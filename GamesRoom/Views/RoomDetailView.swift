@@ -86,6 +86,22 @@ struct RoomDetailView: View {
         Dictionary(uniqueKeysWithValues: members.map { ($0.userId, $0.displayName) })
     }
 
+    /// What's drawing the user's attention *right now* in this room.
+    /// Single source of truth — every section reads this and picks up
+    /// either `.hero` (warm wash, the 10% accent) or `.standard` (cool
+    /// tint, the 20% secondary). One lever, the whole hierarchy moves.
+    private var dominantAction: Theme.Role.DominantAction {
+        RoomHue.dominantAction(
+            activeEvent: activeEvent,
+            packs: packs,
+            eventWithdrawals: eventWithdrawals,
+            eventTransactions: eventTransactions,
+            currentMemberPoints: currentMember?.pointsBalance ?? 0,
+            isHost: isHost,
+            hasOpenAttestations: !openAttestations.isEmpty
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -331,7 +347,7 @@ struct RoomDetailView: View {
 
                 if isLoadingActive {
                     ProgressView()
-                        .tint(Theme.accent)
+                        .tint(Theme.Role.accent)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 24)
                 } else if let event = activeEvent {
@@ -361,22 +377,22 @@ struct RoomDetailView: View {
             HStack(spacing: 14) {
                 Image(systemName: "calendar.badge.plus")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.Role.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Create tonight's game")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Theme.primaryText)
+                        .foregroundStyle(Theme.Role.dominantText)
                     Text("Pick the game, time, and who's playing")
                         .font(.system(size: 12))
-                        .foregroundStyle(Theme.secondaryText)
+                        .foregroundStyle(Theme.Role.secondaryText)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.secondaryText)
+                    .foregroundStyle(Theme.Role.secondaryText)
             }
             .padding(16)
-            .sectionCard()
+            .sectionCard(.hero)
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.impact(weight: .light), trigger: UUID())
@@ -429,6 +445,12 @@ struct RoomDetailView: View {
         // Hide the section entirely when empty. A room with no members
         // doesn't need a label telling the user that.
         if !leaderboard.isEmpty || isLoadingLeaderboard {
+            // Standings carries the warm wash when the room is in its
+            // "read-only" state (no active event, nothing competing).
+            // When Tonight / Withdraw / Settle are competing, Standings
+            // stays a 20%-secondary surface.
+            let treatment: Theme.SectionCard =
+                (dominantAction == .readStandings) ? .hero : .standard
             VStack(alignment: .leading, spacing: 0) {
                 // Section header sits OUTSIDE the card so the card itself
                 // holds only data — the same convention the active event
@@ -436,12 +458,16 @@ struct RoomDetailView: View {
                 HStack {
                     Text("Standings")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.secondaryText)
+                        .foregroundStyle(
+                            dominantAction == .readStandings
+                                ? Theme.Role.accent
+                                : Theme.Role.secondaryText
+                        )
                     Spacer()
                     if let totalSessions = leaderboard.map({ $0.sessionsPlayed }).max(), totalSessions > 0 {
                         Text("\(totalSessions) session\(totalSessions == 1 ? "" : "s") played")
                             .font(.system(size: 11))
-                            .foregroundStyle(Theme.secondaryText)
+                            .foregroundStyle(Theme.Role.secondaryText)
                     }
                 }
                 .padding(.top, 24)
@@ -449,10 +475,10 @@ struct RoomDetailView: View {
 
                 if isLoadingLeaderboard && leaderboard.isEmpty {
                     ProgressView()
-                        .tint(Theme.accent)
+                        .tint(Theme.Role.accent)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 24)
-                        .sectionCard()
+                        .sectionCard(treatment)
                 } else if !leaderboard.isEmpty {
                     VStack(spacing: 0) {
                         ForEach(Array(leaderboardRanked.enumerated()), id: \.element.id) { idx, entry in
@@ -464,12 +490,12 @@ struct RoomDetailView: View {
                             )
                             if idx < leaderboardRanked.count - 1 {
                                 Divider()
-                                    .background(Theme.hairline.opacity(0.5))
+                                    .background(Theme.Role.secondarySurface.opacity(0.5))
                                     .padding(.leading, contentPadding)
                             }
                         }
                     }
-                    .sectionCard()
+                    .sectionCard(treatment)
                 }
             }
         }
@@ -549,7 +575,7 @@ struct RoomDetailView: View {
             // Mascot voice lives inside the active event card as a
             // footer line — same convention as iPhone.
             Divider()
-                .background(Theme.hairline.opacity(0.5))
+                .background(Theme.Role.secondarySurface.opacity(0.5))
             MascotFooterView(
                 mascotName: (liveRoom ?? room).mascotName,
                 roomName: (liveRoom ?? room).name,
@@ -567,7 +593,9 @@ struct RoomDetailView: View {
             }
         }
         .padding(20)
-        .sectionCard(.hero)
+        // Tonight card carries the warm wash when the event is the
+        // dominant action. Withdraw / Settle priority dims it.
+        .sectionCard(dominantAction == .tonightEvent ? .hero : .standard)
     }
 
     @ViewBuilder

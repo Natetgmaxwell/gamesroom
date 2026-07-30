@@ -2,17 +2,78 @@ import SwiftUI
 
 // ponytail: hardcoded constants, not a Theme EnvironmentValue. Promote when a second view reads the same value.
 enum Theme {
-    static let background = Color(red: 0.039, green: 0.039, blue: 0.043)        // #0A0A0B
-    static let primaryText = Color(red: 0.957, green: 0.937, blue: 0.902)        // #F4EFE6
-    static let secondaryText = Color(red: 0.6, green: 0.6, blue: 0.6)
-    static let accent = Color(red: 0.690, green: 0.553, blue: 0.341)              // #B08D57 brass
-    static let hairline = Color(red: 0.239, green: 0.239, blue: 0.251)            // #3D3D40 ash
-    static let cardSurface = Color(red: 0.075, green: 0.075, blue: 0.082)        // #131315
-    static let successTint = Color(red: 0.45, green: 0.65, blue: 0.45)
-    static let heroShadow = Color.black.opacity(0.6)
+    // ── Palette (raw colours) ────────────────────────────────────────────────
+    // Three families. Sections read from Role, not from Palette directly,
+    // so a 80:20:10 split stays enforced everywhere.
+    static let background   = Color(red: 0.039, green: 0.039, blue: 0.043)        // #0A0A0B
+    static let primaryText  = Color(red: 0.957, green: 0.937, blue: 0.902)        // #F4EFE6
+    static let secondaryText = Color(red: 0.6,   green: 0.6,   blue: 0.6)
+    static let accent       = Color(red: 0.690, green: 0.553, blue: 0.341)        // #B08D57 brass
+    static let hairline     = Color(red: 0.239, green: 0.239, blue: 0.251)        // #3D3D40 ash
+    static let cardSurface  = Color(red: 0.075, green: 0.075, blue: 0.082)        // #131315
+    static let successTint  = Color(red: 0.45,  green: 0.65,  blue: 0.45)
+    static let heroShadow   = Color.black.opacity(0.6)
 
     static let displayFont = Font.system(size: 28, weight: .regular, design: .serif)
-    static let bodyFont = Font.system(size: 17, weight: .regular, design: .default)
+    static let bodyFont   = Font.system(size: 17, weight: .regular, design: .default)
+
+    /// 80/20/10 colour roles. Sections read from here, not from the raw
+    /// palette directly, so a single switch of the dominant action
+    /// (Tonight / Standings / Withdraw / Settle) reshuffles the visual
+    /// hierarchy in one place.
+    ///
+    /// Split:
+    ///   **80% dominant**  — surface, body, hero text. Never competes.
+    ///   **20% secondary** — structure (hairlines, dividers, section
+    ///                      labels). Carries the eye without claiming it.
+    ///   **10% accent**    — the dominant action for the current room
+    ///                      state. Only one section carries the warm wash
+    ///                      at a time. This is the "direct the user's
+    ///                      attention" lever the user asked for.
+    enum Role {
+        /// Background, card surface, primary text. Most of the canvas.
+        static let dominantSurface = Theme.cardSurface
+        static let dominantText    = Theme.primaryText
+
+        /// Hairline, secondary text, section header labels. 20%.
+        static let secondarySurface = Theme.hairline
+        static let secondaryText    = Theme.secondaryText
+
+        /// The dominant action accent. Dynamic per room state — see
+        /// `accent(for: state)`. Always warm brass.
+        static let accent       = Theme.accent
+        static let accentMuted  = Theme.accent.opacity(0.55)
+        static let accentFaint  = Theme.accent.opacity(0.10)
+        static let accentBorder = Theme.accent.opacity(0.40)
+
+        /// Cash-flow CTA: success / withdrawal / settle.
+        static let positive    = Theme.successTint
+
+        /// What's competing for the warm wash *right now*. The room's
+        /// dominant action. View body should ask: "which of these is
+        /// currently calling for attention?" and render that section
+        /// with the hero treatment, dimming the rest to secondary.
+        enum DominantAction: Equatable {
+            /// Room is quiet — leaderboard / past games are the read.
+            case readStandings
+            /// Upcoming or active event — Tonight card takes the stage.
+            case tonightEvent
+            /// Casino running, member has points to withdraw.
+            case withdrawChips
+            /// Settle pending — host needs to finalize the round.
+            case settleRound
+        }
+
+        /// Returns the hero wash opacity (the 10% accent overlay on a
+        /// `.sectionCard(.hero)`). Sections outside the dominant action
+        /// still render — they just get the cooler standard wash.
+        static func heroWash(for action: DominantAction) -> Double {
+            switch action {
+            case .tonightEvent, .withdrawChips, .settleRound: return 0.10
+            case .readStandings: return 0.04
+            }
+        }
+    }
 
     /// Adaptive layout tokens. Phase-1 deliverable: revert the iPad
     /// gutter / contentMaxWidth / cardInset / gridCellMin widening so
@@ -65,10 +126,12 @@ enum Theme {
             #endif
         }
         var borderWidth: CGFloat { 1 }
+        /// Accent overlay opacity. Standard = quiet surface tint; hero
+        /// = the 10% warm wash that draws the eye to the dominant action.
         var tintOpacity: Double {
             switch self {
             case .standard: return 0.03
-            case .hero: return 0.06
+            case .hero: return 0.10
             }
         }
     }
@@ -103,3 +166,38 @@ extension View {
         )
     }
 }
+
+/// Resolves the dominant action for a room based on its live state.
+/// Each branch returns a `.hero` treatment for the section that owns
+/// the user's attention right now. Sections that aren't dominant
+/// still render — they just don't carry the warm wash.
+enum RoomHue {
+    static func dominantAction(
+        activeEvent: ActiveEvent?,
+        packs: [RoomPack],
+        eventWithdrawals: [CasinoWithdrawal],
+        eventTransactions: [EventTransaction],
+        currentMemberPoints: Int,
+        isHost: Bool,
+        hasOpenAttestations: Bool
+    ) -> Theme.Role.DominantAction {
+        // Host with an active settle-pending event: settle is the work.
+        if isHost,
+           let event = activeEvent,
+           eventTransactions.contains(where: { $0.kind == "casino_withdrawal" }) {
+            return .settleRound
+        }
+        // Active event — upcoming OR live — Tonight card takes the eye.
+        if activeEvent != nil {
+            return .tonightEvent
+        }
+        // Casino pack enabled and member has a withdrawable balance.
+        let hasCasino = packs.contains(where: { $0.slug == "casino" })
+        if hasCasino, currentMemberPoints > 0 {
+            return .withdrawChips
+        }
+        // Default: read-only — Standings is the page.
+        return .readStandings
+    }
+}
+
