@@ -21,7 +21,7 @@ struct MascotFooterView: View {
 
     @ObservedObject private var engine = MascotEngine.shared
 
-    private var contentPadding: CGFloat { Theme.Layout.cardInset(for: hSize) }
+    private var contentPadding: CGFloat { 16 }
 
     var body: some View {
         Group {

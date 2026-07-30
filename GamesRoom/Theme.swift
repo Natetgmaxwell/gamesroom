@@ -14,56 +14,33 @@ enum Theme {
     static let displayFont = Font.system(size: 28, weight: .regular, design: .serif)
     static let bodyFont = Font.system(size: 17, weight: .regular, design: .default)
 
-    /// Adaptive layout tokens. One source of truth for every view that
-    /// reads a size class — no more scattered `32` / `48` / `maxWidth: 720`
-    /// hardcodes. Each value branches on horizontal size class so the
-    /// same screen reads correctly on iPhone and fills the iPad canvas
-    /// proportionally. Pass the size class explicitly to keep this
-    /// token set free of @Environment dependencies (the views already
-    /// read the size class once and forward it).
+    /// Adaptive layout tokens. Phase-1 deliverable: revert the iPad
+    /// gutter / contentMaxWidth / cardInset / gridCellMin widening so
+    /// the iPad renders the iPhone view at its native size. The
+    /// iPad's content column stays at iPhone proportions (32 gutter,
+    /// no max width cap) and is centered on the iPad canvas with the
+    /// remaining space as black margin. Adaptive resizing for iPad
+    /// belongs in a follow-up that ports components properly, not by
+    /// stretching iPhone sizes across the canvas.
     enum Layout {
         /// Horizontal gutter on either side of the main content column.
-        /// 32 on iPhone (matches the human-interface margin), 64 on iPad
-        /// (roomier so wide canvases don't strand empty space).
-        static func gutter(compact: CGFloat = 32, regular: CGFloat = 64) -> CGFloat {
-            regular
-        }
+        /// 32 on both iPhone and iPad — the iPad's larger canvas just
+        /// shows more black margin around the iPhone-shaped column.
+        static let gutter: CGFloat = 32
 
-        /// Maximum width of the centered content column. The view grows
-        /// horizontally into this cap, then centers. Lets the iPad canvas
-        /// actually carry content instead of stretching iPhone-sized
-        /// cards into 2000pt of empty edges.
-        ///
-        /// `nil` = no cap (view fills the gutter-constrained column).
-        static func contentMaxWidth(compact: CGFloat? = nil, regular: CGFloat? = 920) -> CGFloat? {
-            regular
-        }
-
-        /// Inset for inner card content. Tighter on iPhone, roomier on
-        /// iPad so the card doesn't read as an iPhone rectangle glued
-        /// onto an iPad screen.
-        static func cardInset(compact: CGFloat = 16, regular: CGFloat = 24) -> CGFloat {
-            regular
-        }
+        /// Card inner content inset. Same on both form factors.
+        static let cardInset: CGFloat = 16
 
         /// Min width for an adaptive grid cell (rooms, packs).
-        static func gridCellMin(compact: CGFloat = 320, regular: CGFloat = 420) -> CGFloat {
-            regular
-        }
+        static let gridCellMin: CGFloat = 320
 
-        /// Branching helper: pass the size class, get the value.
-        static func gutter(for hSize: UserInterfaceSizeClass?) -> CGFloat {
-            hSize == .regular ? 64 : 32
-        }
-        static func contentMaxWidth(for hSize: UserInterfaceSizeClass?) -> CGFloat? {
-            hSize == .regular ? 920 : nil
-        }
-        static func cardInset(for hSize: UserInterfaceSizeClass?) -> CGFloat {
-            hSize == .regular ? 24 : 16
-        }
-        static func gridCellMin(for hSize: UserInterfaceSizeClass?) -> CGFloat {
-            hSize == .regular ? 420 : 320
-        }
+        /// Adaptive branching helpers (kept for callers that want
+        /// the form-factor check, even though the values are equal
+        /// for now).
+        static func gutter(for hSize: UserInterfaceSizeClass?) -> CGFloat { 32 }
+        static func contentMaxWidth(for hSize: UserInterfaceSizeClass?) -> CGFloat? { nil }
+        static func cardInset(for hSize: UserInterfaceSizeClass?) -> CGFloat { 16 }
+        static func gridCellMin(for hSize: UserInterfaceSizeClass?) -> CGFloat { 320 }
     }
 
     /// Standard section card. Same warm tint + hairline border + corner

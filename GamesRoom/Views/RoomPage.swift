@@ -12,10 +12,6 @@ struct RoomPage: View {
     @State private var showGenerateCode = false
     @State private var inviteRoomId: UUID?
 
-    private var gutter: CGFloat { Theme.Layout.gutter(for: hSize) }
-    private var gridMin: CGFloat { Theme.Layout.gridCellMin(for: hSize) }
-    private var contentMaxWidth: CGFloat? { Theme.Layout.contentMaxWidth(for: hSize) }
-
     var body: some View {
         Group {
             if let room = resolvedRoom {
@@ -61,6 +57,7 @@ struct RoomPage: View {
                         .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(.red.opacity(0.7))
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                         .padding(.top, 8)
                 }
 
@@ -71,6 +68,7 @@ struct RoomPage: View {
                         .font(Theme.bodyFont)
                         .foregroundStyle(Theme.accent)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                 }
                 .buttonStyle(.plain)
 
@@ -95,12 +93,11 @@ struct RoomPage: View {
                 }
                 .buttonStyle(.plain)
             }
-            .frame(maxWidth: hSize == .regular ? 600 : .infinity)
+            .frame(maxWidth: hSize == .regular ? 500 : .infinity)
 
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, gutter)
         .padding(.top, 24)
         .sheet(isPresented: $showCreate) {
             CreateRoomView(onCreated: {
@@ -139,8 +136,10 @@ struct RoomPage: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 24)
 
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: gridMin), spacing: 16)], spacing: 16) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16)], spacing: 16) {
                         ForEach(homeVM.rooms) { room in
                             HeroCard(room: room, onGetCode: {
                                 inviteRoomId = room.id
@@ -150,11 +149,9 @@ struct RoomPage: View {
                             })
                         }
                     }
+                    .padding(.horizontal, 32)
                 }
-                .padding(.horizontal, gutter)
-                .padding(.top, 24)
                 .padding(.bottom, 24)
-                .frame(maxWidth: contentMaxWidth, alignment: .center)
             } else {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     HStack {
@@ -169,6 +166,8 @@ struct RoomPage: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 24)
 
                     ForEach(homeVM.rooms) { room in
                         HStack(spacing: 12) {
@@ -188,10 +187,9 @@ struct RoomPage: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .padding(.horizontal, 32)
                     }
                 }
-                .padding(.horizontal, gutter)
-                .padding(.top, 24)
                 .padding(.bottom, 24)
             }
         }

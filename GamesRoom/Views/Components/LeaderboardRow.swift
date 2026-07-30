@@ -18,7 +18,7 @@ struct LeaderboardRow: View {
     @Environment(\.horizontalSizeClass) private var hSize
     @State private var isExpanded: Bool = false
 
-    private var contentPadding: CGFloat { Theme.Layout.cardInset(for: hSize) }
+    private var contentPadding: CGFloat { 16 }
 
     private var scoreLabel: String? {
         // Empty string → don't render. "—" is for "played but zeroed

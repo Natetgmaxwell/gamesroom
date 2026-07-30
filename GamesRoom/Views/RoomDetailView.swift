@@ -12,13 +12,9 @@ struct RoomDetailView: View {
     @Environment(\.horizontalSizeClass) private var hSize
 
     private var isRegularWidth: Bool { hSize == .regular }
-    private var contentPadding: CGFloat { Theme.Layout.gutter(for: hSize) }
-    private var cardCornerRadius: CGFloat {
-        hSize == .regular
-            ? 22
-            : Theme.SectionCard.standard.cornerRadius
-    }
-    private var cardHorizontalPadding: CGFloat { Theme.Layout.cardInset(for: hSize) }
+    private var contentPadding: CGFloat { 32 }
+    private var cardCornerRadius: CGFloat { 14 }
+    private var cardHorizontalPadding: CGFloat { 18 }
     @State private var members: [RoomMember] = []
     @State private var isLoadingMembers = true
     @State private var membersErrorMessage: String?
