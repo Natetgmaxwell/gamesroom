@@ -145,6 +145,15 @@ struct RoomPage: View {
                                 inviteRoomId = room.id
                                 showGenerateCode = true
                             }, onTap: {
+                                // Set activeRoom so the detail column in
+                                // NavigationSplitView (iPad) navigates
+                                // immediately. markViewed() persists the
+                                // id for iPhone's @AppStorage fallback, but
+                                // the split view doesn't re-read the
+                                // storage on every column update, so this
+                                // path is the only reliable navigation on
+                                // iPad.
+                                activeRoom = room
                                 homeVM.markViewed(room)
                             })
                         }
@@ -172,6 +181,7 @@ struct RoomPage: View {
                     ForEach(homeVM.rooms) { room in
                         HStack(spacing: 12) {
                             RoomRow(room: room) {
+                                activeRoom = room
                                 homeVM.markViewed(room)
                             }
                             if let currentUser = authService.currentUser,
