@@ -33,8 +33,18 @@ enum SupabaseClientProvider {
     /// The shared Supabase client. Constructed once, lazily, on first
     /// access. All `Services/` code depends on this single instance.
     static let shared: SupabaseClient = {
-        let urlString = "https://bnrgkdcluopicqdpmrtu.supabase.co"
-        let key = "eyJhbG...gO5Q"
+        // Read URL + key from Info.plist. Config.xcconfig was rejected
+        // because xcconfig parses `//` as a line-comment marker, which
+        // silently strips the URL host. Info.plist literals carry the
+        // full string without that conflict. The Info.plist values are
+        // populated by the build (in the new project.pbxproj for
+        // V0.8) — fallback literals in this file are an emergency
+        // brace for when Info.plist is missing them.
+        let bundle = Bundle.main
+        let urlString = bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
+            ?? "https://bnrgkdcluopicqdpmrtu.supabase.co"
+        let key = bundle.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
+            ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJucmdrZGNsdW9waWNxZHBtcnR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODIxMzcsImV4cCI6MjA5OTE1ODEzN30.3Cc7hElQYaAYsKEJ_goSTdercYQG3o2hG9PiyHggO5Q"
         guard let url = URL(string: urlString) else {
             fatalError("Invalid Supabase URL: \(urlString)")
         }
