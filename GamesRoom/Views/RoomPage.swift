@@ -82,7 +82,8 @@ struct RoomPage: View {
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar { toolbarContent }
                 .sheet(item: $settingsRoom) { room in
-                    RoomSettingsSheetPlaceholder(room: room)
+                    RoomSettingsSheet(room: room)
+                        .environmentObject(roomService)
                 }
         }
         .task {
@@ -342,48 +343,6 @@ struct RoomPage: View {
     }
 }
 
-// MARK: - Settings sheet presentation
-//
-// `RoomSettingsSheet` is owned by another track. We declare a small
-// shim here so this file parses cleanly even before that sheet lands.
-// The shim is a one-line wrapper that the real settings sheet will
-// replace. Track E integration replaces this with the real sheet.
-private struct RoomSettingsSheetPlaceholder: View {
-    let room: Room
-    @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Text("Room settings")
-                    .font(Theme.Typography.title)
-                Text(room.name)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                Spacer()
-            }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.Palette.background.ignoresSafeArea())
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-    }
-}
-
-#if DEBUG
-#Preview("Rooms list") {
-    RoomPage()
-        .environmentObject(PreviewSupport.roomService())
-        .environmentObject(PreviewSupport.authService())
-        .preferredColorScheme(.dark)
-}
-#endif
-
 // MARK: - Preview support
 //
 // Lightweight fakes so the RoomPage preview compiles without the
@@ -397,5 +356,12 @@ private enum PreviewSupport {
     static func roomService() -> RoomService { RoomService.preview() }
     @MainActor
     static func authService() -> AuthService { AuthService.preview() }
+}
+
+#Preview("Rooms list") {
+    RoomPage()
+        .environmentObject(PreviewSupport.roomService())
+        .environmentObject(PreviewSupport.authService())
+        .preferredColorScheme(.dark)
 }
 #endif

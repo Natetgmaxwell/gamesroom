@@ -9,19 +9,25 @@
 //  State precedence (first match wins):
 //    1. .loading            — first open with no data yet
 //    2. .justSettled        — settledAt within 24h, no new event
-//    3. .tonightEvent       — activeEvent present, playedAt ≤ now,
-//                              no withdrawals for casino
-//    4. .inPlay             — activeEvent.isLive && withdrawals exist
-//    5. .settleRound        — host finalized, not all members scanned
-//    6. .upcoming           — playedAt > now, RSVP == .unclaimed
-//    7. .claimed            — playedAt > now, RSVP == .claimed
-//    8. .declined           — playedAt > now, RSVP == .declined
-//    9. .readStandings      — no active event, no recent settle
+//    3. .inPlay             — activeEvent.isLive && withdrawals exist
+//    4. .settleRound        — host finalized, not all members scanned
+//    5. .upcoming           — playedAt > now, RSVP == .unclaimed
+//    6. .claimed            — playedAt > now, RSVP == .claimed
+//    7. .declined           — playedAt > now, RSVP == .declined
+//    8. .readStandings      — no active event, no recent settle
 //
-//  This view does not own data loading. It reads the active event,
-//  the briefing summary, the open attestations, and the leaderboard
-//  from RoomService + CasinoService. The data layer is stubbed for
-//  v0.8 — the wiring of RPCs happens in v0.8.1.
+//  Data flow
+//  ---------
+//  This view is the canonical consumer of `RoomService` +
+//  `CasinoService`. Reads come from the services' `@Published`
+//  caches (populated by `loadActiveEvent`, `loadBriefing`,
+//  `loadLeaderboard`, `loadCurrentMemberRSVP`,
+//  `casinoService.getMyOpenAttestations`). Writes flow through
+//  `RoomService.upsertEventRSVP` (Claim / Decline),
+//  `RoomService.updateRoom` (settings), and
+//  `CasinoService.submitMemberScan` (chip scan). All actions go
+//  through the protocol-based `RoomStore` so the same view tree
+//  runs against the live Supabase backend or the in-memory fake.
 //
 
 import SwiftUI
@@ -38,13 +44,6 @@ struct RoomDetailView: View {
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var casinoService: CasinoService
 
-    // Stub state — replaced by real RPC fetches in v0.8.1.
-    @State private var activeEvent: Event? = nil
-    @State private var briefing: BriefingSummary? = nil
-    @State private var myRSVP: MemberRSVPState = .unclaimed
-    @State private var openAttestations: [OpenAttestationSummary] = []
-    @State private var leaderboard: [LeaderboardEntry] = []
-
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
@@ -53,6 +52,38 @@ struct RoomDetailView: View {
     private var currentUserId: UUID? {
         authService.currentUser?.id
     }
+
+    // MARK: Service-backed state
+
+    /// Cached active event for this room. Driven by
+    /// `roomService.loadActiveEvent(roomId:)` in `.task`.
+    private var activeEvent: Event? {
+        roomService.cachedActiveEvent(roomId: room.id)
+    }
+
+    /// Cached briefing summary for the active event, if any.
+    private var briefing: BriefingSummary? {
+        guard let event = activeEvent else { return nil }
+        return roomService.cachedBriefing(eventId: event.id)
+    }
+
+    /// Cached current-member RSVP for the active event, defaulting
+    /// to `.unclaimed`. Drives the upcoming / claimed / declined
+    /// slot branches.
+    private var myRSVP: MemberRSVPState {
+        guard let event = activeEvent else { return .unclaimed }
+        return roomService.cachedRSVP(eventId: event.id)
+    }
+
+    /// Cached leaderboard for this room. Possibly empty.
+    private var leaderboard: [LeaderboardEntry] {
+        roomService.cachedLeaderboard(roomId: room.id)
+    }
+
+    /// Open attestations for the current member across all rooms
+    /// (one row typically). Driven by
+    /// `casinoService.getMyOpenAttestations()` in `.task`.
+    @State private var openAttestations: [OpenAttestationSummary] = []
 
     var body: some View {
         ScrollView {
@@ -104,12 +135,9 @@ struct RoomDetailView: View {
         if let event = activeEvent {
             let isLive = event.playedAt <= Date()
             let isSettled = event.settledAt != nil
-            let isCasino = event.packSlug == nil ? false : true
-            _ = isCasino // pack slug is not part of Event in v0.8 stub
             if isSettled,
                let s = event.settledAt,
-               s > Date().addingTimeInterval(-86_400),
-               activeEvent == nil || true {
+               s > Date().addingTimeInterval(-86_400) {
                 return .justSettled(event)
             }
             if isLive && event.hostFinalized {
@@ -136,14 +164,31 @@ struct RoomDetailView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Layout.sectionSpacing * 2)
 
-        case .upcoming(let event):  BriefingSlot(event: event, briefing: briefing, myRSVP: myRSVP, onClaim: { Task { await claimSeat() } }, onDecline: { Task { await declineSeat() } }, isHero: true)
-        case .claimed(let event):   BriefingSlot(event: event, briefing: briefing, myRSVP: .claimed, onClaim: {}, onDecline: {}, isHero: true)
-        case .declined(let event):  BriefingSlot(event: event, briefing: briefing, myRSVP: .declined, onClaim: {}, onDecline: {}, isHero: true)
+        case .upcoming(let event):
+            BriefingSlot(event: event, briefing: briefing, myRSVP: myRSVP,
+                         onClaim: { Task { await claimSeat(eventId: event.id) } },
+                         onDecline: { Task { await declineSeat(eventId: event.id) } },
+                         isHero: true)
+        case .claimed(let event):
+            BriefingSlot(event: event, briefing: briefing, myRSVP: .claimed,
+                         onClaim: {}, onDecline: {}, isHero: true)
+        case .declined(let event):
+            BriefingSlot(event: event, briefing: briefing, myRSVP: .declined,
+                         onClaim: {}, onDecline: {}, isHero: true)
 
-        case .inPlay(let event):    WitnessSlot(event: event, attestations: openAttestations, cta: .withdraw, isHero: true)
-        case .settleRound(let event): WitnessSlot(event: event, attestations: openAttestations, cta: .scan, isHero: true)
+        case .inPlay(let event):
+            WitnessSlot(event: event, attestations: openAttestations, cta: .withdraw,
+                        onWithdraw: { Task { await openWithdraw(event: event) } },
+                        onScan: { Task { await openScan(event: event) } },
+                        isHero: true)
+        case .settleRound(let event):
+            WitnessSlot(event: event, attestations: openAttestations, cta: .scan,
+                        onWithdraw: { Task { await openWithdraw(event: event) } },
+                        onScan: { Task { await openScan(event: event) } },
+                        isHero: true)
 
-        case .justSettled(let event): CeremonialCard(event: event)
+        case .justSettled(let event):
+            CeremonialCard(event: event)
 
         case .readStandings:
             VStack(alignment: .leading, spacing: 12) {
@@ -159,27 +204,115 @@ struct RoomDetailView: View {
         }
     }
 
-    // MARK: - Data operations (stubs for v0.8)
+    // MARK: - Data operations
 
+    /// Loads every dependency the V0.8 stage needs in parallel:
+    /// the active event, the briefing summary, the leaderboard,
+    /// the current member's RSVP, and the open attestations.
+    /// Called from `.task` and `.refreshable`.
     private func refresh() async {
-        // v0.8 stubs — the RPCs that back these live in v0.8.1.
-        // For now, the page renders empty states for everything
-        // except room metadata + the pack shelf + roster, which
-        // are derived from the in-hand `Room` value alone.
-        _ = briefing
-        _ = leaderboard
-        _ = activeEvent
+        async let active: () = loadActiveIfNeeded()
+        async let board: () = loadLeaderboardIfNeeded()
+        async let attestations: () = loadAttestations()
+        async let briefingLoad: () = loadBriefingIfNeeded()
+        async let rsvpLoad: () = loadRSVPIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad)
     }
 
-    private func claimSeat() async {
-        // Calls `upsert_event_rsvp(event_id, member_id, state := 'claimed')`
-        // via SupabaseClient. Migration 033 hasn't shipped to live DB
-        // yet, so the rpc returns nothing — stub for v0.8.
-        myRSVP = .claimed
+    private func loadActiveIfNeeded() async {
+        if roomService.cachedActiveEvent(roomId: room.id) == nil {
+            await roomService.loadActiveEvent(roomId: room.id)
+        }
     }
 
-    private func declineSeat() async {
-        myRSVP = .declined
+    private func loadLeaderboardIfNeeded() async {
+        if roomService.cachedLeaderboard(roomId: room.id).isEmpty {
+            await roomService.loadLeaderboard(roomId: room.id)
+        }
+    }
+
+    private func loadBriefingIfNeeded() async {
+        guard let event = roomService.cachedActiveEvent(roomId: room.id) else { return }
+        if roomService.cachedBriefing(eventId: event.id) == nil {
+            await roomService.loadBriefing(eventId: event.id)
+        }
+    }
+
+    private func loadRSVPIfNeeded() async {
+        guard let event = roomService.cachedActiveEvent(roomId: room.id) else { return }
+        // Always re-fetch on refresh so a stale `.claimed` from a
+        // previous session is reconciled against the server.
+        await roomService.loadCurrentMemberRSVP(eventId: event.id)
+    }
+
+    private func loadAttestations() async {
+        // CasinoService.getMyOpenAttestations is non-throwing and
+        // collapses failures to an empty array. We re-fetch on
+        // every refresh so the banner reflects newly-opened rows.
+        let rows = await casinoService.getMyOpenAttestations()
+        self.openAttestations = rows
+    }
+
+    // MARK: - Action handlers (wired to the service layer)
+
+    /// Fires `RoomService.upsertEventRSVP(eventId, .claimed)` for
+    /// the active event. On success the service's `rsvpByEvent`
+    /// cache is updated and the slot rotates to `.claimed`. On
+    /// failure the previous state is preserved and `lastError` is
+    /// surfaced via the service.
+    private func claimSeat(eventId: UUID) async {
+        do {
+            _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .claimed)
+        } catch {
+            // Service already populated lastError; nothing to do here.
+            _ = error
+        }
+    }
+
+    /// Fires `RoomService.upsertEventRSVP(eventId, .declined)`.
+    /// Mirror of `claimSeat`.
+    private func declineSeat(eventId: UUID) async {
+        do {
+            _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .declined)
+        } catch {
+            _ = error
+        }
+    }
+
+    /// Chip-withdraw CTA on the at-play Witness Slot. Currently a
+    /// no-op stub — `CasinoService.withdraw(...)` requires a
+    /// settled slider amount that the V0.8 page doesn't render.
+    /// Wired here so the button has a real call site; the full
+    /// surface ships in V0.8.1.
+    private func openWithdraw(event: Event) async {
+        _ = event
+        // V0.8.1: present the Withdraw surface.
+    }
+
+    /// Chip-scan CTA. Calls `CasinoService.submitMemberScan(...)`
+    /// with placeholder values so the call site exercises the
+    /// service. The real vision pipeline + UI sheet land in V0.8.1.
+    private func openScan(event: Event) async {
+        let stubSnapshot = VisionSnapshot(
+            stacks: [],
+            totalValue: 0,
+            confidenceAvg: 0,
+            discarded: false
+        )
+        do {
+            _ = try await casinoService.submitMemberScan(
+                eventId: event.id,
+                visionAmount: 0,
+                visionSnapshot: stubSnapshot,
+                confidence: nil,
+                source: .manual
+            )
+        } catch {
+            // The CasinoService keeps `lastError` for the banner;
+            // the v0.8 stub intentionally swallows so the chip
+            // scan CTA is reachable from the demo path.
+            _ = error
+        }
     }
 }
 
@@ -228,6 +361,10 @@ private struct BriefingSlot: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
                     .padding(.top, 8)
+            }
+
+            if let briefing {
+                BriefingSeatCount(summary: briefing)
             }
 
             switch myRSVP {
@@ -280,6 +417,36 @@ private struct BriefingSlot: View {
     }
 }
 
+// MARK: - Briefing seat-count row
+
+private struct BriefingSeatCount: View {
+    let summary: BriefingSummary
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\(summary.seatsLeft) seats left")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText)
+            Text("·")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            Text("\(summary.seatsClaimed) claimed")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            if summary.seatsDeclined > 0 {
+                Text("·")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                Text("\(summary.seatsDeclined) declined")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+            Spacer()
+        }
+        .padding(.top, 4)
+    }
+}
+
 // MARK: - Witness slot (at-play)
 
 private struct WitnessSlot: View {
@@ -288,6 +455,8 @@ private struct WitnessSlot: View {
     let event: Event
     let attestations: [OpenAttestationSummary]
     let cta: CTA
+    let onWithdraw: () -> Void
+    let onScan: () -> Void
     let isHero: Bool
 
     var body: some View {
@@ -324,9 +493,7 @@ private struct WitnessSlot: View {
 
             switch cta {
             case .withdraw:
-                Button {
-                    // V0.8.1: CasinoService.withdraw(eventId, amount)
-                } label: {
+                Button(action: onWithdraw) {
                     Text("Withdraw chips")
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.background)
@@ -338,9 +505,7 @@ private struct WitnessSlot: View {
                 .padding(.top, 8)
 
             case .scan:
-                Button {
-                    // V0.8.1: present ChipScanView sheet
-                } label: {
+                Button(action: onScan) {
                     Text("Scan your chips")
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.background)

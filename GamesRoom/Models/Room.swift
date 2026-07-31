@@ -73,6 +73,15 @@ struct Room: Identifiable, Codable, Hashable {
     /// the **footer caption** only.
     let socialNarrationEnabled: Bool
 
+    /// Total seats at the table for events in this room. Drives
+    /// the `Stepper` bounds on the Operations section of
+    /// `RoomSettingsSheet`. Defaults to 6 (the pre-V0.8 default).
+    let maxSeats: Int
+
+    /// How many invites each existing member is allowed to send.
+    /// Defaults to 3 (the V0.7.1 default).
+    let memberInviteQuota: Int
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -91,6 +100,8 @@ struct Room: Identifiable, Codable, Hashable {
         case calendarAutoAddHost = "calendar_auto_add_host"
         case socialPreferencesEnabled = "social_preferences_enabled"
         case socialNarrationEnabled = "social_narration_enabled"
+        case maxSeats = "max_seats"
+        case memberInviteQuota = "member_invite_quota"
     }
 
     init(
@@ -103,14 +114,16 @@ struct Room: Identifiable, Codable, Hashable {
         createdAt: Date,
         updatedAt: Date,
         isLive: Bool,
-        nextEventDescription: String? = nil,
+        nextEventDescription: StringAAAQAAA = nil,
         joinStartingBonus: Int = 200,
         mascotApiKey: String? = nil,
         userRole: RoomRole,
         briefing48hEnabled: Bool = true,
         calendarAutoAddHost: Bool = false,
         socialPreferencesEnabled: Bool = true,
-        socialNarrationEnabled: Bool = true
+        socialNarrationEnabled: Bool = true,
+        maxSeats: Int = 6,
+        memberInviteQuota: Int = 3
     ) {
         self.id = id
         self.name = name
@@ -129,6 +142,8 @@ struct Room: Identifiable, Codable, Hashable {
         self.calendarAutoAddHost = calendarAutoAddHost
         self.socialPreferencesEnabled = socialPreferencesEnabled
         self.socialNarrationEnabled = socialNarrationEnabled
+        self.maxSeats = maxSeats
+        self.memberInviteQuota = memberInviteQuota
     }
 
     init(from decoder: Decoder) throws {
@@ -150,5 +165,7 @@ struct Room: Identifiable, Codable, Hashable {
         calendarAutoAddHost = try c.decodeIfPresent(Bool.self, forKey: .calendarAutoAddHost) ?? false
         socialPreferencesEnabled = try c.decodeIfPresent(Bool.self, forKey: .socialPreferencesEnabled) ?? true
         socialNarrationEnabled = try c.decodeIfPresent(Bool.self, forKey: .socialNarrationEnabled) ?? true
+        maxSeats = try c.decodeIfPresent(Int.self, forKey: .maxSeats) ?? 6
+        memberInviteQuota = try c.decodeIfPresent(Int.self, forKey: .memberInviteQuota) ?? 3
     }
 }
