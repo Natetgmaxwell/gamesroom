@@ -23,17 +23,17 @@
 do $$ begin
   create type public.event_rsvp_state
     as enum ('claimed', 'declined', 'unclaimed');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create type public.season_award_type
     as enum ('phoenix', 'veteran', 'whale', 'drowning');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create type public.notification_cadence
     as enum ('on_create', 't_48h', 'morning_of');
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 -- ----------------------------------------------------------------------------
 -- 2. events.settled_at — supports the .justSettled state machine slot
@@ -42,7 +42,7 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   alter table public.events
     add column if not exists settled_at timestamptz;
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 -- ----------------------------------------------------------------------------
 -- 3. event_rsvps — mirrors the Swift MemberRSVP struct
@@ -60,7 +60,7 @@ do $$ begin
     created_at    timestamptz                 not null default now(),
     unique (event_id, member_id)
   );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 create index if not exists idx_event_rsvps_event_id  on public.event_rsvps(event_id);
 create index if not exists idx_event_rsvps_room_id   on public.event_rsvps(room_id);
@@ -78,17 +78,17 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = event_rsvps.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "event_rsvps_insert_self"
     on public.event_rsvps
     for insert
     with check (member_id = auth.uid());
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "event_rsvps_update_self"
@@ -96,14 +96,14 @@ do $$ begin
     for update
     using       (member_id = auth.uid())
     with check  (member_id = auth.uid());
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "event_rsvps_delete_self"
     on public.event_rsvps
     for delete
     using (member_id = auth.uid());
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 -- ----------------------------------------------------------------------------
 -- 4. chapter_lines — one narrative beat per event
@@ -120,7 +120,7 @@ do $$ begin
     created_at   timestamptz  not null default now(),
     unique (event_id)
   );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 create index if not exists idx_chapter_lines_event_id on public.chapter_lines(event_id);
 create index if not exists idx_chapter_lines_room_id  on public.chapter_lines(room_id);
@@ -136,10 +136,10 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = chapter_lines.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "chapter_lines_insert_room_members"
@@ -150,10 +150,10 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = chapter_lines.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "chapter_lines_update_room_members"
@@ -164,7 +164,7 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = chapter_lines.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     )
     with check (
@@ -172,10 +172,10 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = chapter_lines.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "chapter_lines_delete_room_members"
@@ -186,10 +186,10 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = chapter_lines.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 -- ----------------------------------------------------------------------------
 -- 5. season_awards — end-of-season honours per room
@@ -206,7 +206,7 @@ do $$ begin
     is_private  boolean                  not null default false,
     created_at  timestamptz              not null default now()
   );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 create index if not exists idx_season_awards_room_id    on public.season_awards(room_id);
 create index if not exists idx_season_awards_season_id  on public.season_awards(season_id);
@@ -226,10 +226,10 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = season_awards.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 -- Private awards are only visible to the recipient themselves.
 do $$ begin
@@ -237,7 +237,7 @@ do $$ begin
     on public.season_awards
     for select
     using (is_private = true and member_id = auth.uid());
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 -- Any room member can award (host-side moderation lives at the app layer).
 do $$ begin
@@ -249,10 +249,10 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = season_awards.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "season_awards_update_room_members"
@@ -263,7 +263,7 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = season_awards.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     )
     with check (
@@ -271,10 +271,10 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = season_awards.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "season_awards_delete_room_members"
@@ -285,10 +285,10 @@ do $$ begin
         select 1
         from public.room_memberships rm
         where rm.room_id   = season_awards.room_id
-          and rm.member_id = auth.uid()
+          and rm.user_id = auth.uid()
       )
     );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 -- ----------------------------------------------------------------------------
 -- 6. sent_notifications — audit log of outbound notification cadence hits
@@ -306,7 +306,7 @@ do $$ begin
     sent_at    timestamptz                 not null default now(),
     unique (event_id, member_id, cadence)
   );
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 create index if not exists idx_sent_notifications_event_id  on public.sent_notifications(event_id);
 create index if not exists idx_sent_notifications_member_id on public.sent_notifications(member_id);
@@ -321,7 +321,7 @@ do $$ begin
     for select
     to service_role
     using (true);
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "sent_notifications_service_role_insert"
@@ -329,7 +329,7 @@ do $$ begin
     for insert
     to service_role
     with check (true);
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "sent_notifications_service_role_update"
@@ -338,7 +338,7 @@ do $$ begin
     to service_role
     using (true)
     with check (true);
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
 
 do $$ begin
   create policy "sent_notifications_service_role_delete"
@@ -346,4 +346,4 @@ do $$ begin
     for delete
     to service_role
     using (true);
-exception when duplicate_object then null; end $$;
+exception when duplicate_object OR duplicate_table OR duplicate_function then null; end $$;
