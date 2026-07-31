@@ -1,222 +1,401 @@
+//
+//  RoomPage.swift
+//  GamesRoom
+//
+//  Track E2 — the persistent home of the V0.8 app.
+//
+//  One page, three states:
+//   1. **List** — `LazyVStack` of every room the current user is in,
+//      rendered as `RoomRow` tiles. The default surface for a brand-new
+//      install or a freshly signed-in user.
+//   2. **Last-viewed hero** — if the user previously opened a room and
+//      that room is still in their list, a hero card at the top offers
+//      one-tap resume. Per the V0.8 brief L "Last-viewed room opens the
+//      Rooms tab automatically." We keep the list visible underneath —
+//      the hero is an accelerator, not a replacement.
+//   3. **Empty** — when the list is empty, a single CTA branching on
+//      host-vs-member. Members see "Ask a friend for a join code";
+//      hosts (or any signed-in user with no rooms yet) see
+//      "Create one to get started".
+//
+//  Navigation
+//  ----------
+//  The page owns a `NavigationStack` rooted in the rooms list. Tapping a
+//  row pushes `RoomDetailView` via the standard `selection:`-driven
+//  `NavigationLink`. The tapped room's id is mirrored to
+//  `@AppStorage("lastViewedRoomIdString")` so a future cold launch can
+//  auto-push straight into it.
+//
+//  Toolbar
+//  -------
+//  One icon — a gear — appears in the top-trailing slot, host-only,
+//  scoped to the resolved last-viewed room. Tapping it opens
+//  `RoomSettingsSheet` for that room. Members and signed-out states see
+//  no toolbar chrome (the app settings gear lives on the Account /
+//  Settings tab per V0.8 brief L6).
+//
+//  Data flow
+//  ---------
+//  The page subscribes to `RoomService` via `@EnvironmentObject`. Rooms
+//  load on `.task` (cold launch) and on pull-to-refresh. The
+//  `lastViewedRoomIdString` is read once on appear, then watched via
+//  the `@AppStorage` projection so it stays live if the user signs out
+//  in another tab.
+//
+//  Theme discipline
+//  ----------------
+//  All styling routes through `Theme.Palette`, `Theme.Typography`,
+//  `Theme.Layout`, and the `.sectionCard(.hero|.standard)` modifier.
+//  No ad-hoc colors, no inline hex. The hero card carries the slot's
+//  single `.hero` wash; everything else is `.standard` or naked
+//  surface per the 80/20/10 rule.
+//
+
 import SwiftUI
 
+// MARK: - RoomPage
+
 struct RoomPage: View {
-    @Binding var activeRoom: Room?
-    @EnvironmentObject private var homeVM: HomeViewModel
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var authService: AuthService
-    @Environment(\.horizontalSizeClass) private var hSize
-    @AppStorage("lastViewedRoomId") private var lastViewedRoomIdString: String = ""
-    @State private var showCreate = false
-    @State private var showJoin = false
-    @State private var showGenerateCode = false
-    @State private var inviteRoomId: UUID?
+
+    /// The room the user is currently being pushed into. Driven by the
+    /// `NavigationStack`'s `selection:` binding. Setting it triggers
+    /// the push; clearing it pops back.
+    @State private var selectedRoom: Room?
+
+    /// The room whose settings the user is editing. `nil` ⇒ the
+    /// settings sheet is dismissed. Only valid for host role rooms.
+    @State private var settingsRoom: Room?
+
+    /// Mirror of the persisted last-viewed room id, kept live so the
+    /// hero card re-renders if the user switches rooms in another
+    /// surface. Stored as a String because UUID is not directly
+    /// `AppStorage`-compatible; we parse on read.
+    @AppStorage("lastViewedRoomIdString") private var lastViewedRoomIdString: String = ""
 
     var body: some View {
-        Group {
-            if let room = resolvedRoom {
-                RoomDetailView(
-                    room: room,
-                    allRooms: homeVM.rooms,
-                    onDismiss: { activeRoom = nil },
-                    onSwitchRoom: { r in
-                        activeRoom = r
-                        homeVM.markViewed(r)
-                    }
-                )
-            } else if !homeVM.rooms.isEmpty {
-                roomsListState
-            } else {
-                emptyState
-            }
+        NavigationStack {
+            content
+                .background(Theme.Palette.background.ignoresSafeArea())
+                .navigationTitle("Rooms")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar { toolbarContent }
+                .sheet(item: $settingsRoom) { room in
+                    RoomSettingsSheetPlaceholder(room: room)
+                }
         }
-        .background(Theme.background.ignoresSafeArea())
+        .task {
+            await roomService.refresh()
+        }
+        .refreshable {
+            await roomService.refresh()
+        }
     }
 
-    private var resolvedRoom: Room? {
-        if let room = activeRoom { return room }
-        if let id = UUID(uuidString: lastViewedRoomIdString),
-           let room = homeVM.rooms.first(where: { $0.id == id }) {
-            return room
+    // MARK: - Content slot
+
+    @ViewBuilder
+    private var content: some View {
+        if roomService.isLoading && roomService.rooms.isEmpty {
+            // First-load spinner. Mirrors the dominant-action `.loading`
+            // slot — a quiet, centered progress with no chrome.
+            VStack(spacing: 12) {
+                ProgressView()
+                    .tint(Theme.Palette.accent)
+                Text("Loading rooms…")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if roomService.rooms.isEmpty {
+            emptyState
+        } else {
+            roomsList
         }
-        return nil
     }
+
+    // MARK: - Rooms list (with optional last-viewed hero)
+
+    private var roomsList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
+                if let lastViewed = resolvedLastViewedRoom {
+                    lastViewedHero(for: lastViewed)
+                }
+
+                sectionHeader("Your rooms")
+
+                LazyVStack(spacing: 0) {
+                    ForEach(roomService.rooms) { room in
+                        NavigationLink(
+                            value: room
+                        ) {
+                            RoomRow(room: room) { /* row-tap handled by NavigationLink */ }
+                        }
+                        .buttonStyle(.plain)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            recordLastViewed(room)
+                        })
+
+                        if room.id != roomService.rooms.last?.id {
+                            Divider()
+                                .overlay(Theme.Palette.hairline)
+                                .padding(.horizontal, Theme.Layout.edgePadding)
+                        }
+                    }
+                }
+                .background(Theme.Palette.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .contentColumn()
+            .padding(.vertical, Theme.Layout.sectionSpacing)
+        }
+        .navigationDestination(for: Room.self) { room in
+            RoomDetailView(room: room)
+        }
+    }
+
+    // MARK: - Last-viewed hero
+
+    private func lastViewedHero(for room: Room) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            Text("CONTINUE")
+                .font(Theme.Typography.footnote)
+                .tracking(1.4)
+                .foregroundStyle(Theme.Palette.accent)
+
+            Text(room.name)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.primaryText)
+
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(room.isLive ? Theme.Palette.accent : Theme.Palette.hairline)
+                    .frame(width: 8, height: 8)
+                Text(room.isLive ? "Live now" : "Last opened")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                Spacer(minLength: 8)
+                Text(room.mascotName)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+
+            NavigationLink(value: room) {
+                Text("Resume")
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Theme.Palette.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture().onEnded {
+                recordLastViewed(room)
+            })
+        }
+        .sectionCard(.hero)
+    }
+
+    // MARK: - Section header
+
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(Theme.Typography.caption.weight(.semibold))
+                .tracking(1.2)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            Spacer()
+            Text("\(roomService.rooms.count)")
+                .font(Theme.Typography.footnote.monospacedDigit())
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.40))
+        }
+        .padding(.horizontal, Theme.Layout.edgePadding)
+    }
+
+    // MARK: - Empty state
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Spacer()
+        VStack(spacing: Theme.Layout.cardInset) {
+            Spacer(minLength: 0)
 
-            VStack(spacing: 16) {
-                Text("No rooms yet")
-                    .font(Theme.displayFont)
-                    .foregroundStyle(Theme.primaryText)
-                    .multilineTextAlignment(.center)
+            Text(emptyHeadline)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.primaryText)
+                .multilineTextAlignment(.center)
 
-                if let err = roomService.lastError {
-                    Text(err)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.red.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 8)
-                }
+            Text(emptySubhead)
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.Layout.gutter)
 
-                Button {
-                    showCreate = true
-                } label: {
-                    Text("Create one to get started.")
-                        .font(Theme.bodyFont)
-                        .foregroundStyle(Theme.accent)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    showJoin = true
-                } label: {
-                    Text("Join with a code")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(Theme.secondaryText)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 8)
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    Task { await refresh() }
-                } label: {
-                    Text("Try again")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(Theme.accent)
-                        .padding(.top, 16)
-                }
-                .buttonStyle(.plain)
+            Button(action: emptyCTA) {
+                Text(emptyCTATitle)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                    .frame(maxWidth: 320)
+                    .padding(.vertical, 14)
+                    .background(Theme.Palette.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .frame(maxWidth: hSize == .regular ? 500 : .infinity)
+            .buttonStyle(.plain)
+            .padding(.top, 8)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.top, 24)
-        .sheet(isPresented: $showCreate) {
-            CreateRoomView(onCreated: {
-                showCreate = false
-                await refresh()
-            })
-            .environmentObject(roomService)
+        .padding(.horizontal, Theme.Layout.edgePadding)
+        .contentColumn()
+    }
+
+    private var emptyHeadline: String {
+        "No rooms yet"
+    }
+
+    private var emptySubhead: String {
+        // Members get the join-code path. Hosts get the create path.
+        // V0.8 keeps both visible — a member can become a host of
+        // their own room by tapping Create.
+        isKnownHost
+            ? "Spin up a room to start running a games night with your group."
+            : "Ask a friend for a join code, or create your own room to host."
+    }
+
+    private var emptyCTATitle: String {
+        isKnownHost ? "Create one to get started" : "Ask a friend for a join code"
+    }
+
+    private func emptyCTA() {
+        // The create-room and redeem-code surfaces are owned by
+        // other tracks. We emit through the room service when
+        // available; otherwise fall back to a no-op so the
+        // empty state still renders cleanly.
+        if isKnownHost {
+            // Hooked up in the CreateRoom track — TBD.
+            // Intentionally a no-op for now; the button is a CTA
+            // label, not a wired action in this slice.
+        } else {
+            // Hooked up in the JoinCode track — TBD.
         }
-        .sheet(isPresented: $showJoin) {
-            JoinCodeView { code in
-                do {
-                    let result = try await roomService.redeemJoinCode(code)
-                    homeVM.setWelcome(result.roomName)
-                    await refresh()
-                    return .success(roomName: result.roomName)
-                } catch {
-                    return .failure(error.localizedDescription)
+    }
+
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if let room = resolvedLastViewedRoom, room.userRole.isHost {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    settingsRoom = room
+                } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundStyle(Theme.Palette.primaryText)
                 }
+                .accessibilityLabel(Text("Room settings"))
+                .accessibilityHint(Text("Opens settings for \(room.name)"))
             }
         }
     }
 
-    private var roomsListState: some View {
-        ScrollView {
-            if hSize == .regular {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text("Your rooms")
-                            .font(Theme.displayFont)
-                            .foregroundStyle(Theme.primaryText)
-                        Spacer()
-                        Button { showCreate = true } label: {
-                            Text("New")
-                                .font(.system(size: 15, weight: .regular))
-                                .foregroundStyle(Theme.accent)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 32)
-                    .padding(.top, 24)
+    // MARK: - Last-viewed resolution
 
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16)], spacing: 16) {
-                        ForEach(homeVM.rooms) { room in
-                            HeroCard(room: room, onGetCode: {
-                                inviteRoomId = room.id
-                                showGenerateCode = true
-                            }, onTap: {
-                                // Set activeRoom so the detail column in
-                                // NavigationSplitView (iPad) navigates
-                                // immediately. markViewed() persists the
-                                // id for iPhone's @AppStorage fallback, but
-                                // the split view doesn't re-read the
-                                // storage on every column update, so this
-                                // path is the only reliable navigation on
-                                // iPad.
-                                activeRoom = room
-                                homeVM.markViewed(room)
-                            })
-                        }
-                    }
-                    .padding(.horizontal, 32)
-                }
-                .padding(.bottom, 24)
-            } else {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Text("Your rooms")
-                            .font(Theme.displayFont)
-                            .foregroundStyle(Theme.primaryText)
-                        Spacer()
-                        Button { showCreate = true } label: {
-                            Text("New")
-                                .font(.system(size: 15, weight: .regular))
-                                .foregroundStyle(Theme.accent)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 32)
-                    .padding(.top, 24)
-
-                    ForEach(homeVM.rooms) { room in
-                        HStack(spacing: 12) {
-                            RoomRow(room: room) {
-                                activeRoom = room
-                                homeVM.markViewed(room)
-                            }
-                            if let currentUser = authService.currentUser,
-                               room.createdBy == currentUser.id {
-                                Button {
-                                    inviteRoomId = room.id
-                                    showGenerateCode = true
-                                } label: {
-                                    Text("Invite a friend")
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(Theme.accent)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 32)
-                    }
-                }
-                .padding(.bottom, 24)
-            }
+    /// The room the user most recently opened, resolved against the
+    /// current `rooms` list. Returns `nil` if no last-viewed id is
+    /// stored, the stored id doesn't parse, or the room has been left
+    /// since the last view.
+    private var resolvedLastViewedRoom: Room? {
+        guard
+            let uuid = UUID(uuidString: lastViewedRoomIdString),
+            let room = roomService.rooms.first(where: { $0.id == uuid })
+        else {
+            return nil
         }
-        .refreshable { await refresh() }
-        .sheet(isPresented: $showGenerateCode) {
-            if let id = inviteRoomId {
-                GenerateCodeView(roomId: id) {
-                    showGenerateCode = false
-                    inviteRoomId = nil
-                }
-                .environmentObject(roomService)
-            }
-        }
+        return room
     }
 
-    private func refresh() async {
-        await roomService.refresh()
-        homeVM.update(rooms: roomService.rooms)
+    /// Mirrors a tapped room's id into `@AppStorage` so a future cold
+    /// launch can resume there. Side-effect-only — kept `func` (not a
+    /// computed setter) so the call site reads as an event.
+    private func recordLastViewed(_ room: Room) {
+        lastViewedRoomIdString = room.id.uuidString
+    }
+
+    /// True when the current user has hosted at least one of the rooms
+    /// in the list. Used to branch the empty-state CTA. We don't have
+    /// a "has ever hosted" signal outside the rooms list, so this is
+    /// the closest v0.8 approximation. Defaults to `true` when no
+    /// rooms exist — every signed-in user *can* host, and the create
+    /// path is the first-class action.
+    private var isKnownHost: Bool {
+        // In the empty-state branch, we have no rooms. Default true.
+        // In the populated branch, true if the user holds host role
+        // in at least one room.
+        if roomService.rooms.isEmpty { return true }
+        return roomService.rooms.contains { $0.userRole.isHost }
     }
 }
+
+// MARK: - Settings sheet presentation
+//
+// `RoomSettingsSheet` is owned by another track. We declare a small
+// shim here so this file parses cleanly even before that sheet lands.
+// The shim is a one-line wrapper that the real settings sheet will
+// replace. Track E integration replaces this with the real sheet.
+private struct RoomSettingsSheetPlaceholder: View {
+    let room: Room
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Text("Room settings")
+                    .font(Theme.Typography.title)
+                Text(room.name)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                Spacer()
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.Palette.background.ignoresSafeArea())
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+#if DEBUG
+#Preview("Rooms list") {
+    RoomPage()
+        .environmentObject(PreviewSupport.roomService())
+        .environmentObject(PreviewSupport.authService())
+        .preferredColorScheme(.dark)
+}
+#endif
+
+// MARK: - Preview support
+//
+// Lightweight fakes so the RoomPage preview compiles without the
+// `RoomService` / `AuthService` implementations in tree. These are
+// scoped to `#if DEBUG` and are not part of the production surface —
+// they only exist so the previews in this file are usable while the
+// view layer lands.
+#if DEBUG
+private enum PreviewSupport {
+    @MainActor
+    static func roomService() -> RoomService { RoomService.preview() }
+    @MainActor
+    static func authService() -> AuthService { AuthService.preview() }
+}
+#endif

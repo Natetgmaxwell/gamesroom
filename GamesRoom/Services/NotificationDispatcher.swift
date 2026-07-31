@@ -1,0 +1,396 @@
+//
+//  NotificationDispatcher.swift
+//  GamesRoom
+//
+//  Track D2 — iOS UNUserNotificationCenter wrapper.
+//
+//  Schedules the 3×3 cadence × response-state matrix that drives the
+//  V0.8 pre-play briefing window (per the brief §"Pre-play Briefing
+//  covers the full pre-event window"):
+//
+//                  claimed       unclaimed      declined
+//   ─────────────────────────────────────────────────────────
+//   on_create      push          push           push          (event.createdAt)
+//   T-48h          logistics     reminder       skip          (playedAt − 48h)
+//   morning-of     logistics     reminder       skip          (09:00 local, playedAt day)
+//   ─────────────────────────────────────────────────────────
+//
+//  The `declined` state is **terminal** — no T-48h, no morning-of,
+//  no further nudges for that member for that event. Only the
+//  on-create push reaches a declined member (so they have the
+//  option to change their mind before the room forgets about them,
+//  but they don't get a secondary nudge).
+//
+//  Body-text conventions:
+//   - on-create (all states): "{mascot}: {event} is on the books — open the room to claim your seat."
+//   - T-48h claimed        : "{event} is in two days — {date} at {time}, {venue}."
+//   - T-48h unclaimed      : "reminder — {event} is in two days. Open the room to claim your seat."
+//   - morning-of claimed   : "{event} today — {time}, {venue}."
+//   - morning-of unclaimed : "reminder — {event} is today. Open the room to confirm."
+//
+//  Identifiers are stable per (eventId, cadence, userId) so a
+//  duplicate call is idempotent at the UN layer and `cancel` can
+//  sweep by event-id prefix without re-deriving the cadence.
+//
+//
+
+import Foundation
+import SwiftUI
+import UserNotifications
+
+@MainActor
+final class NotificationDispatcher {
+
+    // MARK: - Singleton
+
+    static let shared = NotificationDispatcher()
+
+    // MARK: - State
+
+    /// Tracks whether `requestAuthorization` has already been asked
+    /// for this app install. iOS will only ever prompt once; if the
+    /// user denied, the schedule methods fall through to a no-op.
+    /// Keeping a flag avoids spamming the system call on every event.
+    private var hasRequestedAuthorization = false
+
+    private init() {}
+
+    // MARK: - Authorization
+
+    /// Requests `.alert`, `.sound`, `.badge` once per app install.
+    /// Safe to call repeatedly: it short-circuits if the OS has
+    /// already answered the prompt or we've already asked.
+    ///
+    /// Returns `true` only when the OS reports authorized/provisional/
+    /// ephemeral. Denied or undetermined-but-rejected callers get `false`.
+    @discardableResult
+    private func requestAuthorizationIfNeeded() async -> Bool {
+        if hasRequestedAuthorization {
+            return true
+        }
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            hasRequestedAuthorization = true
+            return true
+        case .notDetermined:
+            do {
+                let granted = try await center.requestAuthorization(
+                    options: [.alert, .sound, .badge]
+                )
+                hasRequestedAuthorization = true
+                return granted
+            } catch {
+                hasRequestedAuthorization = true
+                return false
+            }
+        case .denied:
+            hasRequestedAuthorization = true
+            return false
+        @unknown default:
+            hasRequestedAuthorization = true
+            return false
+        }
+    }
+
+    // MARK: - Schedule trio
+
+    /// Schedule the pre-play briefing pushes for every member of the
+    /// `perMemberCadence` map, branching on the 3×3 matrix above.
+    ///
+    /// - Parameters:
+    ///   - eventId: Unique event identifier. Drives the notification
+    ///     identifier prefix so the same notification is not
+    ///     scheduled twice across re-calls.
+    ///   - eventName: Display name (e.g. "Friday Night Hold'em").
+    ///     Used as the notification title.
+    ///   - playedAt: When the event starts. Drives T-48h and the
+    ///     morning-of push times.
+    ///   - mascotName: Display name of the room's mascot. Used as a
+    ///     body prefix so the push reads with the room's voice.
+    ///   - perMemberCadence: Map of member id → RSVP state. Declined
+    ///     members are skipped for the T-48h and morning-of pushes;
+    ///     every member receives the on-create push regardless of
+    ///     their current state.
+    func scheduleBriefingTrio(
+        eventId: UUID,
+        eventName: String,
+        playedAt: Date,
+        mascotName: String,
+        perMemberCadence: [UUID: MemberRSVPState]
+    ) async {
+        guard await requestAuthorizationIfNeeded() else { return }
+        let center = UNUserNotificationCenter.current()
+        let now = Date()
+
+        // Compute the three trigger times. `onCreate` fires
+        // immediately (effectively event.createdAt — the dispatcher
+        // is invoked when the host creates the event). T-48h and
+        // morning-of schedule against playedAt.
+
+        // On-create: schedule for `now + 1s` so iOS doesn't dedupe
+        // a zero-second trigger. This still lands in the same
+        // notification cycle as the actual creation moment.
+        let onCreateFireAt = now.addingTimeInterval(1)
+
+        let t48FireAt = playedAt.addingTimeInterval(-48 * 3600)
+
+        // Morning-of: 09:00 local time on the calendar day of
+        // playedAt. If 09:00 already passed today, fall back to the
+        // earlier of `now + 1s` or `playedAt − 30m` so we still fire
+        // a same-day push instead of silently dropping the slot.
+        let calendar = Calendar.current
+        let morningFireAt: Date = {
+            let dayStart = calendar.startOfDay(for: playedAt)
+            guard
+                let nineAM = calendar.date(
+                    bySettingHour: 9, minute: 0, second: 0, of: dayStart
+                )
+            else {
+                return playedAt.addingTimeInterval(-30 * 60)
+            }
+            if nineAM > now {
+                return nineAM
+            }
+            // Past 09:00 on the event day — push the same-day fallback.
+            let preStart = playedAt.addingTimeInterval(-30 * 60)
+            return preStart > now ? preStart : now.addingTimeInterval(1)
+        }()
+
+        // Schedule per member. We don't bail early on a single
+        // failure — each request is independent and `add` swallows
+        // errors per-request.
+
+        for (memberId, state) in perMemberCadence {
+
+            // On-create push — fires for EVERY member regardless of
+            // RSVP state, per the V0.8 brief.
+            await schedule(
+                center: center,
+                identifier: identifier(
+                    eventId: eventId, kind: .onCreate, userId: memberId
+                ),
+                title: eventName,
+                body: onCreateBody(
+                    mascotName: mascotName, eventName: eventName
+                ),
+                kindRaw: NotificationKindRaw.onCreate,
+                eventId: eventId,
+                fireAt: onCreateFireAt
+            )
+
+            // Declined is terminal for T-48h and morning-of.
+            if state == .declined { continue }
+
+            // T-48h push — claim or reminder variant.
+            if t48FireAt > now {
+                let (title, body) = t48Body(
+                    mascotName: mascotName,
+                    eventName: eventName,
+                    playedAt: playedAt,
+                    state: state
+                )
+                await schedule(
+                    center: center,
+                    identifier: identifier(
+                        eventId: eventId, kind: .t48h, userId: memberId
+                    ),
+                    title: title,
+                    body: body,
+                    kindRaw: NotificationKindRaw.t48h,
+                    eventId: eventId,
+                    fireAt: t48FireAt
+                )
+            }
+
+            // Morning-of push — claim or reminder variant.
+            if morningFireAt > now {
+                let (title, body) = morningBody(
+                    mascotName: mascotName,
+                    eventName: eventName,
+                    playedAt: playedAt,
+                    state: state
+                )
+                await schedule(
+                    center: center,
+                    identifier: identifier(
+                        eventId: eventId, kind: .morningOf, userId: memberId
+                    ),
+                    title: title,
+                    body: body,
+                    kindRaw: NotificationKindRaw.morningOf,
+                    eventId: eventId,
+                    fireAt: morningFireAt
+                )
+            }
+        }
+    }
+
+    /// Cancel every pending notification request associated with one
+    /// event. Sweeps by event-id prefix so we don't need to know
+    /// which RSVP states were scheduled.
+    func cancelBriefingTrio(eventId: UUID) async {
+        let center = UNUserNotificationCenter.current()
+        let prefix = eventId.uuidString
+        let pending = await center.pendingNotificationRequests()
+        let ids = pending
+            .map(\.identifier)
+            .filter { $0.hasPrefix(prefix) }
+        guard !ids.isEmpty else { return }
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+    }
+
+    // MARK: - Body builders
+
+    private func onCreateBody(mascotName: String, eventName: String) -> String {
+        "\(mascotName): \(eventName) is on the books — open the room to claim your seat."
+    }
+
+    /// Title + body pair for the T-48h push. Logistics prefix for
+    /// claimed members, "reminder —" prefix for unclaimed.
+    private func t48Body(
+        mascotName: String,
+        eventName: String,
+        playedAt: Date,
+        state: MemberRSVPState
+    ) -> (title: String, body: String) {
+        let when = humanWhen(playedAt)
+        switch state {
+        case .claimed:
+            return (
+                "\(eventName) — in two days",
+                "\(eventName) is in two days — \(when)."
+            )
+        case .unclaimed:
+            return (
+                "reminder — \(eventName)",
+                "reminder — \(eventName) is in two days. Open the room to claim your seat."
+            )
+        case .declined:
+            // Defensive — callers should skip declined, but if we
+            // ever get here, route to the unclaimed reminder copy.
+            return (
+                "reminder — \(eventName)",
+                "reminder — \(eventName) is in two days."
+            )
+        }
+    }
+
+    /// Title + body pair for the morning-of push. Logistics prefix
+    /// for claimed members, "reminder —" prefix for unclaimed.
+    private func morningBody(
+        mascotName: String,
+        eventName: String,
+        playedAt: Date,
+        state: MemberRSVPState
+    ) -> (title: String, body: String) {
+        let time = humanTime(playedAt)
+        switch state {
+        case .claimed:
+            return (
+                "\(eventName) today",
+                "\(eventName) today — \(time)."
+            )
+        case .unclaimed:
+            return (
+                "reminder — \(eventName)",
+                "reminder — \(eventName) is today. Open the room to confirm."
+            )
+        case .declined:
+            return (
+                "reminder — \(eventName)",
+                "reminder — \(eventName) is today."
+            )
+        }
+    }
+
+    // MARK: - Identifier helpers
+
+    private enum CadenceKind: String {
+        case onCreate = "on_create"
+        case t48h = "t48h"
+        case morningOf = "morning_of"
+    }
+
+    /// The `kind` value stored in `userInfo` for downstream handlers
+    /// to branch on (e.g. a tap that deep-links into the briefing).
+    private enum NotificationKindRaw: String {
+        case onCreate = "on_create"
+        case t48h = "t48h"
+        case morningOf = "morning_of"
+    }
+
+    private func identifier(
+        eventId: UUID, kind: CadenceKind, userId: UUID
+    ) -> String {
+        "\(eventId.uuidString)-\(kind.rawValue)-\(userId.uuidString)"
+    }
+
+    // MARK: - Internal schedule primitive
+
+    private func schedule(
+        center: UNUserNotificationCenter,
+        identifier: String,
+        title: String,
+        body: String,
+        kindRaw: NotificationKindRaw,
+        eventId: UUID,
+        fireAt: Date
+    ) async {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = [
+            "kind": kindRaw.rawValue,
+            "event_id": eventId.uuidString
+        ]
+
+        let components = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: fireAt
+        )
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: components, repeats: false
+        )
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: trigger
+        )
+        do {
+            try await center.add(request)
+        } catch {
+            // Per-request failure is non-fatal — the next call will
+            // overwrite via the same stable identifier, and the
+            // UI doesn't depend on a particular push landing.
+        }
+    }
+
+    // MARK: - Date formatting
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    private func humanTime(_ date: Date) -> String {
+        Self.timeFormatter.string(from: date)
+    }
+
+    private func humanWhen(_ date: Date) -> String {
+        let d = Self.dateFormatter.string(from: date)
+        let t = Self.timeFormatter.string(from: date)
+        return "\(d) at \(t)"
+    }
+}

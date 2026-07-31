@@ -1,0 +1,81 @@
+//
+//  Member.swift
+//  GamesRoom
+//
+//  Tracks B model layer. Pure data type. Foundation only.
+//
+
+import Foundation
+
+/// A user's row inside one room. Mirrors `public.members`.
+/// Carries everything needed to identify membership and surface the
+/// V0.8 MemberNotes social-preferences card (L3, KEEP & PROMOTE).
+struct Member: Identifiable, Codable, Hashable {
+    /// Composite `roomId:userId` exposed to UI lists. Stable.
+    let id: String
+    let roomId: UUID
+    let userId: UUID
+
+    /// Role at the time the row was fetched; promoted via a separate
+    /// mutation when the host hands over the room.
+    let role: RoomRole
+
+    /// When the user joined this room. UTC.
+    let joinedAt: Date
+
+    /// Last time the user opened this room's page. Used to drive the
+    /// "still here?" amber wash on quiet state.
+    let lastSeenAt: Date?
+
+    /// Display name as of the last fetch. Cached so the leaderboard
+    /// can render without a join to `public.users`.
+    let displayName: String
+
+    /// Host-visible social text + room-wide conversation prompt.
+    /// Defaults to empty when the member hasn't set one yet — the
+    /// UI surfaces the default value at write time, not at read.
+    let socialPreference: SocialPreference
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case roomId = "room_id"
+        case userId = "user_id"
+        case role
+        case joinedAt = "joined_at"
+        case lastSeenAt = "last_seen_at"
+        case displayName = "display_name"
+        case socialPreference = "social_preference"
+    }
+
+    init(
+        id: String,
+        roomId: UUID,
+        userId: UUID,
+        role: RoomRole,
+        joinedAt: Date,
+        lastSeenAt: Date? = nil,
+        displayName: String,
+        socialPreference: SocialPreference = .empty
+    ) {
+        self.id = id
+        self.roomId = roomId
+        self.userId = userId
+        self.role = role
+        self.joinedAt = joinedAt
+        self.lastSeenAt = lastSeenAt
+        self.displayName = displayName
+        self.socialPreference = socialPreference
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        roomId = try c.decode(UUID.self, forKey: .roomId)
+        userId = try c.decode(UUID.self, forKey: .userId)
+        role = try c.decode(RoomRole.self, forKey: .role)
+        joinedAt = try c.decode(Date.self, forKey: .joinedAt)
+        lastSeenAt = try c.decodeIfPresent(Date.self, forKey: .lastSeenAt)
+        displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? "Member"
+        socialPreference = try c.decodeIfPresent(SocialPreference.self, forKey: .socialPreference) ?? .empty
+    }
+}

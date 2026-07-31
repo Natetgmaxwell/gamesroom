@@ -1,154 +1,165 @@
 import SwiftUI
 
-/// One row of the season leaderboard.
-///
-/// The default view is name + score + last-delta, intentionally quiet
-/// so the active event card can be the visual hero. Tapping a row
-/// expands it inline to show the trajectory sparkline — the at-a-glance
-/// "how am I trending" surface for the masked-autistic / 2e target user.
+// MARK: - LeaderboardRow
+//
+// A single row of the standings board. Renders a rank badge (1–N), a member
+// name, the current season score, last delta, and sessions played. Tapping
+// the row expands it to reveal the trajectory sparkline behind it.
+//
+// The local-member's row is highlighted (`isYou`). T4's "see all" chevron is
+// owned by the parent section, not by this row.
+//
+// Usage:
+//     LeaderboardRow(
+//         rank: 1,
+//         name: "Thea",
+//         score: 1240,
+//         lastDelta: +80,
+//         sessionsPlayed: 6,
+//         trajectory: [-40, +20, +120, +80],
+//         isYou: false
+//     )
 struct LeaderboardRow: View {
     let rank: Int
-    let entry: LeaderboardEntry
-    let isSelf: Bool
-    /// Live event affordance: when set and `isSelf`, the row shows
-    /// a "Withdraw" button tied to the user's current points balance.
-    /// Only host-or-self in an active casino event should set this.
-    var withdrawAction: (() -> Void)? = nil
+    let name: String
+    let score: Int
+    let lastDelta: Int
+    let sessionsPlayed: Int
+    let trajectory: [Int]
+    let isYou: Bool
 
-    @Environment(\.horizontalSizeClass) private var hSize
     @State private var isExpanded: Bool = false
 
-    private var contentPadding: CGFloat { 16 }
-
-    private var scoreLabel: String? {
-        // Empty string → don't render. "—" is for "played but zeroed
-        // out" (rare). No sessions and no score = no character at all,
-        // so the row doesn't carry decorative em-dashes that read as
-        // "AI generated placeholder."
-        if entry.seasonScore == 0 && entry.sessionsPlayed == 0 { return nil }
-        if entry.seasonScore == 0 { return "0" }
-        return "\(entry.seasonScore)"
-    }
-
-    private var lastDeltaLabel: String? {
-        guard entry.sessionsPlayed > 0 else { return nil }
-        let prefix = entry.lastSessionDelta >= 0 ? "+" : ""
-        return "\(prefix)\(entry.lastSessionDelta)"
-    }
-
-    private var lastDeltaColor: Color {
-        if entry.lastSessionDelta > 0 { return .green }
-        if entry.lastSessionDelta < 0 { return .red.opacity(0.85) }
-        return Theme.secondaryText
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 12) {
-                rankBadge
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(entry.displayName)
-                            .font(.system(size: 15, weight: isSelf ? .semibold : .regular))
-                            .foregroundStyle(isSelf ? Theme.accent : Theme.primaryText)
-                        if isSelf {
-                            Text("you")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(Theme.accent)
-                        }
-                    }
-                    if let label = lastDeltaLabel {
-                        HStack(spacing: 4) {
-                            Text("Last: \(label)")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(lastDeltaColor)
-                            Text("·")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Theme.secondaryText)
-                            Text("\(entry.sessionsPlayed) session\(entry.sessionsPlayed == 1 ? "" : "s")")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Theme.secondaryText)
-                        }
-                    } else {
-                        Text("No sessions yet")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    if let scoreLabel {
-                        Text(scoreLabel)
-                            .font(.system(size: 17, weight: .regular, design: .serif))
-                            .foregroundStyle(isSelf ? Theme.accent : Theme.primaryText)
-                    }
-                    if entry.pointsBalance > 0 {
-                        Text("\(entry.pointsBalance) pts")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                }
-                .frame(minWidth: 48, alignment: .trailing)
-
-                if let withdrawAction, isSelf {
-                    Button("Withdraw", action: withdrawAction)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.accent)
-                }
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, contentPadding)
-            .contentShape(Rectangle())
-            .onTapGesture { isExpanded.toggle() }
+        VStack(spacing: 0) {
+            header
+                .contentShape(Rectangle())
+                .onTapGesture { withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() } }
+                .accessibilityElement(children: .combine)
+                .accessibilityHint(Text(isExpanded ? "Tap to collapse trajectory." : "Tap to expand trajectory."))
 
             if isExpanded {
-                TrajectorySparkline(deltas: entry.trajectory.map { $0.delta })
+                Divider().overlay(Theme.Palette.hairline)
+                TrajectorySparkline(values: trajectory)
                     .frame(height: 32)
-                    .padding(.horizontal, contentPadding)
-                    .padding(.bottom, 12)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .padding(.top, Theme.Layout.cardInset)
+                    .padding(.bottom, Theme.Layout.cardInset)
+                    .accessibilityLabel(Text("Trajectory sparkline for \(name)"))
+                    .accessibilityValue(Text(trajectoryAccessibilityDescription))
             }
         }
-        .background(
-            HStack(spacing: 0) {
+        .padding(.vertical, 10)
+        .background(isYou ? Theme.Palette.accent.opacity(0.06) : .clear)
+        .overlay(alignment: .leading) {
+            if isYou {
                 Rectangle()
-                    .fill(Theme.accent)
-                    .frame(width: 3)
-                Color.clear
+                    .fill(Theme.Palette.accent)
+                    .frame(width: 2)
             }
-            .opacity(isSelf ? 1.0 : 0.0)
-        )
-        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+        }
     }
 
-    @ViewBuilder
-    private var rankBadge: some View {
-        if entry.isHost {
-            // Host floats at the top by convention, but doesn't compete
-            // in the ranking. A small HOST chip replaces the placeholder
-            // em-dash that previously flanked every empty row.
-            RoleBadge(role: .host)
-        } else if entry.sessionsPlayed == 0 && entry.seasonScore == 0 {
-            // Brand-new member, hasn't played. Leave the rank slot
-            // empty rather than rendering a typographic ornament.
-            Color.clear.frame(width: 22)
-        } else if rank == 1 {
-            ZStack {
-                Circle()
-                    .fill(Theme.accent.opacity(0.15))
-                    .frame(width: 22, height: 22)
-                Text("1")
-                    .font(.system(size: 12, weight: .semibold, design: .serif))
-                    .foregroundStyle(Theme.accent)
+    // MARK: Header subview
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            rankBadge
+            Text(name)
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText)
+                .lineLimit(1)
+            if isYou {
+                Text("you")
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Theme.Palette.accent, lineWidth: 0.5)
+                    )
             }
-        } else {
-            Text("\(rank)")
-                .font(.system(size: 14, weight: .regular, design: .serif))
-                .foregroundStyle(Theme.secondaryText)
-                .frame(width: 22)
+            Spacer(minLength: 8)
+            scoreColumn
+            chevron
         }
+        .padding(.horizontal, Theme.Layout.cardInset)
+    }
+
+    private var rankBadge: some View {
+        Text("\(rank)")
+            .font(Theme.Typography.footnote)
+            .foregroundStyle(Theme.Palette.primaryText)
+            .frame(width: 24, height: 24)
+            .background(
+                Circle()
+                    .fill(rank == 1 ? Theme.Palette.accent.opacity(0.18) : Theme.Palette.surface)
+            )
+            .overlay(
+                Circle()
+                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+            .accessibilityLabel(Text("Rank \(rank)"))
+    }
+
+    private var scoreColumn: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("\(score)")
+                .font(Theme.Typography.body.monospacedDigit())
+                .foregroundStyle(Theme.Palette.primaryText)
+            HStack(spacing: 6) {
+                Text(deltaLabel)
+                    .font(Theme.Typography.footnote.monospacedDigit())
+                    .foregroundStyle(deltaColor)
+                Text("·")
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                Text("\(sessionsPlayed) sessions")
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("\(score) points, last delta \(deltaLabel), \(sessionsPlayed) sessions"))
+    }
+
+    private var chevron: some View {
+        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            .font(Theme.Typography.footnote)
+            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            .frame(width: 16)
+    }
+
+    // MARK: Helpers
+
+    private var deltaLabel: String {
+        let prefix = lastDelta > 0 ? "+" : ""
+        return "\(prefix)\(lastDelta)"
+    }
+
+    private var deltaColor: Color {
+        if lastDelta > 0 { return Theme.Palette.accent }
+        if lastDelta < 0 { return Theme.Palette.primaryText.opacity(0.55) }
+        return Theme.Palette.primaryText.opacity(0.4)
+    }
+
+    private var trajectoryAccessibilityDescription: String {
+        guard !trajectory.isEmpty else { return "no data" }
+        let joined = trajectory.map { ($0 >= 0 ? "+" : "") + String($0) }.joined(separator: ", ")
+        return joined
     }
 }
+
+#if DEBUG
+#Preview("Leaderboard rows") {
+    VStack(spacing: 0) {
+        LeaderboardRow(rank: 1, name: "Thea", score: 1240, lastDelta: 80, sessionsPlayed: 6, trajectory: [-40, 20, 120, 80], isYou: false)
+        Divider().overlay(Theme.Palette.hairline)
+        LeaderboardRow(rank: 2, name: "You", score: 980, lastDelta: -20, sessionsPlayed: 5, trajectory: [60, -80, 100, -20], isYou: true)
+        Divider().overlay(Theme.Palette.hairline)
+        LeaderboardRow(rank: 3, name: "Marco", score: 720, lastDelta: 0, sessionsPlayed: 4, trajectory: [10, 10, -20, 0], isYou: false)
+    }
+    .background(Theme.Palette.background)
+    .preferredColorScheme(.dark)
+}
+#endif
