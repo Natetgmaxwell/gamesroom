@@ -132,7 +132,18 @@ struct RoomPage: View {
                         NavigationLink(
                             value: room
                         ) {
-                            RoomRow(room: room) { /* row-tap handled by NavigationLink */ }
+                            HStack(spacing: Theme.Layout.gutter) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(room.name)
+                                        .font(Theme.Typography.title)
+                                        .foregroundStyle(Theme.Palette.primaryText)
+                                    Text("Tap to open")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, Theme.Layout.cardInset)
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture().onEnded {
@@ -157,7 +168,12 @@ struct RoomPage: View {
             .padding(.vertical, Theme.Layout.sectionSpacing)
         }
         .navigationDestination(for: Room.self) { room in
-            RoomDetailView(room: room)
+            RoomDetailView(
+                room: room,
+                allRooms: roomService.rooms,
+                onDismiss: {},
+                onSwitchRoom: { _ in }
+            )
         }
     }
 

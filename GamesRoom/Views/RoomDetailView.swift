@@ -190,6 +190,12 @@ struct RoomDetailView: View {
         case .justSettled(let event):
             CeremonialCard(event: event)
 
+        case .tonightEvent(let event):
+            WitnessSlot(event: event, attestations: openAttestations, cta: .scan,
+                         onWithdraw: { Task { await openWithdraw(event: event) } },
+                         onScan: { Task { await openScan(event: event) } },
+                         isHero: true)
+
         case .readStandings:
             VStack(alignment: .leading, spacing: 12) {
                 Text("Standings")
@@ -580,11 +586,15 @@ private struct StandingsSection: View {
             Text("Standings")
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText)
-            ForEach(Array(entries.enumerated()), id: \.element.id) { _, entry in
+            ForEach(Array(entries.enumerated()), id: \.element.id) { idx, entry in
                 LeaderboardRow(
-                    rank: rankFor(entry),
-                    entry: entry,
-                    isSelf: entry.userId == currentUserId
+                    rank: idx + 1,
+                    name: entry.displayName,
+                    score: Int(entry.pointsBalance),
+                    lastDelta: Int(entry.lastSessionDelta),
+                    sessionsPlayed: Int(entry.sessionsPlayed),
+                    trajectory: entry.trajectory.map { Int($0.delta) },
+                    isYou: entry.userId == currentUserId
                 )
             }
         }

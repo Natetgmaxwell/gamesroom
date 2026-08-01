@@ -88,7 +88,7 @@ enum SupabaseClientProvider {
     /// (no session, decode error, keychain error) collapses to `nil`.
     /// Use `loadCurrentUser()` on `AuthService` for the full session
     /// + user-row fetch.
-    static func currentSession() async -> Session? {
+    static func currentSession() async -> Auth.Session? {
         try? await shared.auth.session
     }
 }

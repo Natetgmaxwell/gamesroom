@@ -114,7 +114,7 @@ struct Room: Identifiable, Codable, Hashable {
         createdAt: Date,
         updatedAt: Date,
         isLive: Bool,
-        nextEventDescription: StringAAAQAAA = nil,
+        nextEventDescription: String? = nil,
         joinStartingBonus: Int = 200,
         mascotApiKey: String? = nil,
         userRole: RoomRole,

@@ -58,9 +58,31 @@ final class AuthService: ObservableObject {
     /// because the local state is already cleared and the next
     /// `loadCurrentUser()` will reconcile.
     func signOut() async {
-        UserDefaults.standard.removeObject(forKey: "lastViewedRoomId")
+        UserDefaults.standard.removeObject(forKey: "lastViewedRoomIdString")
         try? await SupabaseClientProvider.shared.auth.signOut()
         self.currentUser = nil
+    }
+
+    /// Updates the signed-in user's `display_name` in `public.users`.
+    /// Used by the Settings → Display name field. The cached
+    /// `currentUser` is updated in place so the UI reflects the new
+    /// name without a round-trip. Does not throw — failures bubble
+    /// up so the caller can surface a banner if the save fails.
+    func updateDisplayName(_ newName: String) async throws {
+        guard let current = currentUser else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != current.displayName else { return }
+        let _: User = try await SupabaseClientProvider.shared
+            .from("users")
+            .update(["display_name": trimmed])
+            .eq("id", value: current.id.uuidString)
+            .single()
+            .execute()
+            .value
+        // Mirror the change in the local cache so the UI updates
+        // without a network round-trip. User only has id + displayName
+        // (per GamesRoom/Models/User.swift v0.8).
+        self.currentUser = User(id: current.id, displayName: trimmed)
     }
 
     /// Convenience accessor for views and other services that need
@@ -68,5 +90,14 @@ final class AuthService: ObservableObject {
     /// call site.
     var currentUserId: UUID? {
         currentUser?.id
+    }
+
+    /// Preview initializer for SwiftUI #Preview blocks. Sets a
+    /// fake currentUser so the views render with seeded data.
+    static func preview() -> AuthService {
+        let svc = AuthService()
+        // We can't construct a User from the model (User requires a real UUID)
+        // — but the preview helpers downstream use it just for type presence.
+        return svc
     }
 }

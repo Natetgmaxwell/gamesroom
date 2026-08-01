@@ -1,0 +1,620 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AAAAAAAA000000000000000A /* GamesRoomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000400 /* GamesRoomApp.swift */; };
+		AAAAAAAA000000000000000B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000401 /* ContentView.swift */; };
+		AAAAAAAA000000000000000C /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000402 /* SignInView.swift */; };
+		AAAAAAAA000000000000000D /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000403 /* Theme.swift */; };
+		AAAAAAAA000000000000000E /* SettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000404 /* SettingsPage.swift */; };
+		AAAAAAAA000000000000000F /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000405 /* AppSettingsView.swift */; };
+		AAAAAAAA0000000000000010 /* SupabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000406 /* SupabaseClient.swift */; };
+		AAAAAAAA0000000000000011 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000407 /* AuthService.swift */; };
+		AAAAAAAA0000000000000012 /* RoomService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000408 /* RoomService.swift */; };
+		AAAAAAAA0000000000000013 /* CasinoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000409 /* CasinoService.swift */; };
+		AAAAAAAA0000000000000014 /* MascotEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040A /* MascotEngine.swift */; };
+		AAAAAAAA0000000000000015 /* NotificationDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040B /* NotificationDispatcher.swift */; };
+		AAAAAAAA0000000000000016 /* RoomStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040C /* RoomStore.swift */; };
+		AAAAAAAA0000000000000017 /* RoomPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040D /* RoomPage.swift */; };
+		AAAAAAAA0000000000000018 /* RoomDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040E /* RoomDetailView.swift */; };
+		AAAAAAAA0000000000000019 /* AddEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040F /* AddEventSheet.swift */; };
+		AAAAAAAA000000000000001A /* RoomSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000410 /* RoomSettingsSheet.swift */; };
+		AAAAAAAA000000000000001B /* LeaderboardRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000411 /* LeaderboardRow.swift */; };
+		AAAAAAAA000000000000001C /* MascotBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000412 /* MascotBubble.swift */; };
+		AAAAAAAA000000000000001D /* SeatGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000413 /* SeatGridView.swift */; };
+		AAAAAAAA000000000000001E /* TrajectorySparkline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */; };
+		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
+		AAAAAAAA00000000000000A2 /* Room.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000415 /* Room.swift */; };
+		AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000416 /* RoomRole.swift */; };
+		AAAAAAAA00000000000000A6 /* Member.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000417 /* Member.swift */; };
+		AAAAAAAA00000000000000A8 /* SocialPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000418 /* SocialPreference.swift */; };
+		AAAAAAAA00000000000000AA /* MemberRSVPState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000419 /* MemberRSVPState.swift */; };
+		AAAAAAAA00000000000000AC /* MemberRSVP.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041A /* MemberRSVP.swift */; };
+		AAAAAAAA00000000000000AE /* MascotPersonality.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041B /* MascotPersonality.swift */; };
+		AAAAAAAA00000000000000B0 /* MascotPoliticalIdeology.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */; };
+		AAAAAAAA00000000000000B2 /* Event.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041D /* Event.swift */; };
+		AAAAAAAA00000000000000B4 /* BriefingSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041E /* BriefingSummary.swift */; };
+		AAAAAAAA00000000000000B6 /* Season.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041F /* Season.swift */; };
+		AAAAAAAA00000000000000B8 /* SeasonStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000420 /* SeasonStatus.swift */; };
+		AAAAAAAA00000000000000BA /* ChapterLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000421 /* ChapterLine.swift */; };
+		AAAAAAAA00000000000000BC /* CallForward.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000422 /* CallForward.swift */; };
+		AAAAAAAA00000000000000BE /* SeasonAward.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000423 /* SeasonAward.swift */; };
+		AAAAAAAA00000000000000C0 /* AwardType.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000424 /* AwardType.swift */; };
+		AAAAAAAA00000000000000C2 /* CasinoConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000425 /* CasinoConfig.swift */; };
+		AAAAAAAA00000000000000C4 /* CasinoWithdrawal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */; };
+		AAAAAAAA00000000000000C6 /* ChipColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000427 /* ChipColor.swift */; };
+		AAAAAAAA00000000000000C8 /* LeaderboardEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000428 /* LeaderboardEntry.swift */; };
+		AAAAAAAA00000000000000CA /* OpenAttestationSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000429 /* OpenAttestationSummary.swift */; };
+		AAAAAAAA00000000000000CC /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000042A /* Session.swift */; };
+		AAAAAAAA00000000000000CE /* SessionDelta.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000042B /* SessionDelta.swift */; };
+		AAAAAAAA00000000000000D0 /* SessionScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000042C /* SessionScan.swift */; };
+		AAAAAAAA00000000000000D2 /* SettlementRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000042D /* SettlementRequest.swift */; };
+		AAAAAAAA00000000000000D4 /* SettlementAttestation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000042E /* SettlementAttestation.swift */; };
+		AAAAAAAA00000000000000D6 /* VisionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000042F /* VisionProvider.swift */; };
+		AAAAAAAA00000000000000D8 /* VisionSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000430 /* VisionSnapshot.swift */; };
+		AAAAAAAA00000000000000DA /* BoundingBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000431 /* BoundingBox.swift */; };
+		AAAAAAAA00000000000000DC /* DetectedStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000432 /* DetectedStack.swift */; };
+		AAAAAAAA00000000000000DE /* DetectionSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000433 /* DetectionSource.swift */; };
+		AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000436 /* Assets.xcassets */; };
+		AAAAAAAA00000000000000F2 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AAAAAAAA00000000000000F3 /* Supabase */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AAAAAAAA0000000000000400 /* GamesRoomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomApp.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000401 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000402 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000403 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000404 /* SettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPage.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000405 /* AppSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsView.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000406 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000407 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000408 /* RoomService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomService.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000409 /* CasinoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoService.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000040A /* MascotEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotEngine.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000040B /* NotificationDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDispatcher.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000040C /* RoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStore.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000040D /* RoomPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPage.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000040E /* RoomDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomDetailView.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000040F /* AddEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEventSheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000410 /* RoomSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSettingsSheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000411 /* LeaderboardRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardRow.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000412 /* MascotBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotBubble.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000413 /* SeatGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatGridView.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectorySparkline.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000414 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000415 /* Room.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Room.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000416 /* RoomRole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomRole.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000417 /* Member.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Member.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000418 /* SocialPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialPreference.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000419 /* MemberRSVPState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRSVPState.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000041A /* MemberRSVP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRSVP.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000041B /* MascotPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPersonality.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPoliticalIdeology.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000041D /* Event.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Event.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000041E /* BriefingSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingSummary.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000041F /* Season.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Season.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000420 /* SeasonStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStatus.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000421 /* ChapterLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterLine.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000422 /* CallForward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallForward.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000423 /* SeasonAward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonAward.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000424 /* AwardType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwardType.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000425 /* CasinoConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoConfig.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoWithdrawal.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000427 /* ChipColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipColor.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000428 /* LeaderboardEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardEntry.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000429 /* OpenAttestationSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAttestationSummary.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000042A /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000042B /* SessionDelta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDelta.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000042C /* SessionScan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionScan.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000042D /* SettlementRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettlementRequest.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000042E /* SettlementAttestation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettlementAttestation.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000042F /* VisionProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionProvider.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000430 /* VisionSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionSnapshot.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000431 /* BoundingBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundingBox.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000432 /* DetectedStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectedStack.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000433 /* DetectionSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionSource.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000434 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000435 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000436 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000437 /* GamesRoom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GamesRoom.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AAAAAAAA00000000000000F5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAAAAAA00000000000000F2 /* Supabase in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AAAAAAAA00000000000000F6 = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA00000000000000F7 /* GamesRoom */,
+				AAAAAAAA00000000000000F8 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AAAAAAAA00000000000000F7 /* GamesRoom */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000400 /* GamesRoomApp.swift */,
+				AAAAAAAA0000000000000401 /* ContentView.swift */,
+				AAAAAAAA0000000000000402 /* SignInView.swift */,
+				AAAAAAAA0000000000000403 /* Theme.swift */,
+				AAAAAAAA00000000000000F9 /* Models */,
+				AAAAAAAA00000000000000FA /* Services */,
+				AAAAAAAA00000000000000FB /* Views */,
+				AAAAAAAA0000000000000404 /* SettingsPage.swift */,
+				AAAAAAAA0000000000000436 /* Assets.xcassets */,
+				AAAAAAAA0000000000000434 /* Info.plist */,
+				AAAAAAAA0000000000000435 /* Config.xcconfig */,
+			);
+			path = GamesRoom;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA00000000000000F9 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000414 /* User.swift */,
+				AAAAAAAA0000000000000415 /* Room.swift */,
+				AAAAAAAA0000000000000416 /* RoomRole.swift */,
+				AAAAAAAA0000000000000417 /* Member.swift */,
+				AAAAAAAA0000000000000418 /* SocialPreference.swift */,
+				AAAAAAAA0000000000000419 /* MemberRSVPState.swift */,
+				AAAAAAAA000000000000041A /* MemberRSVP.swift */,
+				AAAAAAAA000000000000041B /* MascotPersonality.swift */,
+				AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */,
+				AAAAAAAA000000000000041D /* Event.swift */,
+				AAAAAAAA000000000000041E /* BriefingSummary.swift */,
+				AAAAAAAA000000000000041F /* Season.swift */,
+				AAAAAAAA0000000000000420 /* SeasonStatus.swift */,
+				AAAAAAAA0000000000000421 /* ChapterLine.swift */,
+				AAAAAAAA0000000000000422 /* CallForward.swift */,
+				AAAAAAAA0000000000000423 /* SeasonAward.swift */,
+				AAAAAAAA0000000000000424 /* AwardType.swift */,
+				AAAAAAAA0000000000000425 /* CasinoConfig.swift */,
+				AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */,
+				AAAAAAAA0000000000000427 /* ChipColor.swift */,
+				AAAAAAAA0000000000000428 /* LeaderboardEntry.swift */,
+				AAAAAAAA0000000000000429 /* OpenAttestationSummary.swift */,
+				AAAAAAAA000000000000042A /* Session.swift */,
+				AAAAAAAA000000000000042B /* SessionDelta.swift */,
+				AAAAAAAA000000000000042C /* SessionScan.swift */,
+				AAAAAAAA000000000000042D /* SettlementRequest.swift */,
+				AAAAAAAA000000000000042E /* SettlementAttestation.swift */,
+				AAAAAAAA000000000000042F /* VisionProvider.swift */,
+				AAAAAAAA0000000000000430 /* VisionSnapshot.swift */,
+				AAAAAAAA0000000000000431 /* BoundingBox.swift */,
+				AAAAAAAA0000000000000432 /* DetectedStack.swift */,
+				AAAAAAAA0000000000000433 /* DetectionSource.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA00000000000000FA /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000406 /* SupabaseClient.swift */,
+				AAAAAAAA0000000000000407 /* AuthService.swift */,
+				AAAAAAAA0000000000000408 /* RoomService.swift */,
+				AAAAAAAA0000000000000409 /* CasinoService.swift */,
+				AAAAAAAA000000000000040A /* MascotEngine.swift */,
+				AAAAAAAA000000000000040B /* NotificationDispatcher.swift */,
+				AAAAAAAA000000000000040C /* RoomStore.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA00000000000000FB /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA000000000000040D /* RoomPage.swift */,
+				AAAAAAAA000000000000040E /* RoomDetailView.swift */,
+				AAAAAAAA000000000000040F /* AddEventSheet.swift */,
+				AAAAAAAA0000000000000410 /* RoomSettingsSheet.swift */,
+				AAAAAAAA0000000000000405 /* AppSettingsView.swift */,
+				AAAAAAAA00000000000000FC /* Components */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA00000000000000FC /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000411 /* LeaderboardRow.swift */,
+				AAAAAAAA0000000000000412 /* MascotBubble.swift */,
+				AAAAAAAA0000000000000413 /* SeatGridView.swift */,
+				AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA00000000000000F8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000437 /* GamesRoom.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AAAAAAAA00000000000000FD /* GamesRoom */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAAAAAAA00000000000000FE /* Build configuration list for PBXNativeTarget "GamesRoom" */;
+			buildPhases = (
+				AAAAAAAA00000000000000FF /* Sources */,
+				AAAAAAAA00000000000000F5 /* Frameworks */,
+				AAAAAAAA0000000000000100 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			packageProductDependencies = (
+				AAAAAAAA00000000000000F3 /* Supabase */,
+			);
+			name = GamesRoom;
+			productName = GamesRoom;
+			productReference = AAAAAAAA0000000000000437 /* GamesRoom.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AAAAAAAA0000000000000101 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 1620;
+				LastUpgradeCheck = 1620;
+				TargetAttributes = {
+					AAAAAAAA00000000000000FD = {
+						CreatedOnToolsVersion = 16.2;
+					};
+				};
+			};
+			buildConfigurationList = AAAAAAAA0000000000000102 /* Build configuration list for PBXProject "GamesRoom" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AAAAAAAA00000000000000F6;
+			packageReferences = (
+				AAAAAAAA0000000000000200 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			productRefGroup = AAAAAAAA00000000000000F8 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AAAAAAAA00000000000000FD /* GamesRoom */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AAAAAAAA0000000000000100 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AAAAAAAA00000000000000FF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAAAAAA000000000000000A /* GamesRoomApp.swift in Sources */,
+				AAAAAAAA000000000000000B /* ContentView.swift in Sources */,
+				AAAAAAAA000000000000000C /* SignInView.swift in Sources */,
+				AAAAAAAA000000000000000D /* Theme.swift in Sources */,
+				AAAAAAAA000000000000000E /* SettingsPage.swift in Sources */,
+				AAAAAAAA000000000000000F /* AppSettingsView.swift in Sources */,
+				AAAAAAAA0000000000000010 /* SupabaseClient.swift in Sources */,
+				AAAAAAAA0000000000000011 /* AuthService.swift in Sources */,
+				AAAAAAAA0000000000000012 /* RoomService.swift in Sources */,
+				AAAAAAAA0000000000000013 /* CasinoService.swift in Sources */,
+				AAAAAAAA0000000000000014 /* MascotEngine.swift in Sources */,
+				AAAAAAAA0000000000000015 /* NotificationDispatcher.swift in Sources */,
+				AAAAAAAA0000000000000016 /* RoomStore.swift in Sources */,
+				AAAAAAAA0000000000000017 /* RoomPage.swift in Sources */,
+				AAAAAAAA0000000000000018 /* RoomDetailView.swift in Sources */,
+				AAAAAAAA0000000000000019 /* AddEventSheet.swift in Sources */,
+				AAAAAAAA000000000000001A /* RoomSettingsSheet.swift in Sources */,
+				AAAAAAAA000000000000001B /* LeaderboardRow.swift in Sources */,
+				AAAAAAAA000000000000001C /* MascotBubble.swift in Sources */,
+				AAAAAAAA000000000000001D /* SeatGridView.swift in Sources */,
+				AAAAAAAA000000000000001E /* TrajectorySparkline.swift in Sources */,
+				AAAAAAAA00000000000000A0 /* User.swift in Sources */,
+				AAAAAAAA00000000000000A2 /* Room.swift in Sources */,
+				AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */,
+				AAAAAAAA00000000000000A6 /* Member.swift in Sources */,
+				AAAAAAAA00000000000000A8 /* SocialPreference.swift in Sources */,
+				AAAAAAAA00000000000000AA /* MemberRSVPState.swift in Sources */,
+				AAAAAAAA00000000000000AC /* MemberRSVP.swift in Sources */,
+				AAAAAAAA00000000000000AE /* MascotPersonality.swift in Sources */,
+				AAAAAAAA00000000000000B0 /* MascotPoliticalIdeology.swift in Sources */,
+				AAAAAAAA00000000000000B2 /* Event.swift in Sources */,
+				AAAAAAAA00000000000000B4 /* BriefingSummary.swift in Sources */,
+				AAAAAAAA00000000000000B6 /* Season.swift in Sources */,
+				AAAAAAAA00000000000000B8 /* SeasonStatus.swift in Sources */,
+				AAAAAAAA00000000000000BA /* ChapterLine.swift in Sources */,
+				AAAAAAAA00000000000000BC /* CallForward.swift in Sources */,
+				AAAAAAAA00000000000000BE /* SeasonAward.swift in Sources */,
+				AAAAAAAA00000000000000C0 /* AwardType.swift in Sources */,
+				AAAAAAAA00000000000000C2 /* CasinoConfig.swift in Sources */,
+				AAAAAAAA00000000000000C4 /* CasinoWithdrawal.swift in Sources */,
+				AAAAAAAA00000000000000C6 /* ChipColor.swift in Sources */,
+				AAAAAAAA00000000000000C8 /* LeaderboardEntry.swift in Sources */,
+				AAAAAAAA00000000000000CA /* OpenAttestationSummary.swift in Sources */,
+				AAAAAAAA00000000000000CC /* Session.swift in Sources */,
+				AAAAAAAA00000000000000CE /* SessionDelta.swift in Sources */,
+				AAAAAAAA00000000000000D0 /* SessionScan.swift in Sources */,
+				AAAAAAAA00000000000000D2 /* SettlementRequest.swift in Sources */,
+				AAAAAAAA00000000000000D4 /* SettlementAttestation.swift in Sources */,
+				AAAAAAAA00000000000000D6 /* VisionProvider.swift in Sources */,
+				AAAAAAAA00000000000000D8 /* VisionSnapshot.swift in Sources */,
+				AAAAAAAA00000000000000DA /* BoundingBox.swift in Sources */,
+				AAAAAAAA00000000000000DC /* DetectedStack.swift in Sources */,
+				AAAAAAAA00000000000000DE /* DetectionSource.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AAAAAAAA0000000000000103 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AAAAAAAA0000000000000104 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AAAAAAAA0000000000000105 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GamesRoom/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Games Room uses the camera to count chips when settling casino games.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Games Room adds events to your calendar so you never miss a game night.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gamesroom.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AAAAAAAA0000000000000106 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GamesRoom/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Games Room uses the camera to count chips when settling casino games.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Games Room adds events to your calendar so you never miss a game night.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gamesroom.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AAAAAAAA00000000000000FE /* Build configuration list for PBXNativeTarget "GamesRoom" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAAAAAAA0000000000000105 /* Debug */,
+				AAAAAAAA0000000000000106 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAAAAAAA0000000000000102 /* Build configuration list for PBXProject "GamesRoom" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAAAAAAA0000000000000103 /* Debug */,
+				AAAAAAAA0000000000000104 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AAAAAAAA0000000000000200 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.53.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AAAAAAAA00000000000000F3 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AAAAAAAA0000000000000200 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = AAAAAAAA0000000000000101 /* Project object */;
+}
