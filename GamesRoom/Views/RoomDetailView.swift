@@ -44,6 +44,11 @@ struct RoomDetailView: View {
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var casinoService: CasinoService
 
+    /// Drives the host-only Room Settings sheet from the in-room
+    /// toolbar gear (L6 spec). Mirrors `RoomPage.settingsRoom` for
+    /// the standalone rooms-page gear icon.
+    @State private var settingsRoom: Room?
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
@@ -112,11 +117,20 @@ struct RoomDetailView: View {
         .toolbar {
             if isHost {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { /* RoomSettingsSheet presentation handled by RoomPage */ }) {
+                    Button {
+                        settingsRoom = room
+                    } label: {
                         Image(systemName: "gearshape")
+                            .foregroundStyle(Theme.Palette.primaryText)
                     }
+                    .accessibilityLabel(Text("Room settings"))
+                    .accessibilityHint(Text("Opens settings for \(room.name)"))
                 }
             }
+        }
+        .sheet(item: $settingsRoom) { presented in
+            RoomSettingsSheet(room: presented)
+                .environmentObject(roomService)
         }
         .task {
             await refresh()
@@ -189,12 +203,6 @@ struct RoomDetailView: View {
 
         case .justSettled(let event):
             CeremonialCard(event: event)
-
-        case .tonightEvent(let event):
-            WitnessSlot(event: event, attestations: openAttestations, cta: .scan,
-                         onWithdraw: { Task { await openWithdraw(event: event) } },
-                         onScan: { Task { await openScan(event: event) } },
-                         isHero: true)
 
         case .readStandings:
             VStack(alignment: .leading, spacing: 12) {
@@ -327,7 +335,6 @@ struct RoomDetailView: View {
 private enum V0State {
     case loading
     case justSettled(Event)
-    case tonightEvent(Event)
     case inPlay(Event)
     case settleRound(Event)
     case upcoming(Event)
@@ -563,11 +570,15 @@ private struct CeremonialCard: View {
 
             Spacer().frame(height: 24)
 
-            Button("Mark as caught up →") {
-                // v0.8.1: dismiss / scroll-to-standings
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.down")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent.opacity(0.7))
+                Text("Standings below")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent.opacity(0.7))
             }
-            .font(Theme.Typography.body.weight(.semibold))
-            .foregroundStyle(Theme.Palette.accent)
+            .accessibilityLabel(Text("Standings continue below"))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
@@ -634,9 +645,29 @@ private struct MemberRosterReadOnly: View {
 
 private struct MascotFooterCaption: View {
     let room: Room
+    /// Pure template interpolation per V0.8 brief — the footer
+    /// caption is one of the 100 voice cells, picked from the
+    /// room's `(personality × ideology × .postPlayRecap)`
+    /// combination. Tap opens the deep-dive bubble. See
+    /// `MascotEngine.generateVoice(...)` for the placeholder
+    /// contract; nil fields are simply omitted from the template.
+    private var caption: String {
+        MascotEngine.generateVoice(
+            mascotName: room.mascotName,
+            roomName: room.name,
+            personality: room.mascotPersonality,
+            ideology: room.mascotPoliticalIdeology,
+            kind: .postPlayRecap,
+            context: .init(
+                activeEventTitle: nil,
+                lastEventDaysAgo: nil,
+                memberCount: 0,
+                memberNames: []
+            )
+        )
+    }
     var body: some View {
-        // v0.8 wires MascotEngine.buildFooterCaption here.
-        Text("\(room.mascotName) is watching this room.")
+        Text(caption)
             .font(Theme.Typography.caption.italic())
             .foregroundStyle(Theme.Palette.primaryText.opacity(0.45))
             .frame(maxWidth: .infinity, alignment: .leading)

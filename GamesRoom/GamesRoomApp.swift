@@ -22,11 +22,15 @@ import Supabase
 @main
 struct GamesRoomApp: App {
     @StateObject private var auth = AuthService()
+    @StateObject private var roomService = RoomService()
+    @StateObject private var casinoService = CasinoService()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(auth)
+                .environmentObject(roomService)
+                .environmentObject(casinoService)
         }
     }
 }

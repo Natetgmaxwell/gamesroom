@@ -313,42 +313,73 @@ final class CasinoService: ObservableObject {
         confidence: Double?,
         source: DetectionSource
     ) async throws -> SettlementAttestation {
+        // Migration 030 ships record_member_scan as a 3-param RPC
+        // (uuid, bigint, jsonb) — server extracts detection_source
+        // and confidence_avg from inside the snapshot JSON
+        // (`p_vision_snapshot->>'source'`, `->>'confidence_avg'`).
+        // The Swift wrapper used to send them as separate params;
+        // that signature never made it into the migration set,
+        // so callers were 400-ing. Fold both into the snapshot
+        // envelope before sending.
         let encoder = JSONEncoder()
         let snapshotData = try encoder.encode(visionSnapshot)
-        let snapshotJSON = String(data: snapshotData, encoding: .utf8) ?? "{}"
-
-        // Typed params struct so the optional `confidence` encodes
-        // as JSON null when nil (the V0.7.1 pattern from
-        // `upsertConfig`). The server treats a null
-        // `p_confidence_avg` as "no confidence tracked" — valid for
-        // `.manual` and `.pending` rows.
-        struct Params: Encodable {
-            let p_event_id: String
-            let p_vision_amount_points: String
-            let p_vision_snapshot: String
-            let p_confidence_avg: String?
-            let p_detection_source: String
+        let snapshotDict = try JSONSerialization.jsonObject(
+            with: snapshotData, options: []
+        ) as? [String: Any] ?? [:]
+        var envelope = snapshotDict
+        envelope["source"] = source.rawValue
+        if let confidence {
+            envelope["confidence_avg"] = confidence
         }
+        let envelopeData = try JSONSerialization.data(
+            withJSONObject: envelope, options: []
+        )
+        let envelopeJSON = String(data: envelopeData, encoding: .utf8) ?? "{}"
 
-        let rows: [SettlementAttestation] = try await SupabaseClientProvider.shared
-            .rpc("record_member_scan", params: Params(
-                p_event_id: eventId.uuidString,
-                p_vision_amount_points: String(visionAmount),
-                p_vision_snapshot: snapshotJSON,
-                p_confidence_avg: confidence.map { String($0) },
-                p_detection_source: source.rawValue
-            ))
+        let result: Bool = try await SupabaseClientProvider.shared
+            .rpc("record_member_scan", params: [
+                "p_session_id": eventId.uuidString,
+                "p_vision_amount_points": String(visionAmount),
+                "p_vision_snapshot": envelopeJSON
+            ])
             .execute()
             .value
         self.lastError = nil
-        guard let row = rows.first else {
+        // Server returns boolean; resolve attestation via a follow-up read.
+        let rows: [SettlementAttestation] = (try? await SupabaseClientProvider.shared
+            .from("settlement_attestations")
+            .select()
+            .eq("session_id", value: eventId.uuidString)
+            .order("opened_at", ascending: false)
+            .limit(1)
+            .execute()
+            .value) ?? []
+        if let row = rows.first { return row }
+        guard result else {
             throw NSError(
                 domain: "CasinoService",
                 code: -1,
                 userInfo: [NSLocalizedDescriptionKey: "record_member_scan returned no attestation"]
             )
         }
-        return row
+        // Server ack'd but no row read back — synthesise a minimal
+        // placeholder so the caller's UI doesn't have to handle a
+        // missing row. The next refresh will surface the real row.
+        return SettlementAttestation(
+            id: UUID(),
+            sessionId: eventId,
+            roomId: UUID(),
+            memberId: UUID(),
+            visionAmountPoints: visionAmount,
+            claimedAmountPoints: visionAmount,
+            disputed: false,
+            disputeReason: nil,
+            detectionSource: source.rawValue,
+            confidenceAvg: confidence,
+            openedAt: Date(),
+            attestedAt: nil,
+            closedAt: nil
+        )
     }
 
     // MARK: Attestations
