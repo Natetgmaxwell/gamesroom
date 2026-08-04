@@ -95,6 +95,12 @@ final class RoomService: ObservableObject {
     /// slot branches.
     @Published private(set) var rsvpByEvent: [UUID: MemberRSVPState] = [:]
 
+    /// Room-member cache keyed by roomId. Populated lazily by
+    /// `loadRoomMembers(roomId:)`; consumed by the roster surface
+    /// on `RoomDetailView` and `RoomSettingsSheet`. Cleared on
+    /// `signOut()` via the upper layer.
+    @Published private(set) var membersByRoom: [UUID: [Member]] = [:]
+
     // MARK: - Rooms list
 
     /// Re-fetch the rooms list. Safe to call from `.task` and
@@ -117,6 +123,59 @@ final class RoomService: ObservableObject {
     /// fresh data.
     func room(withId id: UUID) -> Room? {
         rooms.first { $0.id == id }
+    }
+
+    // MARK: - Create room + join codes (P0.2 onboarding)
+
+    /// Creates a new room with the calling user as the host.
+    /// Eagerly refreshes the rooms list so the new room appears at
+    /// the top of the home surface without a manual pull-to-refresh.
+    /// Throws on any server error (RLS, RLS-deny on auth, etc.) so
+    /// the call site can show a neutral toast.
+    @discardableResult
+    func createRoom(
+        name: String,
+        mascotName: String,
+        mascotPersonality: MascotPersonality,
+        mascotPoliticalIdeology: MascotPoliticalIdeology,
+        joinStartingBonus: Int = 200,
+        mascotApiKey: String? = nil,
+        blacklistedUserIds: [UUID] = []
+    ) async throws -> UUID {
+        let newId = try await store.createRoom(
+            name: name,
+            mascotName: mascotName,
+            mascotPersonality: mascotPersonality,
+            mascotPoliticalIdeology: mascotPoliticalIdeology,
+            joinStartingBonus: joinStartingBonus,
+            mascotApiKey: mascotApiKey,
+            blacklistedUserIds: blacklistedUserIds
+        )
+        self.lastError = nil
+        await refresh()
+        return newId
+    }
+
+    /// Mints a fresh six-character join code for a room the caller
+    /// hosts. Throws on non-host writes (the server returns 42501;
+    /// the wrapper surfaces it as a thrown error).
+    func generateJoinCode(roomId: UUID) async throws -> String {
+        let code = try await store.generateJoinCode(roomId: roomId)
+        self.lastError = nil
+        return code
+    }
+
+    /// Redeems a six-character join code on behalf of the calling
+    /// user. Idempotent server-side — re-redeeming for an existing
+    /// member returns the room row without mutating points. Throws
+    /// on not-found / already-redeemed / RLS rejection so the UI
+    /// can surface a friendly error.
+    func redeemJoinCode(code: String) async throws -> RedeemedRoom {
+        let normalised = code.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let row = try await store.redeemJoinCode(code: normalised)
+        self.lastError = nil
+        await refresh()
+        return row
     }
 
     // MARK: - Room detail (event + briefing + leaderboard + RSVP)
@@ -169,6 +228,23 @@ final class RoomService: ObservableObject {
         }
     }
 
+    /// Loads the room's member roster into the cache. Returns the
+    /// cached value (possibly empty). Called from `RoomDetailView.task`
+    /// and from `RoomSettingsSheet` when the host opens the members
+    /// section.
+    @discardableResult
+    func loadRoomMembers(roomId: UUID) async -> [Member] {
+        do {
+            let rows = try await store.fetchRoomMembers(roomId: roomId)
+            self.membersByRoom[roomId] = rows
+            self.lastError = nil
+            return rows
+        } catch {
+            self.lastError = error.localizedDescription
+            return membersByRoom[roomId] ?? []
+        }
+    }
+
     /// Loads the current member's RSVP for one event into the
     /// cache. Returns the cached value (defaults to `.unclaimed`
     /// for events with no RSVP row). Called from
@@ -197,11 +273,43 @@ final class RoomService: ObservableObject {
     ///
     /// On error: the cache is unchanged and `lastError` is set.
     /// The view can show a neutral toast.
+    ///
+    /// P1.3 — after a successful upsert, re-schedules the briefing
+    /// trio with the new cadence so a member who toggles
+    /// `.declined` → `.claimed` immediately starts receiving T-48h
+    /// and morning-of logistics nudges (and vice versa). The
+    /// dispatcher's `cancelBriefingTrio` followed by
+    /// `scheduleBriefingTrio` is idempotent at the UN layer
+    /// (the dispatcher uses stable per-(event, cadence, user)
+    /// identifiers).
     @discardableResult
     func upsertEventRSVP(eventId: UUID, state: MemberRSVPState) async throws -> MemberRSVP {
         let row = try await store.upsertEventRSVP(eventId: eventId, state: state)
         self.rsvpByEvent[eventId] = row.state
         self.lastError = nil
+        // P1.3 — re-schedule with the new cadence. Reads the
+        // matching event from the cache to surface the name +
+        // playedAt; falls back to the row's roomId for the
+        // roster lookup.
+        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
+            let room = rooms.first(where: { $0.id == event.roomId })
+            let roster = membersByRoom[event.roomId] ?? []
+            var cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
+                acc[member.userId] = rsvpByEvent[event.id] ?? .unclaimed
+            }
+            // The just-upserted row is canonical — overwrite the
+            // caller's own cadence so the dispatcher fires for
+            // them, not against the stale `.unclaimed` default.
+            cadence[row.memberId] = row.state
+            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
+            await NotificationDispatcher.shared.scheduleBriefingTrio(
+                eventId: event.id,
+                eventName: event.name,
+                playedAt: event.playedAt,
+                mascotName: room?.mascotName ?? "Your mascot",
+                perMemberCadence: cadence
+            )
+        }
         return row
     }
 
@@ -209,7 +317,11 @@ final class RoomService: ObservableObject {
 
     /// Creates a new event in a room. Called from `AddEventSheet`.
     /// Returns the new event id; the parent refreshes the active-
-    /// event cache on success.
+    /// event cache on success. The P1.3 notification fan-out is
+    /// invoked after the server write returns — the dispatcher's
+    /// 3×3 cadence × response-state matrix fires once the event
+    /// row is durable on the server, with the current member's RSVP
+    /// defaulted to `.unclaimed` (the dispatcher handles the rest).
     @discardableResult
     func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String) async throws -> UUID {
         let newId = try await store.addEvent(
@@ -222,6 +334,23 @@ final class RoomService: ObservableObject {
         // Eagerly refresh the active-event cache so the parent's
         // post-create flow doesn't need a second round-trip.
         _ = await loadActiveEvent(roomId: roomId)
+        // P1.3 — schedule the briefing trio. The dispatcher is
+        // non-throwing; failures collapse to a logged warning
+        // inside the dispatcher. Per-event fan-out reads the
+        // post-create room membership (host + invited members)
+        // from the room's roster cache.
+        let room = rooms.first(where: { $0.id == roomId })
+        let roster = membersByRoom[roomId] ?? []
+        let cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
+            acc[member.userId] = .unclaimed
+        }
+        await NotificationDispatcher.shared.scheduleBriefingTrio(
+            eventId: newId,
+            eventName: name,
+            playedAt: playedAt,
+            mascotName: room?.mascotName ?? "Your mascot",
+            perMemberCadence: cadence
+        )
         return newId
     }
 
@@ -288,10 +417,35 @@ final class RoomService: ObservableObject {
         leaderboardByRoom[roomId] ?? []
     }
 
+    /// Cached members for `roomId`, possibly empty. Consumed by
+    /// the roster surface.
+    func cachedMembers(roomId: UUID) -> [Member] {
+        membersByRoom[roomId] ?? []
+    }
+
     /// Cached current-member RSVP for `eventId`, defaulting to
     /// `.unclaimed` so the upcoming slot is the safe default.
     func cachedRSVP(eventId: UUID) -> MemberRSVPState {
         rsvpByEvent[eventId] ?? .unclaimed
+    }
+
+    // MARK: - Host journal (P1.5)
+
+    /// Updates the host's bounded observation/journal field on the
+    /// room. Throws on RLS denial (member trying to edit) or server-
+    /// side length-cap rejection. Returns the persisted `Room` so
+    /// the UI can mirror the canonical value.
+    @discardableResult
+    func updateHostJournal(roomId: UUID, journal: String?) async throws -> Room {
+        let updated = try await store.updateHostJournal(
+            roomId: roomId,
+            journal: journal
+        )
+        self.lastError = nil
+        if let idx = rooms.firstIndex(where: { $0.id == updated.id }) {
+            rooms[idx] = updated
+        }
+        return updated
     }
 }
 

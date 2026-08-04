@@ -55,7 +55,7 @@ struct AddEventSheet: View {
 
     @State private var name: String = ""
     @State private var playedAt: Date = AddEventSheet.defaultPlayedAt()
-    @State private var packSlug: String = AddEventSheet.availablePacks.first?.slug ?? "casino"
+    @State private var packSlug: String = AddEventSheet().initialPackSlug
 
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
@@ -83,7 +83,7 @@ struct AddEventSheet: View {
 
                 Section {
                     Picker("Pack", selection: $packSlug) {
-                        ForEach(Self.availablePacks) { option in
+                        ForEach(availablePacks) { option in
                             Text(option.displayName).tag(option.slug)
                         }
                     }
@@ -170,17 +170,22 @@ struct AddEventSheet: View {
 
     // MARK: - Pack catalog
     //
-    // The V0.8 catalog is intentionally hardcoded — the four packs
-    // are dev-curated and well-defined (per Track A R6: "at least
-    // two must ship in v1"). The picker reads from this static
-    // list; pack discovery from the server lives in the room
-    // settings surface, not here.
-    static let availablePacks: [PackOption] = [
-        PackOption(slug: "casino",               displayName: "Casino"),
-        PackOption(slug: "cards_against_humanity", displayName: "Cards Against Humanity"),
-        PackOption(slug: "monopoly_deal",         displayName: "Monopoly Deal"),
-        PackOption(slug: "pluto_chess",           displayName: "Pluto Chess"),
-    ]
+    /// The V0.8 pack catalog is sourced from `PackRegistry.shared`
+    /// (per migration 034 seed ordering). The picker reads from the
+    /// registry so adding a new pack only requires a new struct in
+    /// `Packs.swift` and an entry in `PackRegistry.defaultPacks`.
+    /// The catalog is filtered through `PackRegistry.shared.isRegistered(slug:)`
+    /// on save so the host can never submit a slug the server doesn't
+    /// know about.
+    private var availablePacks: [PackOption] {
+        PackRegistry.shared.allPacks.map {
+            PackOption(slug: $0.slug, displayName: $0.displayName)
+        }
+    }
+
+    private var initialPackSlug: String {
+        availablePacks.first?.slug ?? "casino"
+    }
 
     // MARK: - Save
 
@@ -189,6 +194,16 @@ struct AddEventSheet: View {
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
+
+        // P0.3 acceptance criterion: "Add-event selection uses
+        // catalog data and cannot submit a slug absent from the
+        // server catalog." Refuse unknown slugs at the form layer
+        // so the host sees a clear error before the network round-
+        // trip.
+        guard PackRegistry.shared.isRegistered(slug: packSlug) else {
+            errorMessage = "Unknown pack: \(packSlug). Pick one of the registered packs."
+            return
+        }
 
         do {
             let newEventId = try await roomService.addEvent(

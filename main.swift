@@ -1,0 +1,411 @@
+//
+//  tests.swift
+//
+//  Single-file Foundation test runner for games-room's
+//  Foundation-only slice. Compiled and run with:
+//
+//      swiftc -parse-as-library \
+//             -target arm64-apple-macosx14.0 \
+//             -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
+//             tests.swift GamesRoom/Models/*.swift \
+//                      GamesRoom/Packs/*.swift \
+//             -o tests && ./tests
+//
+//  `tests.swift` is intentionally one file (not a Swift package)
+//  to side-step a Swift Package Manager limitation in the
+//  CommandLineTools 6.2.4 SDK: the toolchain emits
+//  swiftmodule files that other toolchain-invocation contexts
+//  can't read, so a multi-target SPM build produces "cannot find
+//  type X in scope" errors even when the symbols are present.
+//  Compiling everything in one invocation avoids the issue.
+//
+//  Coverage mirrors what an XCTestCase file would look like:
+//  PackRegistry lookup, PackScoringResolver for both families,
+//  Room / Event / BriefingSummary / RedeemedRoom / ScoreEntry /
+//  PackMetaValue / MemberRSVPState JSON round-trips.
+//
+
+import Foundation
+
+// MARK: - Test primitives
+
+final class TestRunner {
+    var passes = 0
+    var failures: [String] = []
+    var currentName = "<unknown>"
+
+    func assertEqual<T: Equatable>(_ actual: T, _ expected: T,
+                                  file: StaticString = #file,
+                                  line: UInt = #line) {
+        if actual != expected {
+            failures.append("[\(currentName)] \(file):\(line) — expected \(expected), got \(actual)")
+        }
+    }
+
+    func assertTrue(_ value: Bool, _ message: String = "",
+                    file: StaticString = #file,
+                    line: UInt = #line) {
+        if !value {
+            failures.append("[\(currentName)] \(file):\(line) — expected true: \(message)")
+        }
+    }
+
+    func assertFalse(_ value: Bool, _ message: String = "",
+                     file: StaticString = #file,
+                     line: UInt = #line) {
+        if value {
+            failures.append("[\(currentName)] \(file):\(line) — expected false: \(message)")
+        }
+    }
+
+    func assertNotNil<T>(_ value: T?, _ message: String = "",
+                        file: StaticString = #file,
+                        line: UInt = #line) {
+        if value == nil {
+            failures.append("[\(currentName)] \(file):\(line) — expected non-nil: \(message)")
+        }
+    }
+
+    func assertNil<T>(_ value: T?, _ message: String = "",
+                     file: StaticString = #file,
+                     line: UInt = #line) {
+        if value != nil {
+            failures.append("[\(currentName)] \(file):\(line) — expected nil: \(message)")
+        }
+    }
+
+    func run(_ name: String, _ block: () throws -> Void) {
+        currentName = name
+        let prior = failures.count
+        do {
+            try block()
+            if failures.count == prior {
+                print("ok   \(name)")
+                passes += 1
+            } else {
+                print("FAIL \(name)")
+                for f in failures.suffix(failures.count - prior) {
+                    print("       \(f)")
+                }
+            }
+        } catch {
+            print("FAIL \(name) — threw \(error)")
+            failures.append("[\(name)] threw \(error)")
+        }
+    }
+}
+
+let runner = TestRunner()
+
+// MARK: - PackRegistry tests
+
+runner.run("PackRegistry default registry holds four V0.8 packs") {
+    let slugs = PackRegistry.shared.allPacks.map { $0.slug }
+    runner.assertEqual(slugs, ["casino", "cards_against_humanity", "monopoly_deal", "pluto_chess"])
+}
+
+runner.run("PackRegistry isRegistered rejects legacy / unknown slugs") {
+    runner.assertFalse(PackRegistry.shared.isRegistered(slug: "monopoly-deal"))
+    runner.assertFalse(PackRegistry.shared.isRegistered(slug: "blackjack"))
+    runner.assertFalse(PackRegistry.shared.isRegistered(slug: ""))
+    runner.assertFalse(PackRegistry.shared.isRegistered(slug: "unknown-pack"))
+    runner.assertTrue(PackRegistry.shared.isRegistered(slug: "casino"))
+    runner.assertTrue(PackRegistry.shared.isRegistered(slug: "pluto_chess"))
+}
+
+runner.run("Pack scoring types match migration 034") {
+    runner.assertEqual(CasinoPack.scoringType, .withdrawReturn)
+    runner.assertEqual(CardsAgainstHumanityPack.scoringType, .singleWinner)
+    runner.assertEqual(MonopolyDealPack.scoringType, .singleWinner)
+    runner.assertEqual(PlutoChessPack.scoringType, .singleWinner)
+}
+
+runner.run("PackRegistry winPoints single-winner packs return 1") {
+    runner.assertEqual(PackRegistry.shared.winPoints(for: "cards_against_humanity"), 1)
+    runner.assertEqual(PackRegistry.shared.winPoints(for: "monopoly_deal"), 1)
+    runner.assertEqual(PackRegistry.shared.winPoints(for: "pluto_chess"), 1)
+    runner.assertEqual(PackRegistry.shared.winPoints(for: "casino"), 0)
+    runner.assertEqual(PackRegistry.shared.winPoints(for: "unknown"), 1)
+}
+
+// MARK: - PackScoringResolver tests
+
+runner.run("PackScoringResolver singleWinner produces one entry for winner") {
+    let winnerId = UUID()
+    let input = PackScoringInput.singleWinner(
+        roundIndex: 3,
+        winnerMemberId: winnerId,
+        winPoints: 1
+    )
+    let entries = PackScoringResolver.resolve(input, packSlug: "cards_against_humanity")
+    runner.assertEqual(entries.count, 1)
+    runner.assertEqual(entries[0].memberId, winnerId)
+    runner.assertEqual(entries[0].pointsDelta, 1)
+    runner.assertEqual(entries[0].meta["winner"], .bool(true))
+}
+
+runner.run("PackScoringResolver withdrawReturn emits one entry per member with net delta") {
+    let alice = UUID()
+    let bob = UUID()
+    let input = PackScoringInput.withdrawReturn(
+        roundIndex: 1,
+        perMember: [
+            MemberNet(memberId: alice, withdrawnPoints: 50, returnedPoints: 70),
+            MemberNet(memberId: bob,   withdrawnPoints: 50, returnedPoints: 30)
+        ]
+    )
+    let entries = PackScoringResolver.resolve(input, packSlug: "casino")
+    runner.assertEqual(entries.count, 2)
+    let aliceRow = entries.first { $0.memberId == alice }
+    let bobRow   = entries.first { $0.memberId == bob }
+    runner.assertEqual(aliceRow?.pointsDelta, 20)
+    runner.assertEqual(bobRow?.pointsDelta, -20)
+    runner.assertEqual(aliceRow?.meta["withdrawn"], .int(50))
+    runner.assertEqual(aliceRow?.meta["returned"], .int(70))
+}
+
+runner.run("PackScoringResolver withdrawReturn zero-returned records zero delta") {
+    let member = UUID()
+    let input = PackScoringInput.withdrawReturn(
+        roundIndex: 2,
+        perMember: [MemberNet(memberId: member, withdrawnPoints: 50, returnedPoints: 0)]
+    )
+    let entries = PackScoringResolver.resolve(input, packSlug: "casino")
+    runner.assertEqual(entries.first?.pointsDelta, -50)
+}
+
+runner.run("ScoreEntry JSON round-trip preserves the typed meta") {
+    let entry = ScoreEntry(
+        memberId: UUID(),
+        pointsDelta: 5,
+        meta: ["winner": .bool(true), "round_index": .int(Int64(7))]
+    )
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = .sortedKeys
+    let data = try encoder.encode(entry)
+    let decoded = try JSONDecoder().decode(ScoreEntry.self, from: data)
+    runner.assertEqual(decoded.memberId, entry.memberId)
+    runner.assertEqual(decoded.pointsDelta, 5)
+    runner.assertEqual(decoded.meta["winner"], .bool(true))
+    runner.assertEqual(decoded.meta["round_index"], .int(7))
+}
+
+// MARK: - Room decoding
+
+runner.run("Room decodes full V0.26 + host_journal shape") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Friday Night Hold'em",
+      "mascot_name": "Borat",
+      "mascot_personality": "snarky",
+      "mascot_political_ideology": "anarchist",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "next_event_description": "Tonight 8pm",
+      "join_starting_bonus": 250,
+      "user_role": "host",
+      "briefing_48h_enabled": true,
+      "calendar_auto_add_host": false,
+      "social_preferences_enabled": true,
+      "social_narration_enabled": false,
+      "max_seats": 8,
+      "member_invite_quota": 4,
+      "host_journal": "Bring your own chips."
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.name, "Friday Night Hold'em")
+    runner.assertEqual(room.joinStartingBonus, 250)
+    runner.assertEqual(room.maxSeats, 8)
+    runner.assertEqual(room.memberInviteQuota, 4)
+    runner.assertEqual(room.userRole, .host)
+    runner.assertTrue(room.briefing48hEnabled)
+    runner.assertFalse(room.calendarAutoAddHost)
+    runner.assertFalse(room.socialNarrationEnabled)
+    runner.assertEqual(room.hostJournal, "Bring your own chips.")
+}
+
+runner.run("Room falls back to defaults when V0.26 columns missing") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Old Room",
+      "mascot_name": "Felty",
+      "mascot_personality": "professional",
+      "mascot_political_ideology": "order",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-02T00:00:00Z",
+      "is_live": false,
+      "join_starting_bonus": 200,
+      "user_role": "member"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertTrue(room.briefing48hEnabled)
+    runner.assertEqual(room.maxSeats, 6)
+    runner.assertEqual(room.memberInviteQuota, 3)
+    runner.assertNil(room.hostJournal)
+}
+
+// MARK: - RedeemedRoom decoding
+
+runner.run("RedeemedRoom decodes server shape (room_id, room_name)") {
+    let json = """
+    {
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "room_name": "Carwoola Crew"
+    }
+    """
+    let decoded = try JSONDecoder().decode(RedeemedRoom.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.roomId.uuidString, "33333333-3333-3333-3333-333333333333")
+    runner.assertEqual(decoded.roomName, "Carwoola Crew")
+    runner.assertEqual(decoded.id, decoded.roomId)
+}
+
+runner.run("RedeemedRoom falls back to 'Room' when name missing") {
+    let json = """
+    {
+      "room_id": "33333333-3333-3333-3333-333333333333"
+    }
+    """
+    let decoded = try JSONDecoder().decode(RedeemedRoom.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.roomName, "Room")
+}
+
+// MARK: - BriefingSummary
+
+runner.run("BriefingSummary seatsLeft = total - claimed - declined") {
+    let summary = BriefingSummary(
+        eventId: UUID(), roomId: UUID(),
+        seatsTotal: 6, seatsClaimed: 2, seatsDeclined: 1, seatsUnclaimed: 3
+    )
+    runner.assertEqual(summary.seatsLeft, 3)
+}
+
+runner.run("BriefingSummary seatsLeft floors at zero") {
+    let summary = BriefingSummary(
+        eventId: UUID(), roomId: UUID(),
+        seatsTotal: 4, seatsClaimed: 3, seatsDeclined: 2, seatsUnclaimed: -1
+    )
+    runner.assertEqual(summary.seatsLeft, 0)
+}
+
+// MARK: - Event round-trip
+
+runner.run("Event JSON round-trip preserves venue + hostNote") {
+    let event = Event(
+        id: UUID(), roomId: UUID(),
+        name: "Friday Night Hold'em",
+        playedAt: Date(timeIntervalSince1970: 1_700_000_000),
+        createdAt: Date(timeIntervalSince1970: 1_699_900_000),
+        venue: "The dining room",
+        hostNote: "Bring snacks.",
+        maxSeats: 6,
+        startedAt: nil, settledAt: nil, sessionId: nil, hostFinalized: false
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let data = try encoder.encode(event)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(Event.self, from: data)
+    runner.assertEqual(decoded.id, event.id)
+    runner.assertEqual(decoded.name, event.name)
+    runner.assertEqual(decoded.venue, event.venue)
+    runner.assertEqual(decoded.hostNote, event.hostNote)
+}
+
+// MARK: - RSVP
+
+runner.run("MemberRSVPState hasResponded logic") {
+    runner.assertFalse(MemberRSVPState.unclaimed.hasResponded)
+    runner.assertTrue(MemberRSVPState.claimed.hasResponded)
+    runner.assertTrue(MemberRSVPState.declined.hasResponded)
+}
+
+runner.run("MemberRSVPState round-trips through rawValue") {
+    for state in MemberRSVPState.allCases {
+        let decoded = MemberRSVPState(rawValue: state.rawValue)
+        runner.assertEqual(decoded, state)
+    }
+}
+
+runner.run("MemberRSVP decodes server shape with responded_at") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "member_id": "44444444-4444-4444-4444-444444444444",
+      "state": "claimed",
+      "responded_at": "2026-02-01T00:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(MemberRSVP.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.state, .claimed)
+    runner.assertNotNil(decoded.respondedAt)
+}
+
+// MARK: - PackMetaValue encoding round-trip
+
+runner.run("PackMetaValue bool and int round-trip") {
+    let meta: [String: PackMetaValue] = [
+        "flag": .bool(true),
+        "count": .int(Int64(42))
+    ]
+    let data = try JSONEncoder().encode(meta)
+    let decoded = try JSONDecoder().decode([String: PackMetaValue].self, from: data)
+    runner.assertEqual(decoded["flag"], .bool(true))
+    runner.assertEqual(decoded["count"], .int(42))
+}
+
+runner.run("PackMetaValue string round-trip") {
+    let meta: [String: PackMetaValue] = ["reason": .string("host override")]
+    let data = try JSONEncoder().encode(meta)
+    let decoded = try JSONDecoder().decode([String: PackMetaValue].self, from: data)
+    runner.assertEqual(decoded["reason"], .string("host override"))
+}
+
+// MARK: - LeaderboardEntry trajectory
+
+runner.run("LeaderboardEntry round-trip preserves trajectory") {
+    let entry = LeaderboardEntry(
+        userId: UUID(),
+        displayName: "Alex",
+        role: "member",
+        pointsBalance: 980,
+        seasonScore: 980,
+        sessionsPlayed: 12,
+        lastSessionAt: Date(timeIntervalSince1970: 1_699_000_000),
+        lastSessionDelta: 180,
+        trajectory: [
+            SessionDelta(sessionId: UUID(), delta: 60),
+            SessionDelta(sessionId: UUID(), delta: 180)
+        ]
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let data = try encoder.encode(entry)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(LeaderboardEntry.self, from: data)
+    runner.assertEqual(decoded.userId, entry.userId)
+    runner.assertEqual(decoded.trajectory.count, 2)
+    runner.assertEqual(decoded.trajectory[1].delta, 180)
+}
+
+// MARK: - Summary
+
+print("")
+print("Ran \(runner.passes + runner.failures.count) cases: \(runner.passes) passed, \(runner.failures.count) failed.")
+exit(runner.failures.isEmpty ? 0 : 1)

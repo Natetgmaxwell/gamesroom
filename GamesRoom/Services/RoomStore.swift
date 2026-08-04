@@ -70,6 +70,44 @@ protocol RoomStore: Sendable {
     /// order. Mirrors the existing `get_my_rooms` RPC (V0.4+).
     func fetchRooms() async throws -> [Room]
 
+    // MARK: Create room + join codes (P0.2 onboarding)
+
+    /// Creates a new room with the calling user as the host.
+    /// Mirrors the `create_room(p_name, p_mascot_name,
+    /// p_mascot_personality, p_mascot_political_ideology,
+    /// p_join_starting_bonus, p_mascot_api_key,
+    /// p_blacklisted_user_ids)` RPC (migration 022). Returns the
+    /// new room id; the caller should refresh the rooms list so the
+    /// hero/empty state re-renders.
+    func createRoom(
+        name: String,
+        mascotName: String,
+        mascotPersonality: MascotPersonality,
+        mascotPoliticalIdeology: MascotPoliticalIdeology,
+        joinStartingBonus: Int,
+        mascotApiKey: String?,
+        blacklistedUserIds: [UUID]
+    ) async throws -> UUID
+
+    /// Mints a fresh 6-character join code for a room the caller
+    /// hosts. Mirrors `generate_join_code(p_room_id)` (migration
+    /// 004 + 006 host check). Throws on non-host writes.
+    func generateJoinCode(roomId: UUID) async throws -> String
+
+    /// Redeems a join code on behalf of the calling user. Mirrors
+    /// `redeem_join_code(p_code)` (migration 004 + V0.18 bonus
+    /// extension). Idempotent: re-redeeming for an existing member
+    /// returns the room without mutating points. Throws on
+    /// not-found / already-redeemed / RLS rejection (the iOS UI
+    /// maps these to user-facing error strings).
+    func redeemJoinCode(code: String) async throws -> RedeemedRoom
+
+    /// Lists the members of a room, host-first then alphabetical.
+    /// Mirrors `get_room_members(p_room_id)` (migration 008). The
+    /// Swift mirror is the `Member` model — name, role, joined-at.
+    /// Throws on RLS rejection (non-member read attempt).
+    func fetchRoomMembers(roomId: UUID) async throws -> [Member]
+
     // MARK: Active event + briefing
 
     /// The room's currently-relevant event. Returns `nil` when the
@@ -127,6 +165,16 @@ protocol RoomStore: Sendable {
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool
     ) async throws -> Room
+
+    // MARK: Host journal (P1.5)
+
+    /// Updates the host's bounded observation/journal field on the
+    /// room. Mirrors `update_host_journal(p_room_id, p_journal)`
+    /// from migration 036. Server-side bounded to 280 chars.
+    /// Throws on non-host writes (RLS denial). Returns the
+    /// server-canonical `Room` so the UI can mirror the persisted
+    /// value without a follow-up read.
+    func updateHostJournal(roomId: UUID, journal: String?) async throws -> Room
 }
 
 // MARK: - LiveRoomStore
@@ -161,6 +209,101 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .execute()
             .value
         return rooms
+    }
+
+    // MARK: Create room + join codes (P0.2 onboarding)
+
+    /// The live RPC is `create_room(p_name, p_mascot_name,
+    /// p_mascot_personality, p_mascot_political_ideology,
+    /// p_join_starting_bonus, p_mascot_api_key,
+    /// p_blacklisted_user_ids)` (migration 022). The server
+    /// resolves the host check via the caller's auth context,
+    /// inserts the row, fires the `handle_new_room` trigger that
+    /// adds the caller as a host member, and returns the new room
+    /// id.
+    func createRoom(
+        name: String,
+        mascotName: String,
+        mascotPersonality: MascotPersonality,
+        mascotPoliticalIdeology: MascotPoliticalIdeology,
+        joinStartingBonus: Int,
+        mascotApiKey: String?,
+        blacklistedUserIds: [UUID]
+    ) async throws -> UUID {
+        let rows: [UUID] = try await SupabaseClientProvider.shared
+            .rpc("create_room", params: [
+                "p_name": name,
+                "p_mascot_name": mascotName,
+                "p_mascot_personality": mascotPersonality.rawValue,
+                "p_mascot_political_ideology": mascotPoliticalIdeology.rawValue,
+                "p_join_starting_bonus": String(joinStartingBonus),
+                "p_mascot_api_key": mascotApiKey as Any? as Any,
+                "p_blacklisted_user_ids": blacklistedUserIds.map { $0.uuidString }
+            ])
+            .execute()
+            .value
+        guard let id = rows.first else {
+            throw NSError(
+                domain: "LiveRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "create_room returned no id"]
+            )
+        }
+        return id
+    }
+
+    /// The live RPC is `generate_join_code(p_room_id)` (migration
+    /// 004 + V0.3 host-check extension). Returns the freshly-minted
+    /// six-character code. Throws on non-host writes.
+    func generateJoinCode(roomId: UUID) async throws -> String {
+        let rows: [String] = try await SupabaseClientProvider.shared
+            .rpc("generate_join_code", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        guard let code = rows.first, !code.isEmpty else {
+            throw NSError(
+                domain: "LiveRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "generate_join_code returned no code"]
+            )
+        }
+        return code
+    }
+
+    /// The live RPC is `redeem_join_code(p_code)` (migration 004 +
+    /// V0.18 bonus extension). Server is idempotent — re-redeeming
+    /// for an existing member returns the room row without
+    /// mutating points.
+    func redeemJoinCode(code: String) async throws -> RedeemedRoom {
+        let rows: [RedeemedRoom] = try await SupabaseClientProvider.shared
+            .rpc("redeem_join_code", params: [
+                "code": code
+            ])
+            .execute()
+            .value
+        guard let row = rows.first else {
+            throw NSError(
+                domain: "LiveRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "redeem_join_code returned no row"]
+            )
+        }
+        return row
+    }
+
+    /// The live RPC is `get_room_members(p_room_id)` (migration
+    /// 008). Returns one row per room member, host-first then
+    /// alphabetical by display name.
+    func fetchRoomMembers(roomId: UUID) async throws -> [Member] {
+        let rows: [Member] = try await SupabaseClientProvider.shared
+            .rpc("get_room_members", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
     }
 
     // MARK: Active event
@@ -327,6 +470,30 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         }
         return room
     }
+
+    // MARK: Host journal (P1.5)
+
+    /// The live RPC is `update_host_journal(p_room_id, p_journal)`
+    /// (migration 036). Server enforces host-only writes and the
+    /// 280-char length cap. The wrapper reads back the room row so
+    /// the UI can mirror the persisted value.
+    func updateHostJournal(roomId: UUID, journal: String?) async throws -> Room {
+        let rows: [Room] = try await SupabaseClientProvider.shared
+            .rpc("update_host_journal", params: [
+                "p_room_id": roomId.uuidString,
+                "p_journal": (journal ?? "") as Any
+            ])
+            .execute()
+            .value
+        guard let room = rows.first else {
+            throw NSError(
+                domain: "LiveRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "update_host_journal returned no row"]
+            )
+        }
+        return room
+    }
 }
 
 // MARK: - InMemoryRoomStore
@@ -373,6 +540,13 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
 
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
+
+    /// Map of `join_code → roomId` for the in-memory analogue of
+    /// the `public.join_codes` table. Codes are minted by
+    /// `generateJoinCode(roomId:)` and consumed (removed) by
+    /// `redeemJoinCode(code:)`. Powers the P0.2 onboarding
+    /// create-room + join-code surfaces without Supabase.
+    private var joinCodes: [String: UUID]
 
     private init() {
         let carwoola = Room(
@@ -510,6 +684,7 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
         self.rsvps = [:]
+        self.joinCodes = [:]
     }
 
     // MARK: Rooms list
@@ -517,6 +692,143 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     func fetchRooms() async throws -> [Room] {
         lock.lock(); defer { lock.unlock() }
         return rooms
+    }
+
+    // MARK: Create room + join codes (P0.2 onboarding)
+
+    /// Synthesises a new room with the calling user as host and
+    /// inserts it into the seed list. The `currentSyntheticMemberId()`
+    /// pattern from the RSVP write path carries over — the in-memory
+    /// store has no real auth context so the host is the synthetic
+    /// member. Used by `RoomService.createRoom` so the empty-state
+    /// create-room flow works without Supabase.
+    func createRoom(
+        name: String,
+        mascotName: String,
+        mascotPersonality: MascotPersonality,
+        mascotPoliticalIdeology: MascotPoliticalIdeology,
+        joinStartingBonus: Int,
+        mascotApiKey: String?,
+        blacklistedUserIds: [UUID]
+    ) async throws -> UUID {
+        lock.lock()
+        let ownerId = currentSyntheticMemberId()
+        let newRoom = Room(
+            id: UUID(),
+            name: name,
+            mascotName: mascotName,
+            mascotPersonality: mascotPersonality,
+            mascotPoliticalIdeology: mascotPoliticalIdeology,
+            createdBy: ownerId,
+            createdAt: Date(),
+            updatedAt: Date(),
+            isLive: false,
+            nextEventDescription: nil,
+            joinStartingBonus: joinStartingBonus,
+            mascotApiKey: mascotApiKey,
+            userRole: .host,
+            briefing48hEnabled: true,
+            calendarAutoAddHost: false,
+            socialPreferencesEnabled: true,
+            socialNarrationEnabled: true,
+            maxSeats: 6,
+            memberInviteQuota: 3
+        )
+        rooms.insert(newRoom, at: 0)
+        lock.unlock()
+        _ = blacklistedUserIds // in-memory; blacklist is server-only
+        return newRoom.id
+    }
+
+    /// Synthesises a six-character join code from the same alphabet
+    /// the live RPC uses (31 chars, no ambiguous glyphs) and stores
+    /// it in the in-memory `joinCodes` map. Code collisions across
+    /// in-memory rooms are vanishingly rare at MVP scope (31^6 ≈ 887M
+    /// combinations) but we still loop with a uniqueness check so
+    /// the test suite can't flake.
+    func generateJoinCode(roomId: UUID) async throws -> String {
+        let alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+        lock.lock(); defer { lock.unlock() }
+        guard rooms.contains(where: { $0.id == roomId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "room \(roomId) not found"]
+            )
+        }
+        var code = ""
+        for _ in 0..<6 {
+            let idx = Int.random(in: 0..<alphabet.count)
+            let char = alphabet[alphabet.index(alphabet.startIndex, offsetBy: idx)]
+            code.append(char)
+        }
+        joinCodes[code] = roomId
+        return code
+    }
+
+    /// Synthesises a redeem flow: looks up the in-memory code,
+    /// synthesises a membership row, returns a `RedeemedRoom`. The
+    /// re-redeem case (already a member) returns the room without
+    /// mutating state — mirrors the live server's idempotency.
+    func redeemJoinCode(code: String) async throws -> RedeemedRoom {
+        let normalised = code.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        lock.lock(); defer { lock.unlock() }
+        guard let roomId = joinCodes[normalised] else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Code not found or already redeemed"]
+            )
+        }
+        guard let room = rooms.first(where: { $0.id == roomId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Room not found"]
+            )
+        }
+        // Mark the code consumed so a second tap reports the
+        // "already redeemed" path. Mirrors the live redeem_join_code
+        // row update.
+        joinCodes.removeValue(forKey: normalised)
+        return RedeemedRoom(roomId: room.id, roomName: room.name)
+    }
+
+    /// Returns one synthetic `Member` row per seeded room so the
+    /// roster surface renders without Supabase. The host is always
+    /// row 0 (matches the live `get_room_members` ordering: host
+    /// first, then alphabetical). Used by `RoomService.fetchRoomMembers`.
+    func fetchRoomMembers(roomId: UUID) async throws -> [Member] {
+        lock.lock(); defer { lock.unlock() }
+        guard let room = rooms.first(where: { $0.id == roomId }) else {
+            return []
+        }
+        return [
+            Member(
+                id: "\(room.id.uuidString):\(room.createdBy.uuidString)",
+                roomId: room.id,
+                userId: room.createdBy,
+                role: .host,
+                joinedAt: room.createdAt,
+                displayName: "Host"
+            ),
+            Member(
+                id: "\(room.id.uuidString):synthetic-member-2",
+                roomId: room.id,
+                userId: UUID(),
+                role: .member,
+                joinedAt: room.createdAt.addingTimeInterval(86_400 * 7),
+                displayName: "Alex"
+            ),
+            Member(
+                id: "\(room.id.uuidString):synthetic-member-3",
+                roomId: room.id,
+                userId: UUID(),
+                role: .member,
+                joinedAt: room.createdAt.addingTimeInterval(86_400 * 14),
+                displayName: "Sam"
+            )
+        ]
     }
 
     // MARK: Active event
@@ -693,6 +1005,49 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
             socialNarrationEnabled: socialNarrationEnabled,
             maxSeats: maxSeats,
             memberInviteQuota: memberInviteQuota
+        )
+        rooms[idx] = updated
+        return updated
+    }
+
+    // MARK: Host journal (P1.5)
+
+    /// In-memory analogue of `update_host_journal`. Updates the
+    /// `hostJournal` field in place, returns the updated room. The
+    /// 280-char cap is enforced client-side (the form view counts
+    /// characters and refuses over-limit input) so the in-memory
+    /// path doesn't need its own length check.
+    func updateHostJournal(roomId: UUID, journal: String?) async throws -> Room {
+        lock.lock(); defer { lock.unlock() }
+        guard let idx = rooms.firstIndex(where: { $0.id == roomId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "room \(roomId) not found"]
+            )
+        }
+        let existing = rooms[idx]
+        let updated = Room(
+            id: existing.id,
+            name: existing.name,
+            mascotName: existing.mascotName,
+            mascotPersonality: existing.mascotPersonality,
+            mascotPoliticalIdeology: existing.mascotPoliticalIdeology,
+            createdBy: existing.createdBy,
+            createdAt: existing.createdAt,
+            updatedAt: Date(),
+            isLive: existing.isLive,
+            nextEventDescription: existing.nextEventDescription,
+            joinStartingBonus: existing.joinStartingBonus,
+            mascotApiKey: existi...Key,
+            userRole: existing.userRole,
+            briefing48hEnabled: existing.briefing48hEnabled,
+            calendarAutoAddHost: existing.calendarAutoAddHost,
+            socialPreferencesEnabled: existing.socialPreferencesEnabled,
+            socialNarrationEnabled: existing.socialNarrationEnabled,
+            maxSeats: existing.maxSeats,
+            memberInviteQuota: existing.memberInviteQuota,
+            hostJournal: journal
         )
         rooms[idx] = updated
         return updated

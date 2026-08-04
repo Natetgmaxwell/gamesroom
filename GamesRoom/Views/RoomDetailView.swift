@@ -49,6 +49,22 @@ struct RoomDetailView: View {
     /// the standalone rooms-page gear icon.
     @State private var settingsRoom: Room?
 
+    // P0.5 — withdraw + settle sheet bindings. Owned by the view
+    // layer so `openWithdraw` / `openScan` can flip them without
+    // going through `RoomService` (which would force an extra
+    // round-trip). The active event is captured at sheet-present
+    // time so the sheets don't drift if the user pulls-to-refresh
+    // while the sheet is open.
+    @State private var withdrawSheetEvent: Event?
+    @State private var settleSheetEvent: Event?
+    @State private var casinoWithdrawn: Int = 0
+
+    // P0.4 — host-only single-winner scoring sheet binding. Hosts
+    // tap "Score a round" on the at-play Witness Slot; the sheet
+    // opens for any pack (Casino host scoring routes through
+    // `SettleCasinoSheet` instead).
+    @State private var hostScoreEvent: Event?
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
@@ -132,6 +148,39 @@ struct RoomDetailView: View {
             RoomSettingsSheet(room: presented)
                 .environmentObject(roomService)
         }
+        .sheet(item: $withdrawSheetEvent) { event in
+            WithdrawChipsSheet(eventId: event.id, roomId: room.id)
+                .environmentObject(casinoService)
+                .environmentObject(authService)
+        }
+        .sheet(item: $settleSheetEvent) { event in
+            // P0.5 virtual-only Casino: the withdrawn amount is
+            // sourced from the prior `CasinoService.withdraw(...)`
+            // row via the latest open attestation's
+            // `vision_amount_points` proxy. Until we wire the
+            // attestation → withdrawn lookup, default to 0 so
+            // the sheet always renders. The member can edit
+            // the displayed withdrawn value via the stepper
+            // (returns 0–200 pts in 10-pt increments).
+            SettleCasinoSheet(
+                eventId: event.id,
+                roomId: room.id,
+                withdrawn: casinoWithdrawn
+            )
+            .environmentObject(scoringService)
+            .environmentObject(authService)
+        }
+        .sheet(item: $hostScoreEvent) { event in
+            let pack = PackRegistry.shared.definition(for: event.packSlug)
+            HostScoreEntrySheet(
+                eventId: event.id,
+                roomId: room.id,
+                packSlug: event.packSlug,
+                packDisplayName: pack?.displayName ?? event.packSlug
+            )
+            .environmentObject(roomService)
+            .environmentObject(scoringService)
+        }
         .task {
             await refresh()
         }
@@ -191,15 +240,29 @@ struct RoomDetailView: View {
                          onClaim: {}, onDecline: {}, isHero: true)
 
         case .inPlay(let event):
-            WitnessSlot(event: event, attestations: openAttestations, cta: .withdraw,
-                        onWithdraw: { Task { await openWithdraw(event: event) } },
-                        onScan: { Task { await openScan(event: event) } },
-                        isHero: true)
+            WitnessSlot(
+                event: event,
+                attestations: openAttestations,
+                cta: .withdraw,
+                onWithdraw: { Task { await openWithdraw(event: event) } },
+                onScan: { Task { await openScan(event: event) } },
+                onScore: isHost
+                    ? { Task { await openHostScore(event: event) } }
+                    : nil,
+                isHero: true
+            )
         case .settleRound(let event):
-            WitnessSlot(event: event, attestations: openAttestations, cta: .scan,
-                        onWithdraw: { Task { await openWithdraw(event: event) } },
-                        onScan: { Task { await openScan(event: event) } },
-                        isHero: true)
+            WitnessSlot(
+                event: event,
+                attestations: openAttestations,
+                cta: .scan,
+                onWithdraw: { Task { await openWithdraw(event: event) } },
+                onScan: { Task { await openScan(event: event) } },
+                onScore: isHost
+                    ? { Task { await openHostScore(event: event) } }
+                    : nil,
+                isHero: true
+            )
 
         case .justSettled(let event):
             CeremonialCard(event: event)
@@ -222,15 +285,24 @@ struct RoomDetailView: View {
 
     /// Loads every dependency the V0.8 stage needs in parallel:
     /// the active event, the briefing summary, the leaderboard,
-    /// the current member's RSVP, and the open attestations.
-    /// Called from `.task` and `.refreshable`.
+    /// the current member's RSVP, the open attestations, and the
+    /// room members (for the P1.1 roster surface). Called from
+    /// `.task` and `.refreshable`.
     private func refresh() async {
         async let active: () = loadActiveIfNeeded()
         async let board: () = loadLeaderboardIfNeeded()
         async let attestations: () = loadAttestations()
         async let briefingLoad: () = loadBriefingIfNeeded()
         async let rsvpLoad: () = loadRSVPIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad)
+        async let membersLoad: () = loadMembersIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad)
+    }
+
+    private func loadMembersIfNeeded() async {
+        // Always re-fetch on refresh so a member who joined after
+        // the first paint shows up in the roster without a manual
+        // pull-to-refresh.
+        await roomService.loadRoomMembers(roomId: room.id)
     }
 
     private func loadActiveIfNeeded() async {
@@ -293,39 +365,41 @@ struct RoomDetailView: View {
         }
     }
 
-    /// Chip-withdraw CTA on the at-play Witness Slot. Currently a
-    /// no-op stub — `CasinoService.withdraw(...)` requires a
-    /// settled slider amount that the V0.8 page doesn't render.
-    /// Wired here so the button has a real call site; the full
-    /// surface ships in V0.8.1.
+    /// Chip-withdraw CTA on the at-play Witness Slot. P0.5 virtual-
+    /// only Casino: flips `withdrawSheetEvent` so the
+    /// `WithdrawChipsSheet` renders. The sheet loads the member's
+    /// current balance and submits through
+    /// `CasinoService.withdraw(...)`. The full camera/Vision
+    /// pipeline is intentionally out of scope for this MVP slice
+    /// — see plan section 3 P0.5 for the accepted virtual-only
+    /// Casino path.
     private func openWithdraw(event: Event) async {
-        _ = event
-        // V0.8.1: present the Withdraw surface.
+        withdrawSheetEvent = event
     }
 
-    /// Chip-scan CTA. Calls `CasinoService.submitMemberScan(...)`
-    /// with placeholder values so the call site exercises the
-    /// service. The real vision pipeline + UI sheet land in V0.8.1.
+    /// Chip-scan CTA. P0.5 virtual-only Casino: flips
+    /// `settleSheetEvent` so the `SettleCasinoSheet` renders. The
+    /// sheet takes the member's net returned chips and routes
+    /// through `ScoringService.recordRoundInput(...)`. The
+    /// `record_member_scan` RPC + camera/Vision pipeline remain in
+    /// the codebase for the eventual physical-chip flip but are
+    /// not exercised by the V0.8 surface.
     private func openScan(event: Event) async {
-        let stubSnapshot = VisionSnapshot(
-            stacks: [],
-            totalValue: 0,
-            confidenceAvg: 0,
-            discarded: false
-        )
-        do {
-            _ = try await casinoService.submitMemberScan(
-                eventId: event.id,
-                visionAmount: 0,
-                visionSnapshot: stubSnapshot,
-                confidence: nil,
-                source: .manual
-            )
-        } catch {
-            // The CasinoService keeps `lastError` for the banner;
-            // the v0.8 stub intentionally swallows so the chip
-            // scan CTA is reachable from the demo path.
-            _ = error
+        settleSheetEvent = event
+    }
+
+    /// P0.4 — host-only "Score a round" CTA on the at-play Witness
+    /// Slot. Opens `HostScoreEntrySheet` for the event's pack.
+    /// For Casino, the host's equivalent is `SettleCasinoSheet`
+    /// (the member-driven flow), so this CTA flips the same
+    /// `settleSheetEvent` binding — the casino pack renders the
+    /// settle sheet instead of the single-winner picker.
+    private func openHostScore(event: Event) async {
+        if let pack = PackRegistry.shared.definition(for: event.packSlug),
+           pack.scoringType == .withdrawReturn {
+            settleSheetEvent = event
+        } else {
+            hostScoreEvent = event
         }
     }
 }
@@ -470,6 +544,9 @@ private struct WitnessSlot: View {
     let cta: CTA
     let onWithdraw: () -> Void
     let onScan: () -> Void
+    /// Host-only callback that opens `HostScoreEntrySheet`. `nil`
+    /// for member sessions — the host-only button doesn't render.
+    let onScore: (() -> Void)?
     let isHero: Bool
 
     var body: some View {
@@ -528,6 +605,28 @@ private struct WitnessSlot: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.top, 8)
+            }
+
+            // P0.4 — host-only "Score a round" affordance. Renders
+            // below the member-facing CTA so the host's at-play
+            // surface carries both the chip-withdraw entry point
+            // AND the round-recording control without crowding the
+            // dominant action. Members see nothing here.
+            if let onScore {
+                Button(action: onScore) {
+                    HStack {
+                        Image(systemName: "checkmark.seal.fill")
+                        Text("Score a round")
+                    }
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                .accessibilityLabel(Text("Score a round (host)"))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -624,10 +723,72 @@ private struct StandingsSection: View {
 
 private struct PackShelfReadOnly: View {
     let room: Room
+    /// The four V0.8 packs from `PackRegistry.shared`. Each tile
+    /// renders name + icon + description; tapping the tile opens a
+    /// how-to guide placeholder (per the brief: "an entry point to
+    /// each how-to guide"). The how-to body itself is a V0.9+ slice;
+    /// the tap surface ships here so the rest of the shelf contract
+    /// is in place.
+    private var packs: [any PackDefinition.Type] {
+        PackRegistry.shared.allPacks
+    }
+
     var body: some View {
-        // Stub — packs list is sourced from room.packs in v0.8.1.
-        // v0.8 keeps this empty; the Settings → Packs surface owns it.
-        EmptyView()
+        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            Text("Packs")
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.primaryText)
+
+            Text("Games-night rules your room is set up for.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+
+            VStack(spacing: 0) {
+                ForEach(Array(packs.enumerated()), id: \.element.slug) { idx, pack in
+                    packRow(pack)
+                    if idx != packs.count - 1 {
+                        Divider()
+                            .overlay(Theme.Palette.hairline)
+                            .padding(.horizontal, Theme.Layout.edgePadding)
+                    }
+                }
+            }
+            .background(Theme.Palette.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func packRow(_ pack: any PackDefinition.Type) -> some View {
+        HStack(spacing: Theme.Layout.gutter) {
+            Image(systemName: pack.iconSystemName)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.accent)
+                .frame(width: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pack.displayName)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Text(pack.description)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.Palette.hairline)
+        }
+        .padding(.vertical, Theme.Layout.cardInset)
+        .padding(.horizontal, Theme.Layout.edgePadding)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("\(pack.displayName) — \(pack.description)"))
+        .accessibilityHint(Text("Opens how-to guide"))
     }
 }
 
@@ -635,9 +796,85 @@ private struct PackShelfReadOnly: View {
 
 private struct MemberRosterReadOnly: View {
     let room: Room
+    /// The cached roster for this room (host first, then
+    /// alphabetical per `get_room_members`). Falls back to "Loading…"
+    /// when the cache is empty — `RoomDetailView.refresh()` is
+    /// responsible for populating the cache on first appear.
+    @EnvironmentObject private var roomService: RoomService
+
     var body: some View {
-        // Stub — roster list is sourced from RoomService.getRoomMembers in v0.8.1.
-        EmptyView()
+        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            Text("Members")
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.primaryText)
+            Text("Everyone with a seat at the table.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+
+            let members = roomService.cachedMembers(roomId: room.id)
+            if members.isEmpty {
+                HStack {
+                    ProgressView()
+                        .tint(Theme.Palette.accent)
+                    Text("Loading members…")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+                .padding(.vertical, Theme.Layout.cardInset)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(members.enumerated()), id: \.element.id) { idx, member in
+                        memberRow(member)
+                        if idx != members.count - 1 {
+                            Divider()
+                                .overlay(Theme.Palette.hairline)
+                                .padding(.horizontal, Theme.Layout.edgePadding)
+                        }
+                    }
+                }
+                .background(Theme.Palette.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func memberRow(_ member: Member) -> some View {
+        HStack(spacing: Theme.Layout.gutter) {
+            // Avatar placeholder — the V0.8 brief deliberately
+            // surfaces a monogram (initials) rather than a photo so
+            // the roster renders without a media dependency.
+            Circle()
+                .fill(Theme.Palette.accent.opacity(0.18))
+                .frame(width: 32, height: 32)
+                .overlay(
+                    Text(initials(for: member.displayName))
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(member.displayName)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Text(member.role == .host ? "Host" : "Member")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, Theme.Layout.cardInset)
+        .padding(.horizontal, Theme.Layout.edgePadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("\(member.displayName), \(member.role == .host ? "host" : "member")"))
+    }
+
+    private func initials(for name: String) -> String {
+        let parts = name.split(separator: " ").prefix(2)
+        return parts.compactMap { $0.first.map(String.init) }.joined().uppercased()
     }
 }
 

@@ -24,6 +24,7 @@ struct GamesRoomApp: App {
     @StateObject private var auth = AuthService()
     @StateObject private var roomService = RoomService()
     @StateObject private var casinoService = CasinoService()
+    @StateObject private var scoringService = ScoringService()
 
     var body: some Scene {
         WindowGroup {
@@ -31,6 +32,7 @@ struct GamesRoomApp: App {
                 .environmentObject(auth)
                 .environmentObject(roomService)
                 .environmentObject(casinoService)
+                .environmentObject(scoringService)
         }
     }
 }
