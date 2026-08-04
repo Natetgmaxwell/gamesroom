@@ -39,6 +39,23 @@ struct RoomSettingsSheet: View {
     @State private var calendarAutoAddHost: Bool
     @State private var socialPreferencesEnabled: Bool
 
+    // Host journal field (P1.5). Bounded to 280 chars at the SQL
+    // layer (migration 036); the form view counts characters so the
+    // host sees when they're approaching the cap.
+    @State private var hostJournal: String
+
+    // P1.1 — roster surface state. Loads the room's members on
+    // appear so the host sees who's at the table without leaving
+    // the settings sheet.
+    @State private var roster: [Member] = []
+    @State private var isRosterLoading: Bool = false
+
+    // P0.2 — share-code surface state. Generated on demand from the
+    // host's gear; not auto-shown so the host doesn't accidentally
+    // share a stale code.
+    @State private var shareCode: String?
+    @State private var isGeneratingCode: Bool = false
+
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
 
@@ -54,6 +71,7 @@ struct RoomSettingsSheet: View {
         _briefing48hEnabled = State(initialValue: room.briefing48hEnabled)
         _calendarAutoAddHost = State(initialValue: room.calendarAutoAddHost)
         _socialPreferencesEnabled = State(initialValue: room.socialPreferencesEnabled)
+        _hostJournal = State(initialValue: room.hostJournal ?? "")
     }
 
     var body: some View {
@@ -62,6 +80,8 @@ struct RoomSettingsSheet: View {
                 mascotSection
                 operationsSection
                 featureTogglesSection
+                hostJournalSection
+                shareCodeSection
                 membersSection
                 if let errorMessage {
                     Section {
@@ -100,6 +120,39 @@ struct RoomSettingsSheet: View {
             }
         }
         .tint(Theme.Palette.accent)
+        .task {
+            // P1.1 — load the room's members on first appear so
+            // the roster surface renders without a manual refresh.
+            await loadRoster()
+        }
+    }
+
+    // MARK: - Async actions (P1.1 roster + P0.2 share code)
+
+    /// Loads the room's roster into the local `@State`. Calls the
+    /// existing `RoomService.loadRoomMembers(roomId:)` which routes
+    /// through the store to Supabase or the in-memory fake.
+    private func loadRoster() async {
+        isRosterLoading = true
+        defer { isRosterLoading = false }
+        roster = await roomService.loadRoomMembers(roomId: room.id)
+    }
+
+    /// Mints a fresh six-character join code via
+    /// `RoomService.generateJoinCode(roomId:)`. Updates the
+    /// `shareCode` `@State` so the settings sheet surfaces it.
+    /// Throws on server errors (non-host writes) — those surface
+    /// via the inline `errorMessage` path.
+    private func generateShareCode() async {
+        guard !isGeneratingCode else { return }
+        isGeneratingCode = true
+        defer { isGeneratingCode = false }
+        do {
+            let code = try await roomService.generateJoinCode(roomId: room.id)
+            shareCode = code
+        } catch {
+            errorMessage = (error as NSError).localizedDescription
+        }
     }
 
     // MARK: - Sections
@@ -138,26 +191,126 @@ struct RoomSettingsSheet: View {
         }
     }
 
+    // P1.5 — host observation journal. One bounded text field
+    // surfaced off the main path; member cannot edit.
+    private var hostJournalSection: some View {
+        Section {
+            TextField(
+                "Host notes for this room",
+                text: $hostJournal,
+                axis: .vertical
+            )
+            .lineLimit(2...6)
+            .onChange(of: hostJournal) { _, newValue in
+                // Hard-clamp to 280 chars at the form layer so the
+                // host never sees a server rejection. Mirrors the
+                // SQL `check (char_length(host_journal) <= 280)`.
+                if newValue.count > 280 {
+                    hostJournal = String(newValue.prefix(280))
+                }
+            }
+        } header: {
+            HStack {
+                Text("Host journal")
+                Spacer()
+                Text("\(hostJournal.count)/280")
+                    .font(Theme.Typography.footnote.monospacedDigit())
+                    .foregroundStyle(hostJournal.count >= 260
+                                     ? Theme.Palette.accent
+                                     : Theme.Palette.primaryText.opacity(0.45))
+            }
+        } footer: {
+            Text("A short note visible only to hosts — venue quirks, recurring house rules, who's hosting next.")
+        }
+    }
+
+    // P0.2 — invite-code share surface. Host can mint a fresh
+    // six-character code that any signed-in user can redeem to
+    // join the room. Codes are case-insensitive on input and
+    // single-use on the server.
+    private var shareCodeSection: some View {
+        Section {
+            HStack {
+                if isGeneratingCode {
+                    ProgressView()
+                        .tint(Theme.Palette.accent)
+                    Text("Generating…")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                } else if let shareCode {
+                    Text(shareCode)
+                        .font(Theme.Typography.title.monospaced())
+                        .foregroundStyle(Theme.Palette.primaryText)
+                        .tracking(2)
+                } else {
+                    Text("Tap to mint a fresh code")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+                Spacer()
+                Button {
+                    Task { await generateShareCode() }
+                } label: {
+                    Image(systemName: shareCode == nil ? "plus.circle" : "arrow.clockwise")
+                        .foregroundStyle(Theme.Palette.accent)
+                }
+                .disabled(isGeneratingCode)
+                .accessibilityLabel(Text("Generate fresh join code"))
+            }
+        } header: {
+            Text("Invite code")
+        } footer: {
+            Text("Share the six-character code with a friend. Codes are one-use; mint a fresh one for each new member.")
+        }
+    }
+
+    // P1.1 — member roster surface. Loads the room's members on
+    // appear; the host sees role + display name without leaving
+    // the settings sheet.
     private var membersSection: some View {
         Section("Members") {
-            // v0.8 stub — the roster list comes from RoomService.getRoomMembers
-            // (deferred to V0.8.1). Each row would expose: name, role chip,
-            // remove button (host only).
-            Text("Roster list renders here in v0.8.1.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.5))
+            if isRosterLoading && roster.isEmpty {
+                HStack {
+                    ProgressView()
+                        .tint(Theme.Palette.accent)
+                    Text("Loading members…")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+            } else if roster.isEmpty {
+                Text("No members yet. Share the invite code above.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            } else {
+                ForEach(roster, id: \.id) { member in
+                    HStack {
+                        Text(member.displayName)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                        Spacer()
+                        Text(member.role == .host ? "Host" : "Member")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(member.role == .host
+                                             ? Theme.Palette.accent
+                                             : Theme.Palette.primaryText.opacity(0.55))
+                    }
+                }
+            }
         }
     }
 
     // MARK: - Actions
 
-    /// Fires `RoomService.updateRoom(...)` with every form value.
+    /// Fires `RoomService.updateRoom(...)` with every form value
+    /// plus the P1.5 host journal via `RoomService.updateHostJournal(...)`.
     /// On success the rooms-list cache in `RoomService` is
     /// refreshed by the service, the sheet dismisses, and the host
     /// sees the new mascot name + operations immediately on the
     /// Rooms page. On failure the inline `errorMessage` replaces
     /// the dismiss path so the host can edit and retry without
-    /// losing input.
+    /// losing input. The two writes run sequentially because both
+    /// must succeed for the form to be considered saved; the
+    /// journal write is skipped if the settings write throws.
     private func save() {
         guard !isSaving else { return }
         isSaving = true
@@ -178,6 +331,14 @@ struct RoomSettingsSheet: View {
                     briefing48hEnabled: briefing48hEnabled,
                     calendarAutoAddHost: calendarAutoAddHost,
                     socialPreferencesEnabled: socialPreferencesEnabled
+                )
+                // P1.5: persist the journal separately. Empty string
+                // → nil so the SQL column stores NULL, which the
+                // iOS decoder collapses to nil on read-back.
+                let trimmedJournal = hostJournal.trimmingCharacters(in: .whitespacesAndNewlines)
+                _ = try await roomService.updateHostJournal(
+                    roomId: room.id,
+                    journal: trimmedJournal.isEmpty ? nil : trimmedJournal
                 )
                 dismiss()
             } catch {

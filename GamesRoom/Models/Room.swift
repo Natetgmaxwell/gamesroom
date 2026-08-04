@@ -82,6 +82,15 @@ struct Room: Identifiable, Codable, Hashable {
     /// Defaults to 3 (the V0.7.1 default).
     let memberInviteQuota: Int
 
+    // MARK: Host journal (P1.5 — host operations polish)
+
+    /// The host's bounded observation/journal field. Single free-
+    /// text line surfaced on Room Settings; member cannot edit.
+    /// Migration 036 adds the `host_journal text` column; the iOS
+    /// decoder falls back to `nil` on legacy rows that pre-date
+    /// the migration. Bounded to 280 chars at the SQL layer.
+    let hostJournal: String?
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -102,6 +111,7 @@ struct Room: Identifiable, Codable, Hashable {
         case socialNarrationEnabled = "social_narration_enabled"
         case maxSeats = "max_seats"
         case memberInviteQuota = "member_invite_quota"
+        case hostJournal = "host_journal"
     }
 
     init(
@@ -123,7 +133,8 @@ struct Room: Identifiable, Codable, Hashable {
         socialPreferencesEnabled: Bool = true,
         socialNarrationEnabled: Bool = true,
         maxSeats: Int = 6,
-        memberInviteQuota: Int = 3
+        memberInviteQuota: Int = 3,
+        hostJournal: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -144,6 +155,7 @@ struct Room: Identifiable, Codable, Hashable {
         self.socialNarrationEnabled = socialNarrationEnabled
         self.maxSeats = maxSeats
         self.memberInviteQuota = memberInviteQuota
+        self.hostJournal = hostJournal
     }
 
     init(from decoder: Decoder) throws {
@@ -167,5 +179,6 @@ struct Room: Identifiable, Codable, Hashable {
         socialNarrationEnabled = try c.decodeIfPresent(Bool.self, forKey: .socialNarrationEnabled) ?? true
         maxSeats = try c.decodeIfPresent(Int.self, forKey: .maxSeats) ?? 6
         memberInviteQuota = try c.decodeIfPresent(Int.self, forKey: .memberInviteQuota) ?? 3
+        hostJournal = try c.decodeIfPresent(String.self, forKey: .hostJournal)
     }
 }

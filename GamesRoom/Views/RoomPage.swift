@@ -68,6 +68,14 @@ struct RoomPage: View {
     /// settings sheet is dismissed. Only valid for host role rooms.
     @State private var settingsRoom: Room?
 
+    /// Create-room sheet binding. Mirrors the empty-state "Create"
+    /// CTA (P0.2 onboarding).
+    @State private var showingCreateRoom: Bool = false
+
+    /// Join-room sheet binding. Mirrors the empty-state "Join with
+    /// code" CTA (P0.2 onboarding).
+    @State private var showingJoinRoom: Bool = false
+
     /// Mirror of the persisted last-viewed room id, kept live so the
     /// hero card re-renders if the user switches rooms in another
     /// surface. Stored as a String because UUID is not directly
@@ -83,6 +91,14 @@ struct RoomPage: View {
                 .toolbar { toolbarContent }
                 .sheet(item: $settingsRoom) { room in
                     RoomSettingsSheet(room: room)
+                        .environmentObject(roomService)
+                }
+                .sheet(isPresented: $showingCreateRoom) {
+                    CreateRoomSheet()
+                        .environmentObject(roomService)
+                }
+                .sheet(isPresented: $showingJoinRoom) {
+                    JoinRoomSheet()
                         .environmentObject(roomService)
                 }
         }
@@ -253,10 +269,16 @@ struct RoomPage: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Theme.Layout.gutter)
 
-            Button(action: emptyCTA) {
+            // P0.2: both onboarding paths render equal-weight. The
+            // host-create path is the primary (brass-accented fill);
+            // the member join path is a quieter outlined button.
+            // Members (who don't see the "hosted" badge) get the
+            // same pair — a brand-new user with no rooms can become
+            // a host of their own room by tapping Create.
+            Button(action: openCreateRoom) {
                 Text(emptyCTATitle)
                     .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText)
+                    .foregroundStyle(Theme.Palette.background)
                     .frame(maxWidth: 320)
                     .padding(.vertical, 14)
                     .background(Theme.Palette.accent)
@@ -264,6 +286,16 @@ struct RoomPage: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
+
+            Button(action: openJoinRoom) {
+                Text("Ask a friend for a join code")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    .frame(maxWidth: 320)
+                    .padding(.vertical, 12)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
+            }
+            .buttonStyle(.plain)
 
             Spacer(minLength: 0)
         }
@@ -277,30 +309,27 @@ struct RoomPage: View {
     }
 
     private var emptySubhead: String {
-        // Members get the join-code path. Hosts get the create path.
-        // V0.8 keeps both visible — a member can become a host of
-        // their own room by tapping Create.
+        // Members get the join-code path; hosts get the create path.
+        // Both choices render regardless — V0.8 keeps both visible
+        // so a member can become a host of their own room by
+        // tapping Create.
         isKnownHost
             ? "Spin up a room to start running a games night with your group."
             : "Ask a friend for a join code, or create your own room to host."
     }
 
     private var emptyCTATitle: String {
-        isKnownHost ? "Create one to get started" : "Ask a friend for a join code"
+        isKnownHost ? "Create one to get started" : "Create your own room"
     }
 
-    private func emptyCTA() {
-        // The create-room and redeem-code surfaces are owned by
-        // other tracks. We emit through the room service when
-        // available; otherwise fall back to a no-op so the
-        // empty state still renders cleanly.
-        if isKnownHost {
-            // Hooked up in the CreateRoom track — TBD.
-            // Intentionally a no-op for now; the button is a CTA
-            // label, not a wired action in this slice.
-        } else {
-            // Hooked up in the JoinCode track — TBD.
-        }
+    // MARK: - Empty-state actions (P0.2 wired)
+
+    private func openCreateRoom() {
+        showingCreateRoom = true
+    }
+
+    private func openJoinRoom() {
+        showingJoinRoom = true
     }
 
     // MARK: - Toolbar
