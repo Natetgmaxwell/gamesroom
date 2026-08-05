@@ -19,6 +19,7 @@
 		AAAAAAAA0000000000000013 /* CasinoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000409 /* CasinoService.swift */; };
 		AAAAAAAA0000000000000014 /* MascotEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040A /* MascotEngine.swift */; };
 		AAAAAAAA0000000000000015 /* NotificationDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040B /* NotificationDispatcher.swift */; };
+		AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000445 /* StorageKeys.swift */; };
 		AAAAAAAA0000000000000016 /* RoomStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040C /* RoomStore.swift */; };
 		AAAAAAAA0000000000000017 /* RoomPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040D /* RoomPage.swift */; };
 		AAAAAAAA0000000000000018 /* RoomDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040E /* RoomDetailView.swift */; };
@@ -88,6 +89,7 @@
 		AAAAAAAA0000000000000409 /* CasinoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoService.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040A /* MascotEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotEngine.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040B /* NotificationDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDispatcher.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000445 /* StorageKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageKeys.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040C /* RoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStore.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040D /* RoomPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPage.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040E /* RoomDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomDetailView.swift; sourceTree = "<group>"; };
@@ -246,6 +248,7 @@
 				AAAAAAAA0000000000000409 /* CasinoService.swift */,
 				AAAAAAAA000000000000040A /* MascotEngine.swift */,
 				AAAAAAAA000000000000040B /* NotificationDispatcher.swift */,
+				AAAAAAAA0000000000000445 /* StorageKeys.swift */,
 				AAAAAAAA000000000000040C /* RoomStore.swift */,
 				AAAAAAAA000000000000043D /* ScoringService.swift */,
 			);
@@ -382,6 +385,7 @@
 				AAAAAAAA0000000000000013 /* CasinoService.swift in Sources */,
 				AAAAAAAA0000000000000014 /* MascotEngine.swift in Sources */,
 				AAAAAAAA0000000000000015 /* NotificationDispatcher.swift in Sources */,
+				AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */,
 				AAAAAAAA0000000000000016 /* RoomStore.swift in Sources */,
 				AAAAAAAA0000000000000017 /* RoomPage.swift in Sources */,
 				AAAAAAAA0000000000000018 /* RoomDetailView.swift in Sources */,

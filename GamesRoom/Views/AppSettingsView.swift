@@ -99,7 +99,7 @@ struct AppSettingsView: View {
     }
 
     private func logout() async {
-        UserDefaults.standard.removeObject(forKey: "lastViewedRoomIdString")
+        UserDefaults.standard.removeObject(forKey: StorageKeys.lastViewedRoomId)
         await authService.signOut()
         await MainActor.run { dismiss() }
     }

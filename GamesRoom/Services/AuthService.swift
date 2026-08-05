@@ -58,7 +58,7 @@ final class AuthService: ObservableObject {
     /// because the local state is already cleared and the next
     /// `loadCurrentUser()` will reconcile.
     func signOut() async {
-        UserDefaults.standard.removeObject(forKey: "lastViewedRoomIdString")
+        UserDefaults.standard.removeObject(forKey: StorageKeys.lastViewedRoomId)
         try? await SupabaseClientProvider.shared.auth.signOut()
         self.currentUser = nil
     }

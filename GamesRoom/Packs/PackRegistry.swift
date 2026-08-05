@@ -20,8 +20,9 @@ import Foundation
 
 /// Singleton registry. Not a true singleton (no `shared static`)
 ///
-/// because tests construct their own — see `PackRegistryTests` —
-/// but the production app uses `PackRegistry.shared` everywhere.
+/// because tests construct their own — see the Foundation runner
+/// (`main.swift`'s `PackRegistry` cases) — but the production app
+/// uses `PackRegistry.shared` everywhere.
 final class PackRegistry: @unchecked Sendable {
 
     /// The production registry instance. Pre-populated with the

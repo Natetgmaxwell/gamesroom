@@ -79,7 +79,8 @@ struct RoomPage: View {
     /// Mirror of the persisted last-viewed room id, kept live so the
     /// hero card re-renders if the user switches rooms in another
     /// surface. Stored as a String because UUID is not directly
-    /// `AppStorage`-compatible; we parse on read.
+    /// `AppStorage`-compatible; we parse on read. See
+    /// `StorageKeys.lastViewedRoomId` for the central key constant.
     @AppStorage("lastViewedRoomIdString") private var lastViewedRoomIdString: String = ""
 
     var body: some View {

@@ -23,8 +23,8 @@
 //  Server-side `public.packs` table is the authoritative availability
 //  list (per migration 034), but the Swift definition is the
 //  authoritative scoring contract — pack metadata drift between
-//  server and client is caught by the per-pack decoder tests in
-//  `GamesRoomTests/PackRegistryTests.swift`.
+//  server and client is caught by the `PackRegistry` round-trip
+//  cases in the Foundation-only test runner (`main.swift`).
 //
 //
 
