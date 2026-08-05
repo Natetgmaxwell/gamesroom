@@ -381,7 +381,8 @@ struct RoomDetailView: View {
         async let rsvpLoad: () = loadRSVPIfNeeded()
         async let membersLoad: () = loadMembersIfNeeded()
         async let seasonLoad: () = loadSeasonIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad)
+        async let withdrawalLoad: () = loadMyOpenWithdrawalIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad)
     }
 
     /// Loads the room's current season and (if present) its awards.
@@ -433,6 +434,20 @@ struct RoomDetailView: View {
         // every refresh so the banner reflects newly-opened rows.
         let rows = await casinoService.getMyOpenAttestations()
         self.openAttestations = rows
+    }
+
+    /// M3.1 — loads the calling member's open withdrawal for the
+    /// active event and assigns it to `casinoWithdrawn`. Powers
+    /// the SettleCasinoSheet stepper default so the member sees
+    /// the actual bracket they moved, not 0. Lazy on refresh so
+    /// a fresh withdrawal surfaces on the next pull-to-refresh.
+    private func loadMyOpenWithdrawalIfNeeded() async {
+        guard let event = activeEvent else {
+            casinoWithdrawn = 0
+            return
+        }
+        let row = await casinoService.loadMyOpenWithdrawal(eventId: event.id)
+        casinoWithdrawn = Int(row?.pointsWithdrawn ?? 0)
     }
 
     // MARK: - Action handlers (wired to the service layer)

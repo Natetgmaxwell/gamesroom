@@ -438,4 +438,32 @@ final class CasinoService: ObservableObject {
         self.lastError = nil
         return result
     }
+
+    // MARK: Open-withdrawal lookup (M3.1)
+
+    /// Returns the calling member's latest open (un-settled)
+    /// `casino_withdrawals` row for one event, or `nil` if none.
+    ///
+    /// Powers the `SettleCasinoSheet` stepper default. The pre-M3
+    /// placeholder was `withdrawn: 0` — the member saw an
+    /// empty slider even after a withdrawal. After this wiring,
+    /// the sheet renders with the actual chip bracket the
+    /// member moved at the start of the round.
+    ///
+    /// Non-throwing: any RPC failure collapses to `nil` so the
+    /// sheet can still render with the safe-zero default. Errors
+    /// surface via `lastError` for the UI banner.
+    ///
+    /// Server-side: `get_my_open_withdrawal(p_event_id)` RPC,
+    /// migration 040.
+    func loadMyOpenWithdrawal(eventId: UUID) async -> CasinoWithdrawal? {
+        let rows: [CasinoWithdrawal] = (try? await SupabaseClientProvider.shared
+            .rpc("get_my_open_withdrawal", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value) ?? []
+        self.lastError = nil
+        return rows.first
+    }
 }

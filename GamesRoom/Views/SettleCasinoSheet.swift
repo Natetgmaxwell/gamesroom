@@ -10,11 +10,13 @@
 //  `record_round_score` RPC (migration 035) — the camera/Vision
 //  pipeline is intentionally not exercised by this slice.
 //
-//  Pinned default: 0 pts returned (matches the pre-V0.8
-//  "did_not_scan" path; the member walks away even). The slider
-//  ranges from 0 to (withdrawn + available balance) so the
-//  member can return more than they withdrew if they had
-//  pre-existing points. Save calls
+//  Pinned default: the stepper shows the member's open
+//  withdrawal for the event (from the
+//  `get_my_open_withdrawal(p_event_id)` RPC, migration 040),
+//  falling back to 0 when no withdrawal exists. The slider
+//  ranges from 0 upward in 10-pt increments so the member can
+//  return more than they withdrew if they had pre-existing
+//  points. Save calls
 //  `ScoringService.recordRoundInput(roomId:eventId:packSlug:input:)`
 //  with a `.withdrawReturn(roundIndex:perMember:)` input —
 //  single-member edition since the host pre-aggregates in V0.8.
