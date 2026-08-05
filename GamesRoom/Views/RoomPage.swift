@@ -150,6 +150,16 @@ struct RoomPage: View {
                             value: room
                         ) {
                             HStack(spacing: Theme.Layout.gutter) {
+                                // M1.2 — session-active indicator. A
+                                // small accent dot appears next to the
+                                // room name when the room has an
+                                // active event cached in RoomService.
+                                if roomService.activeEventByRoom[room.id] != nil {
+                                    Circle()
+                                        .fill(Theme.Palette.accent)
+                                        .frame(width: 8, height: 8)
+                                        .accessibilityLabel(Text("Active session"))
+                                }
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(room.name)
                                         .font(Theme.Typography.title)

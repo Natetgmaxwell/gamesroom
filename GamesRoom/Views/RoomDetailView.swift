@@ -131,6 +131,23 @@ struct RoomDetailView: View {
         .navigationTitle(room.name)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
+            // M1.2 — rooms dropdown (only when there's something
+            // to switch to OR create). The menu renders for any
+            // user with ≥ 1 room, with a "+ Create a new room"
+            // section appended when there's >1 room. Per vision
+            // §3.7, the dropdown is the canonical reachability
+            // surface; the Rooms tab remains the bulk-management
+            // view.
+            ToolbarItem(placement: .topBarLeading) {
+                if !allRooms.isEmpty {
+                    RoomSwitcherMenu(
+                        currentRoom: room,
+                        allRooms: allRooms,
+                        activeEventByRoom: roomService.activeEventByRoom,
+                        onSwitchRoom: onSwitchRoom
+                    )
+                }
+            }
             if isHost {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -1146,5 +1163,107 @@ private struct MascotFooterCaption: View {
             .foregroundStyle(Theme.Palette.primaryText.opacity(0.45))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Theme.Layout.sectionSpacing)
+    }
+}
+
+// MARK: - Room switcher menu (M1.2)
+
+/// Toolbar dropdown that lists the user's rooms with active-event
+/// indicators and an optional "+ Create a new room" section.
+///
+/// Per vision §3.7: the rooms list is a top-bar dropdown
+/// reachable from any room view. The Rooms tab remains the
+/// bulk-management view; this menu is the in-room quick-switch.
+///
+/// Per plan §2.7: when there's only the current room, the menu
+/// renders with just that room (no-op on tap) — never hides.
+private struct RoomSwitcherMenu: View {
+    let currentRoom: Room
+    let allRooms: [Room]
+    let activeEventByRoom: [UUID: Event]
+    let onSwitchRoom: (Room) -> Void
+
+    /// `true` when more than one room exists; the "+ Create a
+    /// new room" section only renders when there's something to
+    /// switch to AND something to add to.
+    private var canCreate: Bool {
+        allRooms.count > 1
+    }
+
+    /// Rooms other than the current one, in display order. The
+    /// current room renders at the top with a checkmark.
+    private var otherRooms: [Room] {
+        allRooms.filter { $0.id != currentRoom.id }
+    }
+
+    var body: some View {
+        Menu {
+            Section {
+                Button {
+                    // No-op: current room is already shown.
+                } label: {
+                    Label {
+                        HStack {
+                            Text(currentRoom.name)
+                            if activeEventByRoom[currentRoom.id] != nil {
+                                Text("•")
+                                    .foregroundStyle(Theme.Palette.accent)
+                                    .accessibilityLabel(Text("Active session"))
+                            }
+                            Spacer()
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Theme.Palette.accent)
+                        }
+                    } icon: {
+                        Text(currentRoom.mascotName.prefix(1).uppercased())
+                    }
+                }
+                .disabled(true)
+
+                ForEach(otherRooms) { room in
+                    Button {
+                        onSwitchRoom(room)
+                    } label: {
+                        Label {
+                            HStack {
+                                Text(room.name)
+                                if activeEventByRoom[room.id] != nil {
+                                    Text("•")
+                                        .foregroundStyle(Theme.Palette.accent)
+                                        .accessibilityLabel(Text("Active session"))
+                                }
+                            }
+                        } icon: {
+                            Text(room.mascotName.prefix(1).uppercased())
+                        }
+                    }
+                }
+            }
+
+            if canCreate {
+                Section {
+                    // The Rooms tab owns the create-room surface
+                    // — tapping this pops back to the Rooms tab.
+                    // For now, the dropdown is read-only here; the
+                    // Rooms tab's "+" remains the canonical create
+                    // entry per audit §7.2. The dropdown gets a
+                    // future "create" surface in a follow-up slice.
+                    Text("Create a room from the Rooms tab")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentRoom.name)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+            .accessibilityLabel(Text("Switch room — currently \(currentRoom.name)"))
+        }
     }
 }
