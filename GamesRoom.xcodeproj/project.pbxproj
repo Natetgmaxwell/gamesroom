@@ -45,6 +45,7 @@
 		AAAAAAAA00000000000000BA /* ChapterLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000421 /* ChapterLine.swift */; };
 		AAAAAAAA00000000000000BC /* CallForward.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000422 /* CallForward.swift */; };
 		AAAAAAAA00000000000000BE /* SeasonAward.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000423 /* SeasonAward.swift */; };
+		AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */; };
 		AAAAAAAA00000000000000C0 /* AwardType.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000424 /* AwardType.swift */; };
 		AAAAAAAA00000000000000C2 /* CasinoConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000425 /* CasinoConfig.swift */; };
 		AAAAAAAA00000000000000C4 /* CasinoWithdrawal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */; };
