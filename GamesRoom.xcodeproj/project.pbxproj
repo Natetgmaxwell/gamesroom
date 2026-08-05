@@ -413,6 +413,7 @@
 				AAAAAAAA00000000000000BA /* ChapterLine.swift in Sources */,
 				AAAAAAAA00000000000000BC /* CallForward.swift in Sources */,
 				AAAAAAAA00000000000000BE /* SeasonAward.swift in Sources */,
+				AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */,
 				AAAAAAAA00000000000000C0 /* AwardType.swift in Sources */,
 				AAAAAAAA00000000000000C2 /* CasinoConfig.swift in Sources */,
 				AAAAAAAA00000000000000C4 /* CasinoWithdrawal.swift in Sources */,
