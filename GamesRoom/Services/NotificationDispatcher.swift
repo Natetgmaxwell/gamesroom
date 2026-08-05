@@ -118,7 +118,8 @@ final class NotificationDispatcher {
         eventName: String,
         playedAt: Date,
         mascotName: String,
-        perMemberCadence: [UUID: MemberRSVPState]
+        perMemberCadence: [UUID: MemberRSVPState],
+        hostNote: String? = nil
     ) async {
         guard await requestAuthorizationIfNeeded() else { return }
         let center = UNUserNotificationCenter.current()
@@ -189,7 +190,8 @@ final class NotificationDispatcher {
                     mascotName: mascotName,
                     eventName: eventName,
                     playedAt: playedAt,
-                    state: state
+                    state: state,
+                    hostNote: hostNote
                 )
                 await schedule(
                     center: center,
@@ -248,19 +250,26 @@ final class NotificationDispatcher {
     }
 
     /// Title + body pair for the T-48h push. Logistics prefix for
-    /// claimed members, "reminder —" prefix for unclaimed.
+    /// claimed members, "reminder —" prefix for unclaimed. When the
+    /// host has written a pre-event note (≤280 chars), the claimed
+    /// variant appends it per vision §3.6: "Host's note: [note]".
     private func t48Body(
         mascotName: String,
         eventName: String,
         playedAt: Date,
-        state: MemberRSVPState
+        state: MemberRSVPState,
+        hostNote: String? = nil
     ) -> (title: String, body: String) {
         let when = humanWhen(playedAt)
         switch state {
         case .claimed:
+            var body = "\(eventName) is in two days — \(when)."
+            if let note = hostNote, !note.isEmpty {
+                body += " Host's note: \(note)"
+            }
             return (
                 "\(eventName) — in two days",
-                "\(eventName) is in two days — \(when)."
+                body
             )
         case .unclaimed:
             return (
@@ -268,8 +277,6 @@ final class NotificationDispatcher {
                 "reminder — \(eventName) is in two days. Open the room to claim your seat."
             )
         case .declined:
-            // Defensive — callers should skip declined, but if we
-            // ever get here, route to the unclaimed reminder copy.
             return (
                 "reminder — \(eventName)",
                 "reminder — \(eventName) is in two days."

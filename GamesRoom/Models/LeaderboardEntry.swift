@@ -44,8 +44,20 @@ struct LeaderboardEntry: Identifiable, Codable, Hashable {
     /// sparkline renders without a second fetch.
     let trajectory: [SessionDelta]
 
+    /// F-MVP-11 — the created_at of the most recent score correction
+    /// that touched this member. `nil` when no correction has been
+    /// recorded. The row renders a 60s amber dot while this value is
+    /// within 60 seconds of `now()`.
+    let scoreCorrectedAt: Date?
+
     /// `userId` is the stable identity on the leaderboard.
     var id: UUID { userId }
+
+    /// True for 60 seconds after the member's score was corrected.
+    var isRecentlyCorrected: Bool {
+        guard let scoreCorrectedAt else { return false }
+        return Date().timeIntervalSince(scoreCorrectedAt) < 60
+    }
 
     /// Convenience: whether this row is the host. The UI uses this
     /// to render the host's row at the top in `.role`-order
@@ -62,6 +74,7 @@ struct LeaderboardEntry: Identifiable, Codable, Hashable {
         case lastSessionAt = "last_session_at"
         case lastSessionDelta = "last_session_delta"
         case trajectory
+        case scoreCorrectedAt = "score_corrected_at"
     }
 
     init(
@@ -73,7 +86,8 @@ struct LeaderboardEntry: Identifiable, Codable, Hashable {
         sessionsPlayed: Int64,
         lastSessionAt: Date?,
         lastSessionDelta: Int64,
-        trajectory: [SessionDelta]
+        trajectory: [SessionDelta],
+        scoreCorrectedAt: Date? = nil
     ) {
         self.userId = userId
         self.displayName = displayName
@@ -84,6 +98,7 @@ struct LeaderboardEntry: Identifiable, Codable, Hashable {
         self.lastSessionAt = lastSessionAt
         self.lastSessionDelta = lastSessionDelta
         self.trajectory = trajectory
+        self.scoreCorrectedAt = scoreCorrectedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -97,5 +112,6 @@ struct LeaderboardEntry: Identifiable, Codable, Hashable {
         lastSessionAt = try c.decodeIfPresent(Date.self, forKey: .lastSessionAt)
         lastSessionDelta = try c.decodeIfPresent(Int64.self, forKey: .lastSessionDelta) ?? 0
         trajectory = try c.decodeIfPresent([SessionDelta].self, forKey: .trajectory) ?? []
+        scoreCorrectedAt = try c.decodeIfPresent(Date.self, forKey: .scoreCorrectedAt)
     }
 }

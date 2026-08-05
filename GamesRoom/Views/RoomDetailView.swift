@@ -101,6 +101,12 @@ struct RoomDetailView: View {
         roomService.cachedLeaderboard(roomId: room.id)
     }
 
+    /// Unread system events for this room (pack installed/removed,
+    /// season closed). Drives the System banner above the standings.
+    private var systemEvents: [RoomSystemEvent] {
+        roomService.cachedSystemEvents(roomId: room.id)
+    }
+
     /// Open attestations for the current member across all rooms
     /// (one row typically). Driven by
     /// `casinoService.getMyOpenAttestations()` in `.task`.
@@ -111,6 +117,15 @@ struct RoomDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
                 activeSlot
                     .frame(maxWidth: .infinity)
+                if !systemEvents.isEmpty {
+                    SystemBanner(
+                        events: systemEvents,
+                        onDismiss: { eventId in
+                            Task { await roomService.acknowledgeSystemEvent(eventId: eventId, roomId: room.id) }
+                        }
+                    )
+                    .sectionCard(.standard)
+                }
                 if !leaderboard.isEmpty {
                     StandingsSection(
                         entries: leaderboard,
@@ -382,7 +397,8 @@ struct RoomDetailView: View {
         async let membersLoad: () = loadMembersIfNeeded()
         async let seasonLoad: () = loadSeasonIfNeeded()
         async let withdrawalLoad: () = loadMyOpenWithdrawalIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad)
+        async let eventsLoad: () = roomService.loadSystemEvents(roomId: room.id)
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad)
     }
 
     /// Loads the room's current season and (if present) its awards.
@@ -960,6 +976,65 @@ private struct AwardRow: View {
     }
 }
 
+// MARK: - System banner (briefing slot notification stream)
+
+private struct SystemBanner: View {
+    let events: [RoomSystemEvent]
+    let onDismiss: (UUID) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(events) { event in
+                HStack(spacing: 10) {
+                    Image(systemName: iconFor(event.kind))
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(event.kind.displayName)
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.primaryText)
+                        Text(payloadDescription(for: event))
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                    Spacer()
+                    Button {
+                        onDismiss(event.id)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    }
+                    .accessibilityLabel(Text("Dismiss"))
+                }
+                if event.id != events.last?.id {
+                    Divider().overlay(Theme.Palette.hairline)
+                }
+            }
+        }
+    }
+
+    private func iconFor(_ kind: RoomSystemEvent.Kind) -> String {
+        switch kind {
+        case .packInstalled: return "plus.circle.fill"
+        case .packRemoved:   return "minus.circle.fill"
+        case .seasonClosed:  return "flag.checkered"
+        }
+    }
+
+    private func payloadDescription(for event: RoomSystemEvent) -> String {
+        switch event.kind {
+        case .packInstalled, .packRemoved:
+            if let name = event.payload["pack_name"] {
+                return "Pack: \(String(describing: name.value))"
+            }
+            return "A pack was updated."
+        case .seasonClosed:
+            return "The season has been closed by the host."
+        }
+    }
+}
+
 // MARK: - Standings section (always-on, below the slot)
 
 private struct StandingsSection: View {
@@ -979,7 +1054,8 @@ private struct StandingsSection: View {
                     lastDelta: Int(entry.lastSessionDelta),
                     sessionsPlayed: Int(entry.sessionsPlayed),
                     trajectory: entry.trajectory.map { Int($0.delta) },
-                    isYou: entry.userId == currentUserId
+                    isYou: entry.userId == currentUserId,
+                    isRecentlyCorrected: entry.isRecentlyCorrected
                 )
             }
         }

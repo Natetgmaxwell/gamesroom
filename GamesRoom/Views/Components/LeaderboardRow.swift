@@ -27,6 +27,7 @@ struct LeaderboardRow: View {
     let sessionsPlayed: Int
     let trajectory: [Int]
     let isYou: Bool
+    let isRecentlyCorrected: Bool
 
     @State private var isExpanded: Bool = false
 
@@ -68,6 +69,13 @@ struct LeaderboardRow: View {
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.primaryText)
                 .lineLimit(1)
+            if isRecentlyCorrected {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 8, height: 8)
+                    .accessibilityLabel(Text("Score recently corrected"))
+                    .transition(.opacity.combined(with: .scale))
+            }
             if isYou {
                 Text("you")
                     .font(Theme.Typography.footnote)
@@ -153,11 +161,11 @@ struct LeaderboardRow: View {
 #if DEBUG
 #Preview("Leaderboard rows") {
     VStack(spacing: 0) {
-        LeaderboardRow(rank: 1, name: "Thea", score: 1240, lastDelta: 80, sessionsPlayed: 6, trajectory: [-40, 20, 120, 80], isYou: false)
+        LeaderboardRow(rank: 1, name: "Thea", score: 1240, lastDelta: 80, sessionsPlayed: 6, trajectory: [-40, 20, 120, 80], isYou: false, isRecentlyCorrected: false)
         Divider().overlay(Theme.Palette.hairline)
-        LeaderboardRow(rank: 2, name: "You", score: 980, lastDelta: -20, sessionsPlayed: 5, trajectory: [60, -80, 100, -20], isYou: true)
+        LeaderboardRow(rank: 2, name: "You", score: 980, lastDelta: -20, sessionsPlayed: 5, trajectory: [60, -80, 100, -20], isYou: true, isRecentlyCorrected: true)
         Divider().overlay(Theme.Palette.hairline)
-        LeaderboardRow(rank: 3, name: "Marco", score: 720, lastDelta: 0, sessionsPlayed: 4, trajectory: [10, 10, -20, 0], isYou: false)
+        LeaderboardRow(rank: 3, name: "Marco", score: 720, lastDelta: 0, sessionsPlayed: 4, trajectory: [10, 10, -20, 0], isYou: false, isRecentlyCorrected: false)
     }
     .background(Theme.Palette.background)
     .preferredColorScheme(.dark)

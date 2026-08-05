@@ -404,6 +404,48 @@ runner.run("LeaderboardEntry round-trip preserves trajectory") {
     runner.assertEqual(decoded.trajectory[1].delta, 180)
 }
 
+runner.run("LeaderboardEntry scoreCorrectedAt decodes and isRecentlyCorrected fires within 60s") {
+    let recentCorrection = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-10))
+    let json = """
+    {
+      "user_id": "55555555-5555-5555-5555-555555555555",
+      "display_name": "Thea",
+      "role": "member",
+      "points_balance": 1240,
+      "season_score": 1240,
+      "sessions_played": 6,
+      "last_session_at": "2026-08-01T00:00:00Z",
+      "last_session_delta": 80,
+      "trajectory": [],
+      "score_corrected_at": "\(recentCorrection)"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let entry = try decoder.decode(LeaderboardEntry.self, from: json.data(using: .utf8)!)
+    runner.assertNotNil(entry.scoreCorrectedAt)
+    runner.assertTrue(entry.isRecentlyCorrected)
+}
+
+runner.run("LeaderboardEntry without score_corrected_at decodes nil and isRecentlyCorrected is false") {
+    let json = """
+    {
+      "user_id": "66666666-6666-6666-6666-666666666666",
+      "display_name": "Marco",
+      "role": "member",
+      "points_balance": 720,
+      "season_score": 720,
+      "sessions_played": 4,
+      "trajectory": []
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let entry = try decoder.decode(LeaderboardEntry.self, from: json.data(using: .utf8)!)
+    runner.assertNil(entry.scoreCorrectedAt)
+    runner.assertFalse(entry.isRecentlyCorrected)
+}
+
 // MARK: - Summary
 
 print("")

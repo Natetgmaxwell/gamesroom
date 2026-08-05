@@ -112,6 +112,18 @@ final class RoomService: ObservableObject {
     /// before rendering (privacy boundary).
     @Published private(set) var awardsBySeason: [UUID: [SeasonAward]] = [:]
 
+    /// Enabled pack slugs per room. Populated lazily by
+    /// `loadRoomPacks(roomId:)`; consumed by the Operations sub-sheet's
+    /// Packs toggle section. Empty array means "use the default
+    /// installed set" (all four V0.8 packs).
+    @Published private(set) var roomPacksByRoom: [UUID: [String]] = [:]
+
+    /// System events per room. Populated lazily by
+    /// `loadSystemEvents(roomId:)`; consumed by the briefing slot's
+    /// System banner. Only unread events (acknowledged_at == nil)
+    /// are kept.
+    @Published private(set) var systemEventsByRoom: [UUID: [RoomSystemEvent]] = [:]
+
     // MARK: - Rooms list
 
     /// Re-fetch the rooms list. Safe to call from `.task` and
@@ -355,7 +367,8 @@ final class RoomService: ObservableObject {
                 eventName: event.name,
                 playedAt: event.playedAt,
                 mascotName: room?.mascotName ?? "Your mascot",
-                perMemberCadence: cadence
+                perMemberCadence: cadence,
+                hostNote: event.hostNote
             )
         }
         return row
@@ -486,6 +499,71 @@ final class RoomService: ObservableObject {
     /// Cached awards for `seasonId`, possibly empty.
     func cachedSeasonAwards(seasonId: UUID) -> [SeasonAward] {
         awardsBySeason[seasonId] ?? []
+    }
+
+    /// Cached enabled pack slugs for `roomId`. Falls back to the
+    /// default installed set (all four V0.8 packs) when the room has
+    /// no explicit overrides stored.
+    func cachedRoomPacks(roomId: UUID) -> [String] {
+        roomPacksByRoom[roomId] ?? []
+    }
+
+    // MARK: - Room packs (M4)
+
+    /// Fetch the room's enabled pack slugs from the store and cache
+    /// the result. Called from the Operations sub-sheet's `.task`.
+    @discardableResult
+    func loadRoomPacks(roomId: UUID) async -> [String] {
+        do {
+            let slugs = try await store.fetchRoomPacks(roomId: roomId)
+            self.roomPacksByRoom[roomId] = slugs
+            self.lastError = nil
+            return slugs
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return roomPacksByRoom[roomId] ?? []
+        }
+    }
+
+    /// Persist the room's enabled pack slugs. Called from the
+    /// Operations sub-sheet's toggle handlers. The store routes
+    /// through the `update_room_packs` RPC (migration 041).
+    func updateRoomPacks(roomId: UUID, slugs: [String]) async throws {
+        try await store.updateRoomPacks(roomId: roomId, slugs: slugs)
+        self.roomPacksByRoom[roomId] = slugs
+        self.lastError = nil
+    }
+
+    /// Cached unread system events for `roomId`, possibly empty.
+    func cachedSystemEvents(roomId: UUID) -> [RoomSystemEvent] {
+        systemEventsByRoom[roomId] ?? []
+    }
+
+    /// Fetch the room's unread system events and cache them.
+    /// Called from `RoomDetailView`'s `.task`.
+    @discardableResult
+    func loadSystemEvents(roomId: UUID) async -> [RoomSystemEvent] {
+        do {
+            let events = try await store.fetchRoomSystemEvents(roomId: roomId)
+            let unread = events.filter { $0.acknowledgedAt == nil }
+            self.systemEventsByRoom[roomId] = unread
+            self.lastError = nil
+            return unread
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return systemEventsByRoom[roomId] ?? []
+        }
+    }
+
+    /// Acknowledge a system event, removing it from the unread cache.
+    func acknowledgeSystemEvent(eventId: UUID, roomId: UUID) async {
+        do {
+            try await store.acknowledgeSystemEvent(eventId: eventId)
+            self.systemEventsByRoom[roomId]?.removeAll { $0.id == eventId }
+            self.lastError = nil
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+        }
     }
 
     // MARK: - Host journal (P1.5)

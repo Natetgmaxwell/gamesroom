@@ -43,23 +43,24 @@ import SwiftUI
 protocol ScoringStore: Sendable {
     /// Submit one round's worth of score entries for a host-scored
     /// session. Mirrors `record_round_score(p_room_id, p_event_id,
-    /// p_pack_slug, p_round_index, p_entries jsonb)` from
-    /// migration 035. Throws on RLS rejection (non-host writes)
+    /// p_pack_slug, p_round_index, p_entries jsonb, p_correction_of?)`
+    /// from migration 042. Throws on RLS rejection (non-host writes)
     /// or invalid entries (e.g. unknown member id).
     func recordRound(
         roomId: UUID,
         eventId: UUID,
         packSlug: String,
         roundIndex: Int,
-        entries: [ScoreEntry]
+        entries: [ScoreEntry],
+        correctionOf: UUID?
     ) async throws -> ScoreSubmission
 }
 
 /// The result of a successful round submission. Mirrors the
 /// `(id uuid, room_id uuid, event_id uuid, round_index int,
-/// pack_slug text, created_at timestamptz)` shape returned by
-/// `record_round_score`. Carried by the host-side dashboard so
-/// the in-flight round card collapses to a settled state.
+/// pack_slug text, created_at timestamptz, correction_of uuid?)`
+/// shape returned by `record_round_score`. Carried by the host-side
+/// dashboard so the in-flight round card collapses to a settled state.
 struct ScoreSubmission: Identifiable, Codable, Hashable {
     let id: UUID
     let roomId: UUID
@@ -67,6 +68,7 @@ struct ScoreSubmission: Identifiable, Codable, Hashable {
     let roundIndex: Int
     let packSlug: String
     let createdAt: Date
+    let correctionOf: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -75,15 +77,25 @@ struct ScoreSubmission: Identifiable, Codable, Hashable {
         case roundIndex = "round_index"
         case packSlug = "pack_slug"
         case createdAt = "created_at"
+        case correctionOf = "correction_of"
     }
 
-    init(id: UUID, roomId: UUID, eventId: UUID, roundIndex: Int, packSlug: String, createdAt: Date) {
+    init(
+        id: UUID,
+        roomId: UUID,
+        eventId: UUID,
+        roundIndex: Int,
+        packSlug: String,
+        createdAt: Date,
+        correctionOf: UUID? = nil
+    ) {
         self.id = id
         self.roomId = roomId
         self.eventId = eventId
         self.roundIndex = roundIndex
         self.packSlug = packSlug
         self.createdAt = createdAt
+        self.correctionOf = correctionOf
     }
 
     init(from decoder: Decoder) throws {
@@ -94,6 +106,7 @@ struct ScoreSubmission: Identifiable, Codable, Hashable {
         roundIndex = try c.decodeIfPresent(Int.self, forKey: .roundIndex) ?? 0
         packSlug = try c.decodeIfPresent(String.self, forKey: .packSlug) ?? ""
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        correctionOf = try c.decodeIfPresent(UUID.self, forKey: .correctionOf)
     }
 }
 
@@ -111,7 +124,8 @@ final class LiveScoringStore: ScoringStore, @unchecked Sendable {
         eventId: UUID,
         packSlug: String,
         roundIndex: Int,
-        entries: [ScoreEntry]
+        entries: [ScoreEntry],
+        correctionOf: UUID?
     ) async throws -> ScoreSubmission {
         // Encode the entries as JSON. The server jsonb decoder
         // expects `[{member_id, points_delta, meta}, …]`.
@@ -119,14 +133,19 @@ final class LiveScoringStore: ScoringStore, @unchecked Sendable {
         let entriesData = try encoder.encode(entries)
         let entriesJSON = String(data: entriesData, encoding: .utf8) ?? "[]"
 
+        var params: [String: String] = [
+            "p_room_id": roomId.uuidString,
+            "p_event_id": eventId.uuidString,
+            "p_pack_slug": packSlug,
+            "p_round_index": String(roundIndex),
+            "p_entries": entriesJSON
+        ]
+        if let correctionOf {
+            params["p_correction_of"] = correctionOf.uuidString
+        }
+
         let rows: [ScoreSubmission] = try await SupabaseClientProvider.shared
-            .rpc("record_round_score", params: [
-                "p_room_id": roomId.uuidString,
-                "p_event_id": eventId.uuidString,
-                "p_pack_slug": packSlug,
-                "p_round_index": String(roundIndex),
-                "p_entries": entriesJSON
-            ])
+            .rpc("record_round_score", params: params)
             .execute()
             .value
         guard let row = rows.first else {
@@ -156,16 +175,18 @@ final class InMemoryScoringStore: ScoringStore, @unchecked Sendable {
         eventId: UUID,
         packSlug: String,
         roundIndex: Int,
-        entries: [ScoreEntry]
+        entries: [ScoreEntry],
+        correctionOf: UUID?
     ) async throws -> ScoreSubmission {
-        _ = entries // in-memory; the round is recorded but not aggregated
+        _ = entries
         return ScoreSubmission(
             id: UUID(),
             roomId: roomId,
             eventId: eventId,
             roundIndex: roundIndex,
             packSlug: packSlug,
-            createdAt: Date()
+            createdAt: Date(),
+            correctionOf: correctionOf
         )
     }
 }
@@ -203,7 +224,8 @@ final class ScoringService: ObservableObject {
         eventId: UUID,
         packSlug: String,
         roundIndex: Int,
-        entries: [ScoreEntry]
+        entries: [ScoreEntry],
+        correctionOf: UUID? = nil
     ) async throws -> ScoreSubmission {
         guard !entries.isEmpty else {
             throw NSError(
@@ -217,7 +239,8 @@ final class ScoringService: ObservableObject {
             eventId: eventId,
             packSlug: packSlug,
             roundIndex: roundIndex,
-            entries: entries
+            entries: entries,
+            correctionOf: correctionOf
         )
         self.lastSubmission = submission
         self.lastError = nil
@@ -234,7 +257,8 @@ final class ScoringService: ObservableObject {
         roomId: UUID,
         eventId: UUID,
         packSlug: String,
-        input: PackScoringInput
+        input: PackScoringInput,
+        correctionOf: UUID? = nil
     ) async throws -> ScoreSubmission {
         let entries = PackScoringResolver.resolve(input, packSlug: packSlug)
         let roundIndex: Int = {
@@ -248,7 +272,8 @@ final class ScoringService: ObservableObject {
             eventId: eventId,
             packSlug: packSlug,
             roundIndex: roundIndex,
-            entries: entries
+            entries: entries,
+            correctionOf: correctionOf
         )
     }
 }

@@ -314,7 +314,7 @@ struct RoomSettingsSocialSheet: View {
 // MARK: - Operations sub-sheet
 
 /// M2.2 — Operations section. Seats, invite quota, starting
-/// bonus, feature toggles, share-code surface.
+/// bonus, feature toggles, share-code surface, pack toggles.
 struct RoomSettingsOperationsSheet: View {
     let roomId: UUID
     @Binding var maxSeats: Int
@@ -325,6 +325,11 @@ struct RoomSettingsOperationsSheet: View {
     @Binding var socialPreferencesEnabled: Bool
     @Binding var shareCode: String?
     @Binding var isGeneratingCode: Bool
+
+    @EnvironmentObject private var roomService: RoomService
+
+    @State private var enabledPackSlugs: Set<String> = []
+    @State private var packsLoaded: Bool = false
 
     init(
         roomId: UUID = UUID(), // unused; kept for future RPC binding
@@ -360,6 +365,30 @@ struct RoomSettingsOperationsSheet: View {
                 Toggle("48-hour briefing push", isOn: $briefing48hEnabled)
                 Toggle("Auto-add to host calendar", isOn: $calendarAutoAddHost)
                 Toggle("Members can set preferences", isOn: $socialPreferencesEnabled)
+            }
+
+            Section {
+                ForEach(PackRegistry.shared.allPacks, id: \.slug) { pack in
+                    Toggle(isOn: Binding(
+                        get: { enabledPackSlugs.contains(pack.slug) },
+                        set: { isOn in
+                            Task { await togglePack(pack.slug, isOn: isOn) }
+                        }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(pack.displayName)
+                                .font(Theme.Typography.body)
+                                .foregroundStyle(Theme.Palette.primaryText)
+                            Text(pack.scoringType == .singleWinner ? "Single winner" : "Withdraw & return")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        }
+                    }
+                }
+            } header: {
+                Text("Packs")
+            } footer: {
+                Text("Toggles which game packs are available in this room. All packs ship pre-installed.")
             }
 
             Section {
@@ -409,6 +438,38 @@ struct RoomSettingsOperationsSheet: View {
         .background(Theme.Palette.background)
         .navigationTitle("Operations")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard !packsLoaded else { return }
+            let slugs = await roomService.loadRoomPacks(roomId: roomId)
+            enabledPackSlugs = slugs.isEmpty
+                ? Set(PackRegistry.shared.allPacks.map { $0.slug })
+                : Set(slugs)
+            packsLoaded = true
+        }
+    }
+
+    /// Toggle a pack on/off for this room. Persists immediately via
+    /// `RoomService.updateRoomPacks` so the change is durable even if
+    /// the host navigates away without hitting Save.
+    private func togglePack(_ slug: String, isOn: Bool) async {
+        if isOn {
+            enabledPackSlugs.insert(slug)
+        } else {
+            enabledPackSlugs.remove(slug)
+        }
+        let slugs = PackRegistry.shared.allPacks
+            .map { $0.slug }
+            .filter { enabledPackSlugs.contains($0) }
+        do {
+            try await roomService.updateRoomPacks(roomId: roomId, slugs: slugs)
+        } catch {
+            // Revert the local toggle on failure
+            if isOn {
+                enabledPackSlugs.remove(slug)
+            } else {
+                enabledPackSlugs.insert(slug)
+            }
+        }
     }
 
     /// Stub that mirrors the hub's `generateShareCode`. The full
