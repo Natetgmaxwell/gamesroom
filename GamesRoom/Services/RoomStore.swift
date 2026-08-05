@@ -175,6 +175,28 @@ protocol RoomStore: Sendable {
     /// server-canonical `Room` so the UI can mirror the persisted
     /// value without a follow-up read.
     func updateHostJournal(roomId: UUID, journal: String?) async throws -> Room
+
+    // MARK: Seasons (M1.1 — slot-rotation fidelity)
+
+    /// The room's active-or-most-recently-ended season. Returns
+    /// `nil` only when the room has never opened a season — the
+    /// V0.8 brief guarantees every room has at least one season
+    /// from creation. Drives the `.seasonClose` V0State branch on
+    /// `RoomDetailView`.
+    ///
+    /// Server side: migration 039 introduces `public.seasons`. The
+    /// server should return one row — preferring `status='ended'`
+    /// over `status='active'` if both exist (a defensive fallback
+    /// for the season-close transition window).
+    func fetchCurrentSeason(roomId: UUID) async throws -> Season?
+
+    /// The room's awards for one season. **Privacy boundary:**
+    /// the server must NOT include `.drowning` rows unless the
+    /// caller is the recipient — migration 039 encodes this with
+    /// per-recipient RLS. The Swift layer additionally filters
+    /// `.drowning` rows whose `recipientUserId != currentUserId`,
+    /// as a belt-and-braces guard in case the SQL view leaks.
+    func fetchSeasonAwards(seasonId: UUID) async throws -> [SeasonAward]
 }
 
 // MARK: - LiveRoomStore
@@ -345,6 +367,38 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         let rows: [LeaderboardEntry] = try await SupabaseClientProvider.shared
             .rpc("get_room_leaderboard", params: [
                 "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
+    // MARK: Seasons (M1.1)
+
+    /// The live RPC `get_current_season(p_room_id)` (migration 039)
+    /// returns the room's current season. The server prefers
+    /// `status='ended'` over `'active'` so the `.seasonClose`
+    /// transition surface renders correctly. Returns `nil` only
+    /// for rooms that have never opened a season.
+    func fetchCurrentSeason(roomId: UUID) async throws -> Season? {
+        let rows: [Season] = try await SupabaseClientProvider.shared
+            .rpc("get_current_season", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows.first
+    }
+
+    /// The live RPC `get_season_awards(p_season_id)` (migration 039)
+    /// returns the room's awards. Privacy boundary is enforced
+    /// server-side via RLS: drowning rows are only returned to the
+    /// recipient. Swift layer defensively filters drowning rows for
+    /// other users as a belt-and-braces guard.
+    func fetchSeasonAwards(seasonId: UUID) async throws -> [SeasonAward] {
+        let rows: [SeasonAward] = try await SupabaseClientProvider.shared
+            .rpc("get_season_awards", params: [
+                "p_season_id": seasonId.uuidString
             ])
             .execute()
             .value
@@ -538,6 +592,16 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// Map of `roomId → leaderboard rows`.
     private var leaderboards: [UUID: [LeaderboardEntry]]
 
+    /// Map of `roomId → current season`. M1.1 — every seeded room
+    /// starts with an active season; the V0.8 brief's
+    /// `seasonScore` lives on `room_memberships` but the `seasons`
+    /// + `season_awards` schema is what drives the awards-card
+    /// surface.
+    private var currentSeasons: [UUID: Season]
+
+    /// Map of `seasonId → awards rows`. M1.1.
+    private var seasonAwards: [UUID: [SeasonAward]]
+
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
 
@@ -685,6 +749,99 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
         self.rsvps = [:]
         self.joinCodes = [:]
+
+        // M1.1 — seed every room with an active season so the
+        // V0State resolver has a season to read. Seed two rooms
+        // (pluto + felt) with `status = .ended` to exercise the
+        // `.seasonClose` branch on RoomDetailView.
+        let plutoSeason = Season(
+            id: UUID(),
+            roomId: pluto.id,
+            ordinal: 1,
+            subtitle: "The Long River",
+            status: .ended,
+            startedAt: Date().addingTimeInterval(-86_400 * 60),
+            endedAt: Date().addingTimeInterval(-86_400 * 3)
+        )
+        let feltSeason = Season(
+            id: UUID(),
+            roomId: felt.id,
+            ordinal: 4,
+            subtitle: "Felt Faction — Season 4",
+            status: .ended,
+            startedAt: Date().addingTimeInterval(-86_400 * 200),
+            endedAt: Date().addingTimeInterval(-86_400 * 7)
+        )
+        let carwoolaSeason = Season(
+            id: UUID(),
+            roomId: carwoola.id,
+            ordinal: 3,
+            subtitle: "Borat's Big Year",
+            status: .active,
+            startedAt: Date().addingTimeInterval(-86_400 * 30),
+            endedAt: nil
+        )
+        self.currentSeasons = [
+            carwoola.id: carwoolaSeason,
+            pluto.id: plutoSeason,
+            felt.id: feltSeason
+        ]
+
+        // Seed awards for the two `.ended` seasons so the awards
+        // card renders with real rows. Per Q-DROWNING lean, the
+        // drowning row is included in the seed so privacy filtering
+        // is exercised end-to-end in previews. The current-user
+        // id is the carwoola host so the drowning row is for a
+        // different member.
+        let otherMemberId = UUID()
+        let hostUserId = carwoola.createdBy
+        self.seasonAwards = [
+            plutoSeason.id: [
+                SeasonAward(
+                    id: UUID(),
+                    seasonId: plutoSeason.id,
+                    roomId: pluto.id,
+                    recipientUserId: pluto.createdBy,
+                    recipientDisplayName: "Felix",
+                    awardType: .veteran,
+                    caption: "Played every Sunday for 8 weeks.",
+                    awardedAt: Date().addingTimeInterval(-86_400 * 3)
+                ),
+                SeasonAward(
+                    id: UUID(),
+                    seasonId: plutoSeason.id,
+                    roomId: pluto.id,
+                    recipientUserId: otherMemberId,
+                    recipientDisplayName: "Sam",
+                    awardType: .drowning,
+                    caption: "Came back every week. Kept showing up.",
+                    awardedAt: Date().addingTimeInterval(-86_400 * 3)
+                )
+            ],
+            feltSeason.id: [
+                SeasonAward(
+                    id: UUID(),
+                    seasonId: feltSeason.id,
+                    roomId: felt.id,
+                    recipientUserId: felt.createdBy,
+                    recipientDisplayName: "Felty",
+                    awardType: .phoenix,
+                    caption: "Climbed 4 ranks across the season.",
+                    awardedAt: Date().addingTimeInterval(-86_400 * 7)
+                ),
+                SeasonAward(
+                    id: UUID(),
+                    seasonId: feltSeason.id,
+                    roomId: felt.id,
+                    recipientUserId: hostUserId,
+                    recipientDisplayName: "Borat",
+                    awardType: .whale,
+                    caption: "Single-session record: +580.",
+                    awardedAt: Date().addingTimeInterval(-86_400 * 7)
+                )
+            ]
+        ]
+        _ = hostUserId // suppress unused-let warning if compiler is strict
     }
 
     // MARK: Rooms list
@@ -850,6 +1007,18 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     func fetchLeaderboard(roomId: UUID) async throws -> [LeaderboardEntry] {
         lock.lock(); defer { lock.unlock() }
         return leaderboards[roomId] ?? []
+    }
+
+    // MARK: Seasons (M1.1)
+
+    func fetchCurrentSeason(roomId: UUID) async throws -> Season? {
+        lock.lock(); defer { lock.unlock() }
+        return currentSeasons[roomId]
+    }
+
+    func fetchSeasonAwards(seasonId: UUID) async throws -> [SeasonAward] {
+        lock.lock(); defer { lock.unlock() }
+        return seasonAwards[seasonId] ?? []
     }
 
     // MARK: RSVP — read

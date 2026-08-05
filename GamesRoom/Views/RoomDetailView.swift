@@ -195,6 +195,14 @@ struct RoomDetailView: View {
         if activeEvent == nil, briefing == nil, leaderboard.isEmpty {
             return .loading
         }
+        // M1.1 — season-close takes priority over active-event
+        // branches. When the current season has ended, the page
+        // should render the awards card regardless of whether the
+        // room has a recently-settled or in-play event — the
+        // awards card IS the hero for that period.
+        if let season = currentSeason, season.status == .ended {
+            return .seasonClose(season, seasonAwardsForPrivacy)
+        }
         if let event = activeEvent {
             let isLive = event.playedAt <= Date()
             let isSettled = event.settledAt != nil
@@ -205,6 +213,16 @@ struct RoomDetailView: View {
             }
             if isLive && event.hostFinalized {
                 return .settleRound(event)
+            }
+            // M1.1 — `.tonightEvent` is the play-just-started
+            // moment: live, member hasn't moved chips yet, the
+            // host hasn't finalised. Distinct from `.inPlay` so
+            // the witness hero can carry the started-time caption
+            // in isolation. The collapse-into-`.inPlay` that the
+            // audit flags (V0State used to mix these) is undone
+            // here — the brief's 10-state machine wins.
+            if isLive && casinoWithdrawn == 0 {
+                return .tonightEvent(event)
             }
             if isLive {
                 return .inPlay(event)
@@ -217,6 +235,28 @@ struct RoomDetailView: View {
             }
         }
         return .readStandings
+    }
+
+    /// M1.1 — current season cached read. `nil` only when the
+    /// room has never opened a season (no row in
+    /// `public.seasons`).
+    private var currentSeason: Season? {
+        roomService.cachedCurrentSeason(roomId: room.id)
+    }
+
+    /// M1.1 — cached awards filtered for the current user.
+    /// Drowning rows are kept only when the current user IS the
+    /// recipient — the privacy boundary the SQL RLS layer also
+    /// enforces. Belt-and-braces against a server regression.
+    private var seasonAwardsForPrivacy: [SeasonAward] {
+        let all = roomService.cachedSeasonAwards(
+            seasonId: currentSeason?.id ?? UUID()
+        )
+        guard let me = authService.currentUser?.id else { return all }
+        return all.filter { row in
+            guard row.awardType.isPrivate else { return true }
+            return row.recipientUserId == me
+        }
     }
 
     @ViewBuilder
@@ -239,7 +279,7 @@ struct RoomDetailView: View {
             BriefingSlot(event: event, briefing: briefing, myRSVP: .declined,
                          onClaim: {}, onDecline: {}, isHero: true)
 
-        case .inPlay(let event):
+        case inPlay(let event):
             WitnessSlot(
                 event: event,
                 attestations: openAttestations,
@@ -249,8 +289,34 @@ struct RoomDetailView: View {
                 onScore: isHost
                     ? { Task { await openHostScore(event: event) } }
                     : nil,
-                isHero: true
+                isHero: true,
+                headerMode: .inPlay
             )
+
+        // M1.1 — `.tonightEvent` renders the witness hero with
+        // the play-just-started copy + the full-width "Withdraw
+        // chips" CTA. Same `WitnessSlot` component as `.inPlay`;
+        // the started-time caption is what differentiates this
+        // state from the post-withdrawal one.
+        case .tonightEvent(let event):
+            WitnessSlot(
+                event: event,
+                attestations: openAttestations,
+                cta: .withdraw,
+                onWithdraw: { Task { await openWithdraw(event: event) } },
+                onScan: { Task { await openScan(event: event) } },
+                onScore: isHost
+                    ? { Task { await openHostScore(event: event) } }
+                    : nil,
+                isHero: true,
+                headerMode: .tonightEvent
+            )
+
+        // M1.1 — `.seasonClose` renders the awards card with the
+        // privacy-filtered awards for the current user. The
+        // drowning row stays visible only to the recipient.
+        case .seasonClose(let season, let awards):
+            AwardsCard(season: season, awards: awards)
         case .settleRound(let event):
             WitnessSlot(
                 event: event,
@@ -261,7 +327,8 @@ struct RoomDetailView: View {
                 onScore: isHost
                     ? { Task { await openHostScore(event: event) } }
                     : nil,
-                isHero: true
+                isHero: true,
+                headerMode: .settleRound
             )
 
         case .justSettled(let event):
@@ -285,9 +352,10 @@ struct RoomDetailView: View {
 
     /// Loads every dependency the V0.8 stage needs in parallel:
     /// the active event, the briefing summary, the leaderboard,
-    /// the current member's RSVP, the open attestations, and the
-    /// room members (for the P1.1 roster surface). Called from
-    /// `.task` and `.refreshable`.
+    /// the current member's RSVP, the open attestations, the room
+    /// members (for the P1.1 roster surface), and the current
+    /// season + awards (for the M1.1 `.seasonClose` slot).
+    /// Called from `.task` and `.refreshable`.
     private func refresh() async {
         async let active: () = loadActiveIfNeeded()
         async let board: () = loadLeaderboardIfNeeded()
@@ -295,7 +363,18 @@ struct RoomDetailView: View {
         async let briefingLoad: () = loadBriefingIfNeeded()
         async let rsvpLoad: () = loadRSVPIfNeeded()
         async let membersLoad: () = loadMembersIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad)
+        async let seasonLoad: () = loadSeasonIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad)
+    }
+
+    /// Loads the room's current season and (if present) its awards.
+    /// Triggered on every refresh so a host declaring a season-close
+    /// in another tab surfaces on next pull-to-refresh.
+    private func loadSeasonIfNeeded() async {
+        await roomService.loadCurrentSeason(roomId: room.id)
+        if let season = roomService.cachedCurrentSeason(roomId: room.id) {
+            await roomService.loadSeasonAwards(seasonId: season.id)
+        }
     }
 
     private func loadMembersIfNeeded() async {
@@ -409,12 +488,23 @@ struct RoomDetailView: View {
 private enum V0State {
     case loading
     case justSettled(Event)
+    /// M1.1 — the play-just-started moment: the event is live
+    /// but the member hasn't moved any chips yet. Distinct from
+    /// `.inPlay` so the witness hero can render the started-time
+    /// caption + the full-width "Withdraw chips" CTA in
+    /// isolation. Transitions to `.inPlay` once a withdrawal
+    /// lands.
+    case tonightEvent(Event)
     case inPlay(Event)
     case settleRound(Event)
     case upcoming(Event)
     case claimed(Event)
     case declined(Event)
     case readStandings
+    /// M1.1 — season-close moment: the current season has
+    /// `status == .ended`. Renders the awards card surface with
+    /// per-recipient privacy filtering for the drowning row.
+    case seasonClose(Season, [SeasonAward])
 }
 
 // MARK: - Briefing slot
@@ -539,6 +629,13 @@ private struct BriefingSeatCount: View {
 private struct WitnessSlot: View {
     enum CTA { case withdraw, scan }
 
+    /// M1.1 — header copy differentiates `.tonightEvent`
+    /// (play-just-started, "started N min ago") from `.inPlay`
+    /// (mid-game, "phones face-down"). The same `WitnessSlot`
+    /// component renders both — only the eyebrow + caption
+    /// change.
+    enum HeaderMode { case inPlay, tonightEvent, settleRound }
+
     let event: Event
     let attestations: [OpenAttestationSummary]
     let cta: CTA
@@ -548,6 +645,10 @@ private struct WitnessSlot: View {
     /// for member sessions — the host-only button doesn't render.
     let onScore: (() -> Void)?
     let isHero: Bool
+    /// M1.1 — defaults to `.inPlay` for backwards-compat with
+    /// the pre-M1.1 call sites. New call sites for
+    /// `.tonightEvent` / `.settleRound` set this explicitly.
+    var headerMode: HeaderMode = .inPlay
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
@@ -556,10 +657,10 @@ private struct WitnessSlot: View {
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("The game is on")
+                    Text(headerTitle)
                         .font(Theme.Typography.title.weight(.semibold))
                         .foregroundStyle(Theme.Palette.primaryText)
-                    Text("Phones face-down. Stay in the room.")
+                    Text(headerCaption)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
@@ -637,6 +738,30 @@ private struct WitnessSlot: View {
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
         )
     }
+
+    /// M1.1 — copy variant for the witness header. Each variant
+    /// carries the V0.8 brief's intent: `.tonightEvent` is
+    /// play-just-started (no withdrawals yet), `.inPlay` is the
+    /// canonical mid-game copy, `.settleRound` is the host-finalised
+    /// "phones face-down — count what's on the table" copy.
+    private var headerTitle: String {
+        switch headerMode {
+        case .inPlay:       return "The game is on"
+        case .tonightEvent: return "The night has started"
+        case .settleRound:  return "Count what's on the table"
+        }
+    }
+
+    private var headerCaption: String {
+        switch headerMode {
+        case .inPlay:
+            return "Phones face-down. Stay in the room."
+        case .tonightEvent:
+            return "The host just kicked off. Move your first chips when you're ready."
+        case .settleRound:
+            return "The host has finalised. Settle your stack before you leave the room."
+        }
+    }
 }
 
 // MARK: - Ceremonial card (post-play, ≤24h after settle)
@@ -682,6 +807,118 @@ private struct CeremonialCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
         .sectionCard(.hero)
+    }
+}
+
+// MARK: - Awards card (season-close slot, M1.1)
+
+/// Renders the per-season awards. The `.drowning` row is private
+/// to the recipient — the calling resolver (`seasonAwardsForPrivacy`
+/// in `RoomDetailView`) already filters drowning rows whose
+/// `recipientUserId` isn't the current user. The card renders
+/// whatever rows it receives; it does not re-filter.
+private struct AwardsCard: View {
+    let season: Season
+    let awards: [SeasonAward]
+
+    /// Stable display order: phoenix, veteran, whale, drowning.
+    /// `AwardType.CaseIterable` defines the order; we sort by it.
+    private var sortedAwards: [SeasonAward] {
+        awards.sorted { lhs, rhs in
+            let lhsIdx = AwardType.allCases.firstIndex(of: lhs.awardType) ?? 0
+            let rhsIdx = AwardType.allCases.firstIndex(of: rhs.awardType) ?? 0
+            return lhsIdx < rhsIdx
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Season \(season.ordinal) is closed")
+                    .font(Theme.Typography.title.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                if !season.subtitle.isEmpty {
+                    Text(season.subtitle)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+            }
+
+            if sortedAwards.isEmpty {
+                Text("Awards haven't been declared yet.")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .padding(.top, 4)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
+                        AwardRow(award: award)
+                        if idx != sortedAwards.count - 1 {
+                            Divider()
+                                .overlay(Theme.Palette.hairline)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            if let endedAt = season.endedAt {
+                Text("Closed \(endedAt, format: .relative(presentation: .named))")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .padding(.top, 4)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Layout.cardInset)
+        .sectionCard(.hero)
+    }
+}
+
+/// One row inside the awards card. The drowning icon is muted
+/// (the row is private; UI just looks calmer). Other awards use
+/// their award type's symbol.
+private struct AwardRow: View {
+    let award: SeasonAward
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(Theme.Typography.body)
+                .foregroundStyle(award.awardType.isPrivate
+                    ? Theme.Palette.primaryText.opacity(0.55)
+                    : Theme.Palette.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(award.recipientDisplayName)
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Text("·")
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    Text(award.awardType.displayName)
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(award.awardType.isPrivate
+                            ? Theme.Palette.primaryText.opacity(0.55)
+                            : Theme.Palette.accent)
+                }
+                if let caption = award.caption, !caption.isEmpty {
+                    Text(caption)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var symbol: String {
+        switch award.awardType {
+        case .phoenix:  return "flame.fill"
+        case .veteran:  return "checkmark.seal.fill"
+        case .whale:    return "circle.hexagongrid.fill"
+        case .drowning: return "drop.fill"
+        }
     }
 }
 

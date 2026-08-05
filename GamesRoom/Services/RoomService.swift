@@ -101,6 +101,17 @@ final class RoomService: ObservableObject {
     /// `signOut()` via the upper layer.
     @Published private(set) var membersByRoom: [UUID: [Member]] = [:]
 
+    /// Current season cache keyed by roomId. Populated lazily by
+    /// `loadCurrentSeason(roomId:)`; consumed by `RoomDetailView`
+    /// to drive the `.seasonClose` V0State branch.
+    @Published private(set) var currentSeasonByRoom: [UUID: Season] = [:]
+
+    /// Season awards cache keyed by seasonId. Populated lazily by
+    /// `loadSeasonAwards(seasonId:)`; consumed by the awards card
+    /// surface. The view layer applies the recipient-check
+    /// before rendering (privacy boundary).
+    @Published private(set) var awardsBySeason: [UUID: [SeasonAward]] = [:]
+
     // MARK: - Rooms list
 
     /// Re-fetch the rooms list. Safe to call from `.task` and
@@ -209,6 +220,43 @@ final class RoomService: ObservableObject {
         } catch {
             self.lastError = error.localizedDescription
             return briefingByEvent[eventId]
+        }
+    }
+
+    // MARK: - Seasons (M1.1)
+
+    /// Loads the room's current season. Returns the cached value
+    /// (which may be `nil` only for rooms that never opened a
+    /// season). Called from `RoomDetailView.task` alongside the
+    /// active-event + briefing loads.
+    @discardableResult
+    func loadCurrentSeason(roomId: UUID) async -> Season? {
+        do {
+            let season = try await store.fetchCurrentSeason(roomId: roomId)
+            self.currentSeasonByRoom[roomId] = season
+            self.lastError = nil
+            return season
+        } catch {
+            self.lastError = error.localizedDescription
+            return currentSeasonByRoom[roomId]
+        }
+    }
+
+    /// Loads the awards for one season. The privacy boundary is
+    /// enforced at the SQL RLS layer (migration 039 drowning
+    /// policy); this method stores the rows as-is. The view
+    /// layer applies the recipient-check before rendering, in
+    /// case the server-side contract regresses.
+    @discardableResult
+    func loadSeasonAwards(seasonId: UUID) async -> [SeasonAward] {
+        do {
+            let rows = try await store.fetchSeasonAwards(seasonId: seasonId)
+            self.awardsBySeason[seasonId] = rows
+            self.lastError = nil
+            return rows
+        } catch {
+            self.lastError = error.localizedDescription
+            return awardsBySeason[seasonId] ?? []
         }
     }
 
@@ -427,6 +475,17 @@ final class RoomService: ObservableObject {
     /// `.unclaimed` so the upcoming slot is the safe default.
     func cachedRSVP(eventId: UUID) -> MemberRSVPState {
         rsvpByEvent[eventId] ?? .unclaimed
+    }
+
+    /// Cached current season for `roomId`. `nil` only when the
+    /// room has never opened a season.
+    func cachedCurrentSeason(roomId: UUID) -> Season? {
+        currentSeasonByRoom[roomId]
+    }
+
+    /// Cached awards for `seasonId`, possibly empty.
+    func cachedSeasonAwards(seasonId: UUID) -> [SeasonAward] {
+        awardsBySeason[seasonId] ?? []
     }
 
     // MARK: - Host journal (P1.5)
