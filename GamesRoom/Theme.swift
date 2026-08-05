@@ -92,6 +92,35 @@ enum Theme {
         /// Hairline color for the card's top/bottom dividers.
         var hairline: Color { Palette.hairline }
     }
+
+    // MARK: Icons (M2.5)
+    //
+    // SF Symbol names that recur across the app — the seat-grid,
+    // pack shelf, room settings, and toolbar. Centralising them
+    // here means a future redesign can swap symbols in one place
+    // instead of grepping across views. Names are iOS 17+
+    // SF Symbols (the project targets iOS 26+).
+    enum Icon {
+        /// The "this seat is yours" affordance on the seat grid.
+        static let chairFill = "chair.fill"
+        /// The settings gear in the room toolbar.
+        static let gearshape = "gearshape"
+        /// The "switch room" chevron inside the rooms dropdown.
+        static let chevronDown = "chevron.down"
+        /// The chevron historically used on pack-row taps. The
+        /// Track E verdict dropped it; kept here so a future
+        /// surface can opt back in without re-deriving the name.
+        static let chevronRight = "chevron.right"
+        /// The checkmark on the current room inside the
+        /// RoomSwitcherMenu.
+        static let checkmark = "checkmark"
+        /// The score-correction amber dot for the F-MVP-11
+        /// 60-second "host correcting" indicator on leaderboard
+        /// rows.
+        static let circleFill = "circle.fill"
+        /// The active-event accent dot on the rooms list.
+        static let activeSessionDot = "circle.fill"
+    }
 }
 
 // MARK: - sectionCard modifier

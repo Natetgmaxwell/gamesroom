@@ -29,6 +29,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct JoinRoomSheet: View {
 
@@ -118,6 +119,11 @@ struct JoinRoomSheet: View {
         defer { isRedeeming = false }
         do {
             _ = try await roomService.redeemJoinCode(code: resolved)
+            // M2.4 — per vision §6.1 Q3 lean: prompt for notification
+            // permission at room join, not at install. The on-page
+            // briefing slot is the fallback if the member denies.
+            // Best-effort; never blocks the dismiss path on failure.
+            await requestNotificationsIfNeeded()
             dismiss()
         } catch {
             // Map the most common server errors to user-facing
@@ -133,6 +139,26 @@ struct JoinRoomSheet: View {
             default:
                 errorMessage = "Couldn't join right now. Try again in a moment."
             }
+        }
+    }
+
+    /// M2.4 — request notification permission after a successful
+    /// join. `requestAuthorization` is idempotent: iOS will surface
+    /// the system prompt only on the first call per app install;
+    /// subsequent calls return the cached answer immediately.
+    /// Errors (e.g., `NotificationsDeniedAtJoin`) are logged via
+    /// the ponytail comment but do not block the dismiss path —
+    /// the briefing slot is the documented fallback.
+    private func requestNotificationsIfNeeded() async {
+        do {
+            _ = try await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .badge, .sound])
+            // ponytail: notifications permission requested at join;
+            // the briefing slot remains the fallback for denied
+            // members per vision §6.1 Q3.
+        } catch {
+            // ponytail: notifications denied at join; the briefing
+            // slot is the fallback. No UI affordance needed.
         }
     }
 }

@@ -823,6 +823,12 @@ private struct CeremonialCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
+        // M2.5 — state-driven hero wash. The CeremonialCard
+        // (.justSettled) is always the active slot in its V0State,
+        // so .hero is correct here. The hard-coded `.hero` on
+        // the original page-level Tonight card (audit §11
+        // finding) is no longer in the tree — the slot renderer
+        // drives the wash via `isHero`.
         .sectionCard(.hero)
     }
 }
@@ -1018,6 +1024,11 @@ private struct PackShelfReadOnly: View {
     }
 
     private func packRow(_ pack: any PackDefinition.Type) -> some View {
+        // M2.1 — pack rows are read-only display only. The
+        // chevron + tap affordance are dropped per the Track E
+        // verdict ("DROP the pack-row trigger"). The how-to
+        // body is V0.9; until then, the row shows the pack's
+        // name + description as static metadata for the room.
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: pack.iconSystemName)
                 .font(Theme.Typography.title)
@@ -1033,16 +1044,11 @@ private struct PackShelfReadOnly: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            Image(systemName: "chevron.right")
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Palette.hairline)
         }
         .padding(.vertical, Theme.Layout.cardInset)
         .padding(.horizontal, Theme.Layout.edgePadding)
-        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(pack.displayName) — \(pack.description)"))
-        .accessibilityHint(Text("Opens how-to guide"))
     }
 }
 
@@ -1142,6 +1148,15 @@ private struct MascotFooterCaption: View {
     /// combination. Tap opens the deep-dive bubble. See
     /// `MascotEngine.generateVoice(...)` for the placeholder
     /// contract; nil fields are simply omitted from the template.
+    ///
+    /// M2.3 — pass real memberCount + memberNames from the cached
+    /// roster so the post-play recap template doesn't substitute
+    /// "0 members". Members are loaded by `RoomDetailView.task`;
+    /// this view reads from the service's published cache so the
+    /// caption updates without a manual refresh.
+    private var members: [Member] {
+        roomService.cachedMembers(roomId: room.id)
+    }
     private var caption: String {
         MascotEngine.generateVoice(
             mascotName: room.mascotName,
@@ -1152,8 +1167,8 @@ private struct MascotFooterCaption: View {
             context: .init(
                 activeEventTitle: nil,
                 lastEventDaysAgo: nil,
-                memberCount: 0,
-                memberNames: []
+                memberCount: members.count,
+                memberNames: members.map(\.displayName)
             )
         )
     }
