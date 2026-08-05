@@ -91,6 +91,16 @@ struct Room: Identifiable, Codable, Hashable {
     /// the migration. Bounded to 280 chars at the SQL layer.
     let hostJournal: String?
 
+    // MARK: M4 — installed pack slugs (room-level pack state)
+
+    /// Slugs of the packs installed in this room. Mirrors the
+    /// `public.room_packs` table (migration 041). The room never
+    /// reaches up to the global catalog — only these slugs are
+    /// visible. `nil` means "use the legacy V0.8 default of all
+    /// four packs" so legacy rooms pre-migration keep rendering
+    /// the same shelf.
+    let installedPackSlugs: [String]?
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -112,6 +122,7 @@ struct Room: Identifiable, Codable, Hashable {
         case maxSeats = "max_seats"
         case memberInviteQuota = "member_invite_quota"
         case hostJournal = "host_journal"
+        case installedPackSlugs = "installed_pack_slugs"
     }
 
     init(
@@ -134,7 +145,8 @@ struct Room: Identifiable, Codable, Hashable {
         socialNarrationEnabled: Bool = true,
         maxSeats: Int = 6,
         memberInviteQuota: Int = 3,
-        hostJournal: String? = nil
+        hostJournal: String? = nil,
+        installedPackSlugs: [String]? = nil
     ) {
         self.id = id
         self.name = name
@@ -156,6 +168,7 @@ struct Room: Identifiable, Codable, Hashable {
         self.maxSeats = maxSeats
         self.memberInviteQuota = memberInviteQuota
         self.hostJournal = hostJournal
+        self.installedPackSlugs = installedPackSlugs
     }
 
     init(from decoder: Decoder) throws {
@@ -180,5 +193,6 @@ struct Room: Identifiable, Codable, Hashable {
         maxSeats = try c.decodeIfPresent(Int.self, forKey: .maxSeats) ?? 6
         memberInviteQuota = try c.decodeIfPresent(Int.self, forKey: .memberInviteQuota) ?? 3
         hostJournal = try c.decodeIfPresent(String.self, forKey: .hostJournal)
+        installedPackSlugs = try c.decodeIfPresent([String].self, forKey: .installedPackSlugs)
     }
 }

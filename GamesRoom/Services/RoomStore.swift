@@ -197,6 +197,34 @@ protocol RoomStore: Sendable {
     /// `.drowning` rows whose `recipientUserId != currentUserId`,
     /// as a belt-and-braces guard in case the SQL view leaks.
     func fetchSeasonAwards(seasonId: UUID) async throws -> [SeasonAward]
+
+    // MARK: Room packs (M4 — pack-as-platform polish)
+
+    /// Returns the pack slugs installed in this room. Mirrors
+    /// the `public.room_packs` table (migration 041). The room
+    /// never reaches up to the global catalog; only enabled
+    /// rows are visible. Returns an empty array when the room
+    /// has no pack overrides (callers can fall back to the
+    /// V0.8 default of all four packs).
+    func fetchRoomPacks(roomId: UUID) async throws -> [String]
+
+    /// Replaces the room's enabled pack set in a single call.
+    /// Mirrors `update_room_packs(p_room_id, p_slugs text[])`
+    /// (migration 041). Validates slugs server-side; throws on
+    /// invalid input. Emits one `room_system_events` row per
+    /// removed pack so the briefing banner surfaces the change.
+    func updateRoomPacks(roomId: UUID, slugs: [String]) async throws
+
+    /// Returns the room's unread system events (pack_removed,
+    /// season_closed, etc.). Used by the briefing slot's
+    /// "System" section. Mirrors migration 041's
+    /// `public.room_system_events`.
+    func fetchRoomSystemEvents(roomId: UUID) async throws -> [RoomSystemEvent]
+
+    /// Marks one system event as acknowledged for the calling
+    /// user. Used by the briefing slot after the member has
+    /// seen the banner.
+    func acknowledgeSystemEvent(eventId: UUID) async throws
 }
 
 // MARK: - LiveRoomStore
@@ -405,6 +433,63 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         return rows
     }
 
+    // MARK: Room packs (M4)
+
+    /// The live RPC `get_room_packs(p_room_id)` (migration 041)
+    /// returns the room's enabled pack slugs. Returns an empty
+    /// array when no overrides exist — callers fall back to the
+    /// global `PackRegistry.shared.allPacks` per the V0.8 brief.
+    func fetchRoomPacks(roomId: UUID) async throws -> [String] {
+        let rows: [String] = try await SupabaseClientProvider.shared
+            .rpc("get_room_packs", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
+    /// The live RPC `update_room_packs(p_room_id, p_slugs text[])`
+    /// (migration 041). Validates slugs server-side and emits one
+    /// `room_system_events` row per removed pack so the briefing
+    /// banner surfaces the change. Throws on non-host writes
+    /// (RLS denial 42501) or invalid slugs (errcode 22023).
+    func updateRoomPacks(roomId: UUID, slugs: [String]) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("update_room_packs", params: [
+                "p_room_id": roomId.uuidString,
+                "p_slugs": slugs
+            ])
+            .execute()
+            .value as Void
+    }
+
+    /// The live RPC `get_room_system_events(p_room_id)` (migration 041)
+    /// returns the room's unread system events. RLS already
+    /// scopes this to the calling user, so no further filtering
+    /// is needed.
+    func fetchRoomSystemEvents(roomId: UUID) async throws -> [RoomSystemEvent] {
+        let rows: [RoomSystemEvent] = try await SupabaseClientProvider.shared
+            .rpc("get_room_system_events", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
+    /// The live RPC `acknowledge_system_event(p_event_id)` (migration 041)
+    /// sets `acknowledged_at = now()` on the row. RLS gates the
+    /// update to room members.
+    func acknowledgeSystemEvent(eventId: UUID) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("acknowledge_system_event", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value as Void
+    }
+
     // MARK: RSVP — read
 
     /// The live RPC is `get_my_event_rsvp(p_event_id)` (migration
@@ -601,6 +686,30 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
 
     /// Map of `seasonId → awards rows`. M1.1.
     private var seasonAwards: [UUID: [SeasonAward]]
+
+    /// Map of `roomId → enabled pack slugs`. M4. Empty when a
+    /// room has no pack overrides — callers fall back to the
+    /// global `PackRegistry.shared.allPacks` per the V0.8 brief.
+    private var roomPacks: [UUID: [String]]
+
+    /// Map of `roomId → system events queue`. M4. Drives the
+    /// briefing slot's "System" section.
+    private var roomSystemEvents: [UUID: [RoomSystemEvent]]
+
+    /// Default pack set every room starts with when there's no
+    /// explicit override. Matches the V0.8 brief's "all 4 packs
+    /// pre-installed" position.
+    private static let defaultInstalledPacks: [String] = [
+        "casino",
+        "cards_against_humanity",
+        "monopoly_deal",
+        "pluto_chess"
+    ]
+
+    /// M4 — public read accessor for the default. Callers that
+    /// receive an empty `fetchRoomPacks` array use this as the
+    /// fallback shelf.
+    var defaultInstalledPacks: [String] { Self.defaultInstalledPacks }
 
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
@@ -842,6 +951,17 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
             ]
         ]
         _ = hostUserId // suppress unused-let warning if compiler is strict
+
+        // M4 — seed every room with the default pack set so the
+        // shelf contract from before the migration stays intact.
+        // The host can remove packs later via the settings
+        // Operations sub-sheet's updateRoomPacks call.
+        self.roomPacks = [
+            carwoola.id: Self.defaultInstalledPacks,
+            pluto.id: Self.defaultInstalledPacks,
+            felt.id: Self.defaultInstalledPacks
+        ]
+        self.roomSystemEvents = [:]
     }
 
     // MARK: Rooms list
@@ -1019,6 +1139,79 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     func fetchSeasonAwards(seasonId: UUID) async throws -> [SeasonAward] {
         lock.lock(); defer { lock.unlock() }
         return seasonAwards[seasonId] ?? []
+    }
+
+    // MARK: Room packs (M4)
+
+    /// M4 — returns the pack slugs installed in this room. The
+    /// in-memory store seeds every room with all four V0.8
+    /// packs so the shelf contract from before the migration
+    /// stays intact. Callers can fall back to the global
+    /// `PackRegistry.shared.allPacks` when this returns an empty
+    /// array.
+    func fetchRoomPacks(roomId: UUID) async throws -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return roomPacks[roomId] ?? defaultInstalledPacks
+    }
+
+    /// M4 — replace the room's enabled pack set. The in-memory
+    /// store just stores the slugs verbatim; the live RPC
+    /// validates against `public.packs`. Throws on missing
+    /// slugs so the UI surfaces an error rather than silently
+    /// dropping the request.
+    func updateRoomPacks(roomId: UUID, slugs: [String]) async throws {
+        // Validate every slug against PackRegistry. The live
+        // RPC does this server-side; the in-memory store
+        // mirrors the contract.
+        let knownSlugs = Set(PackRegistry.shared.allPacks.map(\.slug))
+        for slug in slugs where !knownSlugs.contains(slug) {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Unknown pack slug: \(slug)"]
+            )
+        }
+        lock.lock(); defer { lock.unlock() }
+        guard rooms.contains(where: { $0.id == roomId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "room \(roomId) not found"]
+            )
+        }
+        roomPacks[roomId] = slugs
+    }
+
+    /// M4 — returns the room's unread system events. Empty
+    /// array when no events. The live impl queries
+    /// `public.room_system_events` filtered by `acknowledged_at
+    /// IS NULL`.
+    func fetchRoomSystemEvents(roomId: UUID) async throws -> [RoomSystemEvent] {
+        lock.lock(); defer { lock.unlock() }
+        return roomSystemEvents[roomId] ?? []
+    }
+
+    /// M4 — marks one system event acknowledged. The live impl
+    /// `UPDATE public.room_system_events SET acknowledged_at =
+    /// now() WHERE id = $1 AND user_can_ack(...)`. RLS already
+    /// gates the row, so the Swift layer doesn't need a
+    /// pre-check.
+    func acknowledgeSystemEvent(eventId: UUID) async throws {
+        lock.lock(); defer { lock.unlock() }
+        for (roomId, events) in roomSystemEvents {
+            if let idx = events.firstIndex(where: { $0.id == eventId }) {
+                var updated = events
+                updated[idx] = RoomSystemEvent(
+                    id: events[idx].id,
+                    roomId: events[idx].roomId,
+                    kind: events[idx].kind,
+                    payload: events[idx].payload,
+                    createdAt: events[idx].createdAt,
+                    acknowledgedAt: Date()
+                )
+                roomSystemEvents[roomId] = updated
+            }
+        }
     }
 
     // MARK: RSVP — read
