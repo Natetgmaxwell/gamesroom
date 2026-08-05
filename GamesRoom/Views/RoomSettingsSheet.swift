@@ -51,6 +51,7 @@ struct RoomSettingsSheet: View {
     @State private var maxSeats: Int
     @State private var memberInviteQuota: Int
     @State private var joinStartingBonus: Int
+    @State private var seatDepositAmount: Int
     @State private var briefing48hEnabled: Bool
     @State private var calendarAutoAddHost: Bool
     @State private var socialPreferencesEnabled: Bool
@@ -72,6 +73,7 @@ struct RoomSettingsSheet: View {
         _maxSeats = State(initialValue: room.maxSeats)
         _memberInviteQuota = State(initialValue: room.memberInviteQuota)
         _joinStartingBonus = State(initialValue: room.joinStartingBonus)
+        _seatDepositAmount = State(initialValue: room.seatDepositAmount)
         _briefing48hEnabled = State(initialValue: room.briefing48hEnabled)
         _calendarAutoAddHost = State(initialValue: room.calendarAutoAddHost)
         _socialPreferencesEnabled = State(initialValue: room.socialPreferencesEnabled)
@@ -103,11 +105,13 @@ struct RoomSettingsSheet: View {
                             maxSeats: $maxSeats,
                             memberInviteQuota: $memberInviteQuota,
                             joinStartingBonus: $joinStartingBonus,
+                            seatDepositAmount: $seatDepositAmount,
                             briefing48hEnabled: $briefing48hEnabled,
                             calendarAutoAddHost: $calendarAutoAddHost,
                             socialPreferencesEnabled: $socialPreferencesEnabled,
                             shareCode: $shareCode,
-                            isGeneratingCode: $isGeneratingCode
+                            isGeneratingCode: $isGeneratingCode,
+                            roomId: room.id
                         )
                     } label: {
                         settingsRow(
@@ -320,6 +324,7 @@ struct RoomSettingsOperationsSheet: View {
     @Binding var maxSeats: Int
     @Binding var memberInviteQuota: Int
     @Binding var joinStartingBonus: Int
+    @Binding var seatDepositAmount: Int
     @Binding var briefing48hEnabled: Bool
     @Binding var calendarAutoAddHost: Bool
     @Binding var socialPreferencesEnabled: Bool
@@ -332,10 +337,11 @@ struct RoomSettingsOperationsSheet: View {
     @State private var packsLoaded: Bool = false
 
     init(
-        roomId: UUID = UUID(), // unused; kept for future RPC binding
+        roomId: UUID = UUID(),
         maxSeats: Binding<Int>,
         memberInviteQuota: Binding<Int>,
         joinStartingBonus: Binding<Int>,
+        seatDepositAmount: Binding<Int>,
         briefing48hEnabled: Binding<Bool>,
         calendarAutoAddHost: Binding<Bool>,
         socialPreferencesEnabled: Binding<Bool>,
@@ -346,6 +352,7 @@ struct RoomSettingsOperationsSheet: View {
         _maxSeats = maxSeats
         _memberInviteQuota = memberInviteQuota
         _joinStartingBonus = joinStartingBonus
+        _seatDepositAmount = seatDepositAmount
         _briefing48hEnabled = briefing48hEnabled
         _calendarAutoAddHost = calendarAutoAddHost
         _socialPreferencesEnabled = socialPreferencesEnabled
@@ -359,6 +366,7 @@ struct RoomSettingsOperationsSheet: View {
                 Stepper("Max seats: \(maxSeats)", value: $maxSeats, in: 2...20)
                 Stepper("Invite quota: \(memberInviteQuota)", value: $memberInviteQuota, in: 0...20)
                 Stepper("Starting bonus: \(joinStartingBonus) pts", value: $joinStartingBonus, in: 0...1000, step: 50)
+                Stepper("Seat deposit: \(seatDepositAmount) pts", value: $seatDepositAmount, in: 0...500, step: 10)
             }
 
             Section("Features") {

@@ -471,6 +471,160 @@ enum MascotEngine {
         }
     }
 
+    // MARK: - LLM-driven voice generation (V0.26 extension)
+
+    /// When the room has an `mascot_api_key` set, the engine can call
+    /// an OpenAI-compatible endpoint (e.g. z.ai's glm-4.6) to generate
+    /// a dynamic mascot voice instead of the template interpolation.
+    /// Falls back to the template if the call fails, times out, or
+    /// the key is missing. This implements the V0.26 LLM extension
+    /// from vision §3.4 while keeping the V0.8 template as the
+    /// safe default.
+    static func generateVoiceLLM(
+        mascotName: String,
+        roomName: String,
+        personality: MascotPersonality,
+        ideology: MascotPoliticalIdeology,
+        kind: NotificationKind,
+        context: RoomContext,
+        apiKey: String,
+        endpoint: String = "https://api.z.ai/api/paas/v4",
+        model: String = "glm-4.6",
+        eventDate: Date? = nil,
+        eventVenue: String? = nil,
+        hostNote: String? = nil,
+        seatsLeft: Int? = nil,
+        seatsClaimed: Int? = nil
+    ) async -> String {
+        let templateVoice = generateVoice(
+            mascotName: mascotName,
+            roomName: roomName,
+            personality: personality,
+            ideology: ideology,
+            kind: kind,
+            context: context,
+            eventDate: eventDate,
+            eventVenue: eventVenue,
+            hostNote: hostNote,
+            seatsLeft: seatsLeft,
+            seatsClaimed: seatsClaimed
+        )
+        guard let url = URL(string: "\(endpoint)/chat/completions") else {
+            return templateVoice
+        }
+        let prompt = buildLLMPrompt(
+            mascotName: mascotName,
+            roomName: roomName,
+            personality: personality,
+            ideology: ideology,
+            kind: kind,
+            context: context,
+            eventDate: eventDate,
+            eventVenue: eventVenue,
+            hostNote: hostNote,
+            seatsLeft: seatsLeft,
+            seatsClaimed: seatsClaimed
+        )
+        let requestBody: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": prompt]
+            ],
+            "max_tokens": 120,
+            "temperature": 0.8
+        ]
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return templateVoice
+            }
+            let result = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+            let generated = result.choices.first?.message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (generated?.isEmpty ?? true) ? templateVoice : generated!
+        } catch {
+            return templateVoice
+        }
+    }
+
+    /// System prompt establishing the mascot's voice rules.
+    private static let systemPrompt = """
+    You are a games-night mascot character. Write ONE short message (1-2 sentences, \
+    under 200 characters) in the mascot's voice. No emojis. No markdown. Just the message \
+    text. Match the personality and ideology tone precisely. Be concise, engaging, and \
+    in-character. Never break the fourth wall about being an AI.
+    """
+
+    /// Builds the user-facing prompt with all the context the LLM needs.
+    private static func buildLLMPrompt(
+        mascotName: String,
+        roomName: String,
+        personality: MascotPersonality,
+        ideology: MascotPoliticalIdeology,
+        kind: NotificationKind,
+        context: RoomContext,
+        eventDate: Date?,
+        eventVenue: String?,
+        hostNote: String?,
+        seatsLeft: Int?,
+        seatsClaimed: Int?
+    ) -> String {
+        var lines: [String] = []
+        lines.append("Mascot name: \(mascotName)")
+        lines.append("Room: \(roomName)")
+        lines.append("Personality: \(personality.displayName)")
+        lines.append("Political lean: \(ideology.displayName)")
+        if let event = context.activeEventTitle {
+            lines.append("Event: \(event)")
+        }
+        if let date = eventDate {
+            lines.append("When: \(humanDate(date)) at \(humanTime(date))")
+        }
+        if let venue = eventVenue, !venue.isEmpty {
+            lines.append("Venue: \(venue)")
+        }
+        if let left = seatsLeft {
+            lines.append("Seats left: \(left)")
+        }
+        if let claimed = seatsClaimed {
+            lines.append("Seats claimed: \(claimed)")
+        }
+        if let note = hostNote, !note.isEmpty {
+            lines.append("Host's note: \(note)")
+        }
+        lines.append("Members: \(context.memberCount)")
+        switch kind {
+        case .briefingOnCreate:
+            lines.append("Message type: New event just created. Prompt members to claim their seat.")
+        case .briefing48h:
+            lines.append("Message type: T-48h reminder. Two days until the event.")
+        case .briefingMorning:
+            lines.append("Message type: Morning-of. The event is today.")
+        case .postPlayRecap:
+            lines.append("Message type: Post-play recap. The event has concluded.")
+        }
+        lines.append("Write the mascot's message now:")
+        return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Chat completion response decoding
+
+    private struct ChatCompletionResponse: Decodable {
+        let choices: [Choice]
+        struct Choice: Decodable {
+            let message: Message
+        }
+        struct Message: Decodable {
+            let content: String
+        }
+    }
+
     // MARK: - Placeholder substitution
 
     /// Substitutes `{name}` placeholders with caller-supplied values.

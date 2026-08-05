@@ -368,7 +368,10 @@ final class RoomService: ObservableObject {
                 playedAt: event.playedAt,
                 mascotName: room?.mascotName ?? "Your mascot",
                 perMemberCadence: cadence,
-                hostNote: event.hostNote
+                hostNote: event.hostNote,
+                mascotApiKey: room?.mascotApiKey,
+                mascotPersonality: room?.mascotPersonality ?? .friendly,
+                mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist
             )
         }
         return row
@@ -410,7 +413,10 @@ final class RoomService: ObservableObject {
             eventName: name,
             playedAt: playedAt,
             mascotName: room?.mascotName ?? "Your mascot",
-            perMemberCadence: cadence
+            perMemberCadence: cadence,
+            mascotApiKey: room?.mascotApiKey,
+            mascotPersonality: room?.mascotPersonality ?? .friendly,
+            mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist
         )
         return newId
     }

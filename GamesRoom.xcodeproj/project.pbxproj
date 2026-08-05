@@ -46,6 +46,7 @@
 		AAAAAAAA00000000000000BC /* CallForward.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000422 /* CallForward.swift */; };
 		AAAAAAAA00000000000000BE /* SeasonAward.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000423 /* SeasonAward.swift */; };
 		AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */; };
+		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 		AAAAAAAA00000000000000C0 /* AwardType.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000424 /* AwardType.swift */; };
 		AAAAAAAA00000000000000C2 /* CasinoConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000425 /* CasinoConfig.swift */; };
 		AAAAAAAA00000000000000C4 /* CasinoWithdrawal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */; };
@@ -117,6 +118,7 @@
 		AAAAAAAA0000000000000422 /* CallForward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallForward.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000423 /* SeasonAward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonAward.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSystemEvent.swift; sourceTree = "<group>"; };
+		BBBBBBBB0000000000000450 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000424 /* AwardType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwardType.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000425 /* CasinoConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoConfig.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoWithdrawal.swift; sourceTree = "<group>"; };
@@ -414,6 +416,7 @@
 				AAAAAAAA00000000000000BC /* CallForward.swift in Sources */,
 				AAAAAAAA00000000000000BE /* SeasonAward.swift in Sources */,
 				AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */,
+				BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */,
 				AAAAAAAA00000000000000C0 /* AwardType.swift in Sources */,
 				AAAAAAAA00000000000000C2 /* CasinoConfig.swift in Sources */,
 				AAAAAAAA00000000000000C4 /* CasinoWithdrawal.swift in Sources */,

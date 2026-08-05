@@ -119,7 +119,10 @@ final class NotificationDispatcher {
         playedAt: Date,
         mascotName: String,
         perMemberCadence: [UUID: MemberRSVPState],
-        hostNote: String? = nil
+        hostNote: String? = nil,
+        mascotApiKey: String? = nil,
+        mascotPersonality: MascotPersonality = .friendly,
+        mascotIdeology: MascotPoliticalIdeology = .centrist
     ) async {
         guard await requestAuthorizationIfNeeded() else { return }
         let center = UNUserNotificationCenter.current()
@@ -166,16 +169,38 @@ final class NotificationDispatcher {
         for (memberId, state) in perMemberCadence {
 
             // On-create push — fires for EVERY member regardless of
-            // RSVP state, per the V0.8 brief.
+            // RSVP state, per the V0.8 brief. When the room has a
+            // mascot API key, the body is LLM-generated; otherwise
+            // falls back to the template.
+            var onCreateBodyText = onCreateBody(
+                mascotName: mascotName, eventName: eventName
+            )
+            if let key = mascotApiKey, !key.isEmpty {
+                let context = MascotEngine.RoomContext(
+                    activeEventTitle: eventName,
+                    lastEventDaysAgo: nil,
+                    memberCount: perMemberCadence.count,
+                    memberNames: []
+                )
+                onCreateBodyText = await MascotEngine.generateVoiceLLM(
+                    mascotName: mascotName,
+                    roomName: "",
+                    personality: mascotPersonality,
+                    ideology: mascotIdeology,
+                    kind: .briefingOnCreate,
+                    context: context,
+                    apiKey: key,
+                    eventDate: playedAt,
+                    hostNote: hostNote
+                )
+            }
             await schedule(
                 center: center,
                 identifier: identifier(
                     eventId: eventId, kind: .onCreate, userId: memberId
                 ),
                 title: eventName,
-                body: onCreateBody(
-                    mascotName: mascotName, eventName: eventName
-                ),
+                body: onCreateBodyText,
                 kindRaw: NotificationKindRaw.onCreate,
                 eventId: eventId,
                 fireAt: onCreateFireAt

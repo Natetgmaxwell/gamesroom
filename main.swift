@@ -446,6 +446,86 @@ runner.run("LeaderboardEntry without score_corrected_at decodes nil and isRecent
     runner.assertFalse(entry.isRecentlyCorrected)
 }
 
+// MARK: - SeatDeposit + Room seat_deposit_amount
+
+runner.run("SeatDeposit decodes held status from server shape") {
+    let json = """
+    {
+      "id": "77777777-7777-7777-7777-777777777777",
+      "amount": 50,
+      "status": "held",
+      "held_at": "2026-08-05T12:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let deposit = try decoder.decode(SeatDeposit.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(deposit.amount, 50)
+    runner.assertEqual(deposit.status, .held)
+    runner.assertFalse(deposit.isResolved)
+}
+
+runner.run("SeatDeposit forfeited status is resolved") {
+    let json = """
+    {
+      "id": "88888888-8888-8888-8888-888888888888",
+      "amount": 30,
+      "status": "forfeited",
+      "held_at": "2026-08-01T00:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let deposit = try decoder.decode(SeatDeposit.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(deposit.status, .forfeited)
+    runner.assertTrue(deposit.isResolved)
+}
+
+runner.run("Room decodes seat_deposit_amount from server shape") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Deposit Room",
+      "mascot_name": "Borat",
+      "mascot_personality": "snarky",
+      "mascot_political_ideology": "centrist",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "join_starting_bonus": 200,
+      "user_role": "member",
+      "seat_deposit_amount": 50
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.seatDepositAmount, 50)
+}
+
+runner.run("Room defaults seat_deposit_amount to 0 when column missing") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Legacy Room",
+      "mascot_name": "Felty",
+      "mascot_personality": "professional",
+      "mascot_political_ideology": "order",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-02T00:00:00Z",
+      "is_live": false,
+      "join_starting_bonus": 200,
+      "user_role": "member"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.seatDepositAmount, 0)
+}
+
 // MARK: - Summary
 
 print("")

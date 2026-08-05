@@ -101,6 +101,11 @@ struct Room: Identifiable, Codable, Hashable {
     /// the same shelf.
     let installedPackSlugs: [String]?
 
+    /// F-MVP-04 — per-room seat deposit amount in virtual points.
+    /// Zero means deposits are disabled (the default). When non-zero,
+    /// claiming a seat holds this many points until the host settles.
+    let seatDepositAmount: Int
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -123,6 +128,7 @@ struct Room: Identifiable, Codable, Hashable {
         case memberInviteQuota = "member_invite_quota"
         case hostJournal = "host_journal"
         case installedPackSlugs = "installed_pack_slugs"
+        case seatDepositAmount = "seat_deposit_amount"
     }
 
     init(
@@ -146,7 +152,8 @@ struct Room: Identifiable, Codable, Hashable {
         maxSeats: Int = 6,
         memberInviteQuota: Int = 3,
         hostJournal: String? = nil,
-        installedPackSlugs: [String]? = nil
+        installedPackSlugs: [String]? = nil,
+        seatDepositAmount: Int = 0
     ) {
         self.id = id
         self.name = name
@@ -169,6 +176,7 @@ struct Room: Identifiable, Codable, Hashable {
         self.memberInviteQuota = memberInviteQuota
         self.hostJournal = hostJournal
         self.installedPackSlugs = installedPackSlugs
+        self.seatDepositAmount = seatDepositAmount
     }
 
     init(from decoder: Decoder) throws {
@@ -194,5 +202,6 @@ struct Room: Identifiable, Codable, Hashable {
         memberInviteQuota = try c.decodeIfPresent(Int.self, forKey: .memberInviteQuota) ?? 3
         hostJournal = try c.decodeIfPresent(String.self, forKey: .hostJournal)
         installedPackSlugs = try c.decodeIfPresent([String].self, forKey: .installedPackSlugs)
+        seatDepositAmount = try c.decodeIfPresent(Int.self, forKey: .seatDepositAmount) ?? 0
     }
 }
