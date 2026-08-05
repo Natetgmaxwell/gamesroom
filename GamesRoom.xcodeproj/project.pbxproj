@@ -60,6 +60,17 @@
 		AAAAAAAA00000000000000DA /* BoundingBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000431 /* BoundingBox.swift */; };
 		AAAAAAAA00000000000000DC /* DetectedStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000432 /* DetectedStack.swift */; };
 		AAAAAAAA00000000000000DE /* DetectionSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000433 /* DetectionSource.swift */; };
+		AAAAAAAA00000000000000E0 /* RedeemedRoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000438 /* RedeemedRoom.swift */; };
+		AAAAAAAA00000000000000E1 /* PackDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000439 /* PackDefinition.swift */; };
+		AAAAAAAA00000000000000E2 /* PackRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043A /* PackRegistry.swift */; };
+		AAAAAAAA00000000000000E3 /* PackScoring.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043B /* PackScoring.swift */; };
+		AAAAAAAA00000000000000E4 /* Packs.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043C /* Packs.swift */; };
+		AAAAAAAA00000000000000E5 /* ScoringService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043D /* ScoringService.swift */; };
+		AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043E /* CreateRoomSheet.swift */; };
+		AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */; };
+		AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000440 /* JoinRoomSheet.swift */; };
+		AAAAAAAA00000000000000E9 /* SettleCasinoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */; };
+		AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */; };
 		AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000436 /* Assets.xcassets */; };
 		AAAAAAAA00000000000000F2 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AAAAAAAA00000000000000F3 /* Supabase */; };
 /* End PBXBuildFile section */
@@ -122,6 +133,18 @@
 		AAAAAAAA0000000000000435 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000436 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000437 /* GamesRoom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GamesRoom.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAAAAAAA0000000000000438 /* RedeemedRoom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedeemedRoom.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000439 /* PackDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDefinition.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000043A /* PackRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackRegistry.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000043B /* PackScoring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackScoring.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000043C /* Packs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Packs.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000043D /* ScoringService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoringService.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000043E /* CreateRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateRoomSheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoreEntrySheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000440 /* JoinRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinRoomSheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettleCasinoSheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WithdrawChipsSheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000443 /* GamesRoom.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GamesRoom.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,12 +175,13 @@
 				AAAAAAAA0000000000000402 /* SignInView.swift */,
 				AAAAAAAA0000000000000403 /* Theme.swift */,
 				AAAAAAAA00000000000000F9 /* Models */,
+				AAAAAAAA0000000000000444 /* Packs */,
 				AAAAAAAA00000000000000FA /* Services */,
 				AAAAAAAA00000000000000FB /* Views */,
-				AAAAAAAA0000000000000404 /* SettingsPage.swift */,
 				AAAAAAAA0000000000000436 /* Assets.xcassets */,
 				AAAAAAAA0000000000000434 /* Info.plist */,
 				AAAAAAAA0000000000000435 /* Config.xcconfig */,
+				AAAAAAAA0000000000000443 /* GamesRoom.entitlements */,
 			);
 			path = GamesRoom;
 			sourceTree = "<group>";
@@ -169,6 +193,7 @@
 				AAAAAAAA0000000000000415 /* Room.swift */,
 				AAAAAAAA0000000000000416 /* RoomRole.swift */,
 				AAAAAAAA0000000000000417 /* Member.swift */,
+				AAAAAAAA0000000000000438 /* RedeemedRoom.swift */,
 				AAAAAAAA0000000000000418 /* SocialPreference.swift */,
 				AAAAAAAA0000000000000419 /* MemberRSVPState.swift */,
 				AAAAAAAA000000000000041A /* MemberRSVP.swift */,
@@ -201,6 +226,17 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		AAAAAAAA0000000000000444 /* Packs */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000439 /* PackDefinition.swift */,
+				AAAAAAAA000000000000043A /* PackRegistry.swift */,
+				AAAAAAAA000000000000043B /* PackScoring.swift */,
+				AAAAAAAA000000000000043C /* Packs.swift */,
+			);
+			path = Packs;
+			sourceTree = "<group>";
+		};
 		AAAAAAAA00000000000000FA /* Services */ = {
 			isa = PBXGroup;
 			children = (
@@ -211,6 +247,7 @@
 				AAAAAAAA000000000000040A /* MascotEngine.swift */,
 				AAAAAAAA000000000000040B /* NotificationDispatcher.swift */,
 				AAAAAAAA000000000000040C /* RoomStore.swift */,
+				AAAAAAAA000000000000043D /* ScoringService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -222,7 +259,13 @@
 				AAAAAAAA000000000000040E /* RoomDetailView.swift */,
 				AAAAAAAA000000000000040F /* AddEventSheet.swift */,
 				AAAAAAAA0000000000000410 /* RoomSettingsSheet.swift */,
+				AAAAAAAA0000000000000404 /* SettingsPage.swift */,
 				AAAAAAAA0000000000000405 /* AppSettingsView.swift */,
+				AAAAAAAA000000000000043E /* CreateRoomSheet.swift */,
+				AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */,
+				AAAAAAAA0000000000000440 /* JoinRoomSheet.swift */,
+				AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */,
+				AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */,
 				AAAAAAAA00000000000000FC /* Components */,
 			);
 			path = Views;
@@ -282,6 +325,11 @@
 				TargetAttributes = {
 					AAAAAAAA00000000000000FD = {
 						CreatedOnToolsVersion = 16.2;
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -375,6 +423,17 @@
 				AAAAAAAA00000000000000DA /* BoundingBox.swift in Sources */,
 				AAAAAAAA00000000000000DC /* DetectedStack.swift in Sources */,
 				AAAAAAAA00000000000000DE /* DetectionSource.swift in Sources */,
+				AAAAAAAA00000000000000E0 /* RedeemedRoom.swift in Sources */,
+				AAAAAAAA00000000000000E1 /* PackDefinition.swift in Sources */,
+				AAAAAAAA00000000000000E2 /* PackRegistry.swift in Sources */,
+				AAAAAAAA00000000000000E3 /* PackScoring.swift in Sources */,
+				AAAAAAAA00000000000000E4 /* Packs.swift in Sources */,
+				AAAAAAAA00000000000000E5 /* ScoringService.swift in Sources */,
+				AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */,
+				AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */,
+				AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */,
+				AAAAAAAA00000000000000E9 /* SettleCasinoSheet.swift in Sources */,
+				AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -383,6 +442,7 @@
 /* Begin XCBuildConfiguration section */
 		AAAAAAAA0000000000000103 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AAAAAAAA0000000000000435 /* Config.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -446,6 +506,7 @@
 		};
 		AAAAAAAA0000000000000104 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AAAAAAAA0000000000000435 /* Config.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -502,9 +563,11 @@
 		};
 		AAAAAAAA0000000000000105 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AAAAAAAA0000000000000435 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GamesRoom/GamesRoom.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -540,9 +603,11 @@
 		};
 		AAAAAAAA0000000000000106 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = AAAAAAAA0000000000000435 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GamesRoom/GamesRoom.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;

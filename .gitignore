@@ -2,3 +2,21 @@
 
 # Xcode user config (real Supabase keys)
 GamesRoom/Config.xcconfig
+
+# Test runner artifacts
+.build/
+build/
+games-room-tests
+*.swiftmodule
+*.swiftdoc
+*.swift.o
+
+# Local Xcode/editor artifacts
+.DS_Store
+.archive/
+GamesRoom.xcodeproj/project.xcworkspace/
+xcuserdata/
+TestProj/
+.hermes/
+GamesRoom/* 2/
+GamesRoom/* 2.xcassets/
