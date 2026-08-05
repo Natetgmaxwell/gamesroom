@@ -116,6 +116,7 @@
 		AAAAAAAA0000000000000421 /* ChapterLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterLine.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000422 /* CallForward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallForward.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000423 /* SeasonAward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonAward.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSystemEvent.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000424 /* AwardType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwardType.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000425 /* CasinoConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoConfig.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoWithdrawal.swift; sourceTree = "<group>"; };
