@@ -11,12 +11,13 @@
 //  accessor that returns `Session?` for callers that don't want to
 //  handle the throwable form of `auth.session`.
 //
-//  ponytail: hard-coded URL/key for dev. The Config.xcconfig path
-//  fails because xcconfig parses `//` as the start of a line comment,
-//  so https://... always loses everything after the `//`. Replace
-//  with xcconfig-driven values once we have a build setting that
-//  doesn't contain `//` (e.g. split into SUPABASE_URL_SCHEME +
-//  SUPABASE_URL_HOST, or move to Info.plist literals).
+//  ponytail: SUPABASE_URL + SUPABASE_ANON_KEY are read from
+//  Info.plist at runtime (`Bundle.object(forInfoDictionaryKey:)`);
+//  the values themselves are set as build settings via
+//  `GamesRoom/Config.xcconfig` (gitignored), so the URL never
+//  appears literally in the repo. The xcconfig path was chosen
+//  because the URL contains `//` (the scheme separator) which
+//  Info.plist's literal string format handles cleanly.
 //
 //  ponytail: custom URLSession with HTTP/1.1 forced and short
 //  timeouts. The iOS 26 simulator's default URLSession hangs on
@@ -33,13 +34,12 @@ enum SupabaseClientProvider {
     /// The shared Supabase client. Constructed once, lazily, on first
     /// access. All `Services/` code depends on this single instance.
     static let shared: SupabaseClient = {
-        // Read URL + key from Info.plist. Config.xcconfig was rejected
-        // because xcconfig parses `//` as a line-comment marker, which
-        // silently strips the URL host. Info.plist literals carry the
-        // full string without that conflict. The Info.plist values are
-        // populated by the build (in the new project.pbxproj for
-        // V0.8) — fallback literals in this file are an emergency
-        // brace for when Info.plist is missing them.
+        // Read URL + key from Info.plist. The Info.plist values are
+        // wired to build settings via `$(SUPABASE_URL)` /
+        // `$(SUPABASE_ANON_KEY)`; the build settings themselves come
+        // from `GamesRoom/Config.xcconfig` (gitignored). The fallback
+        // literals in this file are an emergency brace for when
+        // Info.plist is missing them — they are not the canonical path.
         let bundle = Bundle.main
         let urlString = bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
             ?? "https://bnrgkdcluopicqdpmrtu.supabase.co"

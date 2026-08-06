@@ -414,6 +414,7 @@ final class RoomService: ObservableObject {
             playedAt: playedAt,
             mascotName: room?.mascotName ?? "Your mascot",
             perMemberCadence: cadence,
+            memberNames: roster.map(\.displayName),
             mascotApiKey: room?.mascotApiKey,
             mascotPersonality: room?.mascotPersonality ?? .friendly,
             mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist

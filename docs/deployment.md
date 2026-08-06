@@ -142,9 +142,11 @@ vars on first access.
 
 ## Secrets
 
-- `SUPABASE_URL` + `SUPABASE_ANON_KEY` — in `GamesRoom/Config.xcconfig`,
-  gitignored. The build host reads them from the developer's local
-  `~/.config/games-room/secrets.env` via the Xcode build phase.
+- `SUPABASE_URL` + `SUPABASE_ANON_KEY` — in `GamesRoom/Config.xcconfig`
+  (gitignored). The Xcode build sets them as build settings; the app
+  reads them out of `Info.plist` via `Bundle.object(forInfoDictionaryKey:)`
+  in `GamesRoom/Services/SupabaseClient.swift`. The xcconfig path is the
+  canonical source — no other secrets layer is wired in.
 - Apple Developer Team ID + signing identity — encoded into
   `GamesRoom.xcodeproj/project.pbxproj` (signed by the repo
   owner, not secrets).
@@ -157,13 +159,17 @@ vars on first access.
 
 ## Migration numbering convention
 
-`Supabase/migrations/` is numbered `001…NNN` and **not** in
-strictly monotonic order — migrations `037`, `038`, `042`, `043`
-were added out of band during V0.26 + V0.29 work and were
-appended at the next available slot rather than renumbered.
+`Supabase/migrations/` is numbered `001…NNN`. Two slots are
+deliberately unused: `037` and `038` were reserved during V0.26
+broadcast-calendar work that ended up landing in different slots.
+Future migrations should continue at the next available slot
+(`044`+); do not renumber existing files to fill the gap — the
+numbers are stable references in issue trackers and the V0.8 build
+phase commit history.
+
 Down migrations are co-located with their up counterpart. The
-convention is documented here so future operators don't try to
-"fix" the gap.
+convention is documented here so future operators don't try to "fix"
+the gap.
 
 ## CI / CD
 

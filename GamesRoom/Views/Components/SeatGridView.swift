@@ -13,6 +13,13 @@ import SwiftUI
 // table size (4, 6, 8 seats) and to iPhone/iPad width. Each seat is a
 // rounded square; tappable seats can be wired by the parent.
 //
+// Status (Wave 4 of the V0.9 roadmap, 2026-08-06): this component has no
+// production call sites as of `4137a82` / `70697c4`. It is kept around
+// for SwiftUI previews and as the seed for the pack-detail seat
+// visualization if Wave 2 Slice 2.1 ever wants one. If a future audit
+// confirms no production consumer after V0.9.1, remove the file +
+// its pbxproj entries in one commit. Do not silently let it rot.
+//
 // Usage:
 //     SeatGridView(
 //         seats: [

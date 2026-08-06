@@ -598,7 +598,11 @@ enum MascotEngine {
         if let note = hostNote, !note.isEmpty {
             lines.append("Host's note: \(note)")
         }
-        lines.append("Members: \(context.memberCount)")
+        if !context.memberNames.isEmpty {
+            lines.append("Members: \(context.memberNames.joined(separator: ", "))")
+        } else {
+            lines.append("Members: \(context.memberCount)")
+        }
         switch kind {
         case .briefingOnCreate:
             lines.append("Message type: New event just created. Prompt members to claim their seat.")

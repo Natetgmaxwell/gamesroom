@@ -119,6 +119,7 @@ final class NotificationDispatcher {
         playedAt: Date,
         mascotName: String,
         perMemberCadence: [UUID: MemberRSVPState],
+        memberNames: [String] = [],
         hostNote: String? = nil,
         mascotApiKey: String? = nil,
         mascotPersonality: MascotPersonality = .friendly,
@@ -180,7 +181,7 @@ final class NotificationDispatcher {
                     activeEventTitle: eventName,
                     lastEventDaysAgo: nil,
                     memberCount: perMemberCadence.count,
-                    memberNames: []
+                    memberNames: memberNames
                 )
                 onCreateBodyText = await MascotEngine.generateVoiceLLM(
                     mascotName: mascotName,
