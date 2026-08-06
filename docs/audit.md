@@ -127,7 +127,7 @@ games-room/
 | `GamesRoom/Views/Components/`| Reusable sub-views (LeaderboardRow, MascotBubble, SeatGridView, TrajectorySparkline). |
 | `GamesRoom/Auth/*.swift`     | Sign-in surface only.                                                   |
 | `main.swift` (repo root)     | Foundation-only test cases (compiled in one shot by `build-and-run-tests.sh`). |
-| `tests/README.md`            | Test-runner documentation (parallel to `tests/main.swift` which doesn't exist — see §10). |
+| `tests/README.md`            | Test-runner documentation. Path drift fixed in B1.4 — see `tests/README.md` for the canonical layout. |
 
 ### 4.2 Service layer (D1-D3 + scoring)
 
@@ -456,12 +456,12 @@ artefacts in `scripts/` and untracked (not committed).
   any SwiftUI view. These require a Mac with Xcode.app for
   `xcodebuild test` against the iOS SDK.
 
-> **Tests README vs tests/main.swift.** `tests/README.md`
-> references `tests/main.swift` and a `build-and-run-tests.sh`
-> inside `tests/`. The actual entry point is **`main.swift` at
-> the repo root** with **`build-and-run-tests.sh` at the repo
-> root** — the `tests/` directory is documentation-only. Fix the
-> README in a follow-up.
+> **Tests README path drift.** `tests/README.md` referenced the
+> old `main.swift`-inside-`tests/` and
+> `build-and-run-tests.sh`-inside-`tests/` layout. Fixed in B1.4
+> — the actual entry points are **`main.swift` at the repo
+> root** with **`build-and-run-tests.sh` at the repo root**.
+> The `tests/` directory is documentation-only.
 
 ---
 
@@ -476,7 +476,7 @@ A walkthrough flagged these:
 | Empty trailing " 2" directories (`GamesRoom/Auth 2/`, `Models 2/`, `Services 2/`, `Views 2/`, `Assets 2.xcassets/`) | Finder duplicates from the V0.7→V0.8 file moves (Aug 1). Empty. Safe to `rm -rf` after review, but `rm -rf` is destructive — run from the repo root and confirm contents are empty first. |
 | `scripts/merge-v0-8-pbxproj.py` and `scripts/rewrite-pbxproj.py` are untracked               | Historical V0.7→V0.8 pbxproj merge helpers. Not part of the V0.8 build flow. Track them or delete in a follow-up.        |
 | No `TODO` / `FIXME` / `HACK` markers anywhere in `GamesRoom/`.                              | Confirmed via `grep -rni 'todo\|fixme\|xxx\|hack' --include='*.swift' GamesRoom/`. The codebase has no deferred-work markers — debt lives in `ponytail:` comments instead. |
-| `PackDefinition.swift` comments mention `GamesRoomTests/PackRegistryTests.swift`            | That file does not exist on disk. The "tests" are the 21 Foundation cases in `main.swift`. Comment drift — fix or remove the reference. |
+| `PackDefinition.swift` comments mention a non-existent XCTest target            | Drift — fixed in B1.4 by removing the comment. The 27 Foundation cases live at the repo-root `main.swift`. |
 | How-to guide placeholder taps on pack shelf rows                                          | Tap surface ships, body is V0.9 (per comment). Documented as open question.                                              |
 | `record_member_scan` RPC is still on the CasinoService path                                 | Pre-V0.8 camera flow. Not surfaced in V0.8 UI but still callable. Safe to keep; not safe to remove without migrating the attestation dispute surface. |
 | `MascotFooterCaption` reads `MascotEngine.generateVoice(...kind: .postPlayRecap)` with `memberCount: 0, memberNames: []` | Pure template interpolation — fills placeholder rows with empty values. Brief acknowledges mascot voice is v0.9; this is the V0.8 placeholder per Q7. |

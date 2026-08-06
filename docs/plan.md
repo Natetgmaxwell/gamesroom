@@ -203,10 +203,10 @@ PRs are clean.
 3. **`tests/README.md` path drift.** Rewrite to point at `/main.swift`
    and `/build-and-run-tests.sh` at repo root, not the `tests/` dir
    (which is documentation-only — see audit §10).
-4. **`PackDefinition.swift` comment drift.** The comment mentions
-   `GamesRoomTests/PackRegistryTests.swift` which doesn't exist.
-   Replace with a one-line note pointing at `main.swift`'s
-   `PackRegistry` tests in the Foundation runner.
+4. **Comment drift on the XCTest target.** A historical
+   comment referenced a non-existent XCTest target. Fixed in
+   B1.4 — the 27 Foundation cases live at the repo-root
+   `main.swift`.
 5. **Untracked merge scripts.** Decide on `scripts/merge-v0-8-pbxproj.py`
    and `scripts/rewrite-pbxproj.py` — either commit them as
    historical artifacts with a README, or delete. Recommend delete
