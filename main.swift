@@ -575,6 +575,35 @@ runner.run("Room defaults member_drowning_opt_in to false when column missing") 
     runner.assertEqual(room.memberDrowningOptIn, false)
 }
 
+runner.run("PackHowToCatalog returns bundled content for casino") {
+    let howTo = PackHowToCatalog.howTo(forSlug: "casino")
+    runner.assertNotNil(howTo)
+    runner.assertEqual(howTo?.headline, "How to play Casino")
+    runner.assertTrue(howTo?.sections.count ?? 0 >= 3)
+}
+
+runner.run("PackHowToCatalog returns bundled content for all four V0.8 packs") {
+    let slugs = ["casino", "cards_against_humanity", "monopoly_deal", "pluto_chess"]
+    for slug in slugs {
+        runner.assertNotNil(
+            PackHowToCatalog.howTo(forSlug: slug),
+            "Missing how-to for \(slug)"
+        )
+    }
+}
+
+runner.run("PackHowToCatalog returns nil for unknown slugs") {
+    runner.assertNil(PackHowToCatalog.howTo(forSlug: "no_such_pack"))
+    runner.assertNil(PackHowToCatalog.howTo(forSlug: ""))
+}
+
+runner.run("PackDefinition default howToSlug falls back to slug") {
+    runner.assertEqual(CasinoPack.howToSlug, "casino")
+    runner.assertEqual(CardsAgainstHumanityPack.howToSlug, "cards_against_humanity")
+    runner.assertEqual(MonopolyDealPack.howToSlug, "monopoly_deal")
+    runner.assertEqual(PlutoChessPack.howToSlug, "pluto_chess")
+}
+
 // MARK: - Summary
 
 print("")

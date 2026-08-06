@@ -73,6 +73,10 @@ struct RoomDetailView: View {
     // session without entering the settings sheet.
     @State private var showingAddEvent: Bool = false
 
+    // V0.9 Wave 2 Slice 2.2 - the inline "+" in RoomSwitcherMenu
+    // opens the same CreateRoomSheet the Rooms tab's "+" opens.
+    @State private var showingCreateRoom: Bool = false
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
@@ -167,7 +171,8 @@ struct RoomDetailView: View {
                         currentRoom: room,
                         allRooms: allRooms,
                         activeEventByRoom: roomService.activeEventByRoom,
-                        onSwitchRoom: onSwitchRoom
+                        onSwitchRoom: onSwitchRoom,
+                        onCreateRoom: { showingCreateRoom = true }
                     )
                 }
             }
@@ -240,6 +245,14 @@ struct RoomDetailView: View {
             )
             .environmentObject(roomService)
             .environmentObject(scoringService)
+        }
+        // V0.9 Wave 2 Slice 2.2 - inline "+" create-room sheet. Same
+        // surface as the Rooms-tab "+" (CreateRoomSheet, owned here
+        // so it dismisses cleanly when the user backs out of the
+        // menu without a confirmed create).
+        .sheet(isPresented: $showingCreateRoom) {
+            CreateRoomSheet()
+                .environmentObject(roomService)
         }
         .task {
             await refresh()
@@ -1470,6 +1483,10 @@ private struct RoomSwitcherMenu: View {
     let allRooms: [Room]
     let activeEventByRoom: [UUID: Event]
     let onSwitchRoom: (Room) -> Void
+    /// V0.9 Wave 2 Slice 2.2 - inline create-room row. The parent
+    /// supplies this so the create surface can be a sheet owned
+    /// by `RoomDetailView` (matching the Rooms-tab pattern).
+    let onCreateRoom: () -> Void
 
     /// `true` when more than one room exists; the "+ Create a
     /// new room" section only renders when there's something to
@@ -1530,15 +1547,13 @@ private struct RoomSwitcherMenu: View {
 
             if canCreate {
                 Section {
-                    // The Rooms tab owns the create-room surface
-                    // — tapping this pops back to the Rooms tab.
-                    // For now, the dropdown is read-only here; the
-                    // Rooms tab's "+" remains the canonical create
-                    // entry per audit §7.2. The dropdown gets a
-                    // future "create" surface in a follow-up slice.
-                    Text("Create a room from the Rooms tab")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    // V0.9 Wave 2 Slice 2.2 - inline create-room row.
+                    // Tapping opens the same CreateRoomSheet the
+                    // Rooms tab's "+" opens. The hint that pointed
+                    // at the Rooms tab is gone.
+                    Button(action: onCreateRoom) {
+                        Label("Create new room", systemImage: "plus.circle.fill")
+                    }
                 }
             }
         } label: {

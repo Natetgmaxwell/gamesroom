@@ -64,6 +64,10 @@ struct RoomSettingsSheet: View {
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
 
+    // V0.9 Wave 2 Slice 2.1 - the pack the user tapped to view the
+    // how-to body. nil = no detail sheet presented.
+    @State private var packDetailType: (any PackDefinition.Type)?
+
     init(room: Room) {
         self.room = room
         _mascotName = State(initialValue: room.mascotName)
@@ -167,6 +171,16 @@ struct RoomSettingsSheet: View {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
                 }
+            }
+            // V0.9 Wave 2 Slice 2.1 - pack how-to body.
+            .sheet(item: Binding<AnyPackType?>(
+                get: { packDetailType.map(AnyPackType.init) },
+                set: { packDetailType = $0?.type }
+            )) { wrapped in
+                PackDetailView(
+                    pack: wrapped.type,
+                    onDismiss: { packDetailType = nil }
+                )
             }
         }
         .tint(Theme.Palette.accent)
@@ -392,6 +406,21 @@ struct RoomSettingsOperationsSheet: View {
                                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         }
                     }
+                    // V0.9 Wave 2 Slice 2.1 - drill into the how-to
+                    // body. The button is rendered as a swipeAction-style
+                    // disclosure at the row's trailing edge.
+                    Button {
+                        packDetailType = pack
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "info.circle")
+                            Text("How to play")
+                        }
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 4)
                 }
             } header: {
                 Text("Packs")
@@ -555,4 +584,13 @@ struct RoomSettingsMembersSheet: View {
             roster = await roomService.loadRoomMembers(roomId: room.id)
         }
     }
+}
+
+/// V0.9 Wave 2 Slice 2.1 - thin Identifiable wrapper around
+/// `any PackDefinition.Type` so SwiftUI's `.sheet(item:)` API
+/// can drive the PackDetailView presentation off a single
+/// Optional binding.
+private struct AnyPackType: Identifiable {
+    let type: any PackDefinition.Type
+    var id: String { type.slug }
 }

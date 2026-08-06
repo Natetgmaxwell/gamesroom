@@ -53,6 +53,17 @@ protocol PackDefinition {
     /// awarded by the host-side scoring dashboard. Mirrors
     /// `public.packs.scoring_type` from migration 012.
     static var scoringType: PackScoringType { get }
+
+    /// V0.9 Wave 2 Slice 2.1 — slug used to look up how-to content
+    /// in `PackHowToCatalog`. Defaults to `slug` so existing pack
+    /// implementations get sensible behaviour without an override.
+    /// A pack that wants a different lookup key (e.g. a localised
+    /// how-to variant) can override.
+    static var howToSlug: String { get }
+}
+
+extension PackDefinition {
+    static var howToSlug: String { slug }
 }
 
 /// Discriminator from `public.packs.scoring_type`. Two V0.8
