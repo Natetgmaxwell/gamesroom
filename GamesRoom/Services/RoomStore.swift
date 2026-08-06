@@ -670,7 +670,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
 
 /// In-memory room-data store. The default `RoomStore` for builds
 /// without a configured Supabase backend.
-actor InMemoryRoomStore {
+actor InMemoryRoomStore: RoomStore {
 
     /// The shared in-memory store. All `RoomService` callers that
     /// don't pass a custom `RoomStore` end up here.
