@@ -62,6 +62,27 @@ import Foundation
 /// refused, RLS rejection, insufficient balance, etc.) — pure
 /// "no result found" cases return `nil` / empty arrays so the
 /// caller doesn't need a `try` for the happy path.
+// MARK: - RPC parameter structs
+// Supabase-swift's rpc(params:) requires Encodable & Sendable. Dict
+// literals that mix String and [String] values infer as [String: Any]
+// which is not Encodable. These structs give each array-param RPC a
+// concrete Encodable type.
+
+struct CreateRoomParams: Encodable, Sendable {
+    let p_name: String
+    let p_mascot_name: String
+    let p_mascot_personality: String
+    let p_mascot_political_ideology: String
+    let p_join_starting_bonus: String
+    let p_mascot_api_key: String
+    let p_blacklisted_user_ids: [String]
+}
+
+struct UpdateRoomPacksParams: Encodable, Sendable {
+    let p_room_id: String
+    let p_slugs: [String]
+}
+
 protocol RoomStore: Sendable {
 
     // MARK: Rooms list
@@ -281,15 +302,15 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         blacklistedUserIds: [UUID]
     ) async throws -> UUID {
         let rows: [UUID] = try await SupabaseClientProvider.shared
-            .rpc("create_room", params: [
-                "p_name": name,
-                "p_mascot_name": mascotName,
-                "p_mascot_personality": mascotPersonality.rawValue,
-                "p_mascot_political_ideology": mascotPoliticalIdeology.rawValue,
-                "p_join_starting_bonus": String(joinStartingBonus),
-                "p_mascot_api_key": mascotApiKey as Any? as Any,
-                "p_blacklisted_user_ids": blacklistedUserIds.map { $0.uuidString }
-            ])
+            .rpc("create_room", params: CreateRoomParams(
+                p_name: name,
+                p_mascot_name: mascotName,
+                p_mascot_personality: mascotPersonality.rawValue,
+                p_mascot_political_ideology: mascotPoliticalIdeology.rawValue,
+                p_join_starting_bonus: String(joinStartingBonus),
+                p_mascot_api_key: mascotApiKey ?? "",
+                p_blacklisted_user_ids: blacklistedUserIds.map(\.uuidString)
+            ))
             .execute()
             .value
         guard let id = rows.first else {
@@ -456,10 +477,10 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// (RLS denial 42501) or invalid slugs (errcode 22023).
     func updateRoomPacks(roomId: UUID, slugs: [String]) async throws {
         _ = try await SupabaseClientProvider.shared
-            .rpc("update_room_packs", params: [
-                "p_room_id": roomId.uuidString,
-                "p_slugs": slugs
-            ])
+            .rpc("update_room_packs", params: UpdateRoomPacksParams(
+                p_room_id: roomId.uuidString,
+                p_slugs: slugs
+            ))
             .execute()
             .value as Void
     }
@@ -620,7 +641,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         let rows: [Room] = try await SupabaseClientProvider.shared
             .rpc("update_host_journal", params: [
                 "p_room_id": roomId.uuidString,
-                "p_journal": (journal ?? "") as Any
+                "p_journal": journal ?? ""
             ])
             .execute()
             .value
@@ -648,18 +669,11 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
 
 /// In-memory room-data store. The default `RoomStore` for builds
 /// without a configured Supabase backend.
-final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
+actor InMemoryRoomStore {
 
     /// The shared in-memory store. All `RoomService` callers that
     /// don't pass a custom `RoomStore` end up here.
     static let shared = InMemoryRoomStore()
-
-    /// Lock guarding all mutable state. The protocol is
-    /// `Sendable` so concurrent callers (the view layer's many
-    /// `task`s) can hit this store simultaneously; the lock keeps
-    /// the seed data consistent without forcing every method
-    /// through `@MainActor`.
-    private let lock = NSLock()
 
     /// Seed rooms — three rooms spanning the role matrix, copied
     /// from the previous `RoomService.preview()` so pre-existing
@@ -709,7 +723,7 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// M4 — public read accessor for the default. Callers that
     /// receive an empty `fetchRoomPacks` array use this as the
     /// fallback shelf.
-    var defaultInstalledPacks: [String] { Self.defaultInstalledPacks }
+    nonisolated var defaultInstalledPacks: [String] { Self.defaultInstalledPacks }
 
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
@@ -967,7 +981,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     // MARK: Rooms list
 
     func fetchRooms() async throws -> [Room] {
-        lock.lock(); defer { lock.unlock() }
         return rooms
     }
 
@@ -988,7 +1001,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
         mascotApiKey: String?,
         blacklistedUserIds: [UUID]
     ) async throws -> UUID {
-        lock.lock()
         let ownerId = currentSyntheticMemberId()
         let newRoom = Room(
             id: UUID(),
@@ -1012,7 +1024,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
             memberInviteQuota: 3
         )
         rooms.insert(newRoom, at: 0)
-        lock.unlock()
         _ = blacklistedUserIds // in-memory; blacklist is server-only
         return newRoom.id
     }
@@ -1025,7 +1036,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// the test suite can't flake.
     func generateJoinCode(roomId: UUID) async throws -> String {
         let alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-        lock.lock(); defer { lock.unlock() }
         guard rooms.contains(where: { $0.id == roomId }) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
@@ -1049,7 +1059,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// mutating state — mirrors the live server's idempotency.
     func redeemJoinCode(code: String) async throws -> RedeemedRoom {
         let normalised = code.uppercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        lock.lock(); defer { lock.unlock() }
         guard let roomId = joinCodes[normalised] else {
             throw NSError(
                 domain: "InMemoryRoomStore",
@@ -1076,7 +1085,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// row 0 (matches the live `get_room_members` ordering: host
     /// first, then alphabetical). Used by `RoomService.fetchRoomMembers`.
     func fetchRoomMembers(roomId: UUID) async throws -> [Member] {
-        lock.lock(); defer { lock.unlock() }
         guard let room = rooms.first(where: { $0.id == roomId }) else {
             return []
         }
@@ -1111,33 +1119,28 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     // MARK: Active event
 
     func fetchActiveEvent(roomId: UUID) async throws -> Event? {
-        lock.lock(); defer { lock.unlock() }
         return events[roomId]
     }
 
     // MARK: Briefing
 
     func fetchBriefing(eventId: UUID) async throws -> BriefingSummary? {
-        lock.lock(); defer { lock.unlock() }
         return briefings[eventId]
     }
 
     // MARK: Leaderboard
 
     func fetchLeaderboard(roomId: UUID) async throws -> [LeaderboardEntry] {
-        lock.lock(); defer { lock.unlock() }
         return leaderboards[roomId] ?? []
     }
 
     // MARK: Seasons (M1.1)
 
     func fetchCurrentSeason(roomId: UUID) async throws -> Season? {
-        lock.lock(); defer { lock.unlock() }
         return currentSeasons[roomId]
     }
 
     func fetchSeasonAwards(seasonId: UUID) async throws -> [SeasonAward] {
-        lock.lock(); defer { lock.unlock() }
         return seasonAwards[seasonId] ?? []
     }
 
@@ -1150,7 +1153,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// `PackRegistry.shared.allPacks` when this returns an empty
     /// array.
     func fetchRoomPacks(roomId: UUID) async throws -> [String] {
-        lock.lock(); defer { lock.unlock() }
         return roomPacks[roomId] ?? defaultInstalledPacks
     }
 
@@ -1171,7 +1173,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
                 userInfo: [NSLocalizedDescriptionKey: "Unknown pack slug: \(slug)"]
             )
         }
-        lock.lock(); defer { lock.unlock() }
         guard rooms.contains(where: { $0.id == roomId }) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
@@ -1187,7 +1188,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// `public.room_system_events` filtered by `acknowledged_at
     /// IS NULL`.
     func fetchRoomSystemEvents(roomId: UUID) async throws -> [RoomSystemEvent] {
-        lock.lock(); defer { lock.unlock() }
         return roomSystemEvents[roomId] ?? []
     }
 
@@ -1197,7 +1197,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// gates the row, so the Swift layer doesn't need a
     /// pre-check.
     func acknowledgeSystemEvent(eventId: UUID) async throws {
-        lock.lock(); defer { lock.unlock() }
         for (roomId, events) in roomSystemEvents {
             if let idx = events.firstIndex(where: { $0.id == eventId }) {
                 var updated = events
@@ -1217,7 +1216,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     // MARK: RSVP — read
 
     func fetchCurrentMemberRSVP(eventId: UUID) async throws -> MemberRSVPState {
-        lock.lock(); defer { lock.unlock() }
         // The in-memory store has no notion of "the current user"
         // (the view layer passes a `currentUserId` for mutations,
         // not reads), so RSVP reads return `.unclaimed` until a
@@ -1238,7 +1236,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     // that the protocol exposes. The default seed user is the host
     // of the first room.
     func upsertEventRSVP(eventId: UUID, state: MemberRSVPState) async throws -> MemberRSVP {
-        lock.lock(); defer { lock.unlock() }
         let memberId = currentSyntheticMemberId()
         var states = rsvps[eventId] ?? [:]
         states[memberId] = state
@@ -1294,7 +1291,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     // MARK: Event create
 
     func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String) async throws -> UUID {
-        lock.lock(); defer { lock.unlock() }
         let new = Event(
             id: UUID(),
             roomId: roomId,
@@ -1338,7 +1334,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool
     ) async throws -> Room {
-        lock.lock(); defer { lock.unlock() }
         guard let idx = rooms.firstIndex(where: { $0.id == id }) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
@@ -1380,7 +1375,6 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
     /// characters and refuses over-limit input) so the in-memory
     /// path doesn't need its own length check.
     func updateHostJournal(roomId: UUID, journal: String?) async throws -> Room {
-        lock.lock(); defer { lock.unlock() }
         guard let idx = rooms.firstIndex(where: { $0.id == roomId }) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
@@ -1401,7 +1395,7 @@ final class InMemoryRoomStore: RoomStore, @unchecked Sendable {
             isLive: existing.isLive,
             nextEventDescription: existing.nextEventDescription,
             joinStartingBonus: existing.joinStartingBonus,
-            mascotApiKey: existi...Key,
+            mascotApiKey: existing.mascotApiKey,
             userRole: existing.userRole,
             briefing48hEnabled: existing.briefing48hEnabled,
             calendarAutoAddHost: existing.calendarAutoAddHost,
