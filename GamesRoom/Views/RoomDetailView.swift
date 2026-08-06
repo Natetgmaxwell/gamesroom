@@ -339,16 +339,34 @@ struct RoomDetailView: View {
                 .padding(.vertical, Theme.Layout.sectionSpacing * 2)
 
         case .upcoming(let event):
-            BriefingSlot(event: event, briefing: briefing, myRSVP: myRSVP,
-                         onClaim: { Task { await claimSeat(eventId: event.id) } },
-                         onDecline: { Task { await declineSeat(eventId: event.id) } },
-                         isHero: true)
+            BriefingSlot(
+                event: event,
+                briefing: briefing,
+                myRSVP: myRSVP,
+                onClaim: { Task { await claimSeat(eventId: event.id) } },
+                onDecline: { Task { await declineSeat(eventId: event.id) } },
+                onReAccept: { Task { await claimSeat(eventId: event.id) } },
+                onReDecline: { Task { await declineSeat(eventId: event.id) } },
+                isHero: true
+            )
         case .claimed(let event):
             BriefingSlot(event: event, briefing: briefing, myRSVP: .claimed,
                          onClaim: {}, onDecline: {}, isHero: true)
         case .declined(let event):
-            BriefingSlot(event: event, briefing: briefing, myRSVP: .declined,
-                         onClaim: {}, onDecline: {}, isHero: true)
+            // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
+            // member who previously declined can change their mind.
+            // The pills route through the same claimSeat /
+            // declineSeat handlers as the first-time flow.
+            BriefingSlot(
+                event: event,
+                briefing: briefing,
+                myRSVP: .declined,
+                onClaim: {},
+                onDecline: {},
+                onReAccept: { Task { await claimSeat(eventId: event.id) } },
+                onReDecline: { Task { await declineSeat(eventId: event.id) } },
+                isHero: true
+            )
 
         case inPlay(let event):
             WitnessSlot(
@@ -630,7 +648,33 @@ private struct BriefingSlot: View {
     let myRSVP: MemberRSVPState
     let onClaim: () -> Void
     let onDecline: () -> Void
+    /// V0.9 Wave 1 Slice 1.2 - when the member has already declined,
+    /// the briefing slot surfaces a "Re-accept / Re-decline" pill so
+    /// the user can change their mind before the event. Wired up
+    /// only when the parent passes non-nil callbacks.
+    let onReAccept: (() -> Void)?
+    let onReDecline: (() -> Void)?
     let isHero: Bool
+
+    init(
+        event: Event,
+        briefing: BriefingSummary?,
+        myRSVP: MemberRSVPState,
+        onClaim: @escaping () -> Void,
+        onDecline: @escaping () -> Void,
+        onReAccept: (() -> Void)? = nil,
+        onReDecline: (() -> Void)? = nil,
+        isHero: Bool
+    ) {
+        self.event = event
+        self.briefing = briefing
+        self.myRSVP = myRSVP
+        self.onClaim = onClaim
+        self.onDecline = onDecline
+        self.onReAccept = onReAccept
+        self.onReDecline = onReDecline
+        self.isHero = isHero
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
@@ -693,10 +737,11 @@ private struct BriefingSlot: View {
                 .padding(.top, 8)
 
             case .declined:
-                Text("You said you can't make it.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .padding(.top, 8)
+                V0StateReEntryPills(
+                    onReAccept: onReAccept ?? {},
+                    onReDecline: onReDecline ?? {}
+                )
+                .padding(.top, 8)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -706,6 +751,49 @@ private struct BriefingSlot: View {
                 .fill(isHero ? Theme.Palette.accent.opacity(0.10) : Theme.Palette.surface)
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
         )
+    }
+}
+
+// MARK: - Re-entry pills (V0.9 Wave 1 Slice 1.2)
+
+/// Two-button row rendered when the member has already declined an
+/// event. The brief previously treated `.declined` as terminal —
+/// the dispatcher dropped the member from T-48h and morning-of
+/// pushes, the briefing slot showed a static "you said you can't
+/// make it" caption. Wave 1 Slice 1.2 surfaces a re-entry path:
+/// "Re-accept" flips the row to `.claimed` (same RPC, same RLS);
+/// "Re-decline" re-confirms the decline. Both buttons route
+/// through `RoomService.upsertEventRSVP` so the server-side write
+/// is the same code path as the first-time claim.
+private struct V0StateReEntryPills: View {
+    let onReAccept: () -> Void
+    let onReDecline: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("You said you can\'t make it.")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            HStack(spacing: 12) {
+                Button(action: onReAccept) {
+                    Text("Re-accept")
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.background)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Theme.Palette.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                Button(action: onReDecline) {
+                    Text("Re-decline")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
+                }
+            }
+        }
     }
 }
 
