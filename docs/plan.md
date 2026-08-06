@@ -205,7 +205,7 @@ PRs are clean.
    (which is documentation-only — see audit §10).
 4. **Comment drift on the XCTest target.** A historical
    comment referenced a non-existent XCTest target. Fixed in
-   B1.4 — the 27 Foundation cases live at the repo-root
+   B1.4 — the Foundation cases live at the repo-root
    `main.swift`.
 5. **Untracked merge scripts.** Decide on `scripts/merge-v0-8-pbxproj.py`
    and `scripts/rewrite-pbxproj.py` — either commit them as

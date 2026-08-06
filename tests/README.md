@@ -16,7 +16,7 @@ emits `.swiftmodule` files other invocations cannot read.
 The runner lives at the **repo root**, not inside `tests/`:
 
 ```
-./main.swift                      Foundation-only test cases (27 total)
+./main.swift                      Foundation-only test cases (33 total)
 ./build-and-run-tests.sh          compile + run script
 ```
 
@@ -42,7 +42,7 @@ The script:
 
 Exit code: `0` on all-pass, `1` on any failure.
 
-## Coverage (27 cases)
+## Coverage (33 cases)
 
 - `PackRegistry` — default ordering, isRegistered gate,
   scoring-type discriminator, winPoints lookup.
