@@ -33,3 +33,18 @@ swiftc \
 echo ""
 echo "Running tests..."
 ./"$BIN"
+
+echo ""
+echo "Parse-checking SwiftUI + Services..."
+# B1.2: catch SwiftUI body-shape errors that the Foundation runner
+# can't see (it only compiles Models/ + Packs/). On macOS-SDK hosts
+# this is a best-effort gate; the real gate is `xcodebuild` on a Mac
+# with Xcode.
+set +e
+./scripts/parse-check-swiftui.sh
+PARSE_RC=$?
+set -e
+if [ "$PARSE_RC" -ne 0 ]; then
+    echo "parse-check-swiftui.sh failed (rc=$PARSE_RC)" >&2
+    exit 1
+fi
