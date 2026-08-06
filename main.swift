@@ -526,6 +526,55 @@ runner.run("Room defaults seat_deposit_amount to 0 when column missing") {
     runner.assertEqual(room.seatDepositAmount, 0)
 }
 
+runner.run("Room decodes member_drowning_opt_in true from server shape") {
+    // Migration 044+045: the current user's per-room opt-in for the
+    // Drowning row share. The default is false (privacy-respecting).
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Opted-in Room",
+      "mascot_name": "Felty",
+      "mascot_personality": "professional",
+      "mascot_political_ideology": "order",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "join_starting_bonus": 200,
+      "user_role": "member",
+      "member_drowning_opt_in": true
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.memberDrowningOptIn, true)
+}
+
+runner.run("Room defaults member_drowning_opt_in to false when column missing") {
+    // Pre-migration-045 server shape (or member who has never set the
+    // flag). Defaults to false — the privacy-respecting default.
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Pre-migration Room",
+      "mascot_name": "Borat",
+      "mascot_personality": "snarky",
+      "mascot_political_ideology": "centrist",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "join_starting_bonus": 200,
+      "user_role": "member"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.memberDrowningOptIn, false)
+}
+
 // MARK: - Summary
 
 print("")

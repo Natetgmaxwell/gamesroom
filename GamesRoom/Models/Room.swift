@@ -105,6 +105,10 @@ struct Room: Identifiable, Codable, Hashable {
     /// Zero means deposits are disabled (the default). When non-zero,
     /// claiming a seat holds this many points until the host settles.
     let seatDepositAmount: Int
+    /// Per-room opt-in for sharing the member's own Drowning season-end award.
+    /// When true, other opted-in members + the host can read this
+    /// member's Drowning row (RLS-gated by migration 045). Default false.
+    let memberDrowningOptIn: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -129,6 +133,7 @@ struct Room: Identifiable, Codable, Hashable {
         case hostJournal = "host_journal"
         case installedPackSlugs = "installed_pack_slugs"
         case seatDepositAmount = "seat_deposit_amount"
+    case memberDrowningOptIn = "member_drowning_opt_in"
     }
 
     init(
@@ -153,7 +158,8 @@ struct Room: Identifiable, Codable, Hashable {
         memberInviteQuota: Int = 3,
         hostJournal: String? = nil,
         installedPackSlugs: [String]? = nil,
-        seatDepositAmount: Int = 0
+        seatDepositAmount: Int = 0,
+        memberDrowningOptIn: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -177,6 +183,7 @@ struct Room: Identifiable, Codable, Hashable {
         self.hostJournal = hostJournal
         self.installedPackSlugs = installedPackSlugs
         self.seatDepositAmount = seatDepositAmount
+        self.memberDrowningOptIn = memberDrowningOptIn
     }
 
     init(from decoder: Decoder) throws {
@@ -203,5 +210,6 @@ struct Room: Identifiable, Codable, Hashable {
         hostJournal = try c.decodeIfPresent(String.self, forKey: .hostJournal)
         installedPackSlugs = try c.decodeIfPresent([String].self, forKey: .installedPackSlugs)
         seatDepositAmount = try c.decodeIfPresent(Int.self, forKey: .seatDepositAmount) ?? 0
+        memberDrowningOptIn = try c.decodeIfPresent(Bool.self, forKey: .memberDrowningOptIn) ?? false
     }
 }

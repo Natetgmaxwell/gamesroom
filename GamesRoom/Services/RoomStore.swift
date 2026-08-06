@@ -247,6 +247,17 @@ protocol RoomStore: Sendable {
     /// user. Used by the briefing slot after the member has
     /// seen the banner.
     func acknowledgeSystemEvent(eventId: UUID) async throws
+
+    // MARK: Drowning opt-in (V0.9 Wave 1 Slice 1.1)
+
+    /// Flips `room_memberships.member_drowning_opt_in` for the
+    /// calling member's own row in this room. The SQL RLS policy
+    /// in migration 045 ensures a member can only update their own
+    /// row; the dedicated `set_drowning_opt_in` RPC keeps the
+    /// contract explicit. The service-layer caller is responsible
+    /// for re-fetching the room so the in-memory cache reflects
+    /// the new value.
+    func setDrowningOptIn(roomId: UUID, optIn: Bool) async throws
 }
 
 // MARK: - LiveRoomStore
@@ -507,6 +518,22 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         _ = try await SupabaseClientProvider.shared
             .rpc("acknowledge_system_event", params: [
                 "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value as Void
+    }
+
+    // MARK: Drowning opt-in (V0.9 Wave 1 Slice 1.1)
+
+    /// The live RPC is `set_drowning_opt_in(p_room_id, p_opt_in)`
+    /// (migration 045). Returns nothing on success. The
+    /// `set_drowning_opt_in` RPC is security-definer and gated by
+    /// RLS so the caller can only update their own membership row.
+    func setDrowningOptIn(roomId: UUID, optIn: Bool) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_drowning_opt_in", params: [
+                "p_room_id": roomId.uuidString,
+                "p_opt_in": optIn
             ])
             .execute()
             .value as Void
@@ -1212,6 +1239,19 @@ actor InMemoryRoomStore: RoomStore {
                 roomSystemEvents[roomId] = updated
             }
         }
+    }
+
+    /// V0.9 Wave 1 Slice 1.1 - flips the drowning opt-in flag for
+    /// the calling member in the in-memory store. The in-memory
+    /// store tracks membership per user; this is a no-op on the
+    /// room-by-room cache. The service-layer caller is responsible
+    /// for refreshing the Room so the toggle reflects in the UI.
+    func setDrowningOptIn(roomId: UUID, optIn: Bool) async throws {
+        // No state to mutate - the opt-in flag lives on the
+        // Room struct (decoded from get_my_rooms). The service
+        // layer re-fetches the room after this call so the new
+        // value surfaces.
+        _ = (roomId, optIn)
     }
 
     // MARK: RSVP — read

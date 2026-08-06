@@ -573,6 +573,48 @@ final class RoomService: ObservableObject {
         }
     }
 
+    // MARK: - Drowning opt-in (V0.9 Wave 1 Slice 1.1)
+
+    /// Flips the calling member's per-room Drowning opt-in flag.
+    /// Wraps the `set_drowning_opt_in` RPC and refreshes the
+    /// cached Room so the toggle state mirrors in the UI without
+    /// a manual reload. The SQL RLS policy in migration 045
+    /// enforces that a member can only update their own row.
+    func setDrowningOptIn(roomId: UUID, optIn: Bool) async throws {
+        try await store.setDrowningOptIn(roomId: roomId, optIn: optIn)
+        // Refresh the cached Room so the toggle reflects
+        // immediately in any view that reads `room.memberDrowningOptIn`.
+        if let idx = self.rooms.firstIndex(where: { $0.id == roomId }) {
+            let old = self.rooms[idx]
+            self.rooms[idx] = Room(
+                id: old.id,
+                name: old.name,
+                mascotName: old.mascotName,
+                mascotPersonality: old.mascotPersonality,
+                mascotPoliticalIdeology: old.mascotPoliticalIdeology,
+                createdBy: old.createdBy,
+                createdAt: old.createdAt,
+                updatedAt: old.updatedAt,
+                isLive: old.isLive,
+                nextEventDescription: old.nextEventDescription,
+                joinStartingBonus: old.joinStartingBonus,
+                mascotApiKey: old.mascotApiKey,
+                userRole: old.userRole,
+                briefing48hEnabled: old.briefing48hEnabled,
+                calendarAutoAddHost: old.calendarAutoAddHost,
+                socialPreferencesEnabled: old.socialPreferencesEnabled,
+                socialNarrationEnabled: old.socialNarrationEnabled,
+                maxSeats: old.maxSeats,
+                memberInviteQuota: old.memberInviteQuota,
+                hostJournal: old.hostJournal,
+                installedPackSlugs: old.installedPackSlugs,
+                seatDepositAmount: old.seatDepositAmount,
+                memberDrowningOptIn: optIn
+            )
+        }
+        self.lastError = nil
+    }
+
     // MARK: - Host journal (P1.5)
 
     /// Updates the host's bounded observation/journal field on the

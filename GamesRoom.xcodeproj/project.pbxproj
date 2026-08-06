@@ -28,6 +28,7 @@
 		AAAAAAAA000000000000001C /* MascotBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000412 /* MascotBubble.swift */; };
 		AAAAAAAA000000000000001D /* SeatGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000413 /* SeatGridView.swift */; };
 		AAAAAAAA000000000000001E /* TrajectorySparkline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */; };
+		AAAAAAAA0000000000000447 /* DrowningBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000448 /* DrowningBadge.swift */; };
 		AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000445 /* StorageKeys.swift */; };
 		AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
@@ -80,6 +81,7 @@
 
 /* Begin PBXFileReference section */
 		AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectorySparkline.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000400 /* GamesRoomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomApp.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000401 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000402 /* Auth/SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
@@ -284,6 +286,7 @@
 				AAAAAAAA0000000000000412 /* MascotBubble.swift */,
 				AAAAAAAA0000000000000413 /* SeatGridView.swift */,
 				AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */,
+				AAAAAAAA0000000000000448 /* DrowningBadge.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -401,6 +404,7 @@
 				AAAAAAAA000000000000001C /* MascotBubble.swift in Sources */,
 				AAAAAAAA000000000000001D /* SeatGridView.swift in Sources */,
 				AAAAAAAA000000000000001E /* TrajectorySparkline.swift in Sources */,
+				AAAAAAAA0000000000000447 /* DrowningBadge.swift in Sources */,
 				AAAAAAAA00000000000000A0 /* User.swift in Sources */,
 				AAAAAAAA00000000000000A2 /* Room.swift in Sources */,
 				AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */,

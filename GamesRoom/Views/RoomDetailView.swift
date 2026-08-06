@@ -305,17 +305,28 @@ struct RoomDetailView: View {
     }
 
     /// M1.1 — cached awards filtered for the current user.
-    /// Drowning rows are kept only when the current user IS the
-    /// recipient — the privacy boundary the SQL RLS layer also
-    /// enforces. Belt-and-braces against a server regression.
+    /// Drowning rows are kept only when:
+    ///   - the current user IS the recipient (always allowed), OR
+    ///   - the current user is the host of the room (host oversight),
+    ///   - OR the current user has opted in to Drowning shares
+    ///     (per-room member_drowning_opt_in flag, migration 045).
+    /// The SQL RLS layer also enforces this gate — this resolver is
+    /// belt-and-braces against a server regression.
     private var seasonAwardsForPrivacy: [SeasonAward] {
         let all = roomService.cachedSeasonAwards(
             seasonId: currentSeason?.id ?? UUID()
         )
         guard let me = authService.currentUser?.id else { return all }
+        let isHost = room.userRole == .host
+        let optedIn = room.memberDrowningOptIn
         return all.filter { row in
             guard row.awardType.isPrivate else { return true }
-            return row.recipientUserId == me
+            // Recipient always sees their own row.
+            if row.recipientUserId == me { return true }
+            // Host always sees drowning rows.
+            if isHost { return true }
+            // Otherwise: only opted-in members see other drowning rows.
+            return optedIn
         }
     }
 
@@ -374,9 +385,20 @@ struct RoomDetailView: View {
 
         // M1.1 — `.seasonClose` renders the awards card with the
         // privacy-filtered awards for the current user. The
-        // drowning row stays visible only to the recipient.
+        // drowning row stays visible only to the recipient / host /
+        // opted-in members; the AwardsCard renders the drowning row
+        // through DrowningBadge when it appears.
         case .seasonClose(let season, let awards):
-            AwardsCard(season: season, awards: awards)
+            AwardsCard(
+                season: season,
+                awards: awards,
+                currentUserId: authService.currentUser?.id,
+                isHost: room.userRole == .host,
+                currentUserOptedIn: room.memberDrowningOptIn,
+                onToggleDrowningOptIn: { newValue in
+                    Task { await setDrowningOptIn(newValue) }
+                }
+            )
         case .settleRound(let event):
             WitnessSlot(
                 event: event,
@@ -516,6 +538,23 @@ struct RoomDetailView: View {
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .declined)
         } catch {
+            // Service already populated lastError; nothing to do here.
+            _ = error
+        }
+    }
+
+    /// V0.9 Wave 1 Slice 1.1 — fires the `set_drowning_opt_in` RPC
+    /// (migration 045) when the drowning recipient toggles the
+    /// share-with-the-room switch in the awards card. The service
+    /// refreshes the cached Room so the toggle state mirrors without
+    /// a manual reload; the SQL RLS policy is the load-bearing gate.
+    private func setDrowningOptIn(_ newValue: Bool) async {
+        do {
+            try await roomService.setDrowningOptIn(
+                roomId: room.id, optIn: newValue
+            )
+        } catch {
+            // Service already populated lastError; nothing to do here.
             _ = error
         }
     }
@@ -895,13 +934,24 @@ private struct CeremonialCard: View {
 // MARK: - Awards card (season-close slot, M1.1)
 
 /// Renders the per-season awards. The `.drowning` row is private
-/// to the recipient — the calling resolver (`seasonAwardsForPrivacy`
-/// in `RoomDetailView`) already filters drowning rows whose
-/// `recipientUserId` isn't the current user. The card renders
-/// whatever rows it receives; it does not re-filter.
+/// to the recipient (always) and to opted-in viewers (per the
+/// V0.9 Wave 1 Slice 1.1 model). The calling resolver
+/// (`seasonAwardsForPrivacy` in `RoomDetailView`) already filters
+/// drowning rows whose `recipientUserId` isn't the current user
+/// AND the current user isn't the host AND hasn't opted in. The
+/// card renders whatever rows it receives; it does not re-filter.
+///
+/// Drowning rows are rendered through `DrowningBadge` so the
+/// recipient sees an opt-in toggle and opted-in viewers see a
+/// muted "you've opted in" footnote. Non-drowning rows use the
+/// standard `AwardRow`.
 private struct AwardsCard: View {
     let season: Season
     let awards: [SeasonAward]
+    let currentUserId: UUID?
+    let isHost: Bool
+    let currentUserOptedIn: Bool
+    let onToggleDrowningOptIn: (Bool) -> Void
 
     /// Stable display order: phoenix, veteran, whale, drowning.
     /// `AwardType.CaseIterable` defines the order; we sort by it.
@@ -934,7 +984,7 @@ private struct AwardsCard: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
-                        AwardRow(award: award)
+                        awardView(for: award)
                         if idx != sortedAwards.count - 1 {
                             Divider()
                                 .overlay(Theme.Palette.hairline)
@@ -954,6 +1004,20 @@ private struct AwardsCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
         .sectionCard(.hero)
+    }
+
+    @ViewBuilder
+    private func awardView(for award: SeasonAward) -> some View {
+        if award.awardType == .drowning {
+            DrowningBadge(
+                award: award,
+                isRecipient: award.recipientUserId == currentUserId,
+                isOptedIn: currentUserOptedIn,
+                onToggleOptIn: onToggleDrowningOptIn
+            )
+        } else {
+            AwardRow(award: award)
+        }
     }
 }
 
