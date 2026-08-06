@@ -65,6 +65,14 @@ struct RoomDetailView: View {
     // `SettleCasinoSheet` instead).
     @State private var hostScoreEvent: Event?
 
+    // B1.3 — host-only "+ Add an event" CTA in the in-room
+    // toolbar. The `AddEventSheet` has shipped since P0.3 (comment
+    // block, "Presented by `RoomDetailView` from the host-only
+    // '+ Add an event' CTA") but the CTA itself was never wired —
+    // it lives in the toolbar so hosts can schedule the next
+    // session without entering the settings sheet.
+    @State private var showingAddEvent: Bool = false
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
@@ -166,6 +174,16 @@ struct RoomDetailView: View {
             if isHost {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        showingAddEvent = true
+                    } label: {
+                        Image(systemName: Theme.Icon.chairFill)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                    }
+                    .accessibilityLabel(Text("Add an event"))
+                    .accessibilityHint(Text("Schedule the next games night in \(room.name)"))
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
                         settingsRoom = room
                     } label: {
                         Image(systemName: "gearshape")
@@ -179,6 +197,16 @@ struct RoomDetailView: View {
         .sheet(item: $settingsRoom) { presented in
             RoomSettingsSheet(room: presented)
                 .environmentObject(roomService)
+        }
+        .sheet(isPresented: $showingAddEvent) {
+            AddEventSheet(
+                roomId: room.id,
+                onSaved: { _ in
+                    showingAddEvent = false
+                    Task { await refresh() }
+                }
+            )
+            .environmentObject(roomService)
         }
         .sheet(item: $withdrawSheetEvent) { event in
             WithdrawChipsSheet(eventId: event.id, roomId: room.id)

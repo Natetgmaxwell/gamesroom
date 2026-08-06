@@ -96,8 +96,8 @@ struct SeatGridView: View {
         switch seat {
         case .yours:
             VStack(spacing: 4) {
-                Text("you")
-                    .font(Theme.Typography.footnote)
+                Image(systemName: Theme.Icon.chairFill)
+                    .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
                 Text("Your seat")
                     .font(Theme.Typography.footnote)
@@ -105,6 +105,9 @@ struct SeatGridView: View {
             }
         case .claimed(let name):
             VStack(spacing: 4) {
+                Image(systemName: Theme.Icon.personFill)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 Text(initial(for: name))
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -115,7 +118,7 @@ struct SeatGridView: View {
             }
         case .available:
             VStack(spacing: 4) {
-                Image(systemName: "plus")
+                Image(systemName: Theme.Icon.chair)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
                 Text("open")

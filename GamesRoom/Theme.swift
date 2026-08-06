@@ -103,6 +103,12 @@ enum Theme {
     enum Icon {
         /// The "this seat is yours" affordance on the seat grid.
         static let chairFill = "chair.fill"
+        /// The "this seat is open" affordance on the seat grid.
+        /// Outline variant so it reads as available, not claimed.
+        static let chair = "chair"
+        /// The "another member is sitting here" affordance on the
+        /// seat grid. Paired with their initial in the same cell.
+        static let personFill = "person.fill"
         /// The settings gear in the room toolbar.
         static let gearshape = "gearshape"
         /// The "switch room" chevron inside the rooms dropdown.
