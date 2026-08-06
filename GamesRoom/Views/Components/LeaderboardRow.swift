@@ -49,7 +49,7 @@ struct LeaderboardRow: View {
                     .accessibilityValue(Text(trajectoryAccessibilityDescription))
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .background(isYou ? Theme.Palette.accent.opacity(0.06) : .clear)
         .overlay(alignment: .leading) {
             if isYou {

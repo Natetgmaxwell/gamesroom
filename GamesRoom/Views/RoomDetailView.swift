@@ -1294,7 +1294,9 @@ private struct MascotFooterCaption: View {
     var body: some View {
         Text(caption)
             .font(Theme.Typography.caption.italic())
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.45))
+            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            .lineLimit(1)
+            .truncationMode(.tail)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Theme.Layout.sectionSpacing)
     }
