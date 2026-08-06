@@ -62,6 +62,7 @@ import Foundation
 /// refused, RLS rejection, insufficient balance, etc.) — pure
 /// "no result found" cases return `nil` / empty arrays so the
 /// caller doesn't need a `try` for the happy path.
+
 // MARK: - RPC parameter structs
 // Supabase-swift's rpc(params:) requires Encodable & Sendable. Dict
 // literals that mix String and [String] values infer as [String: Any]
