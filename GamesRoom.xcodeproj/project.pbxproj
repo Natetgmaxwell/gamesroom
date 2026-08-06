@@ -69,6 +69,7 @@
 		AAAAAAAA00000000000000E2 /* PackRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043A /* PackRegistry.swift */; };
 		AAAAAAAA00000000000000E3 /* PackScoring.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043B /* PackScoring.swift */; };
 		AAAAAAAA00000000000000E4 /* Packs.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043C /* Packs.swift */; };
+		AAAAAAAA000000000000044B /* PackHowTo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000044C /* PackHowTo.swift */; };
 		AAAAAAAA00000000000000E5 /* ScoringService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043D /* ScoringService.swift */; };
 		AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043E /* CreateRoomSheet.swift */; };
 		AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */; };
@@ -145,6 +146,7 @@
 		AAAAAAAA000000000000043A /* PackRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackRegistry.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043B /* PackScoring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackScoring.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043C /* Packs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Packs.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043D /* ScoringService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoringService.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043E /* CreateRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateRoomSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoreEntrySheet.swift; sourceTree = "<group>"; };
@@ -301,6 +303,7 @@
 				AAAAAAAA000000000000043A /* PackRegistry.swift */,
 				AAAAAAAA000000000000043B /* PackScoring.swift */,
 				AAAAAAAA000000000000043C /* Packs.swift */,
+				AAAAAAAA000000000000044C /* PackHowTo.swift */,
 			);
 			path = Packs;
 			sourceTree = "<group>";
@@ -448,6 +451,7 @@
 				AAAAAAAA00000000000000E2 /* PackRegistry.swift in Sources */,
 				AAAAAAAA00000000000000E3 /* PackScoring.swift in Sources */,
 				AAAAAAAA00000000000000E4 /* Packs.swift in Sources */,
+				AAAAAAAA000000000000044B /* PackHowTo.swift in Sources */,
 				AAAAAAAA00000000000000E5 /* ScoringService.swift in Sources */,
 				AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */,
 				AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */,
