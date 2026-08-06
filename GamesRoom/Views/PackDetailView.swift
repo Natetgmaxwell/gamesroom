@@ -16,7 +16,7 @@
 import SwiftUI
 
 struct PackDetailView: View {
-    let pack: any PackDefinition
+    let pack: any PackDefinition.Type
     let onDismiss: () -> Void
 
     private var howTo: PackHowTo? {
@@ -74,7 +74,7 @@ struct PackDetailView: View {
     private func summaryBlock(_ howTo: PackHowTo) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(howTo.headline)
-                .font(Theme.Typography.title3.weight(.semibold))
+                .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText)
             Text(howTo.summary)
                 .font(Theme.Typography.body)
