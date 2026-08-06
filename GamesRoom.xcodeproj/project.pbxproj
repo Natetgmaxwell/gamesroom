@@ -3,13 +3,13 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		AAAAAAAA000000000000000A /* GamesRoomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000400 /* GamesRoomApp.swift */; };
 		AAAAAAAA000000000000000B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000401 /* ContentView.swift */; };
-		AAAAAAAA000000000000000C /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000402 /* SignInView.swift */; };
+		AAAAAAAA000000000000000C /* Auth/SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000402 /* Auth/SignInView.swift */; };
 		AAAAAAAA000000000000000D /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000403 /* Theme.swift */; };
 		AAAAAAAA000000000000000E /* SettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000404 /* SettingsPage.swift */; };
 		AAAAAAAA000000000000000F /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000405 /* AppSettingsView.swift */; };
@@ -19,7 +19,6 @@
 		AAAAAAAA0000000000000013 /* CasinoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000409 /* CasinoService.swift */; };
 		AAAAAAAA0000000000000014 /* MascotEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040A /* MascotEngine.swift */; };
 		AAAAAAAA0000000000000015 /* NotificationDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040B /* NotificationDispatcher.swift */; };
-		AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000445 /* StorageKeys.swift */; };
 		AAAAAAAA0000000000000016 /* RoomStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040C /* RoomStore.swift */; };
 		AAAAAAAA0000000000000017 /* RoomPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040D /* RoomPage.swift */; };
 		AAAAAAAA0000000000000018 /* RoomDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040E /* RoomDetailView.swift */; };
@@ -29,6 +28,8 @@
 		AAAAAAAA000000000000001C /* MascotBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000412 /* MascotBubble.swift */; };
 		AAAAAAAA000000000000001D /* SeatGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000413 /* SeatGridView.swift */; };
 		AAAAAAAA000000000000001E /* TrajectorySparkline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */; };
+		AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000445 /* StorageKeys.swift */; };
+		AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
 		AAAAAAAA00000000000000A2 /* Room.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000415 /* Room.swift */; };
 		AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000416 /* RoomRole.swift */; };
@@ -45,8 +46,6 @@
 		AAAAAAAA00000000000000BA /* ChapterLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000421 /* ChapterLine.swift */; };
 		AAAAAAAA00000000000000BC /* CallForward.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000422 /* CallForward.swift */; };
 		AAAAAAAA00000000000000BE /* SeasonAward.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000423 /* SeasonAward.swift */; };
-		AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */; };
-		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 		AAAAAAAA00000000000000C0 /* AwardType.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000424 /* AwardType.swift */; };
 		AAAAAAAA00000000000000C2 /* CasinoConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000425 /* CasinoConfig.swift */; };
 		AAAAAAAA00000000000000C4 /* CasinoWithdrawal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */; };
@@ -76,12 +75,14 @@
 		AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */; };
 		AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000436 /* Assets.xcassets */; };
 		AAAAAAAA00000000000000F2 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AAAAAAAA00000000000000F3 /* Supabase */; };
+		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectorySparkline.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000400 /* GamesRoomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomApp.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000401 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		AAAAAAAA0000000000000402 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000402 /* Auth/SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000403 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000404 /* SettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPage.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000405 /* AppSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsView.swift; sourceTree = "<group>"; };
@@ -91,7 +92,6 @@
 		AAAAAAAA0000000000000409 /* CasinoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoService.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040A /* MascotEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotEngine.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040B /* NotificationDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDispatcher.swift; sourceTree = "<group>"; };
-		AAAAAAAA0000000000000445 /* StorageKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageKeys.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040C /* RoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStore.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040D /* RoomPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPage.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040E /* RoomDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomDetailView.swift; sourceTree = "<group>"; };
@@ -100,7 +100,6 @@
 		AAAAAAAA0000000000000411 /* LeaderboardRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardRow.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000412 /* MascotBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotBubble.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000413 /* SeatGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatGridView.swift; sourceTree = "<group>"; };
-		AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectorySparkline.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000414 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000415 /* Room.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Room.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000416 /* RoomRole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomRole.swift; sourceTree = "<group>"; };
@@ -117,8 +116,6 @@
 		AAAAAAAA0000000000000421 /* ChapterLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterLine.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000422 /* CallForward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallForward.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000423 /* SeasonAward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonAward.swift; sourceTree = "<group>"; };
-		AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSystemEvent.swift; sourceTree = "<group>"; };
-		BBBBBBBB0000000000000450 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000424 /* AwardType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AwardType.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000425 /* CasinoConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoConfig.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoWithdrawal.swift; sourceTree = "<group>"; };
@@ -151,6 +148,9 @@
 		AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettleCasinoSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WithdrawChipsSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000443 /* GamesRoom.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GamesRoom.entitlements; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000445 /* StorageKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageKeys.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSystemEvent.swift; sourceTree = "<group>"; };
+		BBBBBBBB0000000000000450 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -178,7 +178,7 @@
 			children = (
 				AAAAAAAA0000000000000400 /* GamesRoomApp.swift */,
 				AAAAAAAA0000000000000401 /* ContentView.swift */,
-				AAAAAAAA0000000000000402 /* SignInView.swift */,
+				AAAAAAAA0000000000000402 /* Auth/SignInView.swift */,
 				AAAAAAAA0000000000000403 /* Theme.swift */,
 				AAAAAAAA00000000000000F9 /* Models */,
 				AAAAAAAA0000000000000444 /* Packs */,
@@ -190,6 +190,14 @@
 				AAAAAAAA0000000000000443 /* GamesRoom.entitlements */,
 			);
 			path = GamesRoom;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA00000000000000F8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000437 /* GamesRoom.app */,
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 		AAAAAAAA00000000000000F9 /* Models */ = {
@@ -228,19 +236,10 @@
 				AAAAAAAA0000000000000431 /* BoundingBox.swift */,
 				AAAAAAAA0000000000000432 /* DetectedStack.swift */,
 				AAAAAAAA0000000000000433 /* DetectionSource.swift */,
+				AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */,
+				BBBBBBBB0000000000000450 /* SeatDeposit.swift */,
 			);
 			path = Models;
-			sourceTree = "<group>";
-		};
-		AAAAAAAA0000000000000444 /* Packs */ = {
-			isa = PBXGroup;
-			children = (
-				AAAAAAAA0000000000000439 /* PackDefinition.swift */,
-				AAAAAAAA000000000000043A /* PackRegistry.swift */,
-				AAAAAAAA000000000000043B /* PackScoring.swift */,
-				AAAAAAAA000000000000043C /* Packs.swift */,
-			);
-			path = Packs;
 			sourceTree = "<group>";
 		};
 		AAAAAAAA00000000000000FA /* Services */ = {
@@ -289,12 +288,15 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
-		AAAAAAAA00000000000000F8 /* Products */ = {
+		AAAAAAAA0000000000000444 /* Packs */ = {
 			isa = PBXGroup;
 			children = (
-				AAAAAAAA0000000000000437 /* GamesRoom.app */,
+				AAAAAAAA0000000000000439 /* PackDefinition.swift */,
+				AAAAAAAA000000000000043A /* PackRegistry.swift */,
+				AAAAAAAA000000000000043B /* PackScoring.swift */,
+				AAAAAAAA000000000000043C /* Packs.swift */,
 			);
-			name = Products;
+			path = Packs;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -312,10 +314,10 @@
 			);
 			dependencies = (
 			);
+			name = GamesRoom;
 			packageProductDependencies = (
 				AAAAAAAA00000000000000F3 /* Supabase */,
 			);
-			name = GamesRoom;
 			productName = GamesRoom;
 			productReference = AAAAAAAA0000000000000437 /* GamesRoom.app */;
 			productType = "com.apple.product-type.application";
@@ -328,7 +330,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					AAAAAAAA00000000000000FD = {
 						CreatedOnToolsVersion = 16.2;
@@ -379,7 +381,7 @@
 			files = (
 				AAAAAAAA000000000000000A /* GamesRoomApp.swift in Sources */,
 				AAAAAAAA000000000000000B /* ContentView.swift in Sources */,
-				AAAAAAAA000000000000000C /* SignInView.swift in Sources */,
+				AAAAAAAA000000000000000C /* Auth/SignInView.swift in Sources */,
 				AAAAAAAA000000000000000D /* Theme.swift in Sources */,
 				AAAAAAAA000000000000000E /* SettingsPage.swift in Sources */,
 				AAAAAAAA000000000000000F /* AppSettingsView.swift in Sources */,
@@ -486,6 +488,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 37S7KT7W83;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -509,6 +512,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -550,6 +554,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 37S7KT7W83;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -566,6 +571,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -583,12 +589,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 37S7KT7W83;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GamesRoom/Info.plist;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Games Room uses the camera to count chips when settling casino games.";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Games Room adds events to your calendar so you never miss a game night.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Games Room uses the camera to count chips when settling casino games.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -623,12 +628,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 37S7KT7W83;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GamesRoom/Info.plist;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Games Room uses the camera to count chips when settling casino games.";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Games Room adds events to your calendar so you never miss a game night.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Games Room uses the camera to count chips when settling casino games.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
