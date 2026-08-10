@@ -74,11 +74,10 @@ the single CTA, (b) the mascot footer caption is present.
 
 ## Known limitations (V0.8)
 
-- The 4 packs ship pre-installed; no in-app pack store. (V2.)
-- No Glance / Live Activity / Watch. (V0.9.)
-- iPad renders the iPhone column centered — no split-view. (V2.)
-- Camera/Vision chip-scan pipeline is V0.9; the casino pack
-  ships with virtual-only withdrawals in V0.8.
+- The 4 packs ship pre-installed; the pack store shell lists them
+  with installed state, but paid packs are not purchasable yet.
+- Live Activity is a score surface only — suppressed during play
+  per the vision non-goal.
 - LLM mascot voice is opt-in via `mascot_api_key`; default is
   the 25-voice template interpolation.
 
@@ -90,6 +89,9 @@ the single CTA, (b) the mascot footer caption is present.
 - Migration numbering is not strictly monotonic (`037`, `038`,
   `042`, `043` are out-of-band). This is documented in
   `docs/deployment.md` — operators should not "fix" the gap.
+- Widget / Watch / camera-scan surfaces are code-complete but
+  require a manual device pass on an Xcode host (this machine has
+  no Xcode.app — see `docs/roadmap-v0.9.md`).
 
 ## How to file a bug
 
@@ -102,10 +104,8 @@ the single CTA, (b) the mascot footer caption is present.
 
 ## What ships next (V0.9)
 
-- Camera/Vision chip-scan pipeline.
-- LLM-driven mascot voice (default on for hosts who set a key).
-- Member-side event edit surface (decline re-entry).
-- Pack how-to guide bodies.
-- Drowning privacy UI on the awards card.
-- iPad split-view (after the host-of-record cohort validates
-  the iPhone-column-on-iPad pattern).
+- Paid packs in the pack store (StoreKit).
+- Season-subtitle mascot voice (the host-approval mechanism is
+  in; the proposing voice is gated on the Q-TONE brand decision).
+- Hybrid (on-device + cloud) vision fallback.
+- Community-created packs (catalog v1, contribution v2).
