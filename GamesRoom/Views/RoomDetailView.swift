@@ -502,7 +502,8 @@ struct RoomDetailView: View {
         async let eventsLoad: [RoomSystemEvent] = roomService.loadSystemEvents(roomId: room.id)
         async let rsvpGridLoad: () = loadRSVPGridIfNeeded()
         async let packConfigLoad: () = loadPackConfigsIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad)
+        async let packsLoad: [String] = roomService.loadRoomPacks(roomId: room.id)
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad)
     }
 
     /// Loads the per-member RSVP rows for the active event so the
@@ -1449,14 +1450,17 @@ private struct PackShelfReadOnly: View {
     /// its payout. nil = no editor presented.
     @State private var payoutPack: (any PackDefinition.Type)?
 
-    /// The four V0.8 packs from `PackRegistry.shared`. Each tile
-    /// renders name + icon + description; tapping the tile opens a
-    /// how-to guide placeholder (per the brief: "an entry point to
-    /// each how-to guide"). The how-to body itself is a V0.9+ slice;
-    /// the tap surface ships here so the rest of the shelf contract
-    /// is in place.
+    /// The room's enabled packs from `PackRegistry.shared`, filtered
+    /// by the room's installed set. An empty cache means the room
+    /// has no explicit overrides — fall back to the default
+    /// installed set (all four V0.8 packs), matching the Operations
+    /// sub-sheet's convention.
     private var packs: [any PackDefinition.Type] {
-        PackRegistry.shared.allPacks
+        let enabled = roomService.cachedRoomPacks(roomId: room.id)
+        if enabled.isEmpty {
+            return PackRegistry.shared.allPacks
+        }
+        return PackRegistry.shared.allPacks.filter { enabled.contains($0.slug) }
     }
 
     private var isHost: Bool {
