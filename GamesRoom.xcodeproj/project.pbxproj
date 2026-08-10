@@ -36,6 +36,7 @@
 		AAAAAAAA0000000000000467 /* GamesRoomWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */; };
 		AAAAAAAA0000000000000468 /* GamesRoomWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000460 /* GamesRoomWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAAAAAAA0000000000000469 /* GamesRoomWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000461 /* GamesRoomWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AAAAAAAA000000000000046D /* ScoreSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
 		AAAAAAAA00000000000000A2 /* Room.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000415 /* Room.swift */; };
 		AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000416 /* RoomRole.swift */; };
@@ -218,6 +219,7 @@
 		AAAAAAAA0000000000000463 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomWatchApp.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000465 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSnapshotStore.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
@@ -355,6 +357,7 @@
 				AAAAAAAA0000000000000445 /* StorageKeys.swift */,
 				AAAAAAAA000000000000040C /* RoomStore.swift */,
 				AAAAAAAA000000000000043D /* ScoringService.swift */,
+				AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -659,6 +662,7 @@
 				AAAAAAAA00000000000000E4 /* Packs.swift in Sources */,
 				AAAAAAAA000000000000044B /* PackHowTo.swift in Sources */,
 				AAAAAAAA00000000000000E5 /* ScoringService.swift in Sources */,
+				AAAAAAAA000000000000046D /* ScoreSnapshotStore.swift in Sources */,
 				AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */,
 				AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */,
 				AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */,

@@ -527,6 +527,16 @@ struct RoomDetailView: View {
         async let roundsLoad: () = loadRoundsIfNeeded()
         async let chapterLoad: () = loadChapterLineIfNeeded()
         _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad)
+        // W2.3 — keep the widget/watch snapshot fresh with the
+        // current standings. Best-effort write.
+        let topLine = leaderboard.prefix(3)
+            .map { "\($0.displayName) \($0.pointsBalance)" }
+            .joined(separator: " · ")
+        ScoreSnapshotStore.write(
+            roomName: room.name,
+            leaderboardLine: topLine,
+            isLive: activeEvent?.playedAt ?? .distantFuture <= Date()
+        )
     }
 
     /// Loads the chapter line for the active event so the

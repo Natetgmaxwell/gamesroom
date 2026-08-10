@@ -156,6 +156,15 @@ final class RoomService: ObservableObject {
             let result = try await store.fetchRooms()
             self.rooms = result
             self.lastError = nil
+            // W2.3 — keep the widget/watch snapshot fresh. The
+            // Glance reads the App Group suite; best-effort write.
+            if let room = result.first {
+                ScoreSnapshotStore.write(
+                    roomName: room.name,
+                    leaderboardLine: "",
+                    isLive: room.isLive
+                )
+            }
         } catch {
             self.lastError = error.localizedDescription
         }
