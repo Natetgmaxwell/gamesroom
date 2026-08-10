@@ -791,6 +791,46 @@ runner.run("Member decodes team column and defaults to nil") {
     runner.assertEqual(decodedNoTeam.team, nil)
 }
 
+// MARK: - CatchUpMessage (W2.7 — joined-late catch-up)
+
+runner.run("CatchUpMessage upcoming event names date and claims seat") {
+    let body = CatchUpMessage.body(
+        eventName: "Friday Night Hold'em",
+        playedAt: Date().addingTimeInterval(86_400),
+        mascotName: "Felty",
+        leaderboardSummary: "Alex 120 · Sam 80",
+        rsvpState: .unclaimed
+    )
+    runner.assertTrue(body.contains("Friday Night Hold'em"), "event name missing")
+    runner.assertTrue(body.contains("Felty"), "mascot name missing")
+    runner.assertTrue(body.contains("Alex 120"), "standings missing")
+    runner.assertTrue(body.contains("Claim your seat"), "unclaimed nudge missing")
+}
+
+runner.run("CatchUpMessage claimed state says you're in") {
+    let body = CatchUpMessage.body(
+        eventName: "Pluto Chess Sunday",
+        playedAt: Date().addingTimeInterval(86_400),
+        mascotName: "Felty",
+        leaderboardSummary: "",
+        rsvpState: .claimed
+    )
+    runner.assertTrue(body.contains("You're in"), "claimed confirmation missing")
+    runner.assertFalse(body.contains("Claim your seat"), "claimed state should not nudge")
+}
+
+runner.run("CatchUpMessage live event names state of play") {
+    let body = CatchUpMessage.body(
+        eventName: "Casino Night",
+        playedAt: Date().addingTimeInterval(-3600),
+        mascotName: "Felty",
+        leaderboardSummary: "Alex 120 · Sam 80",
+        rsvpState: .unclaimed
+    )
+    runner.assertTrue(body.contains("is live"), "live marker missing")
+    runner.assertTrue(body.contains("Alex 120"), "standings missing")
+}
+
 // MARK: - CasinoWithdrawal (W1.4 — settle-sheet withdrawal wiring)
 
 runner.run("CasinoWithdrawal decodes server shape with points_withdrawn") {

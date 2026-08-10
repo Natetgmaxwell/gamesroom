@@ -31,6 +31,7 @@
 		AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000445 /* StorageKeys.swift */; };
 		AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */; };
 		AAAAAAAA000000000000045B /* EventRound.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045A /* EventRound.swift */; };
+		AAAAAAAA000000000000045F /* CatchUpMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045E /* CatchUpMessage.swift */; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
 		AAAAAAAA00000000000000A2 /* Room.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000415 /* Room.swift */; };
 		AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000416 /* RoomRole.swift */; };
@@ -164,6 +165,7 @@
 		AAAAAAAA0000000000000445 /* StorageKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageKeys.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSystemEvent.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000045A /* EventRound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRound.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000045E /* CatchUpMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatchUpMessage.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
@@ -261,6 +263,7 @@
 				AAAAAAAA0000000000000433 /* DetectionSource.swift */,
 				AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */,
 				AAAAAAAA000000000000045A /* EventRound.swift */,
+				AAAAAAAA000000000000045E /* CatchUpMessage.swift */,
 				BBBBBBBB0000000000000450 /* SeatDeposit.swift */,
 			);
 			path = Models;
@@ -457,6 +460,7 @@
 				AAAAAAAA00000000000000BE /* SeasonAward.swift in Sources */,
 				AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */,
 				AAAAAAAA000000000000045B /* EventRound.swift in Sources */,
+				AAAAAAAA000000000000045F /* CatchUpMessage.swift in Sources */,
 				BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */,
 				AAAAAAAA00000000000000C0 /* AwardType.swift in Sources */,
 				AAAAAAAA00000000000000C2 /* CasinoConfig.swift in Sources */,

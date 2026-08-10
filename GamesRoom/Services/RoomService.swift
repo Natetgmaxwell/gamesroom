@@ -218,7 +218,32 @@ final class RoomService: ObservableObject {
         let row = try await store.redeemJoinCode(code: normalised)
         self.lastError = nil
         await refresh()
+        // W2.7 — joined-late catch-up push. Best-effort; the
+        // dispatcher is non-throwing. Fires only when the room has
+        // an active event the joiner should catch up on.
+        if let room = rooms.first(where: { $0.id == row.roomId }) {
+            await scheduleCatchUpIfNeeded(room: room)
+        }
         return row
+    }
+
+    /// W2.7 — builds and schedules the joined-late catch-up push.
+    /// The identifier is stable per event, so a re-join overwrites
+    /// instead of stacking — no duplicate pushes.
+    private func scheduleCatchUpIfNeeded(room: Room) async {
+        guard let event = await loadActiveEvent(roomId: room.id) else { return }
+        let board = await loadLeaderboard(roomId: room.id)
+        let summary = board.prefix(3)
+            .map { "\($0.displayName) \($0.pointsBalance)" }
+            .joined(separator: " · ")
+        await NotificationDispatcher.shared.scheduleCatchUp(
+            eventId: event.id,
+            eventName: event.name,
+            playedAt: event.playedAt,
+            mascotName: room.mascotName,
+            leaderboardSummary: summary,
+            rsvpState: .unclaimed
+        )
     }
 
     // MARK: - Room detail (event + briefing + leaderboard + RSVP)

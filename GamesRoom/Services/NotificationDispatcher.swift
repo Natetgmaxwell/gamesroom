@@ -269,6 +269,41 @@ final class NotificationDispatcher {
         center.removePendingNotificationRequests(withIdentifiers: ids)
     }
 
+    // MARK: - Joined-late catch-up (W2.7)
+
+    /// Schedules the joined-late catch-up push for one member.
+    /// Fires immediately (the member just joined and is looking at
+    /// the room). The identifier is stable per event, so a re-join
+    /// or a duplicate call overwrites instead of stacking — no
+    /// duplicate pushes.
+    func scheduleCatchUp(
+        eventId: UUID,
+        eventName: String,
+        playedAt: Date,
+        mascotName: String,
+        leaderboardSummary: String,
+        rsvpState: MemberRSVPState
+    ) async {
+        guard await requestAuthorizationIfNeeded() else { return }
+        let center = UNUserNotificationCenter.current()
+        let body = CatchUpMessage.body(
+            eventName: eventName,
+            playedAt: playedAt,
+            mascotName: mascotName,
+            leaderboardSummary: leaderboardSummary,
+            rsvpState: rsvpState
+        )
+        await schedule(
+            center: center,
+            identifier: "\(eventId.uuidString)-catchup",
+            title: eventName,
+            body: body,
+            kindRaw: NotificationKindRaw.catchUp,
+            eventId: eventId,
+            fireAt: Date().addingTimeInterval(1)
+        )
+    }
+
     // MARK: - Body builders
 
     private func onCreateBody(mascotName: String, eventName: String) -> String {
@@ -352,6 +387,7 @@ final class NotificationDispatcher {
         case onCreate = "on_create"
         case t48h = "t48h"
         case morningOf = "morning_of"
+        case catchUp = "catch_up"
     }
 
     private func identifier(
