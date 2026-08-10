@@ -32,6 +32,10 @@
 		AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */; };
 		AAAAAAAA000000000000045B /* EventRound.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045A /* EventRound.swift */; };
 		AAAAAAAA000000000000045F /* CatchUpMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045E /* CatchUpMessage.swift */; };
+		AAAAAAAA0000000000000466 /* GamesRoomWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000462 /* GamesRoomWidgets.swift */; };
+		AAAAAAAA0000000000000467 /* GamesRoomWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */; };
+		AAAAAAAA0000000000000468 /* GamesRoomWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000460 /* GamesRoomWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AAAAAAAA0000000000000469 /* GamesRoomWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000461 /* GamesRoomWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
 		AAAAAAAA00000000000000A2 /* Room.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000415 /* Room.swift */; };
 		AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000416 /* RoomRole.swift */; };
@@ -86,6 +90,48 @@
 		AAAAAAAA000000000000045D /* EditEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045C /* EditEventSheet.swift */; };
 		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AAAAAAAA0000000000000117 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AAAAAAAA0000000000000101 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAAAAAAA0000000000000107;
+			remoteInfo = GamesRoomWidgets;
+		};
+		AAAAAAAA0000000000000119 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AAAAAAAA0000000000000101 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAAAAAAA000000000000010E;
+			remoteInfo = GamesRoomWatch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AAAAAAAA0000000000000115 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AAAAAAAA0000000000000468 /* GamesRoomWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAAAAAA0000000000000116 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				AAAAAAAA0000000000000469 /* GamesRoomWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectorySparkline.swift; sourceTree = "<group>"; };
@@ -166,6 +212,12 @@
 		AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSystemEvent.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000045A /* EventRound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRound.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000045E /* CatchUpMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatchUpMessage.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000460 /* GamesRoomWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GamesRoomWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAAAAAAA0000000000000461 /* GamesRoomWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GamesRoomWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAAAAAAA0000000000000462 /* GamesRoomWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomWidgets.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000463 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomWatchApp.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000465 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
@@ -190,6 +242,8 @@
 			isa = PBXGroup;
 			children = (
 				AAAAAAAA00000000000000F7 /* GamesRoom */,
+				AAAAAAAA000000000000046A /* GamesRoomWidgets */,
+				AAAAAAAA000000000000046B /* GamesRoomWatch */,
 				AAAAAAAA00000000000000F8 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -217,8 +271,28 @@
 			isa = PBXGroup;
 			children = (
 				AAAAAAAA0000000000000437 /* GamesRoom.app */,
+				AAAAAAAA0000000000000460 /* GamesRoomWidgets.appex */,
+				AAAAAAAA0000000000000461 /* GamesRoomWatch.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA000000000000046A /* GamesRoomWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000462 /* GamesRoomWidgets.swift */,
+				AAAAAAAA0000000000000463 /* Info.plist */,
+			);
+			path = GamesRoomWidgets;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA000000000000046B /* GamesRoomWatch */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */,
+				AAAAAAAA0000000000000465 /* Info.plist */,
+			);
+			path = GamesRoomWatch;
 			sourceTree = "<group>";
 		};
 		AAAAAAAA00000000000000F9 /* Models */ = {
@@ -342,10 +416,14 @@
 				AAAAAAAA00000000000000FF /* Sources */,
 				AAAAAAAA00000000000000F5 /* Frameworks */,
 				AAAAAAAA0000000000000100 /* Resources */,
+				AAAAAAAA0000000000000115 /* Embed Foundation Extensions */,
+				AAAAAAAA0000000000000116 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AAAAAAAA0000000000000118 /* PBXTargetDependency */,
+				AAAAAAAA000000000000011A /* PBXTargetDependency */,
 			);
 			name = GamesRoom;
 			packageProductDependencies = (
@@ -354,6 +432,40 @@
 			productName = GamesRoom;
 			productReference = AAAAAAAA0000000000000437 /* GamesRoom.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AAAAAAAA0000000000000107 /* GamesRoomWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAAAAAAA0000000000000108 /* Build configuration list for PBXNativeTarget "GamesRoomWidgets" */;
+			buildPhases = (
+				AAAAAAAA0000000000000109 /* Sources */,
+				AAAAAAAA000000000000010A /* Frameworks */,
+				AAAAAAAA000000000000010B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GamesRoomWidgets;
+			productName = GamesRoomWidgets;
+			productReference = AAAAAAAA0000000000000460 /* GamesRoomWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		AAAAAAAA000000000000010E /* GamesRoomWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAAAAAAA000000000000010F /* Build configuration list for PBXNativeTarget "GamesRoomWatch" */;
+			buildPhases = (
+				AAAAAAAA0000000000000110 /* Sources */,
+				AAAAAAAA0000000000000111 /* Frameworks */,
+				AAAAAAAA0000000000000112 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GamesRoomWatch;
+			productName = GamesRoomWatch;
+			productReference = AAAAAAAA0000000000000461 /* GamesRoomWatch.app */;
+			productType = "com.apple.product-type.application.watchapp2";
 		};
 /* End PBXNativeTarget section */
 
@@ -392,9 +504,24 @@
 			projectRoot = "";
 			targets = (
 				AAAAAAAA00000000000000FD /* GamesRoom */,
+				AAAAAAAA0000000000000107 /* GamesRoomWidgets */,
+				AAAAAAAA000000000000010E /* GamesRoomWatch */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXTargetDependency section */
+		AAAAAAAA0000000000000118 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAAAAAAA0000000000000107 /* GamesRoomWidgets */;
+			targetProxy = AAAAAAAA0000000000000117 /* PBXContainerItemProxy */;
+		};
+		AAAAAAAA000000000000011A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAAAAAAA000000000000010E /* GamesRoomWatch */;
+			targetProxy = AAAAAAAA0000000000000119 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		AAAAAAAA0000000000000100 /* Resources */ = {
@@ -405,9 +532,56 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AAAAAAAA000000000000010B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAAAAAA0000000000000112 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		AAAAAAAA000000000000010A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAAAAAA0000000000000111 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
+		AAAAAAAA0000000000000109 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAAAAAA0000000000000466 /* GamesRoomWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAAAAAA0000000000000110 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAAAAAA0000000000000467 /* GamesRoomWatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AAAAAAAA00000000000000FF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -700,9 +874,125 @@
 			};
 			name = Release;
 		};
+		AAAAAAAA000000000000010C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 37S7KT7W83;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GamesRoomWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gamesroom.app.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AAAAAAAA000000000000010D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 37S7KT7W83;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GamesRoomWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gamesroom.app.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AAAAAAAA0000000000000113 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 37S7KT7W83;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GamesRoomWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gamesroom.app.watch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Debug;
+		};
+		AAAAAAAA0000000000000114 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 37S7KT7W83;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GamesRoomWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gamesroom.app.watch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AAAAAAAA0000000000000108 /* Build configuration list for PBXNativeTarget "GamesRoomWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAAAAAAA000000000000010C /* Debug */,
+				AAAAAAAA000000000000010D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAAAAAAA000000000000010F /* Build configuration list for PBXNativeTarget "GamesRoomWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAAAAAAA0000000000000113 /* Debug */,
+				AAAAAAAA0000000000000114 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AAAAAAAA00000000000000FE /* Build configuration list for PBXNativeTarget "GamesRoom" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

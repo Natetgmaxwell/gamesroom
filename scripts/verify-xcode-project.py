@@ -7,6 +7,10 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "GamesRoom.xcodeproj" / "project.pbxproj"
 SOURCE_ROOT = ROOT / "GamesRoom"
+# W2.3 — the widget extension + watch app targets live outside the
+# main app source root. Scan them too so their files are verified
+# against the pbxproj like the app's are.
+EXTRA_SOURCE_ROOTS = [ROOT / "GamesRoomWidgets", ROOT / "GamesRoomWatch"]
 
 errors: list[str] = []
 text = PROJECT.read_text()
@@ -18,8 +22,9 @@ file_reference_pattern = re.compile(
 path_pattern = re.compile(r"\bpath = (?P<path>[^;]+);")
 source_files_by_name: dict[str, list[Path]] = {}
 
-for source_file in SOURCE_ROOT.rglob("*.swift"):
-    source_files_by_name.setdefault(source_file.name, []).append(source_file)
+for source_root in [SOURCE_ROOT, *EXTRA_SOURCE_ROOTS]:
+    for source_file in source_root.rglob("*.swift"):
+        source_files_by_name.setdefault(source_file.name, []).append(source_file)
 
 referenced_swift_files: set[str] = set()
 for match in file_reference_pattern.finditer(text):
