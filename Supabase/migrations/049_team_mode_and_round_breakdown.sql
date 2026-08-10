@@ -124,6 +124,7 @@ returns table (
 language sql
 security definer
 stable
+set search_path = public
 as $$
   select m.user_id, u.display_name, m.role::text,
          m.points_balance, m.season_score, m.team
