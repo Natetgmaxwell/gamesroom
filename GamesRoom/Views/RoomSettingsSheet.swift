@@ -604,8 +604,8 @@ struct RoomSettingsOperationsSheet: View {
 
 /// M2.2 — Members section. Loads the room's members on appear;
 /// the host sees role + display name without leaving settings.
-/// The sub-sheet is read-only for V0.8; per-member controls
-/// (blacklist, role mutation) ship in V0.9.
+/// W1.6 — hosts can assign a team label per member (F-MVP-05
+/// V2-full, migration 049); members see the roster read-only.
 struct RoomSettingsMembersSheet: View {
     let room: Room
 
@@ -613,6 +613,10 @@ struct RoomSettingsMembersSheet: View {
 
     @State private var roster: [Member] = []
     @State private var isRosterLoading: Bool = false
+
+    private var isHost: Bool {
+        room.userRole == .host
+    }
 
     var body: some View {
         Form {
@@ -631,18 +635,15 @@ struct RoomSettingsMembersSheet: View {
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 } else {
                     ForEach(roster, id: \.id) { member in
-                        HStack {
-                            Text(member.displayName)
-                                .font(Theme.Typography.body)
-                                .foregroundStyle(Theme.Palette.primaryText)
-                            Spacer()
-                            Text(member.role == .host ? "Host" : "Member")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(member.role == .host
-                                                 ? Theme.Palette.accent
-                                                 : Theme.Palette.primaryText.opacity(0.55))
-                        }
+                        memberRow(member)
                     }
+                }
+            }
+            if isHost {
+                Section {
+                    Text("Team labels group members on the leaderboard for the season. Leave blank to clear.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
             }
         }
@@ -654,6 +655,78 @@ struct RoomSettingsMembersSheet: View {
             isRosterLoading = true
             defer { isRosterLoading = false }
             roster = await roomService.loadRoomMembers(roomId: room.id)
+        }
+    }
+
+    @ViewBuilder
+    private func memberRow(_ member: Member) -> some View {
+        if isHost && member.role != .host {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(member.displayName)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Text("Member")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+                Spacer()
+                TextField("Team", text: teamBinding(for: member))
+                    .font(Theme.Typography.caption)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 120)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    .onSubmit {
+                        Task { await commitTeam(member) }
+                    }
+            }
+        } else {
+            HStack {
+                Text(member.displayName)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Spacer()
+                Text(member.role == .host ? "Host" : "Member")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(member.role == .host
+                                     ? Theme.Palette.accent
+                                     : Theme.Palette.primaryText.opacity(0.55))
+            }
+        }
+    }
+
+    /// Local editable copy of the member's team label. The roster
+    /// cache is the source of truth; the field commits on submit.
+    private func teamBinding(for member: Member) -> Binding<String> {
+        Binding(
+            get: { member.team ?? "" },
+            set: { newValue in
+                if let idx = roster.firstIndex(where: { $0.userId == member.userId }) {
+                    roster[idx] = Member(
+                        id: roster[idx].id,
+                        roomId: roster[idx].roomId,
+                        userId: roster[idx].userId,
+                        role: roster[idx].role,
+                        joinedAt: roster[idx].joinedAt,
+                        lastSeenAt: roster[idx].lastSeenAt,
+                        displayName: roster[idx].displayName,
+                        socialPreference: roster[idx].socialPreference,
+                        team: newValue.isEmpty ? nil : newValue
+                    )
+                }
+            }
+        )
+    }
+
+    private func commitTeam(_ member: Member) async {
+        let team = member.team
+        do {
+            try await roomService.setMemberTeam(roomId: room.id, memberId: member.userId, team: team)
+        } catch {
+            // Service already populated lastError; the field keeps
+            // the local value so the host can retry.
+            _ = error
         }
     }
 }

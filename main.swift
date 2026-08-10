@@ -713,6 +713,84 @@ runner.run("RoomPackConfig id is stable composite of room + pack") {
     runner.assertEqual(config.id, "\(roomId.uuidString):casino")
 }
 
+// MARK: - EventRound + Member.team (W1.6 — team mode + per-round breakdown)
+
+runner.run("EventRound decodes server shape with entries array") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "pack_slug": "cards_against_humanity",
+      "round_index": 2,
+      "entries": [
+        {"member_id": "44444444-4444-4444-4444-444444444444", "points_delta": 1, "meta": {"winner": true, "round_index": 2}},
+        {"member_id": "55555555-5555-5555-5555-555555555555", "points_delta": 1, "meta": {"winner": true, "round_index": 2}}
+      ],
+      "created_by": "66666666-6666-6666-6666-666666666666",
+      "created_at": "2026-08-10T12:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(EventRound.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.roundIndex, 2)
+    runner.assertEqual(decoded.packSlug, "cards_against_humanity")
+    runner.assertEqual(decoded.entries.count, 2)
+    runner.assertEqual(decoded.entries.first?.pointsDelta, 1)
+    runner.assertEqual(decoded.entries.first?.memberId, UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
+}
+
+runner.run("EventRound defaults missing entries to empty") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "pack_slug": "pluto_chess",
+      "round_index": 1,
+      "created_by": "66666666-6666-6666-6666-666666666666",
+      "created_at": "2026-08-10T12:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(EventRound.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.entries.count, 0)
+    runner.assertEqual(decoded.roundIndex, 1)
+}
+
+runner.run("Member decodes team column and defaults to nil") {
+    let json = """
+    {
+      "id": "33333333-3333-3333-3333-333333333333:44444444-4444-4444-4444-444444444444",
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "user_id": "44444444-4444-4444-4444-444444444444",
+      "role": "member",
+      "joined_at": "2026-08-01T12:00:00Z",
+      "display_name": "Alex",
+      "team": "Red"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(Member.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.team, "Red")
+
+    let noTeam = """
+    {
+      "id": "33333333-3333-3333-3333-333333333333:44444444-4444-4444-4444-444444444444",
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "user_id": "44444444-4444-4444-4444-444444444444",
+      "role": "member",
+      "joined_at": "2026-08-01T12:00:00Z",
+      "display_name": "Alex"
+    }
+    """
+    let decodedNoTeam = try decoder.decode(Member.self, from: noTeam.data(using: .utf8)!)
+    runner.assertEqual(decodedNoTeam.team, nil)
+}
+
 // MARK: - CasinoWithdrawal (W1.4 — settle-sheet withdrawal wiring)
 
 runner.run("CasinoWithdrawal decodes server shape with points_withdrawn") {

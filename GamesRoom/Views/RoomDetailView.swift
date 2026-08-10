@@ -146,6 +146,14 @@ struct RoomDetailView: View {
                     )
                     .sectionCard(.standard)
                 }
+                if let event = activeEvent,
+                   !roomService.cachedEventRounds(eventId: event.id).isEmpty {
+                    RoundBreakdownSection(
+                        rounds: roomService.cachedEventRounds(eventId: event.id),
+                        members: roomService.cachedMembers(roomId: room.id)
+                    )
+                    .sectionCard(.standard)
+                }
                 PackShelfReadOnly(room: room)
                     .sectionCard(.standard)
                 MemberRosterReadOnly(room: room)
@@ -503,7 +511,16 @@ struct RoomDetailView: View {
         async let rsvpGridLoad: () = loadRSVPGridIfNeeded()
         async let packConfigLoad: () = loadPackConfigsIfNeeded()
         async let packsLoad: [String] = roomService.loadRoomPacks(roomId: room.id)
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad)
+        async let roundsLoad: () = loadRoundsIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad)
+    }
+
+    /// Loads the per-round breakdown for the active event so the
+    /// leaderboard's round history renders. No-op when there's no
+    /// active event.
+    private func loadRoundsIfNeeded() async {
+        guard let event = activeEvent else { return }
+        await roomService.loadEventRounds(eventId: event.id)
     }
 
     /// Loads the per-member RSVP rows for the active event so the
@@ -1437,6 +1454,66 @@ private struct StandingsSection: View {
         if entry.isHost { return 0 }
         let nonHostCount = entries.prefix(while: { $0.id != entry.id }).filter { !$0.isHost }.count
         return nonHostCount + 1
+    }
+}
+
+// MARK: - Round breakdown (F-MVP-05 V2-full, W1.6)
+
+/// Per-round history for the active event, rendered under the
+/// leaderboard. One row per `round_submissions` entry (migration
+/// 035), read through `get_event_rounds` (migration 049). Each
+/// round shows the pack, the round index, and the per-member
+/// deltas the host submitted.
+private struct RoundBreakdownSection: View {
+    let rounds: [EventRound]
+    let members: [Member]
+
+    private var memberNameById: [UUID: String] {
+        Dictionary(uniqueKeysWithValues: members.map { ($0.userId, $0.displayName) })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Round history")
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.primaryText)
+
+            ForEach(rounds) { round in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Round \(round.roundIndex)")
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.primaryText)
+                        Spacer()
+                        Text(round.packSlug.replacingOccurrences(of: "_", with: " "))
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                    ForEach(round.entries, id: \.id) { entry in
+                        HStack {
+                            Text(memberNameById[entry.memberId] ?? "Member")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                            Spacer()
+                            Text(deltaText(entry.pointsDelta))
+                                .font(Theme.Typography.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(entry.pointsDelta >= 0
+                                    ? Theme.Palette.accent
+                                    : Theme.Palette.primaryText.opacity(0.6))
+                        }
+                    }
+                }
+                .padding(.vertical, 6)
+                if round.id != rounds.last?.id {
+                    Divider().overlay(Theme.Palette.hairline)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func deltaText(_ delta: Int64) -> String {
+        delta >= 0 ? "+\(delta)" : "\(delta)"
     }
 }
 

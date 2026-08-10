@@ -36,6 +36,10 @@ struct Member: Identifiable, Codable, Hashable {
     /// UI surfaces the default value at write time, not at read.
     let socialPreference: SocialPreference
 
+    /// Host-assigned team label for the season (F-MVP-05 V2-full,
+    /// migration 049). `nil` = unassigned.
+    let team: String?
+
     enum CodingKeys: String, CodingKey {
         case id
         case roomId = "room_id"
@@ -45,6 +49,7 @@ struct Member: Identifiable, Codable, Hashable {
         case lastSeenAt = "last_seen_at"
         case displayName = "display_name"
         case socialPreference = "social_preference"
+        case team
     }
 
     init(
@@ -55,7 +60,8 @@ struct Member: Identifiable, Codable, Hashable {
         joinedAt: Date,
         lastSeenAt: Date? = nil,
         displayName: String,
-        socialPreference: SocialPreference = .empty
+        socialPreference: SocialPreference = .empty,
+        team: String? = nil
     ) {
         self.id = id
         self.roomId = roomId
@@ -65,6 +71,7 @@ struct Member: Identifiable, Codable, Hashable {
         self.lastSeenAt = lastSeenAt
         self.displayName = displayName
         self.socialPreference = socialPreference
+        self.team = team
     }
 
     init(from decoder: Decoder) throws {
@@ -77,5 +84,6 @@ struct Member: Identifiable, Codable, Hashable {
         lastSeenAt = try c.decodeIfPresent(Date.self, forKey: .lastSeenAt)
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? "Member"
         socialPreference = try c.decodeIfPresent(SocialPreference.self, forKey: .socialPreference) ?? .empty
+        team = try c.decodeIfPresent(String.self, forKey: .team)
     }
 }

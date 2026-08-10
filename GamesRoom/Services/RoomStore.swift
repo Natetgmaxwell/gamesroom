@@ -135,6 +135,19 @@ protocol RoomStore: Sendable {
     /// Throws on RLS rejection (non-member read attempt).
     func fetchRoomMembers(roomId: UUID) async throws -> [Member]
 
+    /// Host-only. Assigns (or clears, with an empty string) a
+    /// member's team label for the season.
+    ///
+    /// Server side: `set_member_team(p_room_id, p_member_id, p_team)`
+    /// (migration 049).
+    func setMemberTeam(roomId: UUID, memberId: UUID, team: String?) async throws
+
+    /// The per-round submissions for one event, oldest round first.
+    /// Room scope derives from the event (F-IDENT-01).
+    ///
+    /// Server side: `get_event_rounds(p_event_id)` (migration 049).
+    func fetchEventRounds(eventId: UUID) async throws -> [EventRound]
+
     // MARK: Active event + briefing
 
     /// The room's currently-relevant event. Returns `nil` when the
@@ -418,6 +431,33 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         let rows: [Member] = try await SupabaseClientProvider.shared
             .rpc("get_room_members", params: [
                 "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
+    /// The live RPC `set_member_team(p_room_id, p_member_id, p_team)`
+    /// (migration 049) assigns a member's team label. Empty string
+    /// clears the assignment.
+    func setMemberTeam(roomId: UUID, memberId: UUID, team: String?) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_member_team", params: [
+                "p_room_id": roomId.uuidString,
+                "p_member_id": memberId.uuidString,
+                "p_team": team ?? ""
+            ])
+            .execute()
+            .value
+    }
+
+    /// The live RPC `get_event_rounds(p_event_id)` (migration 049)
+    /// returns the per-round submissions for one event, oldest round
+    /// first. Room scope derives from the event (F-IDENT-01).
+    func fetchEventRounds(eventId: UUID) async throws -> [EventRound] {
+        let rows: [EventRound] = try await SupabaseClientProvider.shared
+            .rpc("get_event_rounds", params: [
+                "p_event_id": eventId.uuidString
             ])
             .execute()
             .value
@@ -1255,6 +1295,23 @@ actor InMemoryRoomStore: RoomStore {
 
     func fetchActiveEvent(roomId: UUID) async throws -> Event? {
         return events[roomId]
+    }
+
+    /// In-memory mirror of `set_member_team` (migration 049).
+    /// No-op for the synthetic roster — the seeded members have no
+    /// team state to mutate, and previews don't need persistence.
+    func setMemberTeam(roomId: UUID, memberId: UUID, team: String?) async throws {
+        _ = roomId
+        _ = memberId
+        _ = team
+    }
+
+    /// In-memory mirror of `get_event_rounds` (migration 049).
+    /// Returns an empty breakdown — the seeded rooms have no
+    /// round_submissions rows.
+    func fetchEventRounds(eventId: UUID) async throws -> [EventRound] {
+        _ = eventId
+        return []
     }
 
     // MARK: Briefing

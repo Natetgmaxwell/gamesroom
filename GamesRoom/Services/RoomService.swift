@@ -134,6 +134,11 @@ final class RoomService: ObservableObject {
     /// and the host scoring sheet (2026-08-10 feedback round).
     @Published private(set) var packConfigsByRoom: [UUID: [RoomPackConfig]] = [:]
 
+    /// Per-event round submissions. Populated lazily by
+    /// `loadEventRounds(eventId:)`; consumed by the leaderboard's
+    /// per-round breakdown (F-MVP-05 V2-full, migration 049).
+    @Published private(set) var roundsByEvent: [UUID: [EventRound]] = [:]
+
     // MARK: - Rooms list
 
     /// Re-fetch the rooms list. Safe to call from `.task` and
@@ -331,6 +336,51 @@ final class RoomService: ObservableObject {
             self.lastError = error.localizedDescription
             return membersByRoom[roomId] ?? []
         }
+    }
+
+    /// Host-only. Assigns (or clears) a member's team label via the
+    /// `set_member_team` RPC (migration 049), then refreshes the
+    /// roster cache so the team grouping updates in place.
+    func setMemberTeam(roomId: UUID, memberId: UUID, team: String?) async throws {
+        try await store.setMemberTeam(roomId: roomId, memberId: memberId, team: team)
+        self.lastError = nil
+        if var roster = membersByRoom[roomId],
+           let idx = roster.firstIndex(where: { $0.userId == memberId }) {
+            roster[idx] = Member(
+                id: roster[idx].id,
+                roomId: roster[idx].roomId,
+                userId: roster[idx].userId,
+                role: roster[idx].role,
+                joinedAt: roster[idx].joinedAt,
+                lastSeenAt: roster[idx].lastSeenAt,
+                displayName: roster[idx].displayName,
+                socialPreference: roster[idx].socialPreference,
+                team: team
+            )
+            membersByRoom[roomId] = roster
+        }
+    }
+
+    /// Loads the per-round breakdown for one event into the cache.
+    /// Returns the cached value (possibly empty). Called from
+    /// `RoomDetailView` when the leaderboard's per-round section
+    /// renders.
+    @discardableResult
+    func loadEventRounds(eventId: UUID) async -> [EventRound] {
+        do {
+            let rows = try await store.fetchEventRounds(eventId: eventId)
+            self.roundsByEvent[eventId] = rows
+            self.lastError = nil
+            return rows
+        } catch {
+            self.lastError = error.localizedDescription
+            return roundsByEvent[eventId] ?? []
+        }
+    }
+
+    /// Cached per-round breakdown for one event, possibly empty.
+    func cachedEventRounds(eventId: UUID) -> [EventRound] {
+        roundsByEvent[eventId] ?? []
     }
 
     /// Loads the current member's RSVP for one event into the
