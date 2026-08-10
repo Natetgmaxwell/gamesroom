@@ -43,9 +43,11 @@ with the decision matrix below.
 3. Ran two detector variants over the corpus:
    - `rectangles`: `VNDetectRectanglesRequest` + hue classification +
      height-based count (the app's documented on-device approach).
-   - `segmentation`: chip-likeness mask (bright / dark / non-green
-     hue) → 3x3 dilation → connected components → vertical merge into
-     stacks → mean-hue/value classification → height-based count.
+   - `segmentation`: background-adaptive chip-likeness mask (table
+     color estimated from frame border; pixels beyond RGB distance
+     0.15 are chip-like) → 3x3 dilation → connected components →
+     deterministic vertical merge into stacks → mean-hue/value
+     classification → height-based count.
 4. Scored both with stack-level IoU >= 0.3 matching (PASCAL VOC).
 
 ## Results
