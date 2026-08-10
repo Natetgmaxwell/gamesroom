@@ -37,6 +37,8 @@
 		AAAAAAAA00000000000000A8 /* SocialPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000418 /* SocialPreference.swift */; };
 		AAAAAAAA00000000000000AA /* MemberRSVPState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000419 /* MemberRSVPState.swift */; };
 		AAAAAAAA00000000000000AC /* MemberRSVP.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041A /* MemberRSVP.swift */; };
+		AAAAAAAA0000000000000451 /* EventRSVP.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000452 /* EventRSVP.swift */; };
+		AAAAAAAA0000000000000453 /* RoomPackConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000454 /* RoomPackConfig.swift */; };
 		AAAAAAAA00000000000000AE /* MascotPersonality.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041B /* MascotPersonality.swift */; };
 		AAAAAAAA00000000000000B0 /* MascotPoliticalIdeology.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */; };
 		AAAAAAAA00000000000000B2 /* Event.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000041D /* Event.swift */; };
@@ -110,6 +112,8 @@
 		AAAAAAAA0000000000000418 /* SocialPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialPreference.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000419 /* MemberRSVPState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRSVPState.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041A /* MemberRSVP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRSVP.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000452 /* EventRSVP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRSVP.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000454 /* RoomPackConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPackConfig.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041B /* MascotPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPersonality.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPoliticalIdeology.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041D /* Event.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Event.swift; sourceTree = "<group>"; };
@@ -217,6 +221,8 @@
 				AAAAAAAA0000000000000418 /* SocialPreference.swift */,
 				AAAAAAAA0000000000000419 /* MemberRSVPState.swift */,
 				AAAAAAAA000000000000041A /* MemberRSVP.swift */,
+				AAAAAAAA0000000000000452 /* EventRSVP.swift */,
+				AAAAAAAA0000000000000454 /* RoomPackConfig.swift */,
 				AAAAAAAA000000000000041B /* MascotPersonality.swift */,
 				AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */,
 				AAAAAAAA000000000000041D /* Event.swift */,
@@ -419,6 +425,8 @@
 				AAAAAAAA00000000000000A8 /* SocialPreference.swift in Sources */,
 				AAAAAAAA00000000000000AA /* MemberRSVPState.swift in Sources */,
 				AAAAAAAA00000000000000AC /* MemberRSVP.swift in Sources */,
+				AAAAAAAA0000000000000451 /* EventRSVP.swift in Sources */,
+				AAAAAAAA0000000000000453 /* RoomPackConfig.swift in Sources */,
 				AAAAAAAA00000000000000AE /* MascotPersonality.swift in Sources */,
 				AAAAAAAA00000000000000B0 /* MascotPoliticalIdeology.swift in Sources */,
 				AAAAAAAA00000000000000B2 /* Event.swift in Sources */,

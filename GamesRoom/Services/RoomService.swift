@@ -124,6 +124,16 @@ final class RoomService: ObservableObject {
     /// are kept.
     @Published private(set) var systemEventsByRoom: [UUID: [RoomSystemEvent]] = [:]
 
+    /// Per-member RSVP rows per event. Populated lazily by
+    /// `loadEventRSVPs(eventId:)`; consumed by the briefing slot's
+    /// seat grid (2026-08-10 feedback round).
+    @Published private(set) var eventRSVPsByEvent: [UUID: [EventRSVP]] = [:]
+
+    /// Per-room pack payout overrides. Populated lazily by
+    /// `loadRoomPackConfigs(roomId:)`; consumed by the pack shelf
+    /// and the host scoring sheet (2026-08-10 feedback round).
+    @Published private(set) var packConfigsByRoom: [UUID: [RoomPackConfig]] = [:]
+
     // MARK: - Rooms list
 
     /// Re-fetch the rooms list. Safe to call from `.task` and
@@ -571,6 +581,74 @@ final class RoomService: ObservableObject {
         } catch {
             self.lastError = (error as NSError).localizedDescription
         }
+    }
+
+    // MARK: - Seat-grid RSVP read (2026-08-10 feedback round)
+
+    /// Loads the per-member RSVP rows for one event into the cache.
+    /// Called from `RoomDetailView.task` alongside the briefing
+    /// load so the seat grid renders with real claim data.
+    @discardableResult
+    func loadEventRSVPs(eventId: UUID) async -> [EventRSVP] {
+        do {
+            let rows = try await store.fetchEventRSVPs(eventId: eventId)
+            self.eventRSVPsByEvent[eventId] = rows
+            self.lastError = nil
+            return rows
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return eventRSVPsByEvent[eventId] ?? []
+        }
+    }
+
+    /// Cached per-member RSVP rows for `eventId`, possibly empty.
+    func cachedEventRSVPs(eventId: UUID) -> [EventRSVP] {
+        eventRSVPsByEvent[eventId] ?? []
+    }
+
+    // MARK: - Per-room pack payouts (2026-08-10 feedback round)
+
+    /// Loads the room's pack payout overrides into the cache.
+    /// Called from `RoomDetailView.task` so the pack shelf and the
+    /// host scoring sheet read the configured payouts.
+    @discardableResult
+    func loadRoomPackConfigs(roomId: UUID) async -> [RoomPackConfig] {
+        do {
+            let rows = try await store.fetchRoomPackConfigs(roomId: roomId)
+            self.packConfigsByRoom[roomId] = rows
+            self.lastError = nil
+            return rows
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return packConfigsByRoom[roomId] ?? []
+        }
+    }
+
+    /// Cached payout overrides for `roomId`, possibly empty.
+    func cachedRoomPackConfigs(roomId: UUID) -> [RoomPackConfig] {
+        packConfigsByRoom[roomId] ?? []
+    }
+
+    /// The effective win points for a pack in a room: the room's
+    /// override when one exists, otherwise the pack's static
+    /// default. Used by the pack shelf and the host scoring sheet.
+    func effectiveWinPoints(roomId: UUID, packSlug: String) -> Int {
+        if let config = packConfigsByRoom[roomId]?.first(where: { $0.packSlug == packSlug }) {
+            return config.winPoints
+        }
+        return PackRegistry.shared.winPoints(for: packSlug)
+    }
+
+    /// Host-only upsert of one pack's payout for a room. Mirrors
+    /// the override into the cache so the shelf updates without a
+    /// manual refresh. Throws on non-host writes.
+    func setRoomPackConfig(roomId: UUID, packSlug: String, winPoints: Int) async throws {
+        try await store.setRoomPackConfig(roomId: roomId, packSlug: packSlug, winPoints: winPoints)
+        var configs = packConfigsByRoom[roomId] ?? []
+        configs.removeAll { $0.packSlug == packSlug }
+        configs.append(RoomPackConfig(roomId: roomId, packSlug: packSlug, winPoints: winPoints))
+        self.packConfigsByRoom[roomId] = configs
+        self.lastError = nil
     }
 
     // MARK: - Drowning opt-in (V0.9 Wave 1 Slice 1.1)

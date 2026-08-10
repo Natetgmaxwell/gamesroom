@@ -171,6 +171,7 @@ struct RoomPage: View {
                                 Spacer()
                             }
                             .padding(.vertical, Theme.Layout.cardInset)
+                            .padding(.horizontal, Theme.Layout.edgePadding)
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture().onEnded {

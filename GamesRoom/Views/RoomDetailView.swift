@@ -361,11 +361,22 @@ struct RoomDetailView: View {
                 onDecline: { Task { await declineSeat(eventId: event.id) } },
                 onReAccept: { Task { await claimSeat(eventId: event.id) } },
                 onReDecline: { Task { await declineSeat(eventId: event.id) } },
+                rsvps: roomService.cachedEventRSVPs(eventId: event.id),
+                currentUserId: currentUserId,
                 isHero: true
             )
         case .claimed(let event):
-            BriefingSlot(event: event, briefing: briefing, myRSVP: .claimed,
-                         onClaim: {}, onDecline: {}, isHero: true)
+            BriefingSlot(
+                event: event,
+                briefing: briefing,
+                myRSVP: .claimed,
+                onClaim: {},
+                onDecline: {},
+                onRelease: { Task { await releaseSeat(eventId: event.id) } },
+                rsvps: roomService.cachedEventRSVPs(eventId: event.id),
+                currentUserId: currentUserId,
+                isHero: true
+            )
         case .declined(let event):
             // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
             // member who previously declined can change their mind.
@@ -379,6 +390,8 @@ struct RoomDetailView: View {
                 onDecline: {},
                 onReAccept: { Task { await claimSeat(eventId: event.id) } },
                 onReDecline: { Task { await declineSeat(eventId: event.id) } },
+                rsvps: roomService.cachedEventRSVPs(eventId: event.id),
+                currentUserId: currentUserId,
                 isHero: true
             )
 
@@ -480,7 +493,24 @@ struct RoomDetailView: View {
         async let seasonLoad: () = loadSeasonIfNeeded()
         async let withdrawalLoad: () = loadMyOpenWithdrawalIfNeeded()
         async let eventsLoad: [RoomSystemEvent] = roomService.loadSystemEvents(roomId: room.id)
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad)
+        async let rsvpGridLoad: () = loadRSVPGridIfNeeded()
+        async let packConfigLoad: () = loadPackConfigsIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad)
+    }
+
+    /// Loads the per-member RSVP rows for the active event so the
+    /// briefing slot's seat grid renders claimed chairs. No-op when
+    /// there's no active event.
+    private func loadRSVPGridIfNeeded() async {
+        guard let event = activeEvent else { return }
+        await roomService.loadEventRSVPs(eventId: event.id)
+    }
+
+    /// Loads the room's pack payout overrides so the pack shelf
+    /// shows configured payouts and the host scoring sheet uses
+    /// them.
+    private func loadPackConfigsIfNeeded() async {
+        await roomService.loadRoomPackConfigs(roomId: room.id)
     }
 
     /// Loads the room's current season and (if present) its awards.
@@ -569,6 +599,19 @@ struct RoomDetailView: View {
     private func declineSeat(eventId: UUID) async {
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .declined)
+        } catch {
+            // Service already populated lastError; nothing to do here.
+            _ = error
+        }
+    }
+
+    /// 2026-08-10 feedback round — releases a claimed seat by
+    /// flipping the RSVP back to `.unclaimed`, returning the seat to
+    /// the open pool. Same RPC as claim/decline; the server treats
+    /// `.unclaimed` as "no response" so the seat counts as open.
+    private func releaseSeat(eventId: UUID) async {
+        do {
+            _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .unclaimed)
         } catch {
             // Service already populated lastError; nothing to do here.
             _ = error
@@ -668,6 +711,15 @@ private struct BriefingSlot: View {
     /// only when the parent passes non-nil callbacks.
     let onReAccept: (() -> Void)?
     let onReDecline: (() -> Void)?
+    /// 2026-08-10 feedback round - when the member has claimed a
+    /// seat, this releases it (flips the RSVP back to `.unclaimed`).
+    /// Wired up only when the parent passes a non-nil callback.
+    let onRelease: (() -> Void)?
+    /// Per-member RSVP rows for the event, driving the seat grid.
+    /// Empty until the parent's load resolves.
+    let rsvps: [EventRSVP]
+    /// The current user's id, so the grid can mark their seat.
+    let currentUserId: UUID?
     let isHero: Bool
 
     init(
@@ -678,6 +730,9 @@ private struct BriefingSlot: View {
         onDecline: @escaping () -> Void,
         onReAccept: (() -> Void)? = nil,
         onReDecline: (() -> Void)? = nil,
+        onRelease: (() -> Void)? = nil,
+        rsvps: [EventRSVP] = [],
+        currentUserId: UUID? = nil,
         isHero: Bool
     ) {
         self.event = event
@@ -687,6 +742,9 @@ private struct BriefingSlot: View {
         self.onDecline = onDecline
         self.onReAccept = onReAccept
         self.onReDecline = onReDecline
+        self.onRelease = onRelease
+        self.rsvps = rsvps
+        self.currentUserId = currentUserId
         self.isHero = isHero
     }
 
@@ -717,6 +775,17 @@ private struct BriefingSlot: View {
                 BriefingSeatCount(summary: briefing)
             }
 
+            // 2026-08-10 feedback round — the seat grid is the
+            // "chairs coloured in" visual indicator: claimed seats
+            // render filled with the member's initial, open seats
+            // render as outline chairs, the current user's seat is
+            // highlighted. Renders once the per-member RSVP rows
+            // have loaded.
+            if !rsvps.isEmpty {
+                SeatGridRow(rsvps: rsvps, currentUserId: currentUserId)
+                    .padding(.top, 4)
+            }
+
             switch myRSVP {
             case .unclaimed:
                 HStack(spacing: 12) {
@@ -741,12 +810,28 @@ private struct BriefingSlot: View {
                 .padding(.top, 8)
 
             case .claimed:
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Theme.Palette.accent)
-                    Text("You're in.")
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Theme.Palette.accent)
+                        Text("You're in.")
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.accent)
+                    }
+                    // 2026-08-10 feedback round — a claimed seat is
+                    // not terminal: the member can release it and
+                    // the seat returns to the open pool.
+                    if let onRelease {
+                        Button(action: onRelease) {
+                            Text("Release my seat")
+                                .font(Theme.Typography.body)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.top, 8)
 
@@ -838,6 +923,89 @@ private struct BriefingSeatCount: View {
             Spacer()
         }
         .padding(.top, 4)
+    }
+}
+
+// MARK: - Seat grid row (2026-08-10 feedback round)
+
+/// The "chairs coloured in" seat indicator on the briefing slot.
+/// One cell per room member: claimed seats render a filled chair
+/// with the member's initial, open seats render an outline chair,
+/// and the current user's seat is highlighted with the brass
+/// accent. The grid adapts its column count to the seat total so
+/// 4, 6, and 8-seat tables all read cleanly.
+private struct SeatGridRow: View {
+    let rsvps: [EventRSVP]
+    let currentUserId: UUID?
+
+    private var columns: [GridItem] {
+        let count = max(2, min(4, rsvps.count))
+        return Array(
+            repeating: GridItem(.flexible(), spacing: 8),
+            count: count
+        )
+    }
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(rsvps) { rsvp in
+                seatCell(rsvp)
+            }
+        }
+    }
+
+    private func seatCell(_ rsvp: EventRSVP) -> some View {
+        let isYours = rsvp.memberId == currentUserId
+        let isClaimed = rsvp.state == .claimed
+        return VStack(spacing: 3) {
+            Image(systemName: isClaimed ? Theme.Icon.chairFill : Theme.Icon.chair)
+                .font(Theme.Typography.body)
+                .foregroundStyle(isClaimed
+                    ? (isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
+                    : Theme.Palette.primaryText.opacity(0.3))
+            if isClaimed {
+                Text(initial(for: rsvp.displayName))
+                    .font(Theme.Typography.footnote.weight(.semibold))
+                    .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
+                    .lineLimit(1)
+            } else {
+                Text("open")
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 52)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isClaimed
+                    ? (isYours ? Theme.Palette.accent.opacity(0.16) : Theme.Palette.surface)
+                    : Theme.Palette.surface.opacity(0.5))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isClaimed
+                    ? (isYours ? Theme.Palette.accent : Theme.Palette.hairline)
+                    : Theme.Palette.hairline.opacity(0.6),
+                    lineWidth: isYours && isClaimed ? 1.0 : 0.5)
+        )
+        .accessibilityElement()
+        .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
+    }
+
+    private func initial(for name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first else { return "·" }
+        return String(first).uppercased()
+    }
+
+    private func accessibilityLabel(for rsvp: EventRSVP) -> String {
+        let isYours = rsvp.memberId == currentUserId
+        let owner = isYours ? "your seat" : "\(rsvp.displayName)'s seat"
+        switch rsvp.state {
+        case .claimed:   return "\(owner), claimed"
+        case .declined:  return "\(owner), declined"
+        case .unclaimed: return "\(owner), open"
+        }
     }
 }
 
@@ -1268,6 +1436,12 @@ private struct StandingsSection: View {
 
 private struct PackShelfReadOnly: View {
     let room: Room
+    @EnvironmentObject private var roomService: RoomService
+
+    /// 2026-08-10 feedback round — the pack the host tapped to edit
+    /// its payout. nil = no editor presented.
+    @State private var payoutPack: (any PackDefinition.Type)?
+
     /// The four V0.8 packs from `PackRegistry.shared`. Each tile
     /// renders name + icon + description; tapping the tile opens a
     /// how-to guide placeholder (per the brief: "an entry point to
@@ -1276,6 +1450,10 @@ private struct PackShelfReadOnly: View {
     /// is in place.
     private var packs: [any PackDefinition.Type] {
         PackRegistry.shared.allPacks
+    }
+
+    private var isHost: Bool {
+        room.userRole == .host
     }
 
     var body: some View {
@@ -1306,14 +1484,28 @@ private struct PackShelfReadOnly: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(item: Binding<AnyPackType?>(
+            get: { payoutPack.map(AnyPackType.init) },
+            set: { payoutPack = $0?.type }
+        )) { wrapped in
+            PackPayoutSheet(
+                roomId: room.id,
+                pack: wrapped.type,
+                currentPoints: roomService.effectiveWinPoints(roomId: room.id, packSlug: wrapped.type.slug),
+                onSave: { points in
+                    Task { await savePayout(packSlug: wrapped.type.slug, points: points) }
+                }
+            )
+            .environmentObject(roomService)
+        }
     }
 
     private func packRow(_ pack: any PackDefinition.Type) -> some View {
-        // M2.1 — pack rows are read-only display only. The
-        // chevron + tap affordance are dropped per the Track E
-        // verdict ("DROP the pack-row trigger"). The how-to
-        // body is V0.9; until then, the row shows the pack's
-        // name + description as static metadata for the room.
+        // 2026-08-10 feedback round — the pack row is now the
+        // payout surface: hosts tap a pack to edit how much a win
+        // pays out; members see the configured payout as a caption.
+        // The row shows the pack's name + description + the
+        // effective win points for single-winner packs.
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: pack.iconSystemName)
                 .font(Theme.Typography.title)
@@ -1327,13 +1519,100 @@ private struct PackShelfReadOnly: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     .lineLimit(2)
+                if pack.scoringType == .singleWinner {
+                    Text(payoutCaption(for: pack))
+                        .font(Theme.Typography.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                        .padding(.top, 2)
+                }
             }
             Spacer(minLength: 8)
+            if isHost {
+                Image(systemName: "slider.horizontal.3")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            }
         }
         .padding(.vertical, Theme.Layout.cardInset)
         .padding(.horizontal, Theme.Layout.edgePadding)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isHost else { return }
+            payoutPack = pack
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(pack.displayName) — \(pack.description)"))
+        .accessibilityHint(isHost ? Text("Tap to change how much a win pays out") : Text(""))
+    }
+
+    private func payoutCaption(for pack: any PackDefinition.Type) -> String {
+        let points = roomService.effectiveWinPoints(roomId: room.id, packSlug: pack.slug)
+        return points == 1 ? "1 pt per win" : "\(points) pts per win"
+    }
+
+    private func savePayout(packSlug: String, points: Int) async {
+        do {
+            try await roomService.setRoomPackConfig(roomId: room.id, packSlug: packSlug, winPoints: points)
+        } catch {
+            // Service already populated lastError; nothing to do here.
+            _ = error
+        }
+    }
+}
+
+// MARK: - Pack payout sheet (2026-08-10 feedback round)
+
+/// Host-only editor for one pack's per-room payout. A stepper over
+/// the win points; saving routes through
+/// `RoomService.setRoomPackConfig` (migration 047). Members never
+/// see this sheet — the shelf only opens it for hosts.
+private struct PackPayoutSheet: View {
+    let roomId: UUID
+    let pack: any PackDefinition.Type
+    let currentPoints: Int
+    let onSave: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var points: Int
+
+    init(roomId: UUID, pack: any PackDefinition.Type, currentPoints: Int, onSave: @escaping (Int) -> Void) {
+        self.roomId = roomId
+        self.pack = pack
+        self.currentPoints = currentPoints
+        self.onSave = onSave
+        _points = State(initialValue: currentPoints)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper("\(points) pts per win", value: $points, in: 0...1000, step: 5)
+                } header: {
+                    Text("Payout")
+                } footer: {
+                    Text("How many points a win pays out in this room. The default is \(PackRegistry.shared.winPoints(for: pack.slug)) pt(s); this overrides it for \(pack.displayName) only.")
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.Palette.background)
+            .navigationTitle(pack.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(points)
+                        dismiss()
+                    }
+                    .tint(Theme.Palette.accent)
+                }
+            }
+        }
+        .tint(Theme.Palette.accent)
     }
 }
 
@@ -1462,8 +1741,10 @@ private struct MascotFooterCaption: View {
         Text(caption)
             .font(Theme.Typography.caption.italic())
             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
-            .lineLimit(1)
-            .truncationMode(.tail)
+            // 2026-08-10 feedback round — the caption was cut off at
+            // one line. The mascot comment is the room's voice; let
+            // it wrap so the whole comment is readable.
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Theme.Layout.sectionSpacing)
     }

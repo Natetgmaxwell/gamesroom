@@ -263,6 +263,28 @@ protocol RoomStore: Sendable {
     /// for re-fetching the room so the in-memory cache reflects
     /// the new value.
     func setDrowningOptIn(roomId: UUID, optIn: Bool) async throws
+
+    // MARK: Seat-grid RSVP read (2026-08-10 feedback round)
+
+    /// One row per room member with their RSVP state for the
+    /// event, joined to the member's display name. Mirrors
+    /// `get_event_rsvps(p_event_id)` (migration 047). Powers the
+    /// briefing slot's seat grid — which chairs are claimed, by
+    /// whom, and which are open. Throws on non-member reads.
+    func fetchEventRSVPs(eventId: UUID) async throws -> [EventRSVP]
+
+    // MARK: Per-room pack payouts (2026-08-10 feedback round)
+
+    /// Returns the room's payout overrides for every pack that has
+    /// one. Mirrors `get_room_pack_configs(p_room_id)` (migration
+    /// 047). Packs without a row fall back to the pack's static
+    /// `winPoints` default.
+    func fetchRoomPackConfigs(roomId: UUID) async throws -> [RoomPackConfig]
+
+    /// Host-only upsert of one pack's payout for a room. Mirrors
+    /// `set_room_pack_config(p_room_id, p_pack_slug, p_win_points)`
+    /// (migration 047). Throws on non-host writes or unknown slugs.
+    func setRoomPackConfig(roomId: UUID, packSlug: String, winPoints: Int) async throws
 }
 
 // MARK: - LiveRoomStore
@@ -544,6 +566,51 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .value as Void
     }
 
+    // MARK: Seat-grid RSVP read (2026-08-10 feedback round)
+
+    /// The live RPC is `get_event_rsvps(p_event_id)` (migration
+    /// 047). Returns one row per room member with their RSVP state
+    /// joined to the member's display name, host first then
+    /// alphabetical. Throws on non-member reads.
+    func fetchEventRSVPs(eventId: UUID) async throws -> [EventRSVP] {
+        let rows: [EventRSVP] = try await SupabaseClientProvider.shared
+            .rpc("get_event_rsvps", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
+    // MARK: Per-room pack payouts (2026-08-10 feedback round)
+
+    /// The live RPC is `get_room_pack_configs(p_room_id)` (migration
+    /// 047). Returns the room's payout overrides; packs without a
+    /// row fall back to the pack's static `winPoints` default.
+    func fetchRoomPackConfigs(roomId: UUID) async throws -> [RoomPackConfig] {
+        let rows: [RoomPackConfig] = try await SupabaseClientProvider.shared
+            .rpc("get_room_pack_configs", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
+    /// The live RPC is `set_room_pack_config(p_room_id, p_pack_slug,
+    /// p_win_points)` (migration 047). Host-only; throws on
+    /// non-host writes or unknown slugs.
+    func setRoomPackConfig(roomId: UUID, packSlug: String, winPoints: Int) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_room_pack_config", params: [
+                "p_room_id": roomId.uuidString,
+                "p_pack_slug": packSlug,
+                "p_win_points": String(winPoints)
+            ])
+            .execute()
+            .value as Void
+    }
+
     // MARK: RSVP — read
 
     /// The live RPC is `get_my_event_rsvp(p_event_id)` (migration
@@ -761,6 +828,11 @@ actor InMemoryRoomStore: RoomStore {
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
 
+    /// Map of `roomId → payout overrides`. Empty when a room has
+    /// no overrides — callers fall back to the pack's static
+    /// `winPoints` default per the 2026-08-10 feedback round.
+    private var packConfigs: [UUID: [RoomPackConfig]]
+
     /// Map of `join_code → roomId` for the in-memory analogue of
     /// the `public.join_codes` table. Codes are minted by
     /// `generateJoinCode(roomId:)` and consumed (removed) by
@@ -904,6 +976,7 @@ actor InMemoryRoomStore: RoomStore {
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
         self.rsvps = [:]
+        self.packConfigs = [:]
         self.joinCodes = [:]
 
         // M1.1 — seed every room with an active season so the
@@ -1259,6 +1332,45 @@ actor InMemoryRoomStore: RoomStore {
         // layer re-fetches the room after this call so the new
         // value surfaces.
         _ = (roomId, optIn)
+    }
+
+    // MARK: Seat-grid RSVP read (2026-08-10 feedback round)
+
+    /// Synthesises one `EventRSVP` row per seeded member for the
+    /// event's room, layered over the in-memory `rsvps` map so a
+    /// claim/decline in the same process reflects immediately.
+    /// Members without an RSVP row read as `.unclaimed`.
+    func fetchEventRSVPs(eventId: UUID) async throws -> [EventRSVP] {
+        guard let event = events[eventId] else { return [] }
+        let members = try await fetchRoomMembers(roomId: event.roomId)
+        let states = rsvps[eventId] ?? [:]
+        return members.map { member in
+            EventRSVP(
+                eventId: eventId,
+                memberId: member.userId,
+                displayName: member.displayName,
+                state: states[member.userId] ?? .unclaimed
+            )
+        }
+    }
+
+    // MARK: Per-room pack payouts (2026-08-10 feedback round)
+
+    /// Returns the in-memory payout overrides for the room. The
+    /// store seeds no overrides — every pack falls back to its
+    /// static `winPoints` default until the host sets one.
+    func fetchRoomPackConfigs(roomId: UUID) async throws -> [RoomPackConfig] {
+        return packConfigs[roomId] ?? []
+    }
+
+    /// Stores the payout override in the in-memory map. Mirrors
+    /// the live RPC's upsert semantics: setting a value replaces
+    /// the previous override for that pack.
+    func setRoomPackConfig(roomId: UUID, packSlug: String, winPoints: Int) async throws {
+        var configs = packConfigs[roomId] ?? []
+        configs.removeAll { $0.packSlug == packSlug }
+        configs.append(RoomPackConfig(roomId: roomId, packSlug: packSlug, winPoints: winPoints))
+        packConfigs[roomId] = configs
     }
 
     // MARK: RSVP — read

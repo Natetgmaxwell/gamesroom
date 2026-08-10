@@ -641,6 +641,77 @@ runner.run("PackDefinition default howToSlug falls back to slug") {
     runner.assertEqual(PlutoChessPack.howToSlug, "pluto_chess")
 }
 
+// MARK: - EventRSVP (2026-08-10 feedback round)
+
+runner.run("EventRSVP decodes server shape with display_name") {
+    let json = """
+    {
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "member_id": "44444444-4444-4444-4444-444444444444",
+      "display_name": "Alex",
+      "state": "claimed"
+    }
+    """
+    let decoded = try JSONDecoder().decode(EventRSVP.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.eventId, UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+    runner.assertEqual(decoded.memberId, UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
+    runner.assertEqual(decoded.displayName, "Alex")
+    runner.assertEqual(decoded.state, .claimed)
+}
+
+runner.run("EventRSVP defaults missing state to unclaimed") {
+    let json = """
+    {
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "member_id": "44444444-4444-4444-4444-444444444444",
+      "display_name": "Sam"
+    }
+    """
+    let decoded = try JSONDecoder().decode(EventRSVP.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.state, .unclaimed)
+    runner.assertEqual(decoded.displayName, "Sam")
+}
+
+runner.run("EventRSVP id is stable composite of event + member") {
+    let eventId = UUID()
+    let memberId = UUID()
+    let rsvp = EventRSVP(eventId: eventId, memberId: memberId, displayName: "Alex", state: .claimed)
+    runner.assertEqual(rsvp.id, "\(eventId.uuidString):\(memberId.uuidString)")
+}
+
+// MARK: - RoomPackConfig (2026-08-10 feedback round)
+
+runner.run("RoomPackConfig decodes server shape with win_points") {
+    let json = """
+    {
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "pack_slug": "monopoly_deal",
+      "win_points": 25
+    }
+    """
+    let decoded = try JSONDecoder().decode(RoomPackConfig.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.roomId, UUID(uuidString: "33333333-3333-3333-3333-333333333333"))
+    runner.assertEqual(decoded.packSlug, "monopoly_deal")
+    runner.assertEqual(decoded.winPoints, 25)
+}
+
+runner.run("RoomPackConfig defaults missing win_points to 1") {
+    let json = """
+    {
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "pack_slug": "pluto_chess"
+    }
+    """
+    let decoded = try JSONDecoder().decode(RoomPackConfig.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.winPoints, 1)
+}
+
+runner.run("RoomPackConfig id is stable composite of room + pack") {
+    let roomId = UUID()
+    let config = RoomPackConfig(roomId: roomId, packSlug: "casino", winPoints: 0)
+    runner.assertEqual(config.id, "\(roomId.uuidString):casino")
+}
+
 // MARK: - Summary
 
 print("")

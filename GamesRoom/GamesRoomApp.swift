@@ -33,6 +33,15 @@ struct GamesRoomApp: App {
                 .environmentObject(roomService)
                 .environmentObject(casinoService)
                 .environmentObject(scoringService)
+                // The palette is dark-mode-first (near-black canvas,
+                // warm parchment text, brass accent). Forcing dark
+                // scheme at the root keeps system surfaces (Form
+                // rows, sheets, pickers) on the same canvas — without
+                // it, a light-mode device renders white form
+                // backgrounds under the dark palette and the bronze
+                // text loses all contrast (settings-modal readability
+                // bug, 2026-08-10 feedback).
+                .preferredColorScheme(.dark)
         }
     }
 }

@@ -172,8 +172,16 @@ struct HostScoreEntrySheet: View {
     }
 
     private var winPointsText: String {
-        let points = PackRegistry.shared.winPoints(for: packSlug)
+        let points = effectiveWinPoints
         return points == 1 ? "1 point per winner" : "\(points) points per winner"
+    }
+
+    /// 2026-08-10 feedback round — the payout the round submits is
+    /// the room's configured override when one exists, otherwise the
+    /// pack's static default. The host edits payouts from the pack
+    /// shelf; this sheet reads the same effective value.
+    private var effectiveWinPoints: Int {
+        roomService.effectiveWinPoints(roomId: roomId, packSlug: packSlug)
     }
 
     // MARK: - Save
@@ -184,7 +192,7 @@ struct HostScoreEntrySheet: View {
         errorMessage = nil
         defer { isSaving = false }
         do {
-            let winPoints = PackRegistry.shared.winPoints(for: packSlug)
+            let winPoints = effectiveWinPoints
             let input: PackScoringInput
             if selectedMemberIds.count == 1, let soleWinner = selectedMemberIds.first {
                 input = .singleWinner(

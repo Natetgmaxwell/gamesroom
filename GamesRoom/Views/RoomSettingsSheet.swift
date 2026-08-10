@@ -603,8 +603,9 @@ struct RoomSettingsMembersSheet: View {
 /// V0.9 Wave 2 Slice 2.1 - thin Identifiable wrapper around
 /// `any PackDefinition.Type` so SwiftUI's `.sheet(item:)` API
 /// can drive the PackDetailView presentation off a single
-/// Optional binding.
-private struct AnyPackType: Identifiable {
+/// Optional binding. Internal (not private) so the pack shelf
+/// on `RoomDetailView` can reuse it for the payout sheet.
+struct AnyPackType: Identifiable {
     let type: any PackDefinition.Type
     var id: String { type.slug }
 }

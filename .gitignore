@@ -3,6 +3,9 @@
 # Xcode user config (real Supabase keys)
 GamesRoom/Config.xcconfig
 
+# Supabase CLI link state
+Supabase/.temp/
+
 # Test runner artifacts
 .build/
 build/
