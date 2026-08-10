@@ -1,10 +1,12 @@
 # Games Room — Codebase Audit (V0.8)
 
-> **SUPERSEDED 2026-08-06.** This audit captured the working tree at
-> `2cba2fb` (pre-build). For the current state see
-> `audit-t_0458b3fe.md` (676 lines, captures the working tree at
-> `4137a82` post-V0.8 build phase). The roadmap in
-> `docs/roadmap-v0.9.md` references the current audit, not this one.
+> **SUPERSEDED 2026-08-10.** This audit captured the working tree at
+> `2cba2fb` (pre-build). It is kept as a historical record of the
+> V0.8 build phase. For the current state use the live sources:
+> - `docs/v0.8-vision-checklist.md` — the live feature-status source.
+> - `docs/plan.md` — the V0.8 implementation plan.
+> - `docs/roadmap-v0.9.md` — the V0.9 slice list (implementation
+>   plan: `/tmp/games-room-plan.md`, 2026-08-10).
 >
 > **Audience.** A fresh engineer who has never seen this repo. The
 > report below should let them find their feet in under an hour:
