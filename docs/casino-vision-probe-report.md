@@ -1,6 +1,6 @@
 # Casino Vision Probe Report
 
-> **Status:** PROBE COMPLETE — F-CAS-02 LOCKED on synthetic + stress corpus; real-photo confirmation tracked as separate gate (kanban t_cb893998)
+> **Status:** PROBE COMPLETE — F-CAS-02 LOCKED on synthetic + stress corpus; real-photo confirmation gate WAIVED by product-owner decision (2026-08-10, kanban t_cb893998)
 > **Date:** 2026-08-10
 > **Host:** macOS 26, Swift 6.2.4, Vision.framework + CoreML.framework (CommandLineTools SDK)
 > **Tool:** `Tools/CasinoVisionProbe` (out-of-tree SwiftPM executable, per roadmap Q-WAVE-3-PROBE-HARNESS default (a))
@@ -16,9 +16,10 @@ stacks) **passes**: recall 1.000, precision 1.000, color accuracy
 1.000, mean IoU 0.941 on the same corpus, with zero detections on
 pure felt.
 
-**The on-device path is viable across felt variants — but this is still a
-synthetic corpus. The real-photo corpus (10 photos, actual room + chip set)
-is the moment of truth before locking F-CAS-02.**
+**The on-device path is viable across felt variants. The real-photo corpus
+(10 photos, actual room + chip set) was the planned moment of truth, but the
+product owner waived it (2026-08-10): the Felt Faction predecessor vision
+system is accepted as PoC evidence. F-CAS-02 is confirmed LOCKED.**
 
 ## Why this probe exists
 
@@ -191,8 +192,7 @@ the baseline corpus. Remaining known weaknesses: count estimation
 
 ## Verdict
 
-**PARTIAL — synthetic PASS, stress PASS after adaptive-mask fix, real
-photos pending.**
+**PASS — F-CAS-02 CONFIRMED LOCKED (final).**
 
 The segmentation detector achieves the >= 0.8 bar on the original
 synthetic corpus (1.000 across the board). The stress corpus first
@@ -205,18 +205,17 @@ low-contrast stacks on dark-blue felt.
 
 Per the decision matrix, the post-fix stress result (>= 0.8 recall +
 precision) maps to **F-CAS-02 stays deferred V0.9; on-device Core ML
-is shippable** — on synthetic and stress corpora. The rectangle
-detector remains disqualified as the on-device approach.
+is shippable**. The rectangle detector remains disqualified as the
+on-device approach.
 
-**Recommended next step:** capture the real-photo corpus (10 photos
-of the actual chip set in the actual room, per
-`Tools/CasinoVisionProbe/README.md`), run
-`CasinoVisionProbe run <corpus> --detector segmentation`, and lock
-F-CAS-02 with real numbers. The synthetic + stress evidence is
-strongly positive, but real-world transfer (lighting, chip-set
-variation, camera angle, table texture) is only established by the
-real corpus. Known weaknesses to watch on real photos: count
-estimation (MAE ~6 chips) and low-contrast stacks on dark felt.
+**Real-photo gate waived (product-owner decision, 2026-08-10).** The
+planned real-photo confirmation corpus (10 photos of the actual chip
+set in the actual room) was skipped at Nathan's direction: the vision
+system implemented in the games room's predecessor, Felt Faction, is
+accepted as proof of concept — synthetic + stress evidence plus the
+Felt Faction precedent is sufficient. No Wave 3b pivot, no attestation
+fallback needed. Known weaknesses to carry into V0.9 implementation:
+count estimation (MAE ~6 chips) and low-contrast stacks on dark felt.
 
 ## Reproduction
 
