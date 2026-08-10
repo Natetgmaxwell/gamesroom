@@ -1199,12 +1199,14 @@ actor InMemoryRoomStore: RoomStore {
         // RPC does this server-side; the in-memory store
         // mirrors the contract.
         let knownSlugs = Set(PackRegistry.shared.allPacks.map(\.slug))
-        for slug in slugs where !knownSlugs.contains(slug) {
-            throw NSError(
-                domain: "InMemoryRoomStore",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Unknown pack slug: \(slug)"]
-            )
+        for slug in slugs {
+            if !knownSlugs.contains(slug) {
+                throw NSError(
+                    domain: "InMemoryRoomStore",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Unknown pack slug: \(slug)"]
+                )
+            }
         }
         guard rooms.contains(where: { $0.id == roomId }) else {
             throw NSError(
@@ -1267,9 +1269,6 @@ actor InMemoryRoomStore: RoomStore {
         // not reads), so RSVP reads return `.unclaimed` until a
         // matching upsert has been issued. Views layer the
         // optimistic local state on top of this read.
-        for (_, states) in rsvps where !states.isEmpty {
-            _ = states
-        }
         return .unclaimed
     }
 
