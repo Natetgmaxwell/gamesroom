@@ -45,14 +45,15 @@ struct ColorSegmentationDetector {
 
         // 1. Chip-likeness mask.
         //
-        // Saturation alone cannot separate chips from felt: green
-        // felt is itself highly saturated (measured sat ~0.76 on the
-        // synthetic felt). The working rule is value + hue:
-        //   - bright pixels (value >= 0.55): white/red/blue chips
-        //   - dark pixels (value <= 0.25): black chips
-        //   - non-green hues (hue outside [0.25, 0.45]): red/blue
-        //     chips even at mid value
-        // Felt (mid-value green) fails all three.
+        // The original rule (bright / dark / non-green-hue) is tuned
+        // to green felt and collapses on non-green tables (measured:
+        // whole frame masks on dark-blue and burgundy felts — one
+        // giant detection, recall 0.388). The general rule is
+        // background-adaptive: estimate the table color from the
+        // frame border, then mask pixels whose RGB distance from the
+        // background exceeds a threshold. Chips differ from the
+        // table; the table is one uniform color.
+        let bg = estimateBackground(ptr: ptr, bpr: bpr, bpp: bpp, width: width, height: height)
         var mask = [UInt8](repeating: 0, count: width * height)
         for y in 0..<height {
             for x in 0..<width {
@@ -60,11 +61,9 @@ struct ColorSegmentationDetector {
                 let r = Double(ptr[off]) / 255.0
                 let g = Double(ptr[off + 1]) / 255.0
                 let b = Double(ptr[off + 2]) / 255.0
-                let (hue, _, value) = rgbToHsv(r: r, g: g, b: b)
-                let isBright = value >= 0.55
-                let isDark = value <= 0.25
-                let isNonGreenHue = hue < 0.25 || hue > 0.45
-                if isBright || isDark || isNonGreenHue {
+                let dr = r - bg.r, dg = g - bg.g, db = b - bg.b
+                let dist = (dr * dr + dg * dg + db * db).squareRoot()
+                if dist >= 0.15 {
                     mask[y * width + x] = 1
                 }
             }
@@ -214,6 +213,33 @@ struct ColorSegmentationDetector {
             ))
         }
         return detections.sorted { $0.confidence > $1.confidence }
+    }
+
+    /// Estimates the table/felt color from the frame border.
+    ///
+    /// The border of a chip photo is almost always table, not chips
+    /// (stacks sit in the middle). Median RGB over a 4px border strip
+    /// is robust to noise and to a stray chip touching the edge.
+    private func estimateBackground(
+        ptr: UnsafePointer<UInt8>, bpr: Int, bpp: Int, width: Int, height: Int
+    ) -> (r: Double, g: Double, b: Double) {
+        let border = 4
+        var rs: [Double] = [], gs: [Double] = [], bs: [Double] = []
+        rs.reserveCapacity((width + height) * border * 2)
+        gs.reserveCapacity(rs.capacity)
+        bs.reserveCapacity(rs.capacity)
+        for y in 0..<height {
+            for x in 0..<width {
+                guard x < border || x >= width - border || y < border || y >= height - border else { continue }
+                let off = y * bpr + x * bpp
+                rs.append(Double(ptr[off]) / 255.0)
+                gs.append(Double(ptr[off + 1]) / 255.0)
+                bs.append(Double(ptr[off + 2]) / 255.0)
+            }
+        }
+        rs.sort(); gs.sort(); bs.sort()
+        let mid = rs.count / 2
+        return (rs[mid], gs[mid], bs[mid])
     }
 
     /// Two-pass connected-component labeling with union-find.
