@@ -394,7 +394,7 @@ struct RoomSettingsOperationsSheet: View {
             }
 
             Section {
-                ForEach(PackRegistry.shared.allPacks, id: \.slug) { pack in
+                ForEach(Array(PackRegistry.shared.allPacks.enumerated()), id: \.offset) { _, pack in
                     Toggle(isOn: Binding(
                         get: { enabledPackSlugs.contains(pack.slug) },
                         set: { isOn in
