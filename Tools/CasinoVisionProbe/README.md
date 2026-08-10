@@ -97,7 +97,7 @@ Decision matrix (from the roadmap):
 - The segmentation mask is background-adaptive (estimates table
   color from the frame border), so it is not tied to green felt.
   Measured on the stress corpus (6 frames x 4 felt variants):
-  recall 0.963, precision 1.000, color 0.961 across
+  recall 0.975, precision 1.000, color 0.974 across
   green/dark-blue/burgundy/light-green felts.
 - Synthetic chips are drawn with a lighter center band; real chips
   vary (solid, edge spots, inlays). The real-photo corpus is the

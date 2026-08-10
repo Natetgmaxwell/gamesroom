@@ -103,6 +103,11 @@ with the decision matrix below.
 6. **Per-chip band splitting** — each chip's lighter center band is a
    separate component. Fix: merge components with overlapping
    x-intervals and small vertical gaps into one stack.
+7. **Non-deterministic merge order** — the stack-merge loop iterated a
+   Dictionary, and Swift randomizes Dictionary order per process.
+   Same binary, same corpus produced recall 0.963-0.975 / precision
+   0.951-0.987 across runs. Fix: sort components (top-to-bottom,
+   left-to-right) before merging. Now stable across runs.
 
 ## Stress corpus (harder synthetic)
 
@@ -118,12 +123,15 @@ stacks total.
 
 | Metric | Value |
 |--------|-------|
-| Recall | **0.388** (31/80) |
-| Precision | **0.646** (17 FP) |
-| Color accuracy | **1.000** |
-| Count MAE | 5.48 chips |
-| Mean IoU | 0.921 |
-| Pure-felt FPs | 1 per non-green frame |
+| Recall | **0.975** (78/80) |
+| Precision | **1.000** (0 FP) |
+| Color accuracy | **0.974** |
+| Count MAE | 6.14 chips |
+| Mean IoU | 0.926 |
+| Pure-felt FPs | **0** |
+
+Deterministic across runs (component merge order is sorted; see
+failure mode 7 below).
 
 ### The failure is felt color, not lighting or density
 
@@ -153,14 +161,14 @@ calibration needed.
 
 | Metric | Old (hue rule) | New (adaptive) |
 |--------|----------------|----------------|
-| Recall | 0.388 (31/80) | **0.963** (77/80) |
+| Recall | 0.388 (31/80) | **0.975** (78/80) |
 | Precision | 0.646 (17 FP) | **1.000** (0 FP) |
-| Color accuracy | 1.000 | 0.961 |
+| Color accuracy | 1.000 | 0.974 |
 | Count MAE | 5.48 chips | 6.14 chips |
 | Mean IoU | 0.921 | 0.926 |
 | Pure-felt FPs | 1 per non-green frame | **0** |
 
-The 3 misses are all on dark-blue felt (2 stacks, 1 stack, 1 stack) —
+The 2 misses are both on dark-blue felt (stress-16, stress-18) —
 low-contrast chips against dark felt, the same failure class as black
 chips on dark felt. Regression check on the original synthetic corpus:
 unchanged (recall 1.000, precision 1.000, color 1.000, IoU 0.940).
@@ -187,9 +195,9 @@ The segmentation detector achieves the >= 0.8 bar on the original
 synthetic corpus (1.000 across the board). The stress corpus first
 exposed a hard boundary — the hue-exclusion mask collapsed on
 non-green felt (recall 0.388, precision 0.646) — and the
-background-adaptive mask fix resolved it: **stress recall 0.963,
-precision 1.000, color 0.961, zero pure-felt FPs**, with zero
-regression on the baseline corpus. The 3 remaining misses are
+background-adaptive mask fix resolved it: **stress recall 0.975,
+precision 1.000, color 0.974, zero pure-felt FPs**, with zero
+regression on the baseline corpus. The 2 remaining misses are
 low-contrast stacks on dark-blue felt.
 
 Per the decision matrix, the post-fix stress result (>= 0.8 recall +
