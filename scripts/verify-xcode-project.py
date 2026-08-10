@@ -82,6 +82,33 @@ if "SystemCapabilities" not in text or "com.apple.SignInWithApple" not in text:
 if text.count("baseConfigurationReference = AAAAAAAA0000000000000435") != 4:
     errors.append("Config.xcconfig must be wired to all four build configurations")
 
+# W2.3 — widget extension target: app groups entitlement + extension
+# API-only + the score-snapshot mirror must exist in its sources.
+if text.count("CODE_SIGN_ENTITLEMENTS = GamesRoomWidgets/GamesRoomWidgets.entitlements;") != 2:
+    errors.append("GamesRoomWidgets target must set CODE_SIGN_ENTITLEMENTS on Debug and Release")
+if text.count("APPLICATION_EXTENSION_API_ONLY = YES;") != 2:
+    errors.append("GamesRoomWidgets target must set APPLICATION_EXTENSION_API_ONLY on Debug and Release")
+
+# W2.3 — watch target: app groups entitlement on both configs.
+if text.count("CODE_SIGN_ENTITLEMENTS = GamesRoomWatch/GamesRoomWatch.entitlements;") != 2:
+    errors.append("GamesRoomWatch target must set CODE_SIGN_ENTITLEMENTS on Debug and Release")
+
+# W2.3 — the three targets each need their own ScoreSnapshot copy
+# (no shared framework). A missing copy is a compile error on an
+# Xcode host that headless parse-check cannot see.
+for path, target in [
+    (ROOT / "GamesRoom" / "Models" / "ScoreSnapshot.swift", "app"),
+    (ROOT / "GamesRoomWidgets" / "GamesRoomWidgets.swift", "widget"),
+    (ROOT / "GamesRoomWatch" / "GamesRoomWatchApp.swift", "watch"),
+]:
+    if not path.is_file() or "struct ScoreSnapshot: Codable" not in path.read_text():
+        errors.append(f"{target} target is missing its ScoreSnapshot definition ({path})")
+
+# W2.3 — Live Activity requires the app Info.plist key.
+app_plist = ROOT / "GamesRoom" / "Info.plist"
+if app_plist.is_file() and "<key>NSSupportsLiveActivities</key>" not in app_plist.read_text():
+    errors.append("GamesRoom Info.plist must declare NSSupportsLiveActivities")
+
 scheme = ROOT / "GamesRoom.xcodeproj" / "xcshareddata" / "xcschemes" / "GamesRoom.xcscheme"
 if not scheme.is_file():
     errors.append("GamesRoom shared scheme is missing")

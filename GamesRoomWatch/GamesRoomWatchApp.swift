@@ -17,6 +17,25 @@
 import SwiftUI
 import WatchKit
 
+/// The score snapshot the app writes and the watch reads. Mirrors
+/// GamesRoom/Models/ScoreSnapshot.swift (the watch compiles its
+/// own copy — no shared framework). Keep in sync.
+struct ScoreSnapshot: Codable {
+    var roomName: String
+    var leaderboardLine: String
+    var isLive: Bool
+    var updatedAt: Date
+
+    static let suiteName = "group.com.gamesroom.app"
+    private static let key = "scoreSnapshot"
+
+    static func load() -> ScoreSnapshot? {
+        guard let defaults = UserDefaults(suiteName: suiteName),
+              let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(ScoreSnapshot.self, from: data)
+    }
+}
+
 @main
 struct GamesRoomWatchApp: App {
     var body: some Scene {

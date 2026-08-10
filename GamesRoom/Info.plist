@@ -28,6 +28,8 @@
 	<string>Games Room uses the camera to count chips when settling casino games.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Games Room adds events to your calendar so you never miss a game night.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>SUPABASE_URL</key>
 	<string>$(SUPABASE_URL)</string>
 	<key>SUPABASE_ANON_KEY</key>

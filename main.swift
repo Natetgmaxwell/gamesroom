@@ -939,6 +939,63 @@ runner.run("PhotoHash sha256 is deterministic and 64 hex chars") {
     runner.assertTrue(h1 != PhotoHash.sha256(Data("world".utf8)))
 }
 
+// MARK: - Score snapshot + Live Activity rules (W2.3)
+
+runner.run("ScoreSnapshot.shouldPersist accepts first write") {
+    let snapshot = ScoreSnapshot(
+        roomName: "R", leaderboardLine: "A 10 · B 5", isLive: false, updatedAt: Date()
+    )
+    runner.assertTrue(ScoreSnapshot.shouldPersist(snapshot, existing: nil))
+}
+
+runner.run("ScoreSnapshot.shouldPersist rejects stale empty over real line") {
+    let existing = ScoreSnapshot(
+        roomName: "R", leaderboardLine: "A 10 · B 5", isLive: false, updatedAt: Date()
+    )
+    let incoming = ScoreSnapshot(
+        roomName: "R", leaderboardLine: "", isLive: false, updatedAt: Date().addingTimeInterval(60)
+    )
+    runner.assertFalse(ScoreSnapshot.shouldPersist(incoming, existing: existing))
+}
+
+runner.run("ScoreSnapshot.shouldPersist accepts newer non-empty write") {
+    let existing = ScoreSnapshot(
+        roomName: "R", leaderboardLine: "A 10", isLive: false, updatedAt: Date()
+    )
+    let incoming = ScoreSnapshot(
+        roomName: "R", leaderboardLine: "A 12 · B 6", isLive: false,
+        updatedAt: Date().addingTimeInterval(60)
+    )
+    runner.assertTrue(ScoreSnapshot.shouldPersist(incoming, existing: existing))
+}
+
+runner.run("ScoreSnapshot.shouldPersist accepts empty when nothing yet") {
+    let incoming = ScoreSnapshot(
+        roomName: "R", leaderboardLine: "", isLive: false, updatedAt: Date()
+    )
+    runner.assertTrue(ScoreSnapshot.shouldPersist(incoming, existing: nil))
+}
+
+runner.run("LiveActivityRule ends during play when running") {
+    let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: true)
+    runner.assertEqual(action, .end)
+}
+
+runner.run("LiveActivityRule stays quiet during play when not running") {
+    let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: false)
+    runner.assertEqual(action, .none)
+}
+
+runner.run("LiveActivityRule surfaces outside play with a line") {
+    let action = LiveActivityRule.action(isLive: false, hasLine: true, isRunning: false)
+    runner.assertEqual(action, .startOrUpdate)
+}
+
+runner.run("LiveActivityRule no-ops outside play without a line") {
+    let action = LiveActivityRule.action(isLive: false, hasLine: false, isRunning: false)
+    runner.assertEqual(action, .none)
+}
+
 // MARK: - Summary
 
 print("")

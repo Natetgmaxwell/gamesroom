@@ -35,10 +35,11 @@ struct ScoreSnapshot: Codable {
     var updatedAt: Date
 
     static let suiteName = "group.com.gamesroom.app"
+    private static let key = "scoreSnapshot"
 
     static func load() -> ScoreSnapshot? {
         guard let defaults = UserDefaults(suiteName: suiteName),
-              let data = defaults.data(forKey: "scoreSnapshot") else { return nil }
+              let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(ScoreSnapshot.self, from: data)
     }
 }

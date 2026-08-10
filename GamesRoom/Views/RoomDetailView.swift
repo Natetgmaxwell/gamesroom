@@ -528,11 +528,20 @@ struct RoomDetailView: View {
         async let chapterLoad: () = loadChapterLineIfNeeded()
         _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad)
         // W2.3 — keep the widget/watch snapshot fresh with the
-        // current standings. Best-effort write.
+        // current standings. Best-effort write; the stale-empty
+        // rule in `ScoreSnapshot.shouldPersist` keeps a rooms-list
+        // refresh from clobbering real standings.
         let topLine = leaderboard.prefix(3)
             .map { "\($0.displayName) \($0.pointsBalance)" }
             .joined(separator: " · ")
         ScoreSnapshotStore.write(
+            roomName: room.name,
+            leaderboardLine: topLine,
+            isLive: activeEvent?.playedAt ?? .distantFuture <= Date()
+        )
+        // W2.3 — drive the Live Activity per the vision lifecycle
+        // (surface pre-play/post-settle, never during play).
+        ScoreLiveActivityDriver.apply(
             roomName: room.name,
             leaderboardLine: topLine,
             isLive: activeEvent?.playedAt ?? .distantFuture <= Date()

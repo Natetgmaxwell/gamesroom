@@ -37,6 +37,8 @@
 		AAAAAAAA0000000000000468 /* GamesRoomWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000460 /* GamesRoomWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAAAAAAA0000000000000469 /* GamesRoomWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000461 /* GamesRoomWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAAAAAAA000000000000046D /* ScoreSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */; };
+		AAAAAAAA0000000000000470 /* ScoreSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000471 /* ScoreSnapshot.swift */; };
+		AAAAAAAA0000000000000472 /* ScoreLiveActivityDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000473 /* ScoreLiveActivityDriver.swift */; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
 		AAAAAAAA00000000000000A2 /* Room.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000415 /* Room.swift */; };
 		AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000416 /* RoomRole.swift */; };
@@ -203,6 +205,7 @@
 		AAAAAAAA000000000000043B /* PackScoring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackScoring.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043C /* Packs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Packs.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043D /* ScoringService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoringService.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000473 /* ScoreLiveActivityDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreLiveActivityDriver.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043E /* CreateRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateRoomSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoreEntrySheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000440 /* JoinRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinRoomSheet.swift; sourceTree = "<group>"; };
@@ -219,7 +222,11 @@
 		AAAAAAAA0000000000000463 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomWatchApp.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000465 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AAAAAAAA000000000000046E /* GamesRoomWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GamesRoomWidgets.entitlements; sourceTree = "<group>"; };
+		AAAAAAAA000000000000046F /* GamesRoomWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GamesRoomWatch.entitlements; sourceTree = "<group>"; };
 		AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSnapshotStore.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000471 /* ScoreSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSnapshot.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000473 /* ScoreLiveActivityDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreLiveActivityDriver.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
@@ -284,6 +291,7 @@
 			children = (
 				AAAAAAAA0000000000000462 /* GamesRoomWidgets.swift */,
 				AAAAAAAA0000000000000463 /* Info.plist */,
+				AAAAAAAA000000000000046E /* GamesRoomWidgets.entitlements */,
 			);
 			path = GamesRoomWidgets;
 			sourceTree = "<group>";
@@ -293,6 +301,7 @@
 			children = (
 				AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */,
 				AAAAAAAA0000000000000465 /* Info.plist */,
+				AAAAAAAA000000000000046F /* GamesRoomWatch.entitlements */,
 			);
 			path = GamesRoomWatch;
 			sourceTree = "<group>";
@@ -316,6 +325,7 @@
 				AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */,
 				AAAAAAAA000000000000041D /* Event.swift */,
 				AAAAAAAA000000000000041E /* BriefingSummary.swift */,
+				AAAAAAAA0000000000000471 /* ScoreSnapshot.swift */,
 				AAAAAAAA000000000000041F /* Season.swift */,
 				AAAAAAAA0000000000000420 /* SeasonStatus.swift */,
 				AAAAAAAA0000000000000421 /* ChapterLine.swift */,
@@ -357,6 +367,7 @@
 				AAAAAAAA0000000000000445 /* StorageKeys.swift */,
 				AAAAAAAA000000000000040C /* RoomStore.swift */,
 				AAAAAAAA000000000000043D /* ScoringService.swift */,
+				AAAAAAAA0000000000000473 /* ScoreLiveActivityDriver.swift */,
 				AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */,
 			);
 			path = Services;
@@ -663,6 +674,8 @@
 				AAAAAAAA000000000000044B /* PackHowTo.swift in Sources */,
 				AAAAAAAA00000000000000E5 /* ScoringService.swift in Sources */,
 				AAAAAAAA000000000000046D /* ScoreSnapshotStore.swift in Sources */,
+				AAAAAAAA0000000000000470 /* ScoreSnapshot.swift in Sources */,
+				AAAAAAAA0000000000000472 /* ScoreLiveActivityDriver.swift in Sources */,
 				AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */,
 				AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */,
 				AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */,
@@ -881,6 +894,8 @@
 		AAAAAAAA000000000000010C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = GamesRoomWidgets/GamesRoomWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 37S7KT7W83;
@@ -906,6 +921,8 @@
 		AAAAAAAA000000000000010D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = GamesRoomWidgets/GamesRoomWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 37S7KT7W83;
@@ -931,6 +948,7 @@
 		AAAAAAAA0000000000000113 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = GamesRoomWatch/GamesRoomWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 37S7KT7W83;
@@ -955,6 +973,7 @@
 		AAAAAAAA0000000000000114 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = GamesRoomWatch/GamesRoomWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 37S7KT7W83;
