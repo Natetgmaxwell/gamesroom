@@ -185,6 +185,14 @@ protocol RoomStore: Sendable {
     /// `pluto_chess`).
     func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String) async throws -> UUID
 
+    /// Any room member may edit the event's pre-play note + venue
+    /// while the event is still in the future. Empty strings clear
+    /// the field. Room scope derives from the event (F-IDENT-01).
+    ///
+    /// Server side: `update_event_member_fields(p_event_id, p_note,
+    /// p_venue)` (migration 050).
+    func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws
+
     // MARK: Room settings
 
     /// Updates the room's mascot + operations + feature-toggle
@@ -747,6 +755,20 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             )
         }
         return id
+    }
+
+    /// The live RPC `update_event_member_fields(p_event_id, p_note,
+    /// p_venue)` (migration 050) lets any room member edit the
+    /// event's pre-play note + venue. Empty strings clear the field.
+    func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("update_event_member_fields", params: [
+                "p_event_id": eventId.uuidString,
+                "p_note": note ?? "",
+                "p_venue": venue ?? ""
+            ])
+            .execute()
+            .value
     }
 
     // MARK: Room settings
@@ -1594,6 +1616,35 @@ actor InMemoryRoomStore: RoomStore {
         )
         _ = packSlug // unused in-memory; the real store resolves the slug server-side
         return new.id
+    }
+
+    /// In-memory mirror of `update_event_member_fields` (migration
+    /// 050). Mutates the seeded event's note + venue so previews
+    /// reflect the edit.
+    func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws {
+        guard var event = events.values.first(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        event = Event(
+            id: event.id,
+            roomId: event.roomId,
+            name: event.name,
+            playedAt: event.playedAt,
+            createdAt: event.createdAt,
+            venue: (venue?.isEmpty ?? true) ? nil : venue,
+            hostNote: (note?.isEmpty ?? true) ? nil : note,
+            maxSeats: event.maxSeats,
+            startedAt: event.startedAt,
+            settledAt: event.settledAt,
+            sessionId: event.sessionId,
+            packSlug: event.packSlug,
+            hostFinalized: event.hostFinalized
+        )
+        events[event.roomId] = event
     }
 
     // MARK: Room settings

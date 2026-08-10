@@ -78,6 +78,9 @@ struct RoomDetailView: View {
     // opens the same CreateRoomSheet the Rooms tab's "+" opens.
     @State private var showingCreateRoom: Bool = false
 
+    // W2.4 — member-side event edit sheet binding.
+    @State private var editEvent: Event?
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
@@ -210,6 +213,10 @@ struct RoomDetailView: View {
         }
         .sheet(item: $settingsRoom) { presented in
             RoomSettingsSheet(room: presented)
+                .environmentObject(roomService)
+        }
+        .sheet(item: $editEvent) { event in
+            EditEventSheet(event: event)
                 .environmentObject(roomService)
         }
         .sheet(isPresented: $showingAddEvent) {
@@ -378,7 +385,8 @@ struct RoomDetailView: View {
                 onReDecline: { Task { await declineSeat(eventId: event.id) } },
                 rsvps: roomService.cachedEventRSVPs(eventId: event.id),
                 currentUserId: currentUserId,
-                isHero: true
+                isHero: true,
+                onEdit: { editEvent = event }
             )
         case .claimed(let event):
             BriefingSlot(
@@ -390,7 +398,8 @@ struct RoomDetailView: View {
                 onRelease: { Task { await releaseSeat(eventId: event.id) } },
                 rsvps: roomService.cachedEventRSVPs(eventId: event.id),
                 currentUserId: currentUserId,
-                isHero: true
+                isHero: true,
+                onEdit: { editEvent = event }
             )
         case .declined(let event):
             // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
@@ -407,7 +416,8 @@ struct RoomDetailView: View {
                 onReDecline: { Task { await declineSeat(eventId: event.id) } },
                 rsvps: roomService.cachedEventRSVPs(eventId: event.id),
                 currentUserId: currentUserId,
-                isHero: true
+                isHero: true,
+                onEdit: { editEvent = event }
             )
 
         case .inPlay(let event):
@@ -746,6 +756,9 @@ private struct BriefingSlot: View {
     /// The current user's id, so the grid can mark their seat.
     let currentUserId: UUID?
     let isHero: Bool
+    /// W2.4 — member-side event edit. Wired up only when the
+    /// parent passes a non-nil callback.
+    let onEdit: (() -> Void)?
 
     init(
         event: Event,
@@ -758,7 +771,8 @@ private struct BriefingSlot: View {
         onRelease: (() -> Void)? = nil,
         rsvps: [EventRSVP] = [],
         currentUserId: UUID? = nil,
-        isHero: Bool
+        isHero: Bool,
+        onEdit: (() -> Void)? = nil
     ) {
         self.event = event
         self.briefing = briefing
@@ -771,6 +785,7 @@ private struct BriefingSlot: View {
         self.rsvps = rsvps
         self.currentUserId = currentUserId
         self.isHero = isHero
+        self.onEdit = onEdit
     }
 
     var body: some View {
@@ -798,6 +813,23 @@ private struct BriefingSlot: View {
 
             if let briefing {
                 BriefingSeatCount(summary: briefing)
+            }
+
+            // W2.4 — member-side event edit. Any member can adjust
+            // the note + venue while the event is still in the
+            // future; the affordance sits next to the briefing
+            // content, not in a settings tab.
+            if let onEdit {
+                Button(action: onEdit) {
+                    HStack(spacing: 4) {
+                        Image(systemName: Theme.Icon.infoCircle)
+                        Text("Edit details")
+                    }
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.accent)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
 
             // 2026-08-10 feedback round — the seat grid is the

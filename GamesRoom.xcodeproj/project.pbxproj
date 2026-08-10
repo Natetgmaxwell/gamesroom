@@ -82,6 +82,7 @@
 		AAAAAAAA0000000000000449 /* PackDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000044A /* PackDetailView.swift */; };
 		AAAAAAAA000000000000044B /* PackHowTo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000044C /* PackHowTo.swift */; };
 		AAAAAAAA0000000000000459 /* PackStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000458 /* PackStoreView.swift */; };
+		AAAAAAAA000000000000045D /* EditEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045C /* EditEventSheet.swift */; };
 		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 /* End PBXBuildFile section */
 
@@ -167,6 +168,7 @@
 		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000458 /* PackStoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackStoreView.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000045C /* EditEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditEventSheet.swift; sourceTree = "<group>"; };
 		BBBBBBBB0000000000000450 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -285,6 +287,7 @@
 			children = (
 				AAAAAAAA000000000000044A /* PackDetailView.swift */,
 				AAAAAAAA0000000000000458 /* PackStoreView.swift */,
+				AAAAAAAA000000000000045C /* EditEventSheet.swift */,
 				AAAAAAAA000000000000040D /* RoomPage.swift */,
 				AAAAAAAA000000000000040E /* RoomDetailView.swift */,
 				AAAAAAAA000000000000040F /* AddEventSheet.swift */,
@@ -431,6 +434,7 @@
 				AAAAAAAA0000000000000447 /* DrowningBadge.swift in Sources */,
 				AAAAAAAA0000000000000449 /* PackDetailView.swift in Sources */,
 				AAAAAAAA0000000000000459 /* PackStoreView.swift in Sources */,
+				AAAAAAAA000000000000045D /* EditEventSheet.swift in Sources */,
 				AAAAAAAA00000000000000A0 /* User.swift in Sources */,
 				AAAAAAAA00000000000000A2 /* Room.swift in Sources */,
 				AAAAAAAA00000000000000A4 /* RoomRole.swift in Sources */,

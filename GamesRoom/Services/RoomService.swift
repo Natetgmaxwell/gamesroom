@@ -500,6 +500,19 @@ final class RoomService: ObservableObject {
         return newId
     }
 
+    /// Any room member may edit the event's pre-play note + venue
+    /// while the event is still in the future. Routes through the
+    /// `update_event_member_fields` RPC (migration 050); room scope
+    /// derives from the event server-side (F-IDENT-01). Refreshes
+    /// the active-event cache so the briefing card updates.
+    func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws {
+        try await store.updateEventMemberFields(eventId: eventId, note: note, venue: venue)
+        self.lastError = nil
+        if let roomId = cachedActiveEvent(roomId: eventId)?.roomId {
+            _ = await loadActiveEvent(roomId: roomId)
+        }
+    }
+
     // MARK: - Room settings update
 
     /// Updates the room's mascot + operations + feature-toggle
