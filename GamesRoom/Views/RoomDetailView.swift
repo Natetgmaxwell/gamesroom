@@ -1998,7 +1998,7 @@ private struct RoomSwitcherMenu: View {
                     // Rooms tab's "+" opens. The hint that pointed
                     // at the Rooms tab is gone.
                     Button(action: onCreateRoom) {
-                        Label("Create new room", systemImage: "plus.circle.fill")
+                        Label("Create new room", systemImage: Theme.Icon.plusCircleFill)
                     }
                 }
             }

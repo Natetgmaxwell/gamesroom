@@ -136,6 +136,8 @@ enum Theme {
         static let infoCircle = "info.circle"
         /// Mint a fresh join code (no code yet).
         static let plusCircle = "plus.circle"
+        /// The filled create-room CTA in the room switcher dropdown.
+        static let plusCircleFill = "plus.circle.fill"
         /// Re-mint a fresh join code (code exists).
         static let arrowClockwise = "arrow.clockwise"
         /// The expand/collapse chevron on leaderboard rows.
