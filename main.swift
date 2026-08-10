@@ -713,6 +713,42 @@ runner.run("RoomPackConfig id is stable composite of room + pack") {
     runner.assertEqual(config.id, "\(roomId.uuidString):casino")
 }
 
+// MARK: - CasinoWithdrawal (W1.4 — settle-sheet withdrawal wiring)
+
+runner.run("CasinoWithdrawal decodes server shape with points_withdrawn") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "session_id": "22222222-2222-2222-2222-222222222222",
+      "member_id": "44444444-4444-4444-4444-444444444444",
+      "points_withdrawn": 120,
+      "withdrawn_at": "2026-08-10T12:00:00Z",
+      "withdrawn_by": "55555555-5555-5555-5555-555555555555"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(CasinoWithdrawal.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.id, UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+    runner.assertEqual(decoded.pointsWithdrawn, 120)
+    runner.assertEqual(decoded.memberId, UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
+}
+
+runner.run("CasinoWithdrawal round-trips through JSON encoder") {
+    let withdrawal = CasinoWithdrawal(
+        id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
+        sessionId: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+        memberId: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
+        pointsWithdrawn: 80,
+        withdrawnAt: Date(timeIntervalSince1970: 1_752_000_000),
+        withdrawnBy: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!
+    )
+    let data = try JSONEncoder().encode(withdrawal)
+    let decoded = try JSONDecoder().decode(CasinoWithdrawal.self, from: data)
+    runner.assertEqual(decoded.pointsWithdrawn, 80)
+    runner.assertEqual(decoded.withdrawnAt, withdrawal.withdrawnAt)
+}
+
 // MARK: - ChipSegmentationDetector + PhotoHash (F-CAS-02 / F-CAS-03)
 
 /// Draws a synthetic chip-stack test image: a felt-colored canvas
