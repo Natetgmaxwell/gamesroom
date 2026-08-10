@@ -98,7 +98,7 @@ struct RoomSettingsSheet: View {
                         )
                     } label: {
                         settingsRow(
-                            icon: "bubble.left.and.bubble.right.fill",
+                            icon: Theme.Icon.bubbleLeftAndBubbleRightFill,
                             title: "Social",
                             detail: "Mascot voice, narration, host journal"
                         )
@@ -119,7 +119,7 @@ struct RoomSettingsSheet: View {
                         )
                     } label: {
                         settingsRow(
-                            icon: "slider.horizontal.3",
+                            icon: Theme.Icon.sliderHorizontal3,
                             title: "Operations",
                             detail: "Seats, invites, features, share code"
                         )
@@ -129,7 +129,7 @@ struct RoomSettingsSheet: View {
                         RoomSettingsMembersSheet(room: room)
                     } label: {
                         settingsRow(
-                            icon: "person.2.fill",
+                            icon: Theme.Icon.person2Fill,
                             title: "Members",
                             detail: "Roster + per-member controls"
                         )
@@ -417,7 +417,7 @@ struct RoomSettingsOperationsSheet: View {
                         packDetailType = pack
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: "info.circle")
+                            Image(systemName: Theme.Icon.infoCircle)
                             Text("How to play")
                         }
                         .font(Theme.Typography.caption)
@@ -463,7 +463,7 @@ struct RoomSettingsOperationsSheet: View {
                         // slice.
                         Task { await regenerateOnHub() }
                     } label: {
-                        Image(systemName: shareCode == nil ? "plus.circle" : "arrow.clockwise")
+                        Image(systemName: shareCode == nil ? Theme.Icon.plusCircle : Theme.Icon.arrowClockwise)
                             .foregroundStyle(Theme.Palette.accent)
                     }
                     .disabled(isGeneratingCode)

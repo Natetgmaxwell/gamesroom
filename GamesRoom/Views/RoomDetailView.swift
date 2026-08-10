@@ -192,7 +192,7 @@ struct RoomDetailView: View {
                     Button {
                         settingsRoom = room
                     } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: Theme.Icon.gearshape)
                             .foregroundStyle(Theme.Palette.primaryText)
                     }
                     .accessibilityLabel(Text("Room settings"))
@@ -820,7 +820,7 @@ private struct BriefingSlot: View {
             case .claimed:
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
-                        Image(systemName: "checkmark.circle.fill")
+                        Image(systemName: Theme.Icon.checkmarkCircleFill)
                             .foregroundStyle(Theme.Palette.accent)
                         Text("You're in.")
                             .font(Theme.Typography.body.weight(.semibold))
@@ -1046,7 +1046,7 @@ private struct WitnessSlot: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
             HStack(spacing: 12) {
-                Image(systemName: "circle.hexagongrid.fill")
+                Image(systemName: Theme.Icon.circleHexagongridFill)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
                 VStack(alignment: .leading, spacing: 2) {
@@ -1109,7 +1109,7 @@ private struct WitnessSlot: View {
             if let onScore {
                 Button(action: onScore) {
                     HStack {
-                        Image(systemName: "checkmark.seal.fill")
+                        Image(systemName: Theme.Icon.checkmarkSealFill)
                         Text("Score a round")
                     }
                     .font(Theme.Typography.body.weight(.semibold))
@@ -1188,7 +1188,7 @@ private struct CeremonialCard: View {
             Spacer().frame(height: 24)
 
             HStack(spacing: 6) {
-                Image(systemName: "arrow.down")
+                Image(systemName: Theme.Icon.arrowDown)
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent.opacity(0.7))
                 Text("Standings below")
@@ -1371,7 +1371,7 @@ private struct SystemBanner: View {
                     Button {
                         onDismiss(event.id)
                     } label: {
-                        Image(systemName: "xmark")
+                        Image(systemName: Theme.Icon.xmark)
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                     }
@@ -1539,7 +1539,7 @@ private struct PackShelfReadOnly: View {
             }
             Spacer(minLength: 8)
             if isHost {
-                Image(systemName: "slider.horizontal.3")
+                Image(systemName: Theme.Icon.sliderHorizontal3)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
             }
@@ -1810,7 +1810,7 @@ private struct RoomSwitcherMenu: View {
                                     .accessibilityLabel(Text("Active session"))
                             }
                             Spacer()
-                            Image(systemName: "checkmark")
+                            Image(systemName: Theme.Icon.checkmark)
                                 .foregroundStyle(Theme.Palette.accent)
                         }
                     } icon: {
@@ -1856,7 +1856,7 @@ private struct RoomSwitcherMenu: View {
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText)
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
+                Image(systemName: Theme.Icon.chevronDown)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }

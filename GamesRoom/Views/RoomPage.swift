@@ -353,7 +353,7 @@ struct RoomPage: View {
                 Button {
                     settingsRoom = room
                 } label: {
-                    Image(systemName: "gearshape")
+                    Image(systemName: Theme.Icon.gearshape)
                         .foregroundStyle(Theme.Palette.primaryText)
                 }
                 .accessibilityLabel(Text("Room settings"))

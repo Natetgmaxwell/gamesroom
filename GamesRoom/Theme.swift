@@ -126,6 +126,30 @@ enum Theme {
         static let circleFill = "circle.fill"
         /// The active-event accent dot on the rooms list.
         static let activeSessionDot = "circle.fill"
+        /// The "you're in" confirmation on a claimed seat.
+        static let checkmarkCircleFill = "checkmark.circle.fill"
+        /// The host's "Score a round" CTA on the witness slot.
+        static let checkmarkSealFill = "checkmark.seal.fill"
+        /// Dismiss on the system banner and other dismiss buttons.
+        static let xmark = "xmark"
+        /// The "How to play" drill-down on pack rows.
+        static let infoCircle = "info.circle"
+        /// Mint a fresh join code (no code yet).
+        static let plusCircle = "plus.circle"
+        /// Re-mint a fresh join code (code exists).
+        static let arrowClockwise = "arrow.clockwise"
+        /// The expand/collapse chevron on leaderboard rows.
+        static let chevronUp = "chevron.up"
+        /// The host payout affordance on pack shelf rows.
+        static let sliderHorizontal3 = "slider.horizontal.3"
+        /// The "standings below" hint on the witness slot.
+        static let arrowDown = "arrow.down"
+        /// The witness-slot header mark.
+        static let circleHexagongridFill = "circle.hexagongrid.fill"
+        /// The Social sub-sheet row in room settings.
+        static let bubbleLeftAndBubbleRightFill = "bubble.left.and.bubble.right.fill"
+        /// The Members sub-sheet row in room settings.
+        static let person2Fill = "person.2.fill"
     }
 }
 

@@ -132,7 +132,7 @@ struct LeaderboardRow: View {
     }
 
     private var chevron: some View {
-        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+        Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
             .font(Theme.Typography.footnote)
             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
             .frame(width: 16)

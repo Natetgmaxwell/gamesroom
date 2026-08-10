@@ -139,7 +139,7 @@ struct HostScoreEntrySheet: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Spacer(minLength: 0)
                 if isSelected {
-                    Image(systemName: "checkmark")
+                    Image(systemName: Theme.Icon.checkmark)
                         .font(Theme.Typography.footnote)
                         .foregroundStyle(Theme.Palette.accent)
                 }
