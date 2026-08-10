@@ -89,9 +89,11 @@ the single CTA, (b) the mascot footer caption is present.
 - Migration numbering is not strictly monotonic (`037`, `038`,
   `042`, `043` are out-of-band). This is documented in
   `docs/deployment.md` — operators should not "fix" the gap.
-- Widget / Watch / camera-scan surfaces are code-complete but
-  require a manual device pass on an Xcode host (this machine has
-  no Xcode.app — see `docs/roadmap-v0.9.md`).
+- Widget / Watch / camera-scan surfaces are code-complete and
+  wired end-to-end (App Group snapshot channel, per-target
+  entitlements, Live Activity driver) but still require a manual
+  device pass on an Xcode host (this machine has no Xcode.app —
+  see `docs/roadmap-v0.9.md`).
 
 ## How to file a bug
 
