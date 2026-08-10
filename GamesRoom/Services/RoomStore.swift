@@ -193,6 +193,27 @@ protocol RoomStore: Sendable {
     /// p_venue)` (migration 050).
     func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws
 
+    /// Any room member may write the chapter line for a settled
+    /// event. Upserts on the event's unique chapter line.
+    ///
+    /// Server side: `write_chapter_line(p_event_id, p_title,
+    /// p_call_forward)` (migration 051).
+    func writeChapterLine(eventId: UUID, title: String, callForward: String?) async throws
+
+    /// The chapter line for one event, or `nil` when none has been
+    /// written. Room scope derives from the event (F-IDENT-01).
+    ///
+    /// Server side: `get_event_chapter_line(p_event_id)` (migration 051).
+    func fetchEventChapterLine(eventId: UUID) async throws -> ChapterLine?
+
+    /// Host-only. Sets the active season's subtitle — the
+    /// host-approval beat for the mascot's proposed subtitle.
+    /// Empty string clears it.
+    ///
+    /// Server side: `set_season_subtitle(p_room_id, p_subtitle)`
+    /// (migration 051).
+    func setSeasonSubtitle(roomId: UUID, subtitle: String?) async throws
+
     // MARK: Room settings
 
     /// Updates the room's mascot + operations + feature-toggle
@@ -771,6 +792,44 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .value
     }
 
+    /// The live RPC `write_chapter_line(p_event_id, p_title,
+    /// p_call_forward)` (migration 051) writes the chapter line
+    /// for a settled event. Upserts on unique(event_id).
+    func writeChapterLine(eventId: UUID, title: String, callForward: String?) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("write_chapter_line", params: [
+                "p_event_id": eventId.uuidString,
+                "p_title": title,
+                "p_call_forward": callForward ?? ""
+            ])
+            .execute()
+            .value
+    }
+
+    /// The live RPC `get_event_chapter_line(p_event_id)` (migration
+    /// 051) returns the chapter line for one event, or nil.
+    func fetchEventChapterLine(eventId: UUID) async throws -> ChapterLine? {
+        let rows: [ChapterLine] = try await SupabaseClientProvider.shared
+            .rpc("get_event_chapter_line", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value
+        return rows.first
+    }
+
+    /// The live RPC `set_season_subtitle(p_room_id, p_subtitle)`
+    /// (migration 051) sets the active season's subtitle (host-only).
+    func setSeasonSubtitle(roomId: UUID, subtitle: String?) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_season_subtitle", params: [
+                "p_room_id": roomId.uuidString,
+                "p_subtitle": subtitle ?? ""
+            ])
+            .execute()
+            .value
+    }
+
     // MARK: Room settings
 
     /// The live RPC is `update_room_settings(p_room_id, p_name,
@@ -891,6 +950,10 @@ actor InMemoryRoomStore: RoomStore {
 
     /// Map of `seasonId → awards rows`. M1.1.
     private var seasonAwards: [UUID: [SeasonAward]]
+
+    /// Map of `eventId → chapter line`. W2.6 — written at settle,
+    /// rendered on the ceremonial card.
+    private var chapterLines: [UUID: ChapterLine]
 
     /// Map of `roomId → enabled pack slugs`. M4. Empty when a
     /// room has no pack overrides — callers fall back to the
@@ -1173,6 +1236,7 @@ actor InMemoryRoomStore: RoomStore {
             felt.id: Self.defaultInstalledPacks
         ]
         self.roomSystemEvents = [:]
+        self.chapterLines = [:]
     }
 
     // MARK: Rooms list
@@ -1645,6 +1709,54 @@ actor InMemoryRoomStore: RoomStore {
             hostFinalized: event.hostFinalized
         )
         events[event.roomId] = event
+    }
+
+    /// In-memory mirror of `write_chapter_line` (migration 051).
+    /// Stores the line in a local dict so the ceremonial card can
+    /// render it in previews.
+    func writeChapterLine(eventId: UUID, title: String, callForward: String?) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        chapterLines[eventId] = ChapterLine(
+            id: UUID(),
+            roomId: event.roomId,
+            sessionId: event.id,
+            title: title,
+            nextEpisodeTeaser: callForward,
+            writtenAt: Date()
+        )
+    }
+
+    /// In-memory mirror of `get_event_chapter_line` (migration 051).
+    func fetchEventChapterLine(eventId: UUID) async throws -> ChapterLine? {
+        return chapterLines[eventId]
+    }
+
+    /// In-memory mirror of `set_season_subtitle` (migration 051).
+    /// Mutates the active season's subtitle so the awards card
+    /// reflects the host's approval in previews.
+    func setSeasonSubtitle(roomId: UUID, subtitle: String?) async throws {
+        guard let season = currentSeasons[roomId], season.status == .active else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "No active season"]
+            )
+        }
+        currentSeasons[roomId] = Season(
+            id: season.id,
+            roomId: season.roomId,
+            ordinal: season.ordinal,
+            subtitle: (subtitle?.isEmpty ?? true) ? "" : subtitle!,
+            status: season.status,
+            startedAt: season.startedAt,
+            endedAt: season.endedAt
+        )
     }
 
     // MARK: Room settings

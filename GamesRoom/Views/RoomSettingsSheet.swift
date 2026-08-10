@@ -68,6 +68,10 @@ struct RoomSettingsSheet: View {
     @State private var showDeclareConfirm: Bool = false
     @State private var isDeclaring: Bool = false
 
+    // W2.6 — season-subtitle host-approval beat. Seeded from the
+    // current season; saved via set_season_subtitle on Save.
+    @State private var seasonSubtitle: String
+
     // V0.9 Wave 2 Slice 2.1 - the pack the user tapped to view the
     // how-to body. nil = no detail sheet presented.
     @State private var packDetailType: (any PackDefinition.Type)?
@@ -86,6 +90,7 @@ struct RoomSettingsSheet: View {
         _calendarAutoAddHost = State(initialValue: room.calendarAutoAddHost)
         _socialPreferencesEnabled = State(initialValue: room.socialPreferencesEnabled)
         _hostJournal = State(initialValue: room.hostJournal ?? "")
+        _seasonSubtitle = State(initialValue: "")
     }
 
     var body: some View {
@@ -167,6 +172,17 @@ struct RoomSettingsSheet: View {
                 // that state on the room page).
                 if roomService.cachedCurrentSeason(roomId: room.id)?.status != .ended {
                     Section {
+                        // W2.6 — season-subtitle host-approval beat.
+                        // The mascot proposes; the host approves or
+                        // edits here. The proposing voice stays
+                        // gated on Q-TONE; the mechanism ships.
+                        TextField("Season subtitle", text: $seasonSubtitle)
+                            .font(Theme.Typography.body)
+                            .onChange(of: seasonSubtitle) { _, newValue in
+                                if newValue.count > 140 {
+                                    seasonSubtitle = String(newValue.prefix(140))
+                                }
+                            }
                         Button(role: .destructive) {
                             showDeclareConfirm = true
                         } label: {
@@ -184,7 +200,7 @@ struct RoomSettingsSheet: View {
                     } header: {
                         Text("Season")
                     } footer: {
-                        Text("Closes the current season, surfaces awards (Phoenix, Veteran, Whale, Drowning), and resets season scores.")
+                        Text("The subtitle shows on the awards card. Declaring closes the season, surfaces awards (Phoenix, Veteran, Whale, Drowning), and resets season scores.")
                     }
                     .confirmationDialog(
                         "Declare season end?",
@@ -226,6 +242,13 @@ struct RoomSettingsSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                }
+            }
+            .task {
+                // W2.6 — seed the subtitle field from the current
+                // season once the environment object is available.
+                if seasonSubtitle.isEmpty {
+                    seasonSubtitle = roomService.cachedCurrentSeason(roomId: room.id)?.subtitle ?? ""
                 }
             }
             // V0.9 Wave 2 Slice 2.1 - pack how-to body.
@@ -329,6 +352,13 @@ struct RoomSettingsSheet: View {
                 _ = try await roomService.updateHostJournal(
                     roomId: room.id,
                     journal: trimmedJournal.isEmpty ? nil : trimmedJournal
+                )
+                // W2.6 — season-subtitle host-approval beat. Empty
+                // clears; the RPC is idempotent.
+                let trimmedSubtitle = seasonSubtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                try await roomService.setSeasonSubtitle(
+                    roomId: room.id,
+                    subtitle: trimmedSubtitle.isEmpty ? nil : trimmedSubtitle
                 )
                 dismiss()
             } catch {

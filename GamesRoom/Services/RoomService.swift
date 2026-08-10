@@ -139,6 +139,11 @@ final class RoomService: ObservableObject {
     /// per-round breakdown (F-MVP-05 V2-full, migration 049).
     @Published private(set) var roundsByEvent: [UUID: [EventRound]] = [:]
 
+    /// Per-event chapter lines. Populated lazily by
+    /// `loadEventChapterLine(eventId:)`; consumed by the
+    /// ceremonial card (W2.6, migration 051).
+    @Published private(set) var chapterLineByEvent: [UUID: ChapterLine] = [:]
+
     // MARK: - Rooms list
 
     /// Re-fetch the rooms list. Safe to call from `.task` and
@@ -564,6 +569,43 @@ final class RoomService: ObservableObject {
     /// resolves.
     func cachedActiveEvent(roomId: UUID) -> Event? {
         activeEventByRoom[roomId]
+    }
+
+    /// W2.6 — writes the chapter line for a settled event via the
+    /// `write_chapter_line` RPC (migration 051). Any room member
+    /// may write; the ceremonial card renders it post-settle.
+    func writeChapterLine(eventId: UUID, title: String, callForward: String?) async throws {
+        try await store.writeChapterLine(eventId: eventId, title: title, callForward: callForward)
+        self.lastError = nil
+    }
+
+    /// W2.6 — loads the chapter line for one event into the cache.
+    @discardableResult
+    func loadEventChapterLine(eventId: UUID) async -> ChapterLine? {
+        do {
+            let line = try await store.fetchEventChapterLine(eventId: eventId)
+            self.chapterLineByEvent[eventId] = line
+            self.lastError = nil
+            return line
+        } catch {
+            self.lastError = error.localizedDescription
+            return chapterLineByEvent[eventId]
+        }
+    }
+
+    /// Cached chapter line for one event, if any.
+    func cachedEventChapterLine(eventId: UUID) -> ChapterLine? {
+        chapterLineByEvent[eventId]
+    }
+
+    /// W2.6 — host-only. Sets the active season's subtitle via the
+    /// `set_season_subtitle` RPC (migration 051) — the
+    /// host-approval beat for the mascot's proposed subtitle.
+    /// Refreshes the season cache so the awards card updates.
+    func setSeasonSubtitle(roomId: UUID, subtitle: String?) async throws {
+        try await store.setSeasonSubtitle(roomId: roomId, subtitle: subtitle)
+        self.lastError = nil
+        _ = await loadCurrentSeason(roomId: roomId)
     }
 
     /// Cached briefing summary for `eventId`, if any.

@@ -484,7 +484,10 @@ struct RoomDetailView: View {
             )
 
         case .justSettled(let event):
-            CeremonialCard(event: event)
+            CeremonialCard(
+                event: event,
+                chapterLine: roomService.cachedEventChapterLine(eventId: event.id)
+            )
 
         case .readStandings:
             VStack(alignment: .leading, spacing: 12) {
@@ -522,7 +525,16 @@ struct RoomDetailView: View {
         async let packConfigLoad: () = loadPackConfigsIfNeeded()
         async let packsLoad: [String] = roomService.loadRoomPacks(roomId: room.id)
         async let roundsLoad: () = loadRoundsIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad)
+        async let chapterLoad: () = loadChapterLineIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad)
+    }
+
+    /// Loads the chapter line for the active event so the
+    /// ceremonial card renders the written title + call-forward.
+    /// No-op when there's no active event.
+    private func loadChapterLineIfNeeded() async {
+        guard let event = activeEvent else { return }
+        await roomService.loadEventChapterLine(eventId: event.id)
     }
 
     /// Loads the per-round breakdown for the active event so the
@@ -1210,10 +1222,11 @@ private struct WitnessSlot: View {
 
 private struct CeremonialCard: View {
     let event: Event
+    let chapterLine: ChapterLine?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 64) {
-            Text(event.name)
+            Text(chapterLine?.title ?? event.name)
                 .font(Theme.Typography.display)
                 .foregroundStyle(Theme.Palette.primaryText)
 
@@ -1221,6 +1234,17 @@ private struct CeremonialCard: View {
                 Text("Settled \(settledAt, format: .relative(presentation: .named))")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+
+            if let teaser = chapterLine?.nextEpisodeTeaser, !teaser.isEmpty {
+                HStack(spacing: 6) {
+                    Text("↳ Next:")
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                    Text(teaser)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                }
             }
 
             Spacer().frame(height: 32)
