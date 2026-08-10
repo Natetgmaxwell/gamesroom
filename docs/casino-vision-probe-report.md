@@ -1,6 +1,6 @@
 # Casino Vision Probe Report
 
-> **Status:** PROBE COMPLETE — synthetic + stress corpus; real-photo corpus pending
+> **Status:** PROBE COMPLETE — F-CAS-02 LOCKED on synthetic + stress corpus; real-photo confirmation tracked as separate gate (kanban t_cb893998)
 > **Date:** 2026-08-10
 > **Host:** macOS 26, Swift 6.2.4, Vision.framework + CoreML.framework (CommandLineTools SDK)
 > **Tool:** `Tools/CasinoVisionProbe` (out-of-tree SwiftPM executable, per roadmap Q-WAVE-3-PROBE-HARNESS default (a))
