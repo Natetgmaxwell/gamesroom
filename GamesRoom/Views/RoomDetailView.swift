@@ -1289,7 +1289,7 @@ private struct PackShelfReadOnly: View {
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 
             VStack(spacing: 0) {
-                ForEach(Array(packs.enumerated()), id: \.element.slug) { idx, pack in
+                ForEach(Array(packs.enumerated()), id: \.offset) { idx, pack in
                     packRow(pack)
                     if idx != packs.count - 1 {
                         Divider()
