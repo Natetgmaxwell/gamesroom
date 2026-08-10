@@ -1198,7 +1198,7 @@ actor InMemoryRoomStore: RoomStore {
         // Validate every slug against PackRegistry. The live
         // RPC does this server-side; the in-memory store
         // mirrors the contract.
-        let knownSlugs = Set(PackRegistry.shared.allPacks.map(\.slug))
+        let knownSlugs = Set(PackRegistry.shared.allPacks.map { $0.slug })
         for slug in slugs {
             if !knownSlugs.contains(slug) {
                 throw NSError(
