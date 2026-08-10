@@ -138,6 +138,20 @@ struct RoomSettingsSheet: View {
                             detail: "Roster + per-member controls"
                         )
                     }
+
+                    // W2.2 — F-MVP-07 pack store shell. Lists the
+                    // four packs with installed state; paid packs
+                    // land here in a future release.
+                    NavigationLink {
+                        PackStoreView(roomId: room.id)
+                            .environmentObject(roomService)
+                    } label: {
+                        settingsRow(
+                            icon: Theme.Icon.infoCircle,
+                            title: "Pack store",
+                            detail: "Browse packs, how-to guides, installed state"
+                        )
+                    }
                 }
 
                 if let errorMessage {
