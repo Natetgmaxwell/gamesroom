@@ -115,6 +115,16 @@ struct ColorSegmentationDetector {
         for (l, s) in stats where s.count >= minArea {
             components.append((l, s))
         }
+        // Sort deterministically (top-to-bottom, left-to-right) before
+        // merging. `stats` is a Dictionary; iterating it directly makes
+        // merge order — and therefore stack grouping — vary per process
+        // (Swift randomizes Dictionary order). Measured: recall
+        // 0.963-0.975, precision 0.951-0.987 across runs of the same
+        // binary on the same corpus.
+        components.sort {
+            if $0.stats.minY != $1.stats.minY { return $0.stats.minY < $1.stats.minY }
+            return $0.stats.minX < $1.stats.minX
+        }
 
         // 2. Merge components into stacks.
         //
