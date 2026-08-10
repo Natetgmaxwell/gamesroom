@@ -93,6 +93,13 @@ enum PackScoringInput: Hashable {
     /// `winPoints` season-score delta.
     case singleWinner(roundIndex: Int, winnerMemberId: UUID, winPoints: Int)
 
+    /// Multi-winner round. Same `single_winner` scoring family,
+    /// but the round can crown more than one winner (a shared
+    /// pot, a tied hand, a judge's double pick). The resolver
+    /// emits one entry per winner, each with `winPoints`.
+    /// F-MVP-05 V2 minimal (scope decision 2026-08-10).
+    case multiWinner(roundIndex: Int, winnerMemberIds: [UUID], winPoints: Int)
+
     /// Withdraw/return round. Mirrors the `withdraw_return`
     /// pack (casino). One entry per member; the resolver emits
     /// `(returned - withdrawn)` per member and writes
@@ -104,6 +111,7 @@ enum PackScoringInput: Hashable {
     var packSlug: String {
         switch self {
         case .singleWinner: return "single_winner" // pack-specific value resolved via registry
+        case .multiWinner:  return "single_winner"
         case .withdrawReturn: return "casino"
         }
     }
@@ -141,6 +149,15 @@ struct PackScoringResolver {
                     meta: ["winner": .bool(true), "round_index": .int(Int64(roundIndex))]
                 )
             ]
+
+        case .multiWinner(let roundIndex, let winnerMemberIds, let winPoints):
+            return winnerMemberIds.map { memberId in
+                ScoreEntry(
+                    memberId: memberId,
+                    pointsDelta: Int64(winPoints),
+                    meta: ["winner": .bool(true), "round_index": .int(Int64(roundIndex))]
+                )
+            }
 
         case .withdrawReturn(let roundIndex, let perMember):
             return perMember.map { net in

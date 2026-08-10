@@ -264,6 +264,7 @@ final class ScoringService: ObservableObject {
         let roundIndex: Int = {
             switch input {
             case .singleWinner(let roundIndex, _, _): return roundIndex
+            case .multiWinner(let roundIndex, _, _):  return roundIndex
             case .withdrawReturn(let roundIndex, _):  return roundIndex
             }
         }()

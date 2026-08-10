@@ -144,6 +144,43 @@ runner.run("PackScoringResolver singleWinner produces one entry for winner") {
     runner.assertEqual(entries[0].meta["winner"], .bool(true))
 }
 
+runner.run("PackScoringResolver multiWinner produces one entry per winner") {
+    let alice = UUID()
+    let bob = UUID()
+    let input = PackScoringInput.multiWinner(
+        roundIndex: 4,
+        winnerMemberIds: [alice, bob],
+        winPoints: 1
+    )
+    let entries = PackScoringResolver.resolve(input, packSlug: "cards_against_humanity")
+    runner.assertEqual(entries.count, 2)
+    let aliceRow = entries.first { $0.memberId == alice }
+    let bobRow   = entries.first { $0.memberId == bob }
+    runner.assertEqual(aliceRow?.pointsDelta, 1)
+    runner.assertEqual(bobRow?.pointsDelta, 1)
+    runner.assertEqual(aliceRow?.meta["winner"], .bool(true))
+    runner.assertEqual(aliceRow?.meta["round_index"], .int(4))
+}
+
+runner.run("PackScoringResolver multiWinner empty list produces no entries") {
+    let input = PackScoringInput.multiWinner(
+        roundIndex: 1,
+        winnerMemberIds: [],
+        winPoints: 1
+    )
+    let entries = PackScoringResolver.resolve(input, packSlug: "pluto_chess")
+    runner.assertEqual(entries.count, 0)
+}
+
+runner.run("PackScoringInput multiWinner packSlug resolves to single_winner family") {
+    let input = PackScoringInput.multiWinner(
+        roundIndex: 1,
+        winnerMemberIds: [UUID()],
+        winPoints: 1
+    )
+    runner.assertEqual(input.packSlug, "single_winner")
+}
+
 runner.run("PackScoringResolver withdrawReturn emits one entry per member with net delta") {
     let alice = UUID()
     let bob = UUID()
