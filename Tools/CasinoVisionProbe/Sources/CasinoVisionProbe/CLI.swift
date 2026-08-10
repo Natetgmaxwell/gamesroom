@@ -9,6 +9,10 @@ import Foundation
 ///       Runs the on-device detector over the corpus and prints a report.
 ///   CasinoVisionProbe run <corpus-dir> --json <out.json> [confidence-threshold]
 ///       Same, but writes the machine-readable report to a file.
+///   CasinoVisionProbe scan <photo-dir> [--detector segmentation|rectangles]
+///       Runs the detector over a folder of photos with no ground
+///       truth — prints what it sees per image. For eyeballing real
+///       photos before annotating a corpus.
 ///
 /// Exit code 0 = probe completed (regardless of verdict); 1 = usage or
 /// pipeline error. The verdict is in the report, not the exit code.
@@ -154,6 +158,40 @@ struct CasinoVisionProbe {
                 exit(1)
             }
 
+        case "scan":
+            guard args.count >= 3 else {
+                print("error: scan requires a photo directory")
+                printUsage()
+                exit(1)
+            }
+            let photoDir = URL(fileURLWithPath: args[2])
+            var detectorName = "segmentation"
+            var rest = Array(args.dropFirst(3))
+            if let i = rest.firstIndex(of: "--detector"), i + 1 < rest.count {
+                detectorName = rest[i + 1]
+                rest.removeSubrange(i...(i + 1))
+            }
+            let files = imageFiles(in: photoDir)
+            guard !files.isEmpty else {
+                print("error: no images (png/jpg/jpeg/heic) in \(photoDir.path)")
+                exit(1)
+            }
+            print("scanning \(files.count) images with \(detectorName) detector:")
+            for f in files {
+                do {
+                    let dets = try detect(url: f, detectorName: detectorName, threshold: 0.3)
+                    print("  \(f.lastPathComponent): \(dets.count) stack(s)")
+                    for d in dets {
+                        print(String(
+                            format: "    x=%.3f y=%.3f w=%.3f h=%.3f color=%@ count=%d conf=%.3f",
+                            d.x, d.y, d.w, d.h, d.color, d.count, d.confidence
+                        ))
+                    }
+                } catch {
+                    print("  \(f.lastPathComponent): error: \(error)")
+                }
+            }
+
         default:
             print("error: unknown command '\(args[1])'")
             printUsage()
@@ -167,6 +205,7 @@ struct CasinoVisionProbe {
           CasinoVisionProbe generate <output-dir> [image-count] [width] [height]
           CasinoVisionProbe stress <output-dir> [frames-per-variant] [width] [height]
           CasinoVisionProbe run <corpus-dir> [--detector rectangles|segmentation] [--json <out.json>] [confidence-threshold]
+          CasinoVisionProbe scan <photo-dir> [--detector rectangles|segmentation]
           CasinoVisionProbe debug <image-path> [--detector rectangles|segmentation] [confidence-threshold]
         """)
     }

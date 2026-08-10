@@ -4,6 +4,7 @@
 > **Date:** 2026-08-10
 > **Host:** macOS 26, Swift 6.2.4, Vision.framework + CoreML.framework (CommandLineTools SDK)
 > **Tool:** `Tools/CasinoVisionProbe` (out-of-tree SwiftPM executable, per roadmap Q-WAVE-3-PROBE-HARNESS default (a))
+> **Zero-friction real-photo test:** `CasinoVisionProbe scan <photo-dir> --detector segmentation` — runs the detector over a folder of photos with no ground-truth JSON required, prints per-image stacks (box, color, count, confidence). Use this to eyeball real photos before annotating a corpus.
 
 ## TL;DR
 

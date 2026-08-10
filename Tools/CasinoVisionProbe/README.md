@@ -27,6 +27,9 @@ BIN="$(swift build --show-bin-path)/CasinoVisionProbe"
 
 # 4. Machine-readable report
 "$BIN" run /tmp/casino-probe-corpus --detector segmentation --json /tmp/report.json
+
+# 5. Eyeball real photos with no annotation (zero-friction test)
+"$BIN" scan /tmp/casino-real-corpus --detector segmentation
 ```
 
 ## Commands
@@ -36,6 +39,7 @@ BIN="$(swift build --show-bin-path)/CasinoVisionProbe"
 | `generate <dir> [count] [w] [h]` | Draw synthetic chip-stack images + `ground-truth.json` |
 | `stress <dir> [frames-per-variant] [w] [h]` | Draw harder corpus: 4 felt variants, lighting perturbation, pure-felt adversarial frames |
 | `run <dir> [--detector rectangles\|segmentation] [--json out.json] [threshold]` | Run detector over corpus, print metrics |
+| `scan <dir> [--detector segmentation\|rectangles]` | Run detector over a photo folder with no ground truth — prints what it sees per image |
 | `debug <image> [--detector ...] [threshold]` | Print detections + truth for one image |
 
 ## Detector variants
@@ -80,6 +84,13 @@ accuracy. Before locking the F-CAS-02 decision, capture a real corpus:
    `StackTruth` per stack: normalized `x/y/w/h`, `color`
    (red/blue/green/black/white), `count`.
 5. `"$BIN" run /tmp/casino-real-corpus --detector segmentation`
+
+**Zero-annotation first pass:** if you just want to see what the
+detector sees before annotating, drop the photos in a folder and run
+`"$BIN" scan <dir> --detector segmentation` — it prints per-image
+stacks (box, color, count, confidence) with no ground truth required.
+This is the fastest way to eyeball real-world behavior; annotate only
+if the eyeball looks promising.
 
 Decision matrix (from the roadmap):
 
