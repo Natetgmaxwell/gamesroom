@@ -84,30 +84,122 @@ struct RoomPage: View {
     @AppStorage("lastViewedRoomIdString") private var lastViewedRoomIdString: String = ""
 
     var body: some View {
-        NavigationStack {
-            content
-                .background(Theme.Palette.background.ignoresSafeArea())
-                .navigationTitle("Rooms")
-                .navigationBarTitleDisplayMode(.large)
-                .toolbar { toolbarContent }
-                .sheet(item: $settingsRoom) { room in
-                    RoomSettingsSheet(room: room)
-                        .environmentObject(roomService)
-                }
-                .sheet(isPresented: $showingCreateRoom) {
-                    CreateRoomSheet()
-                        .environmentObject(roomService)
-                }
-                .sheet(isPresented: $showingJoinRoom) {
-                    JoinRoomSheet()
-                        .environmentObject(roomService)
-                }
+        Group {
+            if isPad {
+                splitView
+            } else {
+                stackView
+            }
+        }
+        .sheet(item: $settingsRoom) { room in
+            RoomSettingsSheet(room: room)
+                .environmentObject(roomService)
+        }
+        .sheet(isPresented: $showingCreateRoom) {
+            CreateRoomSheet()
+                .environmentObject(roomService)
+        }
+        .sheet(isPresented: $showingJoinRoom) {
+            JoinRoomSheet()
+                .environmentObject(roomService)
         }
         .task {
             await roomService.refresh()
         }
         .refreshable {
             await roomService.refresh()
+        }
+    }
+
+    /// W2.8 — iPad renders a split view (room list sidebar + detail
+    /// pane); iPhone keeps the single-column push navigation.
+    private var isPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+
+    /// iPhone path — the pre-W2.8 NavigationStack, byte-identical.
+    private var stackView: some View {
+        NavigationStack {
+            content
+                .background(Theme.Palette.background.ignoresSafeArea())
+                .navigationTitle("Rooms")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar { toolbarContent }
+        }
+    }
+
+    /// iPad path — room list as sidebar, detail pane on the right.
+    /// NavigationSplitView collapses to a stack in compact widths,
+    /// so split-screen multitasking stays usable.
+    private var splitView: some View {
+        NavigationSplitView {
+            sidebar
+                .navigationTitle("Rooms")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar { toolbarContent }
+        } detail: {
+            NavigationStack {
+                if let room = selectedRoom {
+                    RoomDetailView(
+                        room: room,
+                        allRooms: roomService.rooms,
+                        onDismiss: {},
+                        onSwitchRoom: { _ in }
+                    )
+                } else {
+                    Text("Select a room")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+            }
+        }
+    }
+
+    /// iPad sidebar — the rooms list as a platform-idiomatic
+    /// sidebar List. Selection drives the detail pane.
+    private var sidebar: some View {
+        Group {
+            if roomService.isLoading && roomService.rooms.isEmpty {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(Theme.Palette.accent)
+                    Text("Loading rooms…")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if roomService.rooms.isEmpty {
+                emptyState
+            } else {
+                List(selection: $selectedRoom) {
+                    ForEach(roomService.rooms) { room in
+                        NavigationLink(value: room) {
+                            HStack(spacing: Theme.Layout.gutter) {
+                                if roomService.activeEventByRoom[room.id] != nil {
+                                    Circle()
+                                        .fill(Theme.Palette.accent)
+                                        .frame(width: 8, height: 8)
+                                        .accessibilityLabel(Text("Active session"))
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(room.name)
+                                        .font(Theme.Typography.body.weight(.semibold))
+                                        .foregroundStyle(Theme.Palette.primaryText)
+                                    Text("Tap to open")
+                                        .font(Theme.Typography.caption)
+                                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                }
+                            }
+                        }
+                        .simultaneousGesture(TapGesture().onEnded {
+                            recordLastViewed(room)
+                        })
+                    }
+                }
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .background(Theme.Palette.background)
+            }
         }
     }
 
