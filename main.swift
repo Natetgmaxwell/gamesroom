@@ -26,6 +26,7 @@
 //
 
 import Foundation
+import CoreGraphics
 
 // MARK: - Test primitives
 
@@ -710,6 +711,78 @@ runner.run("RoomPackConfig id is stable composite of room + pack") {
     let roomId = UUID()
     let config = RoomPackConfig(roomId: roomId, packSlug: "casino", winPoints: 0)
     runner.assertEqual(config.id, "\(roomId.uuidString):casino")
+}
+
+// MARK: - ChipSegmentationDetector + PhotoHash (F-CAS-02 / F-CAS-03)
+
+/// Draws a synthetic chip-stack test image: a felt-colored canvas
+/// with one or more solid-color discs (chip stacks). Mirrors the
+/// probe's SyntheticCorpusGenerator drawing approach so the app
+/// detector is exercised on the same visual class it was locked on.
+func makeTestImage(
+    width: Int,
+    height: Int,
+    felt: (r: Double, g: Double, b: Double),
+    stacks: [(x: Int, y: Int, radius: Int, color: (r: Double, g: Double, b: Double))]
+) -> CGImage {
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let ctx = CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )!
+    ctx.setFillColor(CGColor(red: felt.r, green: felt.g, blue: felt.b, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    for stack in stacks {
+        ctx.setFillColor(CGColor(red: stack.color.r, green: stack.color.g, blue: stack.color.b, alpha: 1))
+        ctx.fillEllipse(in: CGRect(
+            x: stack.x - stack.radius,
+            y: stack.y - stack.radius,
+            width: stack.radius * 2,
+            height: stack.radius * 2
+        ))
+    }
+    return ctx.makeImage()!
+}
+
+runner.run("ChipSegmentationDetector finds a red stack on green felt") {
+    let image = makeTestImage(width: 400, height: 400, felt: (0.10, 0.42, 0.18), stacks: [
+        (x: 200, y: 200, radius: 40, color: (0.85, 0.10, 0.10))
+    ])
+    let stacks = ChipSegmentationDetector().detect(cg: image)
+    runner.assertEqual(stacks.count, 1)
+    runner.assertEqual(stacks.first?.chipColor, .red)
+    runner.assertTrue((stacks.first?.count ?? 0) >= 1)
+}
+
+runner.run("ChipSegmentationDetector finds nothing on pure felt") {
+    let image = makeTestImage(width: 400, height: 400, felt: (0.10, 0.42, 0.18), stacks: [])
+    let stacks = ChipSegmentationDetector().detect(cg: image)
+    runner.assertEqual(stacks.count, 0)
+}
+
+runner.run("ChipSegmentationDetector separates two stacks of different colors") {
+    let image = makeTestImage(width: 400, height: 400, felt: (0.10, 0.42, 0.18), stacks: [
+        (x: 120, y: 200, radius: 40, color: (0.85, 0.10, 0.10)),
+        (x: 280, y: 200, radius: 40, color: (0.10, 0.10, 0.85))
+    ])
+    let stacks = ChipSegmentationDetector().detect(cg: image)
+    runner.assertEqual(stacks.count, 2)
+    let colors = Set(stacks.map(\.chipColor))
+    runner.assertTrue(colors.contains(.red) && colors.contains(.blue), "expected red + blue, got \(colors)")
+}
+
+runner.run("PhotoHash sha256 is deterministic and 64 hex chars") {
+    let data = Data("hello".utf8)
+    let h1 = PhotoHash.sha256(data)
+    let h2 = PhotoHash.sha256(data)
+    runner.assertEqual(h1, h2)
+    runner.assertEqual(h1.count, 64)
+    runner.assertTrue(h1 != PhotoHash.sha256(Data("world".utf8)))
 }
 
 // MARK: - Summary

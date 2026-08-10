@@ -220,21 +220,28 @@ struct RoomDetailView: View {
                 .environmentObject(authService)
         }
         .sheet(item: $settleSheetEvent) { event in
-            // P0.5 virtual-only Casino: the withdrawn amount is
-            // sourced from the prior `CasinoService.withdraw(...)`
-            // row via the latest open attestation's
-            // `vision_amount_points` proxy. Until we wire the
-            // attestation → withdrawn lookup, default to 0 so
-            // the sheet always renders. The member can edit
-            // the displayed withdrawn value via the stepper
-            // (returns 0–200 pts in 10-pt increments).
-            SettleCasinoSheet(
-                eventId: event.id,
-                roomId: room.id,
-                withdrawn: casinoWithdrawn
-            )
-            .environmentObject(scoringService)
-            .environmentObject(authService)
+            // F-CAS-02: the member scans their own chips with the
+            // on-device segmentation detector (LOCKED). The sheet
+            // hashes the photo and discards the bytes (F-CAS-03).
+            // The host's settle path stays on SettleCasinoSheet.
+            if isHost {
+                SettleCasinoSheet(
+                    eventId: event.id,
+                    roomId: room.id,
+                    withdrawn: casinoWithdrawn
+                )
+                .environmentObject(scoringService)
+                .environmentObject(authService)
+            } else {
+                ChipScanSheet(
+                    eventId: event.id,
+                    roomId: room.id,
+                    withdrawn: casinoWithdrawn,
+                    onDone: { Task { await refresh() } }
+                )
+                .environmentObject(casinoService)
+                .environmentObject(authService)
+            }
         }
         .sheet(item: $hostScoreEvent) { event in
             let pack = PackRegistry.shared.definition(for: event.packSlug)

@@ -114,6 +114,9 @@
 		AAAAAAAA000000000000041A /* MemberRSVP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRSVP.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000452 /* EventRSVP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRSVP.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000454 /* RoomPackConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPackConfig.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000455 /* ChipSegmentationDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipSegmentationDetector.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000456 /* PhotoHash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoHash.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000457 /* ChipScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipScanSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041B /* MascotPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPersonality.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPoliticalIdeology.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041D /* Event.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Event.swift; sourceTree = "<group>"; };
@@ -223,6 +226,8 @@
 				AAAAAAAA000000000000041A /* MemberRSVP.swift */,
 				AAAAAAAA0000000000000452 /* EventRSVP.swift */,
 				AAAAAAAA0000000000000454 /* RoomPackConfig.swift */,
+				AAAAAAAA0000000000000455 /* ChipSegmentationDetector.swift */,
+				AAAAAAAA0000000000000456 /* PhotoHash.swift */,
 				AAAAAAAA000000000000041B /* MascotPersonality.swift */,
 				AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */,
 				AAAAAAAA000000000000041D /* Event.swift */,
@@ -285,6 +290,7 @@
 				AAAAAAAA0000000000000440 /* JoinRoomSheet.swift */,
 				AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */,
 				AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */,
+				AAAAAAAA0000000000000457 /* ChipScanSheet.swift */,
 				AAAAAAAA00000000000000FC /* Components */,
 			);
 			path = Views;
@@ -427,6 +433,8 @@
 				AAAAAAAA00000000000000AC /* MemberRSVP.swift in Sources */,
 				AAAAAAAA0000000000000451 /* EventRSVP.swift in Sources */,
 				AAAAAAAA0000000000000453 /* RoomPackConfig.swift in Sources */,
+				AAAAAAAA0000000000000455 /* ChipSegmentationDetector.swift in Sources */,
+				AAAAAAAA0000000000000456 /* PhotoHash.swift in Sources */,
 				AAAAAAAA00000000000000AE /* MascotPersonality.swift in Sources */,
 				AAAAAAAA00000000000000B0 /* MascotPoliticalIdeology.swift in Sources */,
 				AAAAAAAA00000000000000B2 /* Event.swift in Sources */,
@@ -466,6 +474,7 @@
 				AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */,
 				AAAAAAAA00000000000000E9 /* SettleCasinoSheet.swift in Sources */,
 				AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */,
+				AAAAAAAA0000000000000457 /* ChipScanSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
