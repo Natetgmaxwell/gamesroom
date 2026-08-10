@@ -1,6 +1,6 @@
 # Casino Vision Probe Report
 
-> **Status:** PROBE COMPLETE — synthetic corpus; real-photo corpus pending
+> **Status:** PROBE COMPLETE — synthetic + stress corpus; real-photo corpus pending
 > **Date:** 2026-08-10
 > **Host:** macOS 26, Swift 6.2.4, Vision.framework + CoreML.framework (CommandLineTools SDK)
 > **Tool:** `Tools/CasinoVisionProbe` (out-of-tree SwiftPM executable, per roadmap Q-WAVE-3-PROBE-HARNESS default (a))
@@ -15,9 +15,10 @@ stacks) **passes**: recall 1.000, precision 1.000, color accuracy
 1.000, mean IoU 0.941 on the same corpus, with zero detections on
 pure felt.
 
-**The on-device path is viable in principle — but this is a synthetic
-corpus. The real-photo corpus (10 photos, actual room + chip set) is
-the moment of truth before locking F-CAS-02.**
+**The on-device path is viable in principle — but only on green felt. The
+stress corpus (non-green felt variants) drops recall to 0.388, and the
+real-photo corpus (10 photos, actual room + chip set) is still the
+moment of truth before locking F-CAS-02.**
 
 ## Why this probe exists
 
@@ -104,6 +105,50 @@ with the decision matrix below.
    separate component. Fix: merge components with overlapping
    x-intervals and small vertical gaps into one stack.
 
+## Stress corpus (harder synthetic)
+
+The synthetic corpus proved the pipeline on one felt color. Real rooms
+vary, so a stress corpus was generated (`CasinoVisionProbe stress`,
+24 frames, 1080x1080): 4 felt variants (baseline green, dark blue,
+burgundy, light green), 2-6 stacks per frame, wider size range
+(40-140 px wide, 20-200 px tall), per-image lighting perturbation
+(0.7-1.15x), and 1 pure-felt adversarial frame per variant. 80 truth
+stacks total.
+
+### Segmentation detector on stress corpus
+
+| Metric | Value |
+|--------|-------|
+| Recall | **0.388** (31/80) |
+| Precision | **0.646** (17 FP) |
+| Color accuracy | **1.000** |
+| Count MAE | 5.48 chips |
+| Mean IoU | 0.921 |
+| Pure-felt FPs | 1 per non-green frame |
+
+### The failure is felt color, not lighting or density
+
+| Felt variant | Frames | Recall | FPs |
+|--------------|--------|--------|-----|
+| Green (baseline + light green) | 8 | **1.000** (31/31) | 1 |
+| Dark blue | 6 | 0.000 (0/20) | 5 |
+| Burgundy | 6 | 0.000 (0/20) | 5 |
+| Light green | 4 | 1.000 (0/0 adversarial) | 0 |
+
+The detector holds up under lighting perturbation, wider size range,
+and denser stacks on green felt. On non-green felt it fails
+completely: the felt itself passes the chip-likeness mask (non-green
+hue), becomes one full-frame component at confidence 100, and
+swallows every stack in the frame. This is the README's flagged known
+limitation ("the segmentation mask assumes green felt") — now
+measured.
+
+**Implication:** the current detector is green-felt-only. A non-green
+table (blue, red, black) is a hard failure mode, not a graceful
+degradation. Re-tuning the hue-exclusion band per table color is
+possible but adds a calibration step the spec does not currently
+contain.
+
 ## Decision matrix (roadmap §Wave 3)
 
 | Probe result | Path |
@@ -114,20 +159,30 @@ with the decision matrix below.
 
 ## Verdict
 
-**PARTIAL — synthetic PASS, real photos pending.**
+**PARTIAL — synthetic PASS, stress FAIL on non-green felt, real photos
+pending.**
 
-The segmentation detector achieves the >= 0.8 bar on the synthetic
-corpus (1.000 across the board), and the rectangle detector is
-disqualified as the on-device approach. The remaining question is
-real-world transfer: lighting, chip-set variation, table color,
-camera angle. That requires the 10-photo real corpus.
+The segmentation detector achieves the >= 0.8 bar on the original
+synthetic corpus (1.000 across the board) and holds 1.000 recall on
+green-felt stress frames under lighting perturbation, wider sizes,
+and denser stacks. But the stress corpus exposes a hard boundary:
+**on non-green felt the detector scores recall 0.000** — the felt
+passes the chip-likeness mask and swallows every stack. Overall
+stress recall 0.388, precision 0.646.
+
+Per the decision matrix, the stress corpus result (< 0.5 recall) maps
+to **F-CAS-02 becomes Wave 3b — hybrid cloud-vision fallback
+required** — *unless* the real table is green felt, which the
+real-photo corpus is the only way to establish. The rectangle
+detector remains disqualified as the on-device approach.
 
 **Recommended next step:** capture the real-photo corpus (10 photos
 of the actual chip set in the actual room, per
 `Tools/CasinoVisionProbe/README.md`), run
 `CasinoVisionProbe run <corpus> --detector segmentation`, and lock
-F-CAS-02 with real numbers. Until then, the casino pack's on-device
-path is *plausible but unproven*.
+F-CAS-02 with real numbers. If the real table is green felt, the
+on-device path is plausibly shippable; if not, plan Wave 3b (hybrid
+cloud-vision) and add per-table-color calibration to the spec.
 
 ## Reproduction
 
@@ -138,7 +193,9 @@ BIN="$(swift build --show-bin-path)/CasinoVisionProbe"
 "$BIN" generate /tmp/casino-probe-corpus 10 1080 1080
 "$BIN" run /tmp/casino-probe-corpus --detector segmentation
 "$BIN" run /tmp/casino-probe-corpus --detector rectangles 0.3
+"$BIN" stress /tmp/casino-stress-corpus 6 1080 1080
+"$BIN" run /tmp/casino-stress-corpus --detector segmentation
 ```
 
 All numbers above reproduce from these commands (seeded RNG, stable
-corpus).
+corpora).

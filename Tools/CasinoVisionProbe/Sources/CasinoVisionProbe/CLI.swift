@@ -42,6 +42,26 @@ struct CasinoVisionProbe {
                 exit(1)
             }
 
+        case "stress":
+            guard args.count >= 3 else {
+                print("error: stress requires an output directory")
+                printUsage()
+                exit(1)
+            }
+            let outDir = URL(fileURLWithPath: args[2])
+            let frames = args.count > 3 ? Int(args[3]) ?? 6 : 6
+            let width = args.count > 4 ? Int(args[4]) ?? 1080 : 1080
+            let height = args.count > 5 ? Int(args[5]) ?? 1080 : 1080
+            do {
+                try StressCorpusGenerator(
+                    outputDir: outDir, framesPerVariant: frames, size: (width, height)
+                ).generate()
+                print("generated stress corpus (\(StressCorpusGenerator.feltVariants.count) felt variants x \(frames) frames) in \(outDir.path)")
+            } catch {
+                print("error: \(error)")
+                exit(1)
+            }
+
         case "run":
             guard args.count >= 3 else {
                 print("error: run requires a corpus directory")
@@ -145,6 +165,7 @@ struct CasinoVisionProbe {
         print("""
         Usage:
           CasinoVisionProbe generate <output-dir> [image-count] [width] [height]
+          CasinoVisionProbe stress <output-dir> [frames-per-variant] [width] [height]
           CasinoVisionProbe run <corpus-dir> [--detector rectangles|segmentation] [--json <out.json>] [confidence-threshold]
           CasinoVisionProbe debug <image-path> [--detector rectangles|segmentation] [confidence-threshold]
         """)

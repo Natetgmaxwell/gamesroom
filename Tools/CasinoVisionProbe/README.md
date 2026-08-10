@@ -34,6 +34,7 @@ BIN="$(swift build --show-bin-path)/CasinoVisionProbe"
 | Command | Purpose |
 |---------|---------|
 | `generate <dir> [count] [w] [h]` | Draw synthetic chip-stack images + `ground-truth.json` |
+| `stress <dir> [frames-per-variant] [w] [h]` | Draw harder corpus: 4 felt variants, lighting perturbation, pure-felt adversarial frames |
 | `run <dir> [--detector rectangles\|segmentation] [--json out.json] [threshold]` | Run detector over corpus, print metrics |
 | `debug <image> [--detector ...] [threshold]` | Print detections + truth for one image |
 
