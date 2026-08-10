@@ -94,8 +94,10 @@ Decision matrix (from the roadmap):
 - Count estimation (stack height / 10px) is the weakest metric
   (MAE ~3.5 chips on synthetic). Real chips have consistent thickness;
   calibrate the divisor against the real chip set.
-- The segmentation mask assumes green felt. Non-green tables (blue,
-  red) need the hue-exclusion band re-tuned.
+- The segmentation mask is background-adaptive (estimates table
+  color from the frame border), so it is not tied to green felt.
+  Measured on the stress corpus: recall 0.975, precision 0.975,
+  color 0.974 across green/dark-blue/burgundy/light-green felts.
 - Synthetic chips are drawn with a lighter center band; real chips
   vary (solid, edge spots, inlays). The real-photo corpus is the
   moment of truth.
