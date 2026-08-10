@@ -19,6 +19,13 @@
 //  because the URL contains `//` (the scheme separator) which
 //  Info.plist's literal string format handles cleanly.
 //
+//  ponytail: a missing or unapplied xcconfig leaves the literal
+//  `$(SUPABASE_URL)` / `$(SUPABASE_ANON_KEY)` strings in the built
+//  Info.plist. Those are treated as missing and fall back to the
+//  compiled defaults (real URL + invalid-key sentinel) with a console
+//  warning — a config problem degrades to a failed sign-in, not a
+//  fatalError crash.
+//
 //  ponytail: custom URLSession with HTTP/1.1 forced and short
 //  timeouts. The iOS 26 simulator's default URLSession hangs on
 //  Supabase PostgREST responses ("Operation timed out" from
@@ -33,6 +40,15 @@ import Supabase
 enum SupabaseClientProvider {
     /// The shared Supabase client. Constructed once, lazily, on first
     /// access. All `Services/` code depends on this single instance.
+
+    // Compiled fallbacks for when Info.plist is missing a value or
+    // carries an unsubstituted `$(...)` build-setting literal (xcconfig
+    // not applied): the URL is real so the app keeps working; the key
+    // is a loud sentinel so a missing config fails visibly instead of
+    // as a confusing 401 from a truncated JWT.
+    private static let fallbackURLString = "https://bnrgkdcluopicqdpmrtu.supabase.co"
+    private static let fallbackKey = "MISSING_SUPABASE_ANON_KEY_CONFIG_ERROR"
+
     static let shared: SupabaseClient = {
         // Read URL + key from Info.plist. The Info.plist values are
         // wired to build settings via `$(SUPABASE_URL)` /
@@ -40,13 +56,32 @@ enum SupabaseClientProvider {
         // from `GamesRoom/Config.xcconfig` (gitignored). The fallback
         // literals in this file are an emergency brace for when
         // Info.plist is missing them — they are not the canonical path.
-        let bundle = Bundle.main
-        let urlString = bundle.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
-            ?? "https://bnrgkdcluopicqdpmrtu.supabase.co"
-        let key = bundle.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
-            ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJucmdrZGNsdW9waWNxZHBtcnR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODIxMzcsImV4cCI6MjA5OTE1ODEzN30.3Cc7hElQYaAYsKEJ_goSTdercYQG3o2hG9PiyHggO5Q"
-        guard let url = URL(string: urlString) else {
-            fatalError("Invalid Supabase URL: \(urlString)")
+        func readConfig(_ key: String, fallback: String) -> String {
+            guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+                  !raw.isEmpty,
+                  !raw.hasPrefix("$(") else {
+                print("[GamesRoom] WARNING: \(key) missing or unsubstituted in Info.plist; using compiled fallback.")
+                return fallback
+            }
+            return raw
+        }
+
+        let urlString = readConfig("SUPABASE_URL", fallback: fallbackURLString)
+        let key = readConfig("SUPABASE_ANON_KEY", fallback: fallbackKey)
+
+        // A malformed plist value (e.g. quotes leaked from the xcconfig)
+        // fails URL(string:) — degrade to the compiled default instead
+        // of trapping. The fatalError below is unreachable unless the
+        // compiled constant itself is broken.
+        let url: URL
+        if let parsed = URL(string: urlString) {
+            url = parsed
+        } else {
+            print("[GamesRoom] WARNING: SUPABASE_URL in Info.plist is not a valid URL ('\(urlString)'); using compiled fallback.")
+            guard let fallbackURL = URL(string: fallbackURLString) else {
+                fatalError("SupabaseClientProvider: compiled fallback URL is invalid: \(fallbackURLString)")
+            }
+            url = fallbackURL
         }
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 15

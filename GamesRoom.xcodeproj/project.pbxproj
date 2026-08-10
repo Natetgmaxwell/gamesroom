@@ -28,8 +28,6 @@
 		AAAAAAAA000000000000001C /* MascotBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000412 /* MascotBubble.swift */; };
 		AAAAAAAA000000000000001D /* SeatGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000413 /* SeatGridView.swift */; };
 		AAAAAAAA000000000000001E /* TrajectorySparkline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */; };
-		AAAAAAAA0000000000000447 /* DrowningBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000448 /* DrowningBadge.swift */; };
-		AAAAAAAA0000000000000449 /* PackDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000044A /* PackDetailView.swift */; };
 		AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000445 /* StorageKeys.swift */; };
 		AAAAAAAA0000000000000061 /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
@@ -69,7 +67,6 @@
 		AAAAAAAA00000000000000E2 /* PackRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043A /* PackRegistry.swift */; };
 		AAAAAAAA00000000000000E3 /* PackScoring.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043B /* PackScoring.swift */; };
 		AAAAAAAA00000000000000E4 /* Packs.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043C /* Packs.swift */; };
-		AAAAAAAA000000000000044B /* PackHowTo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000044C /* PackHowTo.swift */; };
 		AAAAAAAA00000000000000E5 /* ScoringService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043D /* ScoringService.swift */; };
 		AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043E /* CreateRoomSheet.swift */; };
 		AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */; };
@@ -78,13 +75,14 @@
 		AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */; };
 		AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000436 /* Assets.xcassets */; };
 		AAAAAAAA00000000000000F2 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AAAAAAAA00000000000000F3 /* Supabase */; };
+		AAAAAAAA0000000000000447 /* DrowningBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000448 /* DrowningBadge.swift */; };
+		AAAAAAAA0000000000000449 /* PackDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000044A /* PackDetailView.swift */; };
+		AAAAAAAA000000000000044B /* PackHowTo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000044C /* PackHowTo.swift */; };
 		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectorySparkline.swift; sourceTree = "<group>"; };
-		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
-		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000400 /* GamesRoomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomApp.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000401 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000402 /* Auth/SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Auth/SignInView.swift; sourceTree = "<group>"; };
@@ -146,7 +144,6 @@
 		AAAAAAAA000000000000043A /* PackRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackRegistry.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043B /* PackScoring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackScoring.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043C /* Packs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Packs.swift; sourceTree = "<group>"; };
-		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043D /* ScoringService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoringService.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043E /* CreateRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateRoomSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoreEntrySheet.swift; sourceTree = "<group>"; };
@@ -156,6 +153,9 @@
 		AAAAAAAA0000000000000443 /* GamesRoom.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GamesRoom.entitlements; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000445 /* StorageKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageKeys.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000446 /* RoomSystemEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSystemEvent.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
 		BBBBBBBB0000000000000450 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -698,6 +698,8 @@
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.53.0;
 			};
+			traits = (
+			);
 		};
 /* End XCRemoteSwiftPackageReference section */
 
