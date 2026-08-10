@@ -62,6 +62,10 @@ struct Event: Identifiable, Codable, Hashable {
     /// unit the ledger / withdrawals / attestations hang off.
     let sessionId: UUID?
 
+    /// The pack this event uses (V0.8). Legacy events created before
+    /// the pack-slug extension decode to the default "casino" pack.
+    let packSlug: String
+
     /// `true` once the host has finalized. Drives the `Scan your
     /// chips` CTA visibility on the Witness Screen.
     let hostFinalized: Bool
@@ -78,6 +82,7 @@ struct Event: Identifiable, Codable, Hashable {
         case startedAt = "started_at"
         case settledAt = "settled_at"
         case sessionId = "session_id"
+        case packSlug = "pack_slug"
         case hostFinalized = "host_finalized"
     }
 
@@ -93,6 +98,7 @@ struct Event: Identifiable, Codable, Hashable {
         startedAt: Date? = nil,
         settledAt: Date? = nil,
         sessionId: UUID? = nil,
+        packSlug: String = "casino",
         hostFinalized: Bool = false
     ) {
         self.id = id
@@ -106,6 +112,7 @@ struct Event: Identifiable, Codable, Hashable {
         self.startedAt = startedAt
         self.settledAt = settledAt
         self.sessionId = sessionId
+        self.packSlug = packSlug
         self.hostFinalized = hostFinalized
     }
 
@@ -122,6 +129,7 @@ struct Event: Identifiable, Codable, Hashable {
         startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
         settledAt = try c.decodeIfPresent(Date.self, forKey: .settledAt)
         sessionId = try c.decodeIfPresent(UUID.self, forKey: .sessionId)
+        packSlug = try c.decodeIfPresent(String.self, forKey: .packSlug) ?? "casino"
         hostFinalized = try c.decodeIfPresent(Bool.self, forKey: .hostFinalized) ?? false
     }
 }

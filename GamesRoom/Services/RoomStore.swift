@@ -84,6 +84,11 @@ struct UpdateRoomPacksParams: Encodable, Sendable {
     let p_slugs: [String]
 }
 
+struct SetDrowningOptInParams: Encodable, Sendable {
+    let p_room_id: String
+    let p_opt_in: Bool
+}
+
 protocol RoomStore: Sendable {
 
     // MARK: Rooms list
@@ -531,10 +536,10 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// RLS so the caller can only update their own membership row.
     func setDrowningOptIn(roomId: UUID, optIn: Bool) async throws {
         _ = try await SupabaseClientProvider.shared
-            .rpc("set_drowning_opt_in", params: [
-                "p_room_id": roomId.uuidString,
-                "p_opt_in": optIn
-            ])
+            .rpc("set_drowning_opt_in", params: SetDrowningOptInParams(
+                p_room_id: roomId.uuidString,
+                p_opt_in: optIn
+            ))
             .execute()
             .value as Void
     }

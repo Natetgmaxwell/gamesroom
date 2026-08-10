@@ -106,6 +106,7 @@ struct RoomSettingsSheet: View {
 
                     NavigationLink {
                         RoomSettingsOperationsSheet(
+                            roomId: room.id,
                             maxSeats: $maxSeats,
                             memberInviteQuota: $memberInviteQuota,
                             joinStartingBonus: $joinStartingBonus,
@@ -114,8 +115,7 @@ struct RoomSettingsSheet: View {
                             calendarAutoAddHost: $calendarAutoAddHost,
                             socialPreferencesEnabled: $socialPreferencesEnabled,
                             shareCode: $shareCode,
-                            isGeneratingCode: $isGeneratingCode,
-                            roomId: room.id
+                            isGeneratingCode: $isGeneratingCode
                         )
                     } label: {
                         settingsRow(
@@ -350,6 +350,10 @@ struct RoomSettingsOperationsSheet: View {
     @State private var enabledPackSlugs: Set<String> = []
     @State private var packsLoaded: Bool = false
 
+    // V0.9 Wave 2 Slice 2.1 - the pack the user tapped to view the
+    // how-to body. nil = no detail sheet presented.
+    @State private var packDetailType: (any PackDefinition.Type)?
+
     init(
         roomId: UUID = UUID(),
         maxSeats: Binding<Int>,
@@ -482,6 +486,16 @@ struct RoomSettingsOperationsSheet: View {
                 ? Set(PackRegistry.shared.allPacks.map { $0.slug })
                 : Set(slugs)
             packsLoaded = true
+        }
+        // V0.9 Wave 2 Slice 2.1 - pack how-to body.
+        .sheet(item: Binding<AnyPackType?>(
+            get: { packDetailType.map(AnyPackType.init) },
+            set: { packDetailType = $0?.type }
+        )) { wrapped in
+            PackDetailView(
+                pack: wrapped.type,
+                onDismiss: { packDetailType = nil }
+            )
         }
     }
 

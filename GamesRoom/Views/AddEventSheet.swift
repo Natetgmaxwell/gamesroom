@@ -55,7 +55,7 @@ struct AddEventSheet: View {
 
     @State private var name: String = ""
     @State private var playedAt: Date = AddEventSheet.defaultPlayedAt()
-    @State private var packSlug: String = AddEventSheet().initialPackSlug
+    @State private var packSlug: String = AddEventSheet.initialPackSlug
 
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
@@ -183,8 +183,8 @@ struct AddEventSheet: View {
         }
     }
 
-    private var initialPackSlug: String {
-        availablePacks.first?.slug ?? "casino"
+    private static var initialPackSlug: String {
+        PackRegistry.shared.allPacks.first?.slug ?? "casino"
     }
 
     // MARK: - Save

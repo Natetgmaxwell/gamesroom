@@ -43,6 +43,7 @@ struct RoomDetailView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var casinoService: CasinoService
+    @EnvironmentObject private var scoringService: ScoringService
 
     /// Drives the host-only Room Settings sheet from the in-room
     /// toolbar gear (L6 spec). Mirrors `RoomPage.settingsRoom` for
@@ -381,7 +382,7 @@ struct RoomDetailView: View {
                 isHero: true
             )
 
-        case inPlay(let event):
+        case .inPlay(let event):
             WitnessSlot(
                 event: event,
                 attestations: openAttestations,
@@ -478,7 +479,7 @@ struct RoomDetailView: View {
         async let membersLoad: () = loadMembersIfNeeded()
         async let seasonLoad: () = loadSeasonIfNeeded()
         async let withdrawalLoad: () = loadMyOpenWithdrawalIfNeeded()
-        async let eventsLoad: () = roomService.loadSystemEvents(roomId: room.id)
+        async let eventsLoad: [RoomSystemEvent] = roomService.loadSystemEvents(roomId: room.id)
         _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad)
     }
 
@@ -1426,6 +1427,7 @@ private struct MemberRosterReadOnly: View {
 
 private struct MascotFooterCaption: View {
     let room: Room
+    @EnvironmentObject private var roomService: RoomService
     /// Pure template interpolation per V0.8 brief — the footer
     /// caption is one of the 100 voice cells, picked from the
     /// room's `(personality × ideology × .postPlayRecap)`
