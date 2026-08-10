@@ -282,6 +282,24 @@ final class RoomService: ObservableObject {
         }
     }
 
+    /// Host-only. Closes the room's active season via the
+    /// `close_season` RPC (migration 048), then refreshes the
+    /// season + awards caches so the `.seasonClose` awards card
+    /// renders immediately. Returns the closed season.
+    @discardableResult
+    func closeSeason(roomId: UUID) async throws -> Season {
+        let closed = try await store.closeSeason(roomId: roomId)
+        self.currentSeasonByRoom[roomId] = closed
+        self.awardsBySeason[closed.id] = []
+        self.lastError = nil
+        // The RPC opens the next season; refresh the cache so the
+        // page transitions out of `.seasonClose` on next load.
+        if let next = try? await store.fetchCurrentSeason(roomId: roomId) {
+            self.currentSeasonByRoom[roomId] = next
+        }
+        return closed
+    }
+
     /// Loads the room's leaderboard into the cache. Returns the
     /// cached value (possibly empty). Called from
     /// `RoomDetailView.task`.

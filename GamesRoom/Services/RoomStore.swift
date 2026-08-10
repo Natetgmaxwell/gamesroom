@@ -225,6 +225,14 @@ protocol RoomStore: Sendable {
     /// as a belt-and-braces guard in case the SQL view leaks.
     func fetchSeasonAwards(seasonId: UUID) async throws -> [SeasonAward]
 
+    /// Host-only. Closes the room's active season: computes the
+    /// four season awards, resets season scores, opens the next
+    /// season, and emits a `season_closed` system event. Returns
+    /// the closed season.
+    ///
+    /// Server side: `close_season(p_room_id)` (migration 048).
+    func closeSeason(roomId: UUID) async throws -> Season
+
     // MARK: Room packs (M4 — pack-as-platform polish)
 
     /// Returns the pack slugs installed in this room. Mirrors
@@ -491,6 +499,27 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .execute()
             .value
         return rows
+    }
+
+    /// The live RPC `close_season(p_room_id)` (migration 048)
+    /// closes the room's active season, computes the four awards,
+    /// resets season scores, opens the next season, and emits a
+    /// `season_closed` system event. Returns the closed season.
+    func closeSeason(roomId: UUID) async throws -> Season {
+        let rows: [Season] = try await SupabaseClientProvider.shared
+            .rpc("close_season", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        guard let closed = rows.first else {
+            throw NSError(
+                domain: "LiveRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "close_season returned no season"]
+            )
+        }
+        return closed
     }
 
     // MARK: Room packs (M4)
@@ -1248,6 +1277,41 @@ actor InMemoryRoomStore: RoomStore {
 
     func fetchSeasonAwards(seasonId: UUID) async throws -> [SeasonAward] {
         return seasonAwards[seasonId] ?? []
+    }
+
+    /// In-memory mirror of `close_season` (migration 048): closes
+    /// the active season, seeds a fresh active season, and returns
+    /// the closed season. Awards are not computed here — the
+    /// in-memory store's seeded award rows stay put so previews
+    /// keep rendering the awards card.
+    func closeSeason(roomId: UUID) async throws -> Season {
+        guard let active = currentSeasons[roomId], active.status == .active else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "No active season to close"]
+            )
+        }
+        let closed = Season(
+            id: active.id,
+            roomId: active.roomId,
+            ordinal: active.ordinal,
+            subtitle: active.subtitle,
+            status: .ended,
+            startedAt: active.startedAt,
+            endedAt: Date()
+        )
+        let next = Season(
+            id: UUID(),
+            roomId: roomId,
+            ordinal: active.ordinal + 1,
+            subtitle: "",
+            status: .active,
+            startedAt: Date(),
+            endedAt: nil
+        )
+        currentSeasons[roomId] = next
+        return closed
     }
 
     // MARK: Room packs (M4)

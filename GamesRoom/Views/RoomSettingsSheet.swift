@@ -64,6 +64,10 @@ struct RoomSettingsSheet: View {
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
 
+    // W1.5 — host "Declare season end" CTA state.
+    @State private var showDeclareConfirm: Bool = false
+    @State private var isDeclaring: Bool = false
+
     // V0.9 Wave 2 Slice 2.1 - the pack the user tapped to view the
     // how-to body. nil = no detail sheet presented.
     @State private var packDetailType: (any PackDefinition.Type)?
@@ -141,6 +145,44 @@ struct RoomSettingsSheet: View {
                         Text(errorMessage)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(.red.opacity(0.85))
+                    }
+                }
+
+                // W1.5 — host-only season-close CTA. Hidden once the
+                // current season has ended (the awards card owns
+                // that state on the room page).
+                if roomService.cachedCurrentSeason(roomId: room.id)?.status != .ended {
+                    Section {
+                        Button(role: .destructive) {
+                            showDeclareConfirm = true
+                        } label: {
+                            HStack {
+                                Text("Declare season end")
+                                    .font(Theme.Typography.body.weight(.semibold))
+                                Spacer()
+                                if isDeclaring {
+                                    ProgressView()
+                                        .tint(Theme.Palette.accent)
+                                }
+                            }
+                        }
+                        .disabled(isDeclaring)
+                    } header: {
+                        Text("Season")
+                    } footer: {
+                        Text("Closes the current season, surfaces awards (Phoenix, Veteran, Whale, Drowning), and resets season scores.")
+                    }
+                    .confirmationDialog(
+                        "Declare season end?",
+                        isPresented: $showDeclareConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Declare", role: .destructive) {
+                            Task { await declareSeasonEnd() }
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Awards will be computed and season scores reset. This cannot be undone.")
                     }
                 }
 
@@ -227,6 +269,22 @@ struct RoomSettingsSheet: View {
     }
 
     // MARK: - Save (root-level write)
+
+    /// W1.5 — host "Declare season end" action. Fires the
+    /// `close_season` RPC via `RoomService.closeSeason`, then
+    /// refreshes the room page state so the awards card renders.
+    private func declareSeasonEnd() async {
+        guard !isDeclaring else { return }
+        isDeclaring = true
+        errorMessage = nil
+        defer { isDeclaring = false }
+        do {
+            _ = try await roomService.closeSeason(roomId: room.id)
+            dismiss()
+        } catch {
+            errorMessage = (error as NSError).localizedDescription
+        }
+    }
 
     /// Fires `RoomService.updateRoom(...)` with every form value
     /// plus the P1.5 host journal via `RoomService.updateHostJournal(...)`.
