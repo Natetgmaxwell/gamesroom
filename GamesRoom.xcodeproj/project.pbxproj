@@ -226,7 +226,6 @@
 		AAAAAAAA000000000000046F /* GamesRoomWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GamesRoomWatch.entitlements; sourceTree = "<group>"; };
 		AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSnapshotStore.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000471 /* ScoreSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSnapshot.swift; sourceTree = "<group>"; };
-		AAAAAAAA0000000000000473 /* ScoreLiveActivityDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreLiveActivityDriver.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
