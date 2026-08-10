@@ -15,10 +15,9 @@ stacks) **passes**: recall 1.000, precision 1.000, color accuracy
 1.000, mean IoU 0.941 on the same corpus, with zero detections on
 pure felt.
 
-**The on-device path is viable in principle — but only on green felt. The
-stress corpus (non-green felt variants) drops recall to 0.388, and the
-real-photo corpus (10 photos, actual room + chip set) is still the
-moment of truth before locking F-CAS-02.**
+**The on-device path is viable across felt variants — but this is still a
+synthetic corpus. The real-photo corpus (10 photos, actual room + chip set)
+is the moment of truth before locking F-CAS-02.**
 
 ## Why this probe exists
 
@@ -143,11 +142,33 @@ swallows every stack in the frame. This is the README's flagged known
 limitation ("the segmentation mask assumes green felt") — now
 measured.
 
-**Implication:** the current detector is green-felt-only. A non-green
-table (blue, red, black) is a hard failure mode, not a graceful
-degradation. Re-tuning the hue-exclusion band per table color is
-possible but adds a calibration step the spec does not currently
-contain.
+### Fix: background-adaptive mask
+
+The hue-exclusion rule was replaced with a background-adaptive rule:
+estimate the table color from the frame border (median RGB over a 4px
+strip — the border of a chip photo is almost always table), then mask
+pixels whose RGB distance from the background exceeds 0.15. Chips
+differ from the table; the table is one uniform color. No per-color
+calibration needed.
+
+| Metric | Old (hue rule) | New (adaptive) |
+|--------|----------------|----------------|
+| Recall | 0.388 (31/80) | **0.963** (77/80) |
+| Precision | 0.646 (17 FP) | **1.000** (0 FP) |
+| Color accuracy | 1.000 | 0.961 |
+| Count MAE | 5.48 chips | 6.14 chips |
+| Mean IoU | 0.921 | 0.926 |
+| Pure-felt FPs | 1 per non-green frame | **0** |
+
+The 3 misses are all on dark-blue felt (2 stacks, 1 stack, 1 stack) —
+low-contrast chips against dark felt, the same failure class as black
+chips on dark felt. Regression check on the original synthetic corpus:
+unchanged (recall 1.000, precision 1.000, color 1.000, IoU 0.940).
+
+**Implication:** the detector is no longer green-felt-only. The
+adaptive mask generalizes across felt colors with zero regression on
+the baseline corpus. Remaining known weaknesses: count estimation
+(MAE ~6 chips) and low-contrast stacks on dark felt.
 
 ## Decision matrix (roadmap §Wave 3)
 
@@ -159,30 +180,32 @@ contain.
 
 ## Verdict
 
-**PARTIAL — synthetic PASS, stress FAIL on non-green felt, real photos
-pending.**
+**PARTIAL — synthetic PASS, stress PASS after adaptive-mask fix, real
+photos pending.**
 
 The segmentation detector achieves the >= 0.8 bar on the original
-synthetic corpus (1.000 across the board) and holds 1.000 recall on
-green-felt stress frames under lighting perturbation, wider sizes,
-and denser stacks. But the stress corpus exposes a hard boundary:
-**on non-green felt the detector scores recall 0.000** — the felt
-passes the chip-likeness mask and swallows every stack. Overall
-stress recall 0.388, precision 0.646.
+synthetic corpus (1.000 across the board). The stress corpus first
+exposed a hard boundary — the hue-exclusion mask collapsed on
+non-green felt (recall 0.388, precision 0.646) — and the
+background-adaptive mask fix resolved it: **stress recall 0.963,
+precision 1.000, color 0.961, zero pure-felt FPs**, with zero
+regression on the baseline corpus. The 3 remaining misses are
+low-contrast stacks on dark-blue felt.
 
-Per the decision matrix, the stress corpus result (< 0.5 recall) maps
-to **F-CAS-02 becomes Wave 3b — hybrid cloud-vision fallback
-required** — *unless* the real table is green felt, which the
-real-photo corpus is the only way to establish. The rectangle
+Per the decision matrix, the post-fix stress result (>= 0.8 recall +
+precision) maps to **F-CAS-02 stays deferred V0.9; on-device Core ML
+is shippable** — on synthetic and stress corpora. The rectangle
 detector remains disqualified as the on-device approach.
 
 **Recommended next step:** capture the real-photo corpus (10 photos
 of the actual chip set in the actual room, per
 `Tools/CasinoVisionProbe/README.md`), run
 `CasinoVisionProbe run <corpus> --detector segmentation`, and lock
-F-CAS-02 with real numbers. If the real table is green felt, the
-on-device path is plausibly shippable; if not, plan Wave 3b (hybrid
-cloud-vision) and add per-table-color calibration to the spec.
+F-CAS-02 with real numbers. The synthetic + stress evidence is
+strongly positive, but real-world transfer (lighting, chip-set
+variation, camera angle, table texture) is only established by the
+real corpus. Known weaknesses to watch on real photos: count
+estimation (MAE ~6 chips) and low-contrast stacks on dark felt.
 
 ## Reproduction
 
