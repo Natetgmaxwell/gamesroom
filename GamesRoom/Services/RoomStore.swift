@@ -77,6 +77,13 @@ struct SetDrowningOptInParams: Encodable, Sendable {
     let p_opt_in: Bool
 }
 
+struct UpsertCasinoConfigParams: Encodable, Sendable {
+    let p_room_id: String
+    let p_enabled: Bool
+    let p_chip_color_map: [String: Int]
+    let p_standard_presets: Bool
+}
+
 // MARK: - LiveRoomStore
 //
 // The production Supabase-backed implementation of `RoomStore`. Each
@@ -461,6 +468,48 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 "p_pack_slug": packSlug,
                 "p_win_points": String(winPoints)
             ])
+            .execute()
+            .value as Void
+    }
+
+    // MARK: Casino config (W-06, US-26)
+
+    /// The live RPC is `get_casino_config(p_room_id)` (migration
+    /// 014). Returns the room's casino config, or nil when the
+    /// room has never been configured. The decoder's defensive
+    /// fallbacks keep older rows alive (missing vision_* columns
+    /// decode as defaults).
+    func fetchCasinoConfig(roomId: UUID) async throws -> CasinoConfig? {
+        let rows: [CasinoConfig] = try await SupabaseClientProvider.shared
+            .rpc("get_casino_config", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows.first
+    }
+
+    /// The live RPC is `upsert_casino_config(p_room_id, p_enabled,
+    /// p_chip_color_map, p_standard_presets)` (migration 014).
+    /// Host-only; throws on non-host writes (42501). The color map
+    /// is encoded as the JSONB `{ "red": 7, ... }` object the
+    /// `casino_room_config.chip_color_map` column stores.
+    func updateCasinoConfig(
+        roomId: UUID,
+        enabled: Bool,
+        chipColorMap: [ChipColor: Int],
+        standardPresets: Bool
+    ) async throws {
+        let map = Dictionary(uniqueKeysWithValues: chipColorMap.map {
+            ($0.key.rawValue, $0.value)
+        })
+        _ = try await SupabaseClientProvider.shared
+            .rpc("upsert_casino_config", params: UpsertCasinoConfigParams(
+                p_room_id: roomId.uuidString,
+                p_enabled: enabled,
+                p_chip_color_map: map,
+                p_standard_presets: standardPresets
+            ))
             .execute()
             .value as Void
     }

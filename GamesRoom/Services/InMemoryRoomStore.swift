@@ -99,6 +99,12 @@ actor InMemoryRoomStore: RoomStore {
     /// `winPoints` default per the 2026-08-10 feedback round.
     private var packConfigs: [UUID: [RoomPackConfig]]
 
+    /// Map of `roomId → casino config`. W-06 (US-26) — every seeded
+    /// room starts with a defaults row (`standardPresets == true`,
+    /// empty chip color map) so the host's settings sheet can
+    /// read a non-nil initial state on first open.
+    private var casinoConfigs: [UUID: CasinoConfig]
+
     /// Map of `join_code → roomId` for the in-memory analogue of
     /// the `public.join_codes` table. Codes are minted by
     /// `generateJoinCode(roomId:)` and consumed (removed) by
@@ -245,6 +251,24 @@ actor InMemoryRoomStore: RoomStore {
         self.packConfigs = [:]
         self.joinCodes = [:]
         self.seasonHistoryByRoom = [:]
+        // W-06 — seed every room with a default casino config so
+        // the host's settings sheet reads a non-nil initial state.
+        // `standardPresets == true` with an empty map is the
+        // table-default that the SQL migration sets on insert.
+        self.casinoConfigs = [
+            carwoola.id: CasinoConfig(
+                roomId: carwoola.id, enabled: false,
+                chipColorMap: [:], standardPresets: true
+            ),
+            pluto.id: CasinoConfig(
+                roomId: pluto.id, enabled: false,
+                chipColorMap: [:], standardPresets: true
+            ),
+            felt.id: CasinoConfig(
+                roomId: felt.id, enabled: false,
+                chipColorMap: [:], standardPresets: true
+            )
+        ]
 
         // M1.1 — seed every room with an active season so the
         // V0State resolver has a season to read. Seed two rooms
@@ -731,6 +755,33 @@ actor InMemoryRoomStore: RoomStore {
         packConfigs[roomId] = configs
     }
 
+    // MARK: Casino config (W-06, US-26)
+
+    /// In-memory mirror of `get_casino_config(p_room_id)` (migration
+    /// 014). Returns the room's casino config or nil when the room
+    /// has no row.
+    func fetchCasinoConfig(roomId: UUID) async throws -> CasinoConfig? {
+        return casinoConfigs[roomId]
+    }
+
+    /// In-memory mirror of `upsert_casino_config(p_room_id,
+    /// p_enabled, p_chip_color_map, p_standard_presets)` (migration
+    /// 014). No host check on the in-memory path — mirrors the
+    /// `setRoomPackConfig` simplicity.
+    func updateCasinoConfig(
+        roomId: UUID,
+        enabled: Bool,
+        chipColorMap: [ChipColor: Int],
+        standardPresets: Bool
+    ) async throws {
+        casinoConfigs[roomId] = CasinoConfig(
+            roomId: roomId,
+            enabled: enabled,
+            chipColorMap: chipColorMap,
+            standardPresets: standardPresets
+        )
+    }
+
     // MARK: RSVP — read
 
     func fetchCurrentMemberRSVP(eventId: UUID) async throws -> MemberRSVPState {
@@ -963,6 +1014,7 @@ actor InMemoryRoomStore: RoomStore {
         roomSystemEvents.removeValue(forKey: roomId)
         packConfigs.removeValue(forKey: roomId)
         seasonHistoryByRoom.removeValue(forKey: roomId)
+        casinoConfigs.removeValue(forKey: roomId)
     }
 
     func updateRoom(

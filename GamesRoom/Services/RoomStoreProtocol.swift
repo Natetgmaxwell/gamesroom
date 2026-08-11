@@ -273,4 +273,23 @@ protocol RoomStore: Sendable {
     /// `set_room_pack_config(p_room_id, p_pack_slug, p_win_points)`
     /// (migration 047). Throws on non-host writes or unknown slugs.
     func setRoomPackConfig(roomId: UUID, packSlug: String, winPoints: Int) async throws
+
+    // MARK: Casino config (W-06, US-26)
+
+    /// The room's casino config, or `nil` when the room has never
+    /// been configured (callers fall back to standard presets).
+    ///
+    /// Server side: `get_casino_config(p_room_id)` (migration 014).
+    func fetchCasinoConfig(roomId: UUID) async throws -> CasinoConfig?
+
+    /// Host-only upsert of the room's casino config. Mirrors
+    /// `upsert_casino_config(p_room_id, p_enabled, p_chip_color_map,
+    /// p_standard_presets)` (migration 014). Throws on non-host
+    /// writes.
+    func updateCasinoConfig(
+        roomId: UUID,
+        enabled: Bool,
+        chipColorMap: [ChipColor: Int],
+        standardPresets: Bool
+    ) async throws
 }

@@ -466,4 +466,51 @@ final class CasinoService: ObservableObject {
         self.lastError = nil
         return rows.first
     }
+
+    // MARK: Casino config (W-06, US-26)
+
+    /// Returns the room's casino config, or `nil` when the room
+    /// has never been configured (the caller falls back to
+    /// standard presets). Non-throwing by design: a network blip
+    /// on this read shouldn't block the host's settings sheet —
+    /// collapsing to nil renders the default-presets state.
+    ///
+    /// Server side: `get_casino_config(p_room_id)` (migration 014).
+    func loadCasinoConfig(roomId: UUID) async -> CasinoConfig? {
+        let rows: [CasinoConfig] = (try? await SupabaseClientProvider.shared
+            .rpc("get_casino_config", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value) ?? []
+        self.lastError = nil
+        return rows.first
+    }
+
+    /// Host-only upsert of the room's casino config. Throws on
+    /// server errors (non-host write, network failure) so the
+    /// settings sheet can surface a neutral toast.
+    ///
+    /// Server side: `upsert_casino_config(p_room_id, p_enabled,
+    /// p_chip_color_map, p_standard_presets)` (migration 014).
+    func updateCasinoConfig(
+        roomId: UUID,
+        enabled: Bool,
+        chipColorMap: [ChipColor: Int],
+        standardPresets: Bool
+    ) async throws {
+        let map = Dictionary(uniqueKeysWithValues: chipColorMap.map {
+            ($0.key.rawValue, $0.value)
+        })
+        _ = try await SupabaseClientProvider.shared
+            .rpc("upsert_casino_config", params: [
+                "p_room_id": roomId.uuidString,
+                "p_enabled": enabled,
+                "p_chip_color_map": map,
+                "p_standard_presets": standardPresets
+            ])
+            .execute()
+            .value as Void
+        self.lastError = nil
+    }
 }

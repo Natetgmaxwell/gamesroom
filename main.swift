@@ -1098,6 +1098,50 @@ runner.runAsync("InMemoryRoomStore.seasonHistory is empty for a fresh room") {
     runner.assertEqual(history.count, 0)
 }
 
+// MARK: - Casino config (W-06, US-26)
+
+runner.runAsync("InMemoryRoomStore casino config defaults to standard presets") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    let config = try await store.fetchCasinoConfig(roomId: hosted.id)
+    runner.assertNotNil(config, "seeded room should have a casino config")
+    runner.assertTrue(config?.standardPresets ?? false, "defaults to standard presets")
+    runner.assertEqual(config?.chipColorMap.isEmpty ?? false, true)
+}
+
+runner.runAsync("InMemoryRoomStore updateCasinoConfig stores a custom color map") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    try await store.updateCasinoConfig(
+        roomId: hosted.id, enabled: true,
+        chipColorMap: [.red: 7, .blue: 12], standardPresets: false
+    )
+    let config = try await store.fetchCasinoConfig(roomId: hosted.id)
+    runner.assertEqual(config?.chipColorMap[.red], 7)
+    runner.assertEqual(config?.chipColorMap[.blue], 12)
+    runner.assertTrue(config?.standardPresets == false)
+    runner.assertTrue(config?.enabled == true)
+}
+
+runner.run("CasinoConfig.value(for:) honors custom map when standardPresets is false") {
+    let custom = CasinoConfig(
+        roomId: UUID(), enabled: true,
+        chipColorMap: [.red: 7, .blue: 12], standardPresets: false
+    )
+    runner.assertEqual(custom.value(for: .red), 7)
+    runner.assertEqual(custom.value(for: .blue), 12)
+    // Unmapped colors fall back to the built-in default.
+    runner.assertEqual(custom.value(for: .green), 25)
+}
+
+runner.run("CasinoConfig.value(for:) ignores the map when standardPresets is true") {
+    let standard = CasinoConfig(
+        roomId: UUID(), enabled: true,
+        chipColorMap: [.red: 7], standardPresets: true
+    )
+    runner.assertEqual(standard.value(for: .red), 5)
+}
+
 // MARK: - Summary
 
 print("")
