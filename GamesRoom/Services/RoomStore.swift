@@ -331,6 +331,22 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         return closed
     }
 
+    /// The live RPC `get_season_history(p_room_id)` (migration
+    /// 053) returns the room's ended seasons with the caller's
+    /// total + rank in each, most recent first. Empty for rooms
+    /// with no ended seasons or for non-members (membership guard
+    /// is enforced server-side). Powers the US-10
+    /// previous-seasons comparison surface.
+    func fetchSeasonHistory(roomId: UUID) async throws -> [SeasonHistoryEntry] {
+        let rows: [SeasonHistoryEntry] = try await SupabaseClientProvider.shared
+            .rpc("get_season_history", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
     // MARK: Room packs (M4)
 
     /// The live RPC `get_room_packs(p_room_id)` (migration 041)

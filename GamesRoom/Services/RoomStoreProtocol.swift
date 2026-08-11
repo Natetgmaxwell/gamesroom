@@ -203,6 +203,16 @@ protocol RoomStore: Sendable {
     /// Server side: `close_season(p_room_id)` (migration 048).
     func closeSeason(roomId: UUID) async throws -> Season
 
+    // MARK: Season history (W-05, US-10)
+
+    /// The room's ended seasons with the caller's total and rank
+    /// in each, most recent first. Drives the previous-seasons
+    /// comparison ("improving over time"). Empty when the room
+    /// has no ended seasons or when the caller is not a member.
+    ///
+    /// Server side: `get_season_history(p_room_id)` (migration 053).
+    func fetchSeasonHistory(roomId: UUID) async throws -> [SeasonHistoryEntry]
+
     // MARK: Room packs (M4 — pack-as-platform polish)
 
     /// Returns the pack slugs installed in this room. Mirrors

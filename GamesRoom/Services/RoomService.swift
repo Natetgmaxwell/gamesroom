@@ -112,6 +112,12 @@ final class RoomService: ObservableObject {
     /// before rendering (privacy boundary).
     @Published private(set) var awardsBySeason: [UUID: [SeasonAward]] = [:]
 
+    /// Prior seasons cache keyed by roomId. Populated lazily by
+    /// `loadSeasonHistory(roomId:)`; consumed by the US-10
+    /// previous-seasons comparison surface (W-05). Most recent
+    /// season first per the SQL `ORDER BY ordinal DESC`.
+    @Published private(set) var seasonHistoryByRoom: [UUID: [SeasonHistoryEntry]] = [:]
+
     /// Enabled pack slugs per room. Populated lazily by
     /// `loadRoomPacks(roomId:)`; consumed by the Operations sub-sheet's
     /// Packs toggle section. Empty array means "use the default
@@ -594,6 +600,7 @@ final class RoomService: ObservableObject {
         activeEventByRoom[roomId] = nil
         leaderboardByRoom[roomId] = []
         currentSeasonByRoom[roomId] = nil
+        seasonHistoryByRoom[roomId] = []
         await refresh()
     }
 
@@ -716,6 +723,30 @@ final class RoomService: ObservableObject {
     /// Cached awards for `seasonId`, possibly empty.
     func cachedSeasonAwards(seasonId: UUID) -> [SeasonAward] {
         awardsBySeason[seasonId] ?? []
+    }
+
+    /// W-05 (US-10) — loads the room's ended seasons with the
+    /// caller's total + rank, most recent first. Drives the
+    /// previous-seasons comparison section. Returns the cached
+    /// value (possibly empty) so the view renders without
+    /// waiting on the network.
+    @discardableResult
+    func loadSeasonHistory(roomId: UUID) async -> [SeasonHistoryEntry] {
+        do {
+            let rows = try await store.fetchSeasonHistory(roomId: roomId)
+            self.seasonHistoryByRoom[roomId] = rows
+            self.lastError = nil
+            return rows
+        } catch {
+            self.lastError = error.localizedDescription
+            return seasonHistoryByRoom[roomId] ?? []
+        }
+    }
+
+    /// Cached prior seasons for `roomId`, possibly empty.
+    /// Consumed by the US-10 previous-seasons comparison surface.
+    func cachedSeasonHistory(roomId: UUID) -> [SeasonHistoryEntry] {
+        seasonHistoryByRoom[roomId] ?? []
     }
 
     /// Cached enabled pack slugs for `roomId`. Falls back to the

@@ -68,6 +68,7 @@
 		AAAAAAAA00000000000000C4 /* CasinoWithdrawal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */; };
 		AAAAAAAA00000000000000C6 /* ChipColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000427 /* ChipColor.swift */; };
 		AAAAAAAA00000000000000C8 /* LeaderboardEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000428 /* LeaderboardEntry.swift */; };
+		AAAAAAAA000000000000047E /* SeasonHistoryEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000047D /* SeasonHistoryEntry.swift */; };
 		AAAAAAAA00000000000000CA /* OpenAttestationSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000429 /* OpenAttestationSummary.swift */; };
 		AAAAAAAA00000000000000CC /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000042A /* Session.swift */; };
 		AAAAAAAA00000000000000CE /* SessionDelta.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000042B /* SessionDelta.swift */; };
@@ -190,6 +191,7 @@
 		AAAAAAAA0000000000000426 /* CasinoWithdrawal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoWithdrawal.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000427 /* ChipColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipColor.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000428 /* LeaderboardEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardEntry.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000047D /* SeasonHistoryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonHistoryEntry.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000429 /* OpenAttestationSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAttestationSummary.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000042A /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000042B /* SessionDelta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDelta.swift; sourceTree = "<group>"; };
@@ -688,6 +690,7 @@
 				AAAAAAAA0000000000000474 /* CalendarService.swift in Sources */,
 				AAAAAAAA000000000000047A /* RoomStoreProtocol.swift in Sources */,
 				AAAAAAAA000000000000047C /* InMemoryRoomStore.swift in Sources */,
+				AAAAAAAA000000000000047E /* SeasonHistoryEntry.swift in Sources */,
 				AAAAAAAA0000000000000470 /* ScoreSnapshot.swift in Sources */,
 				AAAAAAAA0000000000000472 /* ScoreLiveActivityDriver.swift in Sources */,
 				AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */,

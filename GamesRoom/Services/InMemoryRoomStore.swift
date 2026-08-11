@@ -64,6 +64,14 @@ actor InMemoryRoomStore: RoomStore {
     /// global `PackRegistry.shared.allPacks` per the V0.8 brief.
     private var roomPacks: [UUID: [String]]
 
+    /// Map of `roomId → prior seasons with the caller's totals`,
+    /// ordered most recent first. W-05 — drives the US-10
+    /// previous-seasons comparison surface. The first seeded
+    /// room (Carwoola) carries two prior seasons so previews
+    /// render the "improving over time" section with real data;
+    /// the other rooms stay empty.
+    private var seasonHistoryByRoom: [UUID: [SeasonHistoryEntry]]
+
     /// Map of `roomId → system events queue`. M4. Drives the
     /// briefing slot's "System" section.
     private var roomSystemEvents: [UUID: [RoomSystemEvent]]
@@ -236,6 +244,7 @@ actor InMemoryRoomStore: RoomStore {
         self.rsvps = [:]
         self.packConfigs = [:]
         self.joinCodes = [:]
+        self.seasonHistoryByRoom = [:]
 
         // M1.1 — seed every room with an active season so the
         // V0State resolver has a season to read. Seed two rooms
@@ -341,6 +350,34 @@ actor InMemoryRoomStore: RoomStore {
         ]
         self.roomSystemEvents = [:]
         self.chapterLines = [:]
+
+        // W-05 — seed the first room (Carwoola Crew) with two
+        // prior ended seasons, most recent first in the array.
+        // The order reflects the SQL `ORDER BY ordinal DESC`:
+        // ordinal 2 ("The Comeback") is the freshest prior arc;
+        // ordinal 1 ("Genesis") is the oldest. Caller totals are
+        // chosen so the +340 movement (640 → 980) makes the
+        // "improving over time" story land in the seed view.
+        self.seasonHistoryByRoom[carwoola.id] = [
+            SeasonHistoryEntry(
+                seasonId: UUID(),
+                ordinal: 2,
+                subtitle: "The Comeback",
+                startedAt: Date().addingTimeInterval(-86_400 * 60),
+                endedAt: Date().addingTimeInterval(-86_400 * 30),
+                callerTotal: 980,
+                callerRank: 1
+            ),
+            SeasonHistoryEntry(
+                seasonId: UUID(),
+                ordinal: 1,
+                subtitle: "Genesis",
+                startedAt: Date().addingTimeInterval(-86_400 * 120),
+                endedAt: Date().addingTimeInterval(-86_400 * 61),
+                callerTotal: 640,
+                callerRank: 3
+            )
+        ]
     }
 
     // MARK: Rooms list
@@ -559,6 +596,16 @@ actor InMemoryRoomStore: RoomStore {
         )
         currentSeasons[roomId] = next
         return closed
+    }
+
+    /// In-memory mirror of `get_season_history` (migration 053).
+    /// Returns the seeded prior seasons for the room, most recent
+    /// first. Empty when the room has no ended seasons or when
+    /// the caller is not a member — the seed scope matches the
+    /// synthetic-member model (the in-memory store has no real
+    /// auth context).
+    func fetchSeasonHistory(roomId: UUID) async throws -> [SeasonHistoryEntry] {
+        return seasonHistoryByRoom[roomId] ?? []
     }
 
     // MARK: Room packs (M4)
@@ -915,6 +962,7 @@ actor InMemoryRoomStore: RoomStore {
         roomPacks.removeValue(forKey: roomId)
         roomSystemEvents.removeValue(forKey: roomId)
         packConfigs.removeValue(forKey: roomId)
+        seasonHistoryByRoom.removeValue(forKey: roomId)
     }
 
     func updateRoom(

@@ -1074,6 +1074,30 @@ runner.runAsync("InMemoryRoomStore.deleteRoom throws for non-host") {
     }
 }
 
+// MARK: - Season history (W-05, US-10)
+
+runner.runAsync("InMemoryRoomStore.seasonHistory returns prior seasons ordered with totals") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    let history = try await store.fetchSeasonHistory(roomId: hosted.id)
+    runner.assertEqual(history.count, 2)
+    runner.assertTrue(history[0].ordinal > history[1].ordinal, "most recent season first")
+    runner.assertTrue(history.allSatisfy { $0.callerTotal > 0 }, "caller totals present")
+    let currentScore: Int64 = 1_200
+    runner.assertEqual(history[0].delta(against: currentScore), currentScore - history[0].callerTotal)
+}
+
+runner.runAsync("InMemoryRoomStore.seasonHistory is empty for a fresh room") {
+    let store = InMemoryRoomStore()
+    let id = try await store.createRoom(
+        name: "Fresh", mascotName: "M", mascotPersonality: .friendly,
+        mascotPoliticalIdeology: .centrist, joinStartingBonus: 200,
+        mascotApiKey: nil, blacklistedUserIds: []
+    )
+    let history = try await store.fetchSeasonHistory(roomId: id)
+    runner.assertEqual(history.count, 0)
+}
+
 // MARK: - Summary
 
 print("")
