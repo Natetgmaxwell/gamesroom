@@ -50,6 +50,7 @@ source_phase_match = re.search(
 )
 if not source_phase_match:
     errors.append("PBXSourcesBuildPhase section is missing")
+    source_phase = ""
 else:
     source_phase = source_phase_match.group("section")
     for source_file in sorted(SOURCE_ROOT.rglob("*.swift")):
@@ -57,6 +58,44 @@ else:
             errors.append(f"{source_file.relative_to(ROOT)} has no PBXFileReference")
         if source_file.name not in source_phase:
             errors.append(f"{source_file.relative_to(ROOT)} is not in the Sources build phase")
+
+# Structural check: every ID in a Sources build phase's files array must be a
+# declared PBXBuildFile, and every PBXBuildFile's fileRef must be a declared
+# PBXFileReference. A PBXFileReference sitting directly in a build phase is
+# invalid and breaks Xcode's project load (name-substring checks above miss it).
+file_reference_ids: set[str] = set()
+for match in file_reference_pattern.finditer(text):
+    file_reference_ids.add(match.group("id"))
+build_file_section_match = re.search(
+    r"/\* Begin PBXBuildFile section \*/(?P<section>.*?)/\* End PBXBuildFile section \*/",
+    text,
+    re.DOTALL,
+)
+build_file_ids: set[str] = set()
+build_file_refs: set[str] = set()
+if not build_file_section_match:
+    errors.append("PBXBuildFile section is missing")
+else:
+    build_file_section = build_file_section_match.group("section")
+    for build_file_match in re.finditer(
+        r"(?P<id>[A-Fa-f0-9]{24}) /\* [^*]+ \*/ = \{isa = PBXBuildFile; fileRef = (?P<ref>[A-Fa-f0-9]{24})",
+        build_file_section,
+    ):
+        build_file_ids.add(build_file_match.group("id"))
+        build_file_refs.add(build_file_match.group("ref"))
+    if source_phase_match:
+        for phase_match in re.finditer(
+            r"isa = PBXSourcesBuildPhase;(?P<body>.*?)\n\s*\};",
+            source_phase,
+            re.DOTALL,
+        ):
+            for entry_match in re.finditer(r"(?P<id>[A-Fa-f0-9]{24}) /\* [^*]+ \*/", phase_match.group("body")):
+                entry_id = entry_match.group("id")
+                if entry_id not in build_file_ids:
+                    errors.append(f"Sources build phase entry {entry_id} is not a PBXBuildFile")
+for build_file_ref in sorted(build_file_refs):
+    if build_file_ref not in file_reference_ids:
+        errors.append(f"PBXBuildFile fileRef {build_file_ref} has no PBXFileReference")
 
 target_config_pattern = re.compile(
     r"AAAAAAAA000000000000010[56] /\* (?:Debug|Release) \*/ = \{\n"
