@@ -1098,6 +1098,19 @@ runner.runAsync("InMemoryRoomStore.seasonHistory is empty for a fresh room") {
     runner.assertEqual(history.count, 0)
 }
 
+runner.run("SeasonHistoryEntry.displayName falls back to Season N when subtitle is empty") {
+    let plain = SeasonHistoryEntry(seasonId: UUID(), ordinal: 3, subtitle: "", startedAt: Date(), endedAt: Date(), callerTotal: 120, callerRank: 2)
+    runner.assertEqual(plain.displayName, "Season 3")
+    let named = SeasonHistoryEntry(seasonId: UUID(), ordinal: 3, subtitle: "Poker arc", startedAt: Date(), endedAt: Date(), callerTotal: 120, callerRank: 2)
+    runner.assertEqual(named.displayName, "Season 3: Poker arc")
+}
+
+runner.run("SeasonHistoryEntry.delta(against:) is positive when climbed since that season") {
+    let past = SeasonHistoryEntry(seasonId: UUID(), ordinal: 1, subtitle: "", startedAt: Date(), endedAt: Date(), callerTotal: 100, callerRank: 1)
+    runner.assertEqual(past.delta(against: 160), 60)
+    runner.assertEqual(past.delta(against: 80), -20)
+}
+
 // MARK: - Casino config (W-06, US-26)
 
 runner.runAsync("InMemoryRoomStore casino config defaults to standard presets") {

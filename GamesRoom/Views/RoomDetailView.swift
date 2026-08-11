@@ -166,7 +166,8 @@ struct RoomDetailView: View {
                 // section is member-visible (read surface).
                 if !roomService.cachedSeasonHistory(roomId: room.id).isEmpty {
                     SeasonHistorySection(
-                        rows: roomService.cachedSeasonHistory(roomId: room.id)
+                        rows: roomService.cachedSeasonHistory(roomId: room.id),
+                        currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0
                     )
                     .sectionCard(.standard)
                 }
@@ -1622,7 +1623,8 @@ private struct RoundBreakdownSection: View {
 /// and the delta vs the active season. Member-visible read surface;
 /// hidden entirely when the room has no ended seasons.
 private struct SeasonHistorySection: View {
-    let rows: [SeasonHistoryRow]
+    let rows: [SeasonHistoryEntry]
+    let currentScore: Int64
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1653,10 +1655,10 @@ private struct SeasonHistorySection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func seasonRow(_ row: SeasonHistoryRow) -> some View {
+    private func seasonRow(_ row: SeasonHistoryEntry) -> some View {
         HStack(spacing: Theme.Layout.gutter) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.name)
+                Text(row.displayName)
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(dateRange(row))
@@ -1686,19 +1688,19 @@ private struct SeasonHistorySection: View {
         .padding(.horizontal, Theme.Layout.edgePadding)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            Text("\(row.name), \(row.callerTotal) points, \(rankText(row)), \(deltaText(row)) versus the current season")
+            Text("\(row.displayName), \(row.callerTotal) points, \(rankText(row)), \(deltaText(row)) versus the current season")
         )
     }
 
-    private func dateRange(_ row: SeasonHistoryRow) -> String {
+    private func dateRange(_ row: SeasonHistoryEntry) -> String {
         if let ended = row.endedAt {
             return "\(row.startedAt, format: .dateTime.month().day().year()) – \(ended, format: .dateTime.month().day().year())"
         }
         return row.startedAt.formatted(date: .abbreviated, time: .omitted)
     }
 
-    private func rankText(_ row: SeasonHistoryRow) -> String {
-        row.callerRank == 1 ? "1st place" : "\(ordinal(row.callerRank)) place"
+    private func rankText(_ row: SeasonHistoryEntry) -> String {
+        row.callerRank == 1 ? "1st place" : "\(ordinal(Int(row.callerRank))) place"
     }
 
     private func ordinal(_ n: Int) -> String {
@@ -1716,14 +1718,14 @@ private struct SeasonHistorySection: View {
         return "\(n)\(suffix)"
     }
 
-    private func deltaText(_ row: SeasonHistoryRow) -> String {
-        row.deltaVsCurrent >= 0 ? "+\(row.deltaVsCurrent)" : "\(row.deltaVsCurrent)"
+    private func deltaText(_ row: SeasonHistoryEntry) -> String {
+        row.delta(against: currentScore) >= 0 ? "+\(row.delta(against: currentScore))" : "\(row.delta(against: currentScore))"
     }
 
-    private func deltaColor(_ row: SeasonHistoryRow) -> Color {
-        row.deltaVsCurrent > 0
+    private func deltaColor(_ row: SeasonHistoryEntry) -> Color {
+        row.delta(against: currentScore) > 0
             ? Theme.Palette.accent
-            : (row.deltaVsCurrent < 0 ? .red.opacity(0.85) : Theme.Palette.primaryText.opacity(0.45))
+            : (row.delta(against: currentScore) < 0 ? .red.opacity(0.85) : Theme.Palette.primaryText.opacity(0.45))
     }
 }
 

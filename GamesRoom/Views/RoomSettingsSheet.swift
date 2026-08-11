@@ -1001,7 +1001,12 @@ struct RoomSettingsCasinoSheet: View {
             visionApiKey: loaded.visionApiKey
         )
         do {
-            try await casinoService.updateCasinoConfig(updated)
+            try await casinoService.updateCasinoConfig(
+                roomId: roomId,
+                enabled: updated.enabled,
+                chipColorMap: updated.chipColorMap,
+                standardPresets: updated.standardPresets
+            )
             dismiss()
         } catch {
             // AC-10: what/why/what-to-do inline; the sheet stays so
