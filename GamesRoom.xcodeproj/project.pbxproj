@@ -41,6 +41,8 @@
 		AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000457 /* ChipScanSheet.swift */; };
 		AAAAAAAA0000000000000477 /* ChipSegmentationDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000455 /* ChipSegmentationDetector.swift */; };
 		AAAAAAAA0000000000000478 /* PhotoHash.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000456 /* PhotoHash.swift */; };
+		AAAAAAAA000000000000047A /* RoomStoreProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000479 /* RoomStoreProtocol.swift */; };
+		AAAAAAAA000000000000047C /* InMemoryRoomStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000047B /* InMemoryRoomStore.swift */; };
 		AAAAAAAA0000000000000470 /* ScoreSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000471 /* ScoreSnapshot.swift */; };
 		AAAAAAAA0000000000000472 /* ScoreLiveActivityDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000473 /* ScoreLiveActivityDriver.swift */; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
@@ -231,6 +233,8 @@
 		AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSnapshotStore.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000471 /* ScoreSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSnapshot.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000475 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000479 /* RoomStoreProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStoreProtocol.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000047B /* InMemoryRoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryRoomStore.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000448 /* DrowningBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrowningBadge.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044A /* PackDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000044C /* PackHowTo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackHowTo.swift; sourceTree = "<group>"; };
@@ -374,6 +378,8 @@
 				AAAAAAAA0000000000000473 /* ScoreLiveActivityDriver.swift */,
 				AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */,
 				AAAAAAAA0000000000000475 /* CalendarService.swift */,
+				AAAAAAAA0000000000000479 /* RoomStoreProtocol.swift */,
+				AAAAAAAA000000000000047B /* InMemoryRoomStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -680,6 +686,8 @@
 				AAAAAAAA00000000000000E5 /* ScoringService.swift in Sources */,
 				AAAAAAAA000000000000046D /* ScoreSnapshotStore.swift in Sources */,
 				AAAAAAAA0000000000000474 /* CalendarService.swift in Sources */,
+				AAAAAAAA000000000000047A /* RoomStoreProtocol.swift in Sources */,
+				AAAAAAAA000000000000047C /* InMemoryRoomStore.swift in Sources */,
 				AAAAAAAA0000000000000470 /* ScoreSnapshot.swift in Sources */,
 				AAAAAAAA0000000000000472 /* ScoreLiveActivityDriver.swift in Sources */,
 				AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */,
