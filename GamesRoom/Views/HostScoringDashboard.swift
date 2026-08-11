@@ -52,6 +52,7 @@ struct HostScoringDashboard: View {
     @State private var errorMessage: String?
     @State private var rounds: [EventRound] = []
     @State private var editingRound: EventRound?
+    @State private var roundToDelete: EventRound?
 
     private var members: [Member] {
         roomService.cachedMembers(roomId: room.id)
@@ -95,7 +96,7 @@ struct HostScoringDashboard: View {
                     rounds: rounds,
                     members: members,
                     onEdit: { startEditing($0) },
-                    onDelete: { round in Task { await deleteRound(round) } }
+                    onDelete: { round in roundToDelete = round }
                 )
                 .padding(.horizontal, Theme.Layout.gutter)
                 .padding(.vertical, Theme.Layout.sectionSpacing)
@@ -115,6 +116,27 @@ struct HostScoringDashboard: View {
         .task {
             rounds = await roomService.loadEventRounds(eventId: event.id)
             roundIndex = rounds.nextRoundIndex
+        }
+        .confirmationDialog(
+            "Delete round \(roundToDelete?.roundIndex ?? 0)?",
+            isPresented: Binding(
+                get: { roundToDelete != nil },
+                set: { if !$0 { roundToDelete = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: roundToDelete
+        ) { round in
+            Button("Delete", role: .destructive) {
+                Task {
+                    await deleteRound(round)
+                    roundToDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                roundToDelete = nil
+            }
+        } message: { _ in
+            Text("This reverses the score change for everyone in the round.")
         }
     }
 
@@ -408,6 +430,7 @@ struct HostScoringDashboard: View {
                 input: input,
                 correctionOf: editingRound?.id
             )
+            _ = await roomService.loadLeaderboard(roomId: room.id)
             rounds = await roomService.loadEventRounds(eventId: event.id)
             roundIndex = rounds.nextRoundIndex
             selectedMemberIds.removeAll()
@@ -450,6 +473,7 @@ struct HostScoringDashboard: View {
                 eventId: event.id,
                 roundIndex: round.roundIndex
             )
+            _ = await roomService.loadLeaderboard(roomId: room.id)
             rounds = await roomService.loadEventRounds(eventId: event.id)
             roundIndex = rounds.nextRoundIndex
             if editingRound?.id == round.id { editingRound = nil }
