@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="500" viewBox="0 0 1400 500">
+  <g transform="scale(0.5)">
+    <circle id="coin" cx="512" cy="512" r="330" fill="#F5A623"/>
+    <circle id="rim" cx="512" cy="512" r="330" fill="none" stroke="#F7F3E9" stroke-width="36"/>
+    <g id="pips" fill="#23264F" opacity="0.92">
+      <circle cx="392" cy="392" r="58"/>
+      <circle cx="632" cy="392" r="58"/>
+      <circle cx="392" cy="632" r="58"/>
+      <circle cx="632" cy="632" r="58"/>
+    </g>
+  </g>
+  <text font-family="SFNSRounded, sans-serif" font-weight="700" fill="#23264F">
+    <tspan x="540.0" y="268">G</tspan>
+    <tspan x="622.0" y="268">A</tspan>
+    <tspan x="704.0" y="268">M</tspan>
+    <tspan x="786.0" y="268">E</tspan>
+    <tspan x="868.0" y="268">S</tspan>
+    <tspan x="990.0" y="268">R</tspan>
+    <tspan x="1072.0" y="268">O</tspan>
+    <tspan x="1154.0" y="268">O</tspan>
+    <tspan x="1236.0" y="268">M</tspan>
+  </text>
+</svg>

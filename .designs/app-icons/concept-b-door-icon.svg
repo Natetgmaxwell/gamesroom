@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect id="background" width="1024" height="1024" fill="#1E2A3A"/>
+  <g id="foreground">
+    <rect id="door" x="176" y="192" width="480" height="640" rx="56" fill="#FF6B5E"/>
+    <path id="wedge" d="M724 192 L724 832 L848 752 L848 272 Z" fill="#F5A623" fill-opacity="0.8"/>
+    <line id="gap-edge" x1="724" y1="192" x2="724" y2="832" stroke="#F5A623" stroke-width="40"/>
+  </g>
+</svg>

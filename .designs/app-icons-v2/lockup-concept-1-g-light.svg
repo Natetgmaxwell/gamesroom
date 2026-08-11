@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="500" viewBox="0 0 1400 500">
+  <g transform="scale(0.5)">
+    <path id="g-ring" d="M 793.9 409.4 A 300 300 0 1 0 793.9 614.6" fill="none" stroke="#F5A623" stroke-width="120" stroke-linecap="round"/>
+    <rect id="g-bar" x="512" y="584" width="268" height="60" rx="30" fill="#F5A623"/>
+    <circle id="pip" cx="512" cy="460" r="75" fill="#F7F3E9"/>
+  </g>
+  <text font-family="SFNSRounded, sans-serif" font-weight="700" fill="#23264F">
+    <tspan x="540.0" y="268">G</tspan>
+    <tspan x="622.0" y="268">A</tspan>
+    <tspan x="704.0" y="268">M</tspan>
+    <tspan x="786.0" y="268">E</tspan>
+    <tspan x="868.0" y="268">S</tspan>
+    <tspan x="990.0" y="268">R</tspan>
+    <tspan x="1072.0" y="268">O</tspan>
+    <tspan x="1154.0" y="268">O</tspan>
+    <tspan x="1236.0" y="268">M</tspan>
+  </text>
+</svg>

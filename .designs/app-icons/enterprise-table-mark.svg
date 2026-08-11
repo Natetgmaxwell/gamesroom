@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <g fill="none" stroke="#23264F" stroke-width="20">
+    <rect id="table" x="96" y="156" width="320" height="200" rx="40"/>
+    <g id="seat-ticks" stroke-width="14">
+      <circle cx="96" cy="256" r="30"/>
+      <circle cx="416" cy="256" r="30"/>
+      <circle cx="256" cy="156" r="30"/>
+      <circle cx="256" cy="356" r="30"/>
+    </g>
+  </g>
+</svg>

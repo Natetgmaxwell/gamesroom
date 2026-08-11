@@ -1,36 +1,22 @@
 name: CI
 
 on:
-  pull_request:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
 
 jobs:
-  test:
-    name: Foundation tests + pbxproj + parse-check
-    runs-on: ubuntu-latest
-
+  verify:
+    runs-on: macos-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Swift toolchain
-        uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: "6.0"
-
-      - name: Make scripts executable
-        run: chmod +x build-and-run-tests.sh scripts/parse-check-swiftui.sh
-
-      - name: Run Foundation tests + parse-check
+      - name: Foundation tests + parse checks
         run: ./build-and-run-tests.sh
 
-      - name: Verify Xcode project
+      - name: Xcode project verification
         run: python3 scripts/verify-xcode-project.py
 
-      - name: Upload test binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: games-room-tests
-          path: games-room-tests
-          if-no-files-found: ignore
+      - name: SwiftUI parse check
+        run: bash scripts/parse-check-swiftui.sh

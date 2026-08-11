@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect id="background" width="1024" height="1024" fill="#23264F"/>
+  <g id="foreground">
+    <rect id="table" x="232" y="332" width="560" height="360" rx="72" fill="#F5A623"/>
+    <g id="seats" fill="#F7F3E9" opacity="0.85">
+      <circle cx="232" cy="512" r="70"/>
+      <circle cx="792" cy="512" r="70"/>
+      <circle cx="512" cy="332" r="70"/>
+      <circle cx="512" cy="692" r="70"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect id="background" width="1024" height="1024" fill="#23264F"/>
+  <g id="foreground">
+    <circle id="coin" cx="512" cy="512" r="330" fill="#F5A623"/>
+    <circle id="rim" cx="512" cy="512" r="330" fill="none" stroke="#F7F3E9" stroke-width="36"/>
+    <g id="pips" fill="#23264F" opacity="0.92">
+      <circle cx="392" cy="392" r="58"/>
+      <circle cx="632" cy="392" r="58"/>
+      <circle cx="392" cy="632" r="58"/>
+      <circle cx="632" cy="632" r="58"/>
+    </g>
+  </g>
+</svg>

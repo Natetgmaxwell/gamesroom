@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect id="background" width="1024" height="1024" fill="#23264F"/>
+  <g id="foreground">
+    <rect id="squircle" x="212" y="212" width="600" height="600" rx="170" fill="#F7F3E9"/>
+    <g id="pips" fill="#FFFFFF" opacity="0.9">
+      <circle cx="302" cy="302" r="45"/>
+      <circle cx="722" cy="302" r="45"/>
+      <circle cx="302" cy="722" r="45"/>
+      <circle cx="722" cy="722" r="45"/>
+    </g>
+    <circle id="center-pip" cx="512" cy="512" r="58" fill="#F5A623"/>
+  </g>
+</svg>

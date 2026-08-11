@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="500" viewBox="0 0 1400 500">
+  <g transform="scale(0.5)">
+    <rect id="table" x="232" y="232" width="560" height="560" rx="100" fill="#F5A623"/>
+    <rect id="rail" x="232" y="232" width="560" height="560" rx="100" fill="none" stroke="#F7F3E9" stroke-width="44"/>
+    <g id="seats" fill="#F5A623" opacity="0.92">
+      <rect x="442" y="194" width="140" height="76" rx="38"/>
+      <rect x="442" y="754" width="140" height="76" rx="38"/>
+      <rect x="194" y="442" width="76" height="140" rx="38"/>
+      <rect x="754" y="442" width="76" height="140" rx="38"/>
+    </g>
+  </g>
+  <text font-family="SFNSRounded, sans-serif" font-weight="700" fill="#F7F3E9">
+    <tspan x="540.0" y="268">G</tspan>
+    <tspan x="622.0" y="268">A</tspan>
+    <tspan x="704.0" y="268">M</tspan>
+    <tspan x="786.0" y="268">E</tspan>
+    <tspan x="868.0" y="268">S</tspan>
+    <tspan x="990.0" y="268">R</tspan>
+    <tspan x="1072.0" y="268">O</tspan>
+    <tspan x="1154.0" y="268">O</tspan>
+    <tspan x="1236.0" y="268">M</tspan>
+  </text>
+</svg>
