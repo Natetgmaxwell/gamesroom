@@ -98,6 +98,31 @@ final class TestRunner {
 
 let runner = TestRunner()
 
+// MARK: - StorageKeys tests (T1.2)
+
+runner.run("StorageKeys.keepScanPhotos defaults to false") {
+    let defaults = UserDefaults(suiteName: "test-keepScanPhotos-default")!
+    defaults.removePersistentDomain(forName: "test-keepScanPhotos-default")
+    runner.assertFalse(defaults.bool(forKey: StorageKeys.keepScanPhotos))
+}
+
+runner.run("StorageKeys.keepScanPhotos round-trips") {
+    let defaults = UserDefaults(suiteName: "test-keepScanPhotos-roundtrip")!
+    defaults.removePersistentDomain(forName: "test-keepScanPhotos-roundtrip")
+    defaults.set(true, forKey: StorageKeys.keepScanPhotos)
+    runner.assertTrue(defaults.bool(forKey: StorageKeys.keepScanPhotos))
+    defaults.set(false, forKey: StorageKeys.keepScanPhotos)
+    runner.assertFalse(defaults.bool(forKey: StorageKeys.keepScanPhotos))
+}
+
+runner.run("StorageKeys.calendarEventIdentifier is stable per event") {
+    let id = UUID()
+    let first = StorageKeys.calendarEventIdentifier(eventId: id)
+    let second = StorageKeys.calendarEventIdentifier(eventId: id)
+    runner.assertEqual(first, second)
+    runner.assertTrue(first.contains(id.uuidString))
+}
+
 // MARK: - PackRegistry tests
 
 runner.run("PackRegistry default registry holds four V0.8 packs") {

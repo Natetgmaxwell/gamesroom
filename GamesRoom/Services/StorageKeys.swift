@@ -20,4 +20,18 @@ enum StorageKeys {
     /// doesn't accept `UUID?` directly. Empty string means "no
     /// resume target."
     static let lastViewedRoomId = "lastViewedRoomIdString"
+
+    /// T1.2 — opt-in "keep scan photos" flag. Default `false`:
+    /// the F-CAS-03 discard-by-default path stays identical. When
+    /// on, `ChipScanSheet` writes the JPEG to the app sandbox
+    /// (`Documents/ScanPhotos/`) instead of discarding it. The
+    /// photo never leaves the device.
+    static let keepScanPhotos = "keepScanPhotos"
+
+    /// T1.1 — per-event EKEvent identifier, keyed by the room
+    /// event's UUID. Lets `CalendarService` update/remove the same
+    /// calendar row across edits. Absent = no calendar row yet.
+    static func calendarEventIdentifier(eventId: UUID) -> String {
+        "calendarEventIdentifier-\(eventId.uuidString)"
+    }
 }

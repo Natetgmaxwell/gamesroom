@@ -515,6 +515,23 @@ final class RoomService: ObservableObject {
         // Eagerly refresh the active-event cache so the parent's
         // post-create flow doesn't need a second round-trip.
         _ = await loadActiveEvent(roomId: roomId)
+        // T1.1 — calendar auto-add. Best-effort: a denied prompt
+        // or a failed write never blocks the event flow. Uses the
+        // server-canonical event from the cache when available.
+        if let room = rooms.first(where: { $0.id == roomId }), room.calendarAutoAddHost {
+            let granted = await CalendarService.shared.requestAccess()
+            if granted {
+                let event = activeEventByRoom[roomId] ?? Event(
+                    id: newId,
+                    roomId: roomId,
+                    name: name,
+                    playedAt: playedAt,
+                    createdAt: Date(),
+                    packSlug: packSlug
+                )
+                await CalendarService.shared.addEvent(room: room, event: event)
+            }
+        }
         // P1.3 — schedule the briefing trio. The dispatcher is
         // non-throwing; failures collapse to a logged warning
         // inside the dispatcher. Per-event fan-out reads the
@@ -547,8 +564,16 @@ final class RoomService: ObservableObject {
     func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws {
         try await store.updateEventMemberFields(eventId: eventId, note: note, venue: venue)
         self.lastError = nil
-        if let roomId = cachedActiveEvent(roomId: eventId)?.roomId {
-            _ = await loadActiveEvent(roomId: roomId)
+        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
+            _ = await loadActiveEvent(roomId: event.roomId)
+            // T1.1 — keep the calendar row in sync with venue/note
+            // edits. Reads the post-reload event so the row carries
+            // the fresh values.
+            if let room = rooms.first(where: { $0.id == event.roomId }),
+               room.calendarAutoAddHost,
+               let fresh = activeEventByRoom[event.roomId] {
+                await CalendarService.shared.updateEvent(room: room, event: fresh)
+            }
         }
     }
 

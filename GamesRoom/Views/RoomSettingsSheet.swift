@@ -360,6 +360,17 @@ struct RoomSettingsSheet: View {
                     roomId: room.id,
                     subtitle: trimmedSubtitle.isEmpty ? nil : trimmedSubtitle
                 )
+                // T1.1 — when the host turns the toggle on, ask for
+                // calendar access up front. Denied = inline warning,
+                // not a hard failure; the toggle stays on and the
+                // next event create re-prompts.
+                if calendarAutoAddHost {
+                    let granted = await CalendarService.shared.requestAccess()
+                    guard granted else {
+                        errorMessage = "Calendar access denied — events won't auto-add. You can allow it in Settings."
+                        return
+                    }
+                }
                 dismiss()
             } catch {
                 errorMessage = (error as NSError).localizedDescription
