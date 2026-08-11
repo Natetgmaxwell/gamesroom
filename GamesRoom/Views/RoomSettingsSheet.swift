@@ -37,9 +37,14 @@ import SwiftUI
 
 struct RoomSettingsSheet: View {
     let room: Room
+    /// W-04 — invoked after a successful delete so the presenter can
+    /// pop/dismiss the surrounding navigation (the room is gone from
+    /// the service's rooms cache at this point).
+    var onRoomDeleted: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var roomService: RoomService
+    @EnvironmentObject private var casinoService: CasinoService
 
     // Form-level state — seeded from the `room` passed in.
     // Hoisted to the root so sub-sheets read/write through
@@ -68,6 +73,10 @@ struct RoomSettingsSheet: View {
     @State private var showDeclareConfirm: Bool = false
     @State private var isDeclaring: Bool = false
 
+    // W-04 — host "Delete room" confirm state (US-04).
+    @State private var showDeleteConfirm: Bool = false
+    @State private var isDeleting: Bool = false
+
     // W2.6 — season-subtitle host-approval beat. Seeded from the
     // current season; saved via set_season_subtitle on Save.
     @State private var seasonSubtitle: String
@@ -76,8 +85,9 @@ struct RoomSettingsSheet: View {
     // how-to body. nil = no detail sheet presented.
     @State private var packDetailType: (any PackDefinition.Type)?
 
-    init(room: Room) {
+    init(room: Room, onRoomDeleted: (() -> Void)? = nil) {
         self.room = room
+        self.onRoomDeleted = onRoomDeleted
         _mascotName = State(initialValue: room.mascotName)
         _mascotPersonality = State(initialValue: room.mascotPersonality)
         _mascotIdeology = State(initialValue: room.mascotPoliticalIdeology)
@@ -157,6 +167,22 @@ struct RoomSettingsSheet: View {
                             detail: "Browse packs, how-to guides, installed state"
                         )
                     }
+
+                    // W-06 — host chip-color-map editor (US-26).
+                    // Data layer (`upsert_casino_config`, migration
+                    // 014) shipped with zero UI; this row opens the
+                    // editor. Color map only — no vision-model
+                    // settings panel (non-goal 15).
+                    NavigationLink {
+                        RoomSettingsCasinoSheet(roomId: room.id)
+                            .environmentObject(casinoService)
+                    } label: {
+                        settingsRow(
+                            icon: Theme.Icon.circleHexagongridFill,
+                            title: "Casino chips",
+                            detail: "Chip values — standard or per-room"
+                        )
+                    }
                 }
 
                 if let errorMessage {
@@ -232,6 +258,42 @@ struct RoomSettingsSheet: View {
                         }
                     }
                     .disabled(isSaving)
+                }
+
+                // W-04 — host-only destructive action. Sits at the
+                // bottom of the sheet, visually separated from the
+                // settings sections (AC-03 placement; never next to
+                // claim-seat surfaces).
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        HStack {
+                            Image(systemName: Theme.Icon.trashFill)
+                            Text("Delete room")
+                                .font(Theme.Typography.body.weight(.semibold))
+                            Spacer()
+                            if isDeleting {
+                                ProgressView()
+                                    .tint(.red)
+                            }
+                        }
+                    }
+                    .disabled(isDeleting)
+                } footer: {
+                    Text("Expires all join codes and removes calendar rows. The score ledger is kept for disputes.")
+                }
+                .confirmationDialog(
+                    "Delete \(room.name)?",
+                    isPresented: $showDeleteConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) {
+                        Task { await deleteRoom() }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("All join codes for this room expire immediately. This cannot be undone.")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -318,6 +380,28 @@ struct RoomSettingsSheet: View {
         do {
             _ = try await roomService.closeSeason(roomId: room.id)
             dismiss()
+        } catch {
+            errorMessage = (error as NSError).localizedDescription
+        }
+    }
+
+    // MARK: - Delete room (W-04, US-04)
+
+    /// Host-only destructive action. Fires `RoomService.deleteRoom`,
+    /// which routes through `delete_room` (migration 052): soft-
+    /// deletes the room, expires open join codes, and removes
+    /// calendar rows. On success the sheet dismisses; the service
+    /// updates its rooms-list cache so the caller's list re-renders
+    /// without the room.
+    private func deleteRoom() async {
+        guard !isDeleting else { return }
+        isDeleting = true
+        errorMessage = nil
+        defer { isDeleting = false }
+        do {
+            try await roomService.deleteRoom(roomId: room.id)
+            dismiss()
+            onRoomDeleted?()
         } catch {
             errorMessage = (error as NSError).localizedDescription
         }
@@ -794,4 +878,135 @@ struct RoomSettingsMembersSheet: View {
 struct AnyPackType: Identifiable {
     let type: any PackDefinition.Type
     var id: String { type.slug }
+}
+
+// MARK: - Casino sub-sheet (W-06)
+
+/// W-06 — host chip-color-map editor (US-26). Surfaces
+/// `upsert_casino_config` / `get_casino_config` (migration 014) —
+/// the data layer shipped with zero UI. The host picks between the
+/// standard preset values and per-room overrides per chip color.
+/// Color map only; no vision-model settings panel (non-goal 15).
+struct RoomSettingsCasinoSheet: View {
+    let roomId: UUID
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var casinoService: CasinoService
+
+    /// The config as loaded from the server. Non-nil once the
+    /// initial read resolves; every field except the two the host
+    /// edits (`standardPresets`, `chipColorMap`) passes through
+    /// untouched on save.
+    @State private var loadedConfig: CasinoConfig?
+    @State private var standardPresets: Bool = true
+    @State private var colorValues: [ChipColor: Int] = [:]
+    @State private var isLoading: Bool = false
+    @State private var isSaving: Bool = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle("Standard presets", isOn: $standardPresets)
+                } footer: {
+                    Text("On: the classic chip values (white 1, red 5, blue 10, green 25, black 100). Off: use your per-room values below.")
+                }
+
+                if !standardPresets {
+                    Section("Per-room values") {
+                        ForEach(ChipColor.allCases, id: \.self) { color in
+                            Stepper(
+                                "\(color.displayName): \(value(for: color)) pts",
+                                value: Binding(
+                                    get: { value(for: color) },
+                                    set: { colorValues[color] = $0 }
+                                ),
+                                in: 0...500,
+                                step: 1
+                            )
+                        }
+                    } footer: {
+                        Text("Colors you leave at their standard value keep it — only the changed ones are saved.")
+                    }
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(.red.opacity(0.85))
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.Palette.background)
+            .navigationTitle("Casino chips")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task { await save() }
+                    }
+                    .tint(Theme.Palette.accent)
+                    .disabled(isLoading || isSaving || loadedConfig == nil)
+                }
+            }
+            .task {
+                await load()
+            }
+        }
+        .tint(Theme.Palette.accent)
+    }
+
+    private func value(for color: ChipColor) -> Int {
+        colorValues[color] ?? color.defaultValue
+    }
+
+    private func load() async {
+        guard loadedConfig == nil else { return }
+        isLoading = true
+        defer { isLoading = false }
+        let config = await casinoService.loadCasinoConfig(roomId: roomId)
+        loadedConfig = config
+        standardPresets = config?.standardPresets ?? true
+        colorValues = config?.chipColorMap ?? [:]
+    }
+
+    private func save() async {
+        guard let loaded = loadedConfig, !isSaving else { return }
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+        // Persist only the colors the host actually changed; the
+        // model's `value(for:)` falls back to `defaultValue` for
+        // unmapped colors.
+        let map = standardPresets
+            ? [:]
+            : Dictionary(uniqueKeysWithValues: ChipColor.allCases.compactMap { color in
+                let v = value(for: color)
+                return v == color.defaultValue ? nil : (color, v)
+            })
+        let updated = CasinoConfig(
+            roomId: roomId,
+            enabled: loaded.enabled,
+            chipColorMap: map,
+            standardPresets: standardPresets,
+            visionProvider: loaded.visionProvider,
+            visionModel: loaded.visionModel,
+            visionApiKey: loaded.visionApiKey
+        )
+        do {
+            try await casinoService.updateCasinoConfig(updated)
+            dismiss()
+        } catch {
+            // AC-10: what/why/what-to-do inline; the sheet stays so
+            // the host can retry without losing input.
+            errorMessage = (error as NSError).localizedDescription
+        }
+    }
 }

@@ -152,6 +152,8 @@ enum Theme {
         static let bubbleLeftAndBubbleRightFill = "bubble.left.and.bubble.right.fill"
         /// The Members sub-sheet row in room settings.
         static let person2Fill = "person.2.fill"
+        /// The destructive "Delete room" affordance in room settings.
+        static let trashFill = "trash.fill"
     }
 }
 

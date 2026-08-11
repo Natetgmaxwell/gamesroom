@@ -58,6 +58,7 @@ import SwiftUI
 struct RoomPage: View {
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var casinoService: CasinoService
 
     /// The room the user is currently being pushed into. Driven by the
     /// `NavigationStack`'s `selection:` binding. Setting it triggers
@@ -92,8 +93,13 @@ struct RoomPage: View {
             }
         }
         .sheet(item: $settingsRoom) { room in
+            // W-04 — the sheet dismisses itself after a successful
+            // delete; the service's rooms-list cache update re-renders
+            // this page without the room (and the last-viewed hero
+            // resolves to nil because the room is gone).
             RoomSettingsSheet(room: room)
                 .environmentObject(roomService)
+                .environmentObject(casinoService)
         }
         .sheet(isPresented: $showingCreateRoom) {
             CreateRoomSheet()
@@ -143,7 +149,7 @@ struct RoomPage: View {
                     RoomDetailView(
                         room: room,
                         allRooms: roomService.rooms,
-                        onDismiss: {},
+                        onDismiss: { selectedRoom = nil },
                         onSwitchRoom: { _ in }
                     )
                 } else {
@@ -511,6 +517,7 @@ private enum PreviewSupport {
     RoomPage()
         .environmentObject(PreviewSupport.roomService())
         .environmentObject(PreviewSupport.authService())
+        .environmentObject(CasinoService())
         .preferredColorScheme(.dark)
 }
 #endif

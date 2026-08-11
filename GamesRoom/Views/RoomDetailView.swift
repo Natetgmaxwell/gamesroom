@@ -44,6 +44,10 @@ struct RoomDetailView: View {
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var casinoService: CasinoService
     @EnvironmentObject private var scoringService: ScoringService
+    /// W-04 — pops this pushed detail view when the host deletes the
+    /// room from settings (the room is gone from the rooms list, so
+    /// staying on the page would strand the user on a dead room).
+    @Environment(\.dismiss) private var dismiss
 
     /// Drives the host-only Room Settings sheet from the in-room
     /// toolbar gear (L6 spec). Mirrors `RoomPage.settingsRoom` for
@@ -157,6 +161,15 @@ struct RoomDetailView: View {
                     )
                     .sectionCard(.standard)
                 }
+                // W-05 — previous-seasons comparison (US-10).
+                // Renders only when the room has ended seasons; the
+                // section is member-visible (read surface).
+                if !roomService.cachedSeasonHistory(roomId: room.id).isEmpty {
+                    SeasonHistorySection(
+                        rows: roomService.cachedSeasonHistory(roomId: room.id)
+                    )
+                    .sectionCard(.standard)
+                }
                 PackShelfReadOnly(room: room)
                     .sectionCard(.standard)
                 MemberRosterReadOnly(room: room)
@@ -212,8 +225,13 @@ struct RoomDetailView: View {
             }
         }
         .sheet(item: $settingsRoom) { presented in
-            RoomSettingsSheet(room: presented)
-                .environmentObject(roomService)
+            RoomSettingsSheet(room: presented, onRoomDeleted: {
+                // W-04 — pop back to the rooms list; the deleted
+                // room is already gone from the service cache.
+                dismiss()
+            })
+            .environmentObject(roomService)
+            .environmentObject(casinoService)
         }
         .sheet(item: $editEvent) { event in
             EditEventSheet(event: event)
@@ -587,6 +605,11 @@ struct RoomDetailView: View {
         if let season = roomService.cachedCurrentSeason(roomId: room.id) {
             await roomService.loadSeasonAwards(seasonId: season.id)
         }
+        // W-05 — previous-seasons comparison (US-10). Loaded on
+        // every refresh so a host declaring a season-close in
+        // another tab surfaces the new ended-season row on the
+        // next pull-to-refresh.
+        _ = await roomService.loadSeasonHistory(roomId: room.id)
     }
 
     private func loadMembersIfNeeded() async {
@@ -1589,6 +1612,118 @@ private struct RoundBreakdownSection: View {
 
     private func deltaText(_ delta: Int64) -> String {
         delta >= 0 ? "+\(delta)" : "\(delta)"
+    }
+}
+
+// MARK: - Season history (W-05, US-10)
+
+/// Previous-seasons comparison — the "improving over time" view.
+/// Renders one row per ended season with the caller's total + rank
+/// and the delta vs the active season. Member-visible read surface;
+/// hidden entirely when the room has no ended seasons.
+private struct SeasonHistorySection: View {
+    let rows: [SeasonHistoryRow]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Past seasons")
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.primaryText)
+            Text("Your standing each season — how the current arc compares.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+
+            VStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
+                    seasonRow(row)
+                    if idx != rows.count - 1 {
+                        Divider()
+                            .overlay(Theme.Palette.hairline)
+                            .padding(.horizontal, Theme.Layout.edgePadding)
+                    }
+                }
+            }
+            .background(Theme.Palette.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func seasonRow(_ row: SeasonHistoryRow) -> some View {
+        HStack(spacing: Theme.Layout.gutter) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.name)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Text(dateRange(row))
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(row.callerTotal) pts")
+                    .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Text(rankText(row))
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(deltaText(row))
+                    .font(Theme.Typography.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(deltaColor(row))
+                Text("vs now")
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            }
+            .frame(minWidth: 64)
+        }
+        .padding(.vertical, Theme.Layout.cardInset)
+        .padding(.horizontal, Theme.Layout.edgePadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            Text("\(row.name), \(row.callerTotal) points, \(rankText(row)), \(deltaText(row)) versus the current season")
+        )
+    }
+
+    private func dateRange(_ row: SeasonHistoryRow) -> String {
+        if let ended = row.endedAt {
+            return "\(row.startedAt, format: .dateTime.month().day().year()) – \(ended, format: .dateTime.month().day().year())"
+        }
+        return row.startedAt.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    private func rankText(_ row: SeasonHistoryRow) -> String {
+        row.callerRank == 1 ? "1st place" : "\(ordinal(row.callerRank)) place"
+    }
+
+    private func ordinal(_ n: Int) -> String {
+        let suffix: String
+        switch n % 100 {
+        case 11, 12, 13: suffix = "th"
+        default:
+            switch n % 10 {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(n)\(suffix)"
+    }
+
+    private func deltaText(_ row: SeasonHistoryRow) -> String {
+        row.deltaVsCurrent >= 0 ? "+\(row.deltaVsCurrent)" : "\(row.deltaVsCurrent)"
+    }
+
+    private func deltaColor(_ row: SeasonHistoryRow) -> Color {
+        row.deltaVsCurrent > 0
+            ? Theme.Palette.accent
+            : (row.deltaVsCurrent < 0 ? .red.opacity(0.85) : Theme.Palette.primaryText.opacity(0.45))
     }
 }
 
