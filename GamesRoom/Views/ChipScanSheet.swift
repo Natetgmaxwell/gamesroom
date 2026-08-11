@@ -40,6 +40,7 @@ struct ChipScanSheet: View {
     @State private var isSubmitting = false
     @State private var errorMessage: String?
     @State private var showConfirm = false
+    @State private var lowConfidencePrompt = false
 
     // T1.2 — opt-in photo retention. Default off: the F-CAS-03
     // discard path stays identical. When on, the confirmed scan's
@@ -98,6 +99,20 @@ struct ChipScanSheet: View {
                     Text("Counting chips…")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                } else if lowConfidencePrompt {
+                    Text("Low confidence — move closer, improve lighting, and try again.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    Button {
+                        lowConfidencePrompt = false
+                        showConfirm = true
+                    } label: {
+                        Text("Review result anyway")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                    }
                 } else {
                     Text("Tap shutter to scan")
                         .font(Theme.Typography.caption)
@@ -188,6 +203,7 @@ struct ChipScanSheet: View {
                     lastJpeg = nil
                     showConfirm = false
                     errorMessage = nil
+                    lowConfidencePrompt = false
                 } label: {
                     Text("Re-scan")
                         .font(Theme.Typography.caption)
@@ -298,6 +314,10 @@ struct ChipScanSheet: View {
         detectedStacks = stacks
         photoHash = hash
         recomputeTotals()
+        if ScanConfidenceGate.shouldPromptRescan(confidenceAvg: confidenceAvg) {
+            lowConfidencePrompt = true
+            return
+        }
         showConfirm = true
     }
 

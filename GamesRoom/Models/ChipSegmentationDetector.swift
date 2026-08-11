@@ -352,3 +352,16 @@ private func rgbToHsv(r: Double, g: Double, b: Double) -> (h: Double, s: Double,
     let s = maxC == 0 ? 0 : d / maxC
     return (h, s, maxC)
 }
+
+/// F-CAS-02 v0.34 — low-confidence re-scan gate.
+///
+/// `confidence` is a frame-coverage proxy, so below 0.3 the stacks
+/// occupy <1.5% of the frame and the height-based count estimate
+/// is unreliable.
+enum ScanConfidenceGate {
+    static let rescanThreshold: Double = 0.3
+
+    static func shouldPromptRescan(confidenceAvg: Double) -> Bool {
+        confidenceAvg < rescanThreshold
+    }
+}

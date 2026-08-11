@@ -989,6 +989,14 @@ runner.run("PhotoHash sha256 is deterministic and 64 hex chars") {
     runner.assertTrue(h1 != PhotoHash.sha256(Data("world".utf8)))
 }
 
+runner.run("ScanConfidenceGate prompts rescan below 0.3, not at/above") {
+    runner.assertTrue(ScanConfidenceGate.shouldPromptRescan(confidenceAvg: 0.0))
+    runner.assertTrue(ScanConfidenceGate.shouldPromptRescan(confidenceAvg: 0.29))
+    runner.assertFalse(ScanConfidenceGate.shouldPromptRescan(confidenceAvg: 0.3))
+    runner.assertFalse(ScanConfidenceGate.shouldPromptRescan(confidenceAvg: 0.7))
+    runner.assertFalse(ScanConfidenceGate.shouldPromptRescan(confidenceAvg: 1.0))
+}
+
 // MARK: - Score snapshot + Live Activity rules (W2.3)
 
 runner.run("ScoreSnapshot.shouldPersist accepts first write") {
