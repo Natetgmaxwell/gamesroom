@@ -43,45 +43,69 @@ final class CalendarService: ObservableObject {
     /// Writes (or updates) the EKEvent for a room event. The
     /// eventIdentifier is persisted keyed by the room-event id so
     /// a later settle/delete can remove the calendar row.
-    func addEvent(room: Room, eventId: UUID, name: String, playedAt: Date, venue: String?) async {
+    func addEvent(room: Room, event: Event) async {
         guard room.calendarAutoAddHost else { return }
         guard await requestAccess() else { return }
 
         let ekEvent = EKEvent(eventStore: store)
-        ekEvent.title = name
-        ekEvent.startDate = playedAt
-        ekEvent.endDate = playedAt.addingTimeInterval(2 * 3600)
+        ekEvent.title = event.name
+        ekEvent.startDate = event.playedAt
+        ekEvent.endDate = event.playedAt.addingTimeInterval(2 * 3600)
         ekEvent.calendar = store.defaultCalendarForNewEvents
-        if let venue, !venue.isEmpty {
-            ekEvent.notes = "Games Room · \(venue)"
-        } else {
-            ekEvent.notes = "Games Room"
-        }
+        ekEvent.notes = venueNotes(event.venue)
 
         do {
             try store.save(ekEvent, span: .thisEvent, commit: true)
-            var identifiers = UserDefaults.standard.dictionary(forKey: StorageKeys.calendarEventIdentifiers) as? [String: String] ?? [:]
-            identifiers[eventId.uuidString] = ekEvent.eventIdentifier
-            UserDefaults.standard.set(identifiers, forKey: StorageKeys.calendarEventIdentifiers)
+            UserDefaults.standard.set(ekEvent.eventIdentifier, forKey: StorageKeys.calendarEventIdentifier(eventId: event.id))
             lastError = nil
         } catch {
             lastError = "Couldn't add to calendar: \(error.localizedDescription)"
         }
     }
 
+    /// Updates the calendar row for a room event, creating it when
+    /// no row was written before. Keeps title/start/venue in sync
+    /// with event edits.
+    func updateEvent(room: Room, event: Event) async {
+        guard room.calendarAutoAddHost else { return }
+        guard await requestAccess() else { return }
+
+        let key = StorageKeys.calendarEventIdentifier(eventId: event.id)
+        if let identifier = UserDefaults.standard.string(forKey: key),
+           let existing = store.event(withIdentifier: identifier) {
+            existing.title = event.name
+            existing.startDate = event.playedAt
+            existing.endDate = event.playedAt.addingTimeInterval(2 * 3600)
+            existing.notes = venueNotes(event.venue)
+            do {
+                try store.save(existing, span: .thisEvent, commit: true)
+                lastError = nil
+            } catch {
+                lastError = "Couldn't update calendar event: \(error.localizedDescription)"
+            }
+        } else {
+            await addEvent(room: room, event: event)
+        }
+    }
+
     /// Removes the calendar row for a room event, if one was written.
     /// No-op when the event was never added (or already removed).
     func removeEvent(eventId: UUID) async {
-        guard let identifiers = UserDefaults.standard.dictionary(forKey: StorageKeys.calendarEventIdentifiers) as? [String: String],
-              let identifier = identifiers[eventId.uuidString],
+        let key = StorageKeys.calendarEventIdentifier(eventId: eventId)
+        guard let identifier = UserDefaults.standard.string(forKey: key),
               let ekEvent = store.event(withIdentifier: identifier) else { return }
         do {
             try store.remove(ekEvent, span: .thisEvent, commit: true)
-            var updated = identifiers
-            updated.removeValue(forKey: eventId.uuidString)
-            UserDefaults.standard.set(updated, forKey: StorageKeys.calendarEventIdentifiers)
+            UserDefaults.standard.removeObject(forKey: key)
         } catch {
             lastError = "Couldn't remove calendar event: \(error.localizedDescription)"
         }
+    }
+
+    private func venueNotes(_ venue: String?) -> String {
+        if let venue, !venue.isEmpty {
+            return "Games Room · \(venue)"
+        }
+        return "Games Room"
     }
 }
