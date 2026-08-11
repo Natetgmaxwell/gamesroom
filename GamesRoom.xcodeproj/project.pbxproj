@@ -38,6 +38,9 @@
 		AAAAAAAA0000000000000469 /* GamesRoomWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000461 /* GamesRoomWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAAAAAAA000000000000046D /* ScoreSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */; };
 		AAAAAAAA0000000000000474 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000475 /* CalendarService.swift */; };
+		AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000457 /* ChipScanSheet.swift */; };
+		AAAAAAAA0000000000000477 /* ChipSegmentationDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000455 /* ChipSegmentationDetector.swift */; };
+		AAAAAAAA0000000000000478 /* PhotoHash.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000456 /* PhotoHash.swift */; };
 		AAAAAAAA0000000000000470 /* ScoreSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000471 /* ScoreSnapshot.swift */; };
 		AAAAAAAA0000000000000472 /* ScoreLiveActivityDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000473 /* ScoreLiveActivityDriver.swift */; };
 		AAAAAAAA00000000000000A0 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000414 /* User.swift */; };
@@ -637,8 +640,8 @@
 				AAAAAAAA00000000000000AC /* MemberRSVP.swift in Sources */,
 				AAAAAAAA0000000000000451 /* EventRSVP.swift in Sources */,
 				AAAAAAAA0000000000000453 /* RoomPackConfig.swift in Sources */,
-				AAAAAAAA0000000000000455 /* ChipSegmentationDetector.swift in Sources */,
-				AAAAAAAA0000000000000456 /* PhotoHash.swift in Sources */,
+				AAAAAAAA0000000000000477 /* ChipSegmentationDetector.swift in Sources */,
+				AAAAAAAA0000000000000478 /* PhotoHash.swift in Sources */,
 				AAAAAAAA00000000000000AE /* MascotPersonality.swift in Sources */,
 				AAAAAAAA00000000000000B0 /* MascotPoliticalIdeology.swift in Sources */,
 				AAAAAAAA00000000000000B2 /* Event.swift in Sources */,
@@ -684,7 +687,7 @@
 				AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */,
 				AAAAAAAA00000000000000E9 /* SettleCasinoSheet.swift in Sources */,
 				AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */,
-				AAAAAAAA0000000000000457 /* ChipScanSheet.swift in Sources */,
+				AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
