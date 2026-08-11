@@ -102,13 +102,16 @@ struct RoomDetailView: View {
 
     /// Track P0.4 — gate for the iPad host scoring dashboard. Only
     /// fires on iPad regular width, host-side, during a live
-    /// `single_winner` event (casino keeps `SettleCasinoSheet`).
+    /// `single_winner` event (playedAt <= now && settledAt == nil).
+    /// Settled events (settledAt within 24h, no new event) render the
+    /// normal scroll body on iPad — casino keeps `SettleCasinoSheet`.
     private var showScoringDashboard: Bool {
         guard scoringDashboardVisible else { return false }
         guard hSize == .regular else { return false }
         guard isHost else { return false }
         guard let event = activeEvent else { return false }
         guard event.playedAt <= Date() else { return false }
+        guard event.settledAt == nil else { return false }
         guard let pack = PackRegistry.shared.definition(for: event.packSlug) else { return false }
         return pack.scoringType == .singleWinner
     }
