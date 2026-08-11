@@ -62,7 +62,7 @@ struct PackDetailView: View {
                 Text(pack.displayName)
                     .font(Theme.Typography.title.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
-                Text(pack.scoringType == .singleWinner ? "Single winner" : "Withdraw & return")
+                Text(pack.scoringType.displayLabel)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }

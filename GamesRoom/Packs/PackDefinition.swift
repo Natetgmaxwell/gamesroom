@@ -66,16 +66,33 @@ extension PackDefinition {
     static var howToSlug: String { slug }
 }
 
-/// Discriminator from `public.packs.scoring_type`. Two V0.8
+/// Discriminator from `public.packs.scoring_type`. Three V0.34
 /// families are supported:
 /// - `single_winner`: the round picks one member, awards
-///   `winPoints` to that member's season score (CAH, Monopoly
-///   Deal, Pluto Chess).
+///   `winPoints` to that member's season score (Monopoly Deal,
+///   Pluto Chess).
 /// - `withdraw_return`: the round records a net delta per
 ///   member (Casino); the host enters each member's return
 ///   amount and the net delta is returned-to-balance minus
 ///   withdrawn.
+/// - `count_based`: the round records a count of items held
+///   (Cards Against Humanity — the winner keeps the black
+///   card, and the score is the COUNT of black cards held at
+///   session end). The host enters the number of cards the
+///   winner takes per round (default 1).
 enum PackScoringType: String, Codable, CaseIterable, Hashable {
     case singleWinner = "single_winner"
     case withdrawReturn = "withdraw_return"
+    case countBased = "count_based"
+
+    /// Human-readable scoring-family label for the picker + settings
+    /// rows. One source of truth so PackDetailView, RoomSettingsSheet
+    /// and the pack shelf all read the same string.
+    var displayLabel: String {
+        switch self {
+        case .singleWinner:   return "Single winner"
+        case .withdrawReturn: return "Withdraw & return"
+        case .countBased:     return "Count-based"
+        }
+    }
 }

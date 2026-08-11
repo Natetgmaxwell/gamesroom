@@ -5,12 +5,26 @@
 //  Track P0.4 — host-side scoring entry.
 //
 //  Presented from `RoomDetailView`'s at-play slot when the host
-//  wants to record a round for a `single_winner` pack (CAH,
-//  Monopoly Deal, Pluto Chess). The chip tray shows every member
-//  in the cached roster; tapping a chip selects that member as a
+//  wants to record a round for a `single_winner` pack (Monopoly
+//  Deal, Pluto Chess) or the new `count_based` pack (Cards
+//  Against Humanity). The chip tray shows every member in the
+//  cached roster; tapping a chip selects that member as a
 //  winner, tapping again deselects. Submitting routes through
 //  `ScoringService.recordRoundInput(...)` with a `.singleWinner`
-//  input for one winner or a `.multiWinner` input for several.
+//  input for one winner, `.multiWinner` for several, or
+//  `.countBased` for CAH.
+//
+//  V0.34 — count-based scoring. The sheet branches on the pack's
+//  `scoringType`:
+//   - `.singleWinner` / `.multiWinner`: chip tray is multi-select
+//     (tapping toggles), stepper picks round index, payout is
+//     `effectiveWinPoints`.
+//   - `.countBased` (CAH): chip tray is single-select (the
+//     judge's pick is the only winner), steppers pick round index
+//     + cards won (default 1, range 1...20). The round's score is
+//     the cards-won count; the session-end tally RPC
+    //     (`record_cah_tally`, migration 055) replaces the per-round
+    //     entries with the member's scanned count.
 //
 //  Why a chip tray (F-MVP-05 V2 minimal, scope decision
 //  2026-08-10)
@@ -24,7 +38,8 @@
 //  with no single-winner validation.
 //
 //  The Casino path uses `SettleCasinoSheet` (P0.5) instead; this
-//  sheet is only presented for `single_winner` packs.
+//  sheet is only presented for `single_winner` and `count_based`
+//  packs.
 //
 
 import SwiftUI
@@ -42,11 +57,22 @@ struct HostScoreEntrySheet: View {
 
     @State private var selectedMemberIds: Set<UUID> = []
     @State private var roundIndex: Int = 1
+    /// V0.34 — for count-based scoring packs (CAH) the host also
+    /// enters the number of cards the winner takes per round. Default
+    /// 1; range 1...20 covers any reasonable CAH per-round count.
+    @State private var cardCount: Int = 1
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
 
     private var members: [Member] {
         roomService.cachedMembers(roomId: roomId)
+    }
+
+    /// V0.34 — count-based scoring is a new family. The pack's
+    /// `scoringType` is the discriminator; resolved via the pack
+    /// registry so the sheet's input form branches accordingly.
+    private var isCountBased: Bool {
+        PackRegistry.shared.definition(for: packSlug)?.scoringType == .countBased
     }
 
     var body: some View {
@@ -69,10 +95,26 @@ struct HostScoreEntrySheet: View {
                         value: $roundIndex,
                         in: 1...50
                     )
+                    // V0.34 — count-based packs (CAH) get a
+                    // "cards won" stepper below the round index.
+                    // The judge's pick keeps the black card; the
+                    // host enters how many cards the winner takes
+                    // (usually 1).
+                    if isCountBased {
+                        Stepper(
+                            "Cards won: \(cardCount)",
+                            value: $cardCount,
+                            in: 1...20
+                        )
+                    }
                 } header: {
                     Text("Winners")
                 } footer: {
-                    Text("\(packDisplayName) — \(winPointsText). Tap a member to mark them as a winner; tap again to remove.")
+                    if isCountBased {
+                        Text("The judge's pick wins the round and keeps the black card. Enter how many cards the winner takes (usually 1).")
+                    } else {
+                        Text("\(packDisplayName) — \(winPointsText). Tap a member to mark them as a winner; tap again to remove.")
+                    }
                 }
 
                 if let errorMessage {
@@ -160,6 +202,18 @@ struct HostScoreEntrySheet: View {
     }
 
     private func toggle(_ memberId: UUID) {
+        // V0.34 — count-based scoring is single-select: tapping a
+        // member selects only them, tapping the selected member
+        // deselects. There is no multi-winner for CAH (the judge's
+        // pick is the only winner each round).
+        if isCountBased {
+            if selectedMemberIds.contains(memberId) {
+                selectedMemberIds.remove(memberId)
+            } else {
+                selectedMemberIds = [memberId]
+            }
+            return
+        }
         if selectedMemberIds.contains(memberId) {
             selectedMemberIds.remove(memberId)
         } else {
@@ -194,7 +248,20 @@ struct HostScoreEntrySheet: View {
         do {
             let winPoints = effectiveWinPoints
             let input: PackScoringInput
-            if selectedMemberIds.count == 1, let soleWinner = selectedMemberIds.first {
+            if isCountBased, let soleWinner = selectedMemberIds.first {
+                // V0.34 — count-based scoring routes through
+                // `.countBased` so the resolver emits a `cards_won`
+                // entry and the record_round_score ledger row carries
+                // the round's cards-won metadata. The session-end
+                // tally RPC (record_cah_tally, migration 055) replaces
+                // these per-round entries with the member's scanned
+                // count.
+                input = .countBased(
+                    roundIndex: roundIndex,
+                    winnerMemberId: soleWinner,
+                    cardCount: cardCount
+                )
+            } else if selectedMemberIds.count == 1, let soleWinner = selectedMemberIds.first {
                 input = .singleWinner(
                     roundIndex: roundIndex,
                     winnerMemberId: soleWinner,

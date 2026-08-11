@@ -164,11 +164,39 @@ runner.run("PackRegistry isRegistered rejects legacy / unknown slugs") {
     runner.assertTrue(PackRegistry.shared.isRegistered(slug: "pluto_chess"))
 }
 
-runner.run("Pack scoring types match migration 034") {
+runner.run("Pack scoring types match migration 034 / V0.34 count-based CAH") {
+    // V0.34 — Cards Against Humanity moved from `single_winner` to
+    // the new `count_based` family (migration 055). The pack's score
+    // is now the count of black cards held at session end; the
+    // judge's pick keeps the black card and the host enters the
+    // cards-won count per round.
     runner.assertEqual(CasinoPack.scoringType, .withdrawReturn)
-    runner.assertEqual(CardsAgainstHumanityPack.scoringType, .singleWinner)
+    runner.assertEqual(CardsAgainstHumanityPack.scoringType, .countBased)
     runner.assertEqual(MonopolyDealPack.scoringType, .singleWinner)
     runner.assertEqual(PlutoChessPack.scoringType, .singleWinner)
+}
+
+runner.run("PackScoringType.countBased raw value is 'count_based' and Codable round-trips") {
+    // V0.34 — the new scoring-type discriminator. The raw value is
+    // the database-side `packs.scoring_type` check constraint's
+    // third allowed value (migration 055).
+    runner.assertEqual(PackScoringType.countBased.rawValue, "count_based")
+
+    // Codable round-trip preserves the case through JSON — the
+    // server's jsonb decoder must see the same string the Swift
+    // encoder emits.
+    let data = try JSONEncoder().encode(PackScoringType.countBased)
+    let decoded = try JSONDecoder().decode(PackScoringType.self, from: data)
+    runner.assertEqual(decoded, .countBased)
+}
+
+runner.run("PackScoringType displayLabel covers all three families") {
+    // V0.34 — single source of truth for the picker + settings
+    // rows. The labels are user-facing copy; changes here
+    // propagate to PackDetailView + RoomSettingsSheet.
+    runner.assertEqual(PackScoringType.singleWinner.displayLabel, "Single winner")
+    runner.assertEqual(PackScoringType.withdrawReturn.displayLabel, "Withdraw & return")
+    runner.assertEqual(PackScoringType.countBased.displayLabel, "Count-based")
 }
 
 runner.run("PackRegistry winPoints single-winner packs return 1") {
@@ -260,6 +288,56 @@ runner.run("PackScoringResolver withdrawReturn zero-returned records zero delta"
     )
     let entries = PackScoringResolver.resolve(input, packSlug: "casino")
     runner.assertEqual(entries.first?.pointsDelta, -50)
+}
+
+runner.run("PackScoringResolver countBased emits one entry with cards_won meta") {
+    // V0.34 — count-based scoring (CAH). The resolver emits one
+    // entry whose pointsDelta equals the cards-won count and whose
+    // meta carries the round's `cards_won`, `winner` and
+    // `round_index` so the per-round breakdown can show "Alex won
+    // 2 cards this round" and the session tally RPC can identify
+    // the per-round rows it will later replace.
+    let winnerId = UUID()
+    let input = PackScoringInput.countBased(
+        roundIndex: 2,
+        winnerMemberId: winnerId,
+        cardCount: 2
+    )
+    let entries = PackScoringResolver.resolve(input, packSlug: "cards_against_humanity")
+    runner.assertEqual(entries.count, 1)
+    runner.assertEqual(entries[0].memberId, winnerId)
+    runner.assertEqual(entries[0].pointsDelta, 2)
+    runner.assertEqual(entries[0].meta["cards_won"], .int(2))
+    runner.assertEqual(entries[0].meta["winner"], .bool(true))
+    runner.assertEqual(entries[0].meta["round_index"], .int(2))
+}
+
+runner.run("PackScoringResolver countBased with cardCount 1 records pointsDelta 1") {
+    // V0.34 — the default per-round count is 1 (the judge's pick
+    // takes one black card). The resolver's pointsDelta is the
+    // cardCount so the ledger row matches what the host entered.
+    let winnerId = UUID()
+    let input = PackScoringInput.countBased(
+        roundIndex: 1,
+        winnerMemberId: winnerId,
+        cardCount: 1
+    )
+    let entries = PackScoringResolver.resolve(input, packSlug: "cards_against_humanity")
+    runner.assertEqual(entries.first?.pointsDelta, 1)
+    runner.assertEqual(entries.first?.meta["cards_won"], .int(1))
+}
+
+runner.run("PackScoringInput countBased packSlug resolves to cards_against_humanity") {
+    // The packSlug discriminator drives ScoringService's input
+    // routing (roundIndex extraction, ledger payload key). For CAH
+    // it must read as the CAH slug, not the bare "single_winner"
+    // family name.
+    let input = PackScoringInput.countBased(
+        roundIndex: 1,
+        winnerMemberId: UUID(),
+        cardCount: 1
+    )
+    runner.assertEqual(input.packSlug, "cards_against_humanity")
 }
 
 runner.run("ScoreEntry JSON round-trip preserves the typed meta") {
@@ -683,6 +761,31 @@ runner.run("PackHowToCatalog returns bundled content for all four V0.8 packs") {
 runner.run("PackHowToCatalog returns nil for unknown slugs") {
     runner.assertNil(PackHowToCatalog.howTo(forSlug: "no_such_pack"))
     runner.assertNil(PackHowToCatalog.howTo(forSlug: ""))
+}
+
+runner.run("PackHowTo CAH describes count-based scoring + scan section") {
+    // V0.34 — the CAH how-to body now describes count-based
+    // scoring (winner keeps the black card, score is cards held)
+    // and includes a "Scan" section that points members at the
+    // session-end card-counting flow. The previous single-winner
+    // "one point" copy is gone.
+    let howTo = PackHowToCatalog.howTo(forSlug: "cards_against_humanity")
+    runner.assertNotNil(howTo)
+    let bodies = howTo?.sections.map { $0.body } ?? []
+    // Either form ("cards won" / "cards-won") counts — the
+    // per-round body uses the hyphenated "cards-won count" to
+    // match the leaderboard recap copy.
+    let mentionsCardsWon = bodies.contains { body in
+        body.contains("cards won") || body.contains("cards-won")
+    }
+    runner.assertTrue(
+        mentionsCardsWon,
+        "expected a section body containing 'cards won' / 'cards-won' — got: \(bodies)"
+    )
+    runner.assertTrue(
+        howTo?.sections.contains { $0.title == "Scan" } ?? false,
+        "expected a 'Scan' section in the CAH how-to"
+    )
 }
 
 runner.run("PackDefinition default howToSlug falls back to slug") {

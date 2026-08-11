@@ -88,9 +88,9 @@ struct ScoreEntry: Codable, Hashable, Identifiable {
 /// the matching `ScoreEntry` array.
 enum PackScoringInput: Hashable {
     /// Single-winner round. Mirrors `single_winner` packs
-    /// (cards_against_humanity, monopoly_deal, pluto_chess).
-    /// The resolver emits one entry: the winner's user id plus
-    /// `winPoints` season-score delta.
+    /// (monopoly_deal, pluto_chess). The resolver emits one
+    /// entry: the winner's user id plus `winPoints` season-score
+    /// delta.
     case singleWinner(roundIndex: Int, winnerMemberId: UUID, winPoints: Int)
 
     /// Multi-winner round. Same `single_winner` scoring family,
@@ -106,13 +106,24 @@ enum PackScoringInput: Hashable {
     /// `meta["withdrawn"]` / `meta["returned"]` for the recap.
     case withdrawReturn(roundIndex: Int, perMember: [MemberNet])
 
+    /// Count-based round. Mirrors the `count_based` pack
+    /// (cards_against_humanity). The judge picks one winner who
+    /// takes the black card; the host enters the number of cards
+    /// the winner takes (default 1). The resolver emits one entry
+    /// with `pointsDelta = cardCount` and the round's metadata for
+    /// the recap. Re-scan tallies at session end replace the
+    /// member's per-round entries (see `record_cah_tally`, migration
+    /// 055).
+    case countBased(roundIndex: Int, winnerMemberId: UUID, cardCount: Int)
+
     /// Convenience: which pack a given input was authored for.
     /// Used by the resolver to pick the right policy.
     var packSlug: String {
         switch self {
-        case .singleWinner: return "single_winner" // pack-specific value resolved via registry
-        case .multiWinner:  return "single_winner"
+        case .singleWinner:   return "single_winner" // pack-specific value resolved via registry
+        case .multiWinner:    return "single_winner"
         case .withdrawReturn: return "casino"
+        case .countBased:     return "cards_against_humanity"
         }
     }
 }
@@ -171,6 +182,19 @@ struct PackScoringResolver {
                     ]
                 )
             }
+
+        case .countBased(let roundIndex, let winnerMemberId, let cardCount):
+            return [
+                ScoreEntry(
+                    memberId: winnerMemberId,
+                    pointsDelta: Int64(cardCount),
+                    meta: [
+                        "winner": .bool(true),
+                        "cards_won": .int(Int64(cardCount)),
+                        "round_index": .int(Int64(roundIndex))
+                    ]
+                )
+            ]
         }
     }
 }

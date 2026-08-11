@@ -98,7 +98,7 @@ enum PackHowToCatalog {
         ),
         "cards_against_humanity": PackHowTo(
             headline: "How to play Cards Against Humanity",
-            summary: "Card-judging party game. The round's judge picks the funniest answer; the winner of the round takes the point.",
+            summary: "Card-judging party game. The judge's pick wins the round and keeps the black card; your score is the number of cards you hold at session end.",
             sections: [
                 PackHowTo.Section(
                     title: "Setup",
@@ -106,15 +106,19 @@ enum PackHowToCatalog {
                 ),
                 PackHowTo.Section(
                     title: "Play",
-                    body: "Each non-judge player answers the round's prompt card. The judge picks the funniest answer. The judge's pick is the round's winner."
+                    body: "Each non-judge player answers the round's prompt card. The judge picks the funniest answer. The judge's pick wins the round and keeps the black card."
                 ),
                 PackHowTo.Section(
                     title: "Score",
-                    body: "Host opens the host-side scoring dashboard and picks the round's winner from the member list. Single-winner scoring: the chosen member earns one win-point on the season score."
+                    body: "Count-based scoring: the host enters the number of cards the winner takes per round (usually 1). The winner's card count goes up by that amount. The room's payout override does not apply — the count IS the score."
                 ),
                 PackHowTo.Section(
                     title: "Rounds",
-                    body: "There is no set number of rounds. The room's session ends when the host settles it. Multiple rounds per session are normal; each round awards one point."
+                    body: "There is no set number of rounds. The room's session ends when the host settles it. Multiple rounds per session are normal; each round adds the cards-won count to the winner's tally."
+                ),
+                PackHowTo.Section(
+                    title: "Scan",
+                    body: "At session end each member can scan their stack of won black cards on their own phone. The app counts the cards, the member confirms or adjusts, and the tally is recorded as the authoritative count for the night. Re-scan converges."
                 )
             ]
         ),

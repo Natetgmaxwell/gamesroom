@@ -66,6 +66,10 @@ struct RoomDetailView: View {
     // while the sheet is open.
     @State private var withdrawSheetEvent: Event?
     @State private var settleSheetEvent: Event?
+    // V0.34 — count-based scoring member scan. CAH members scan
+    // their own stack of won black cards on their own phone; the
+    // tally is recorded as the authoritative count for the night.
+    @State private var cahScanEvent: Event?
     @State private var casinoWithdrawn: Int = 0
 
     // P0.4 — host-only single-winner scoring sheet binding. Hosts
@@ -264,6 +268,22 @@ struct RoomDetailView: View {
                 .environmentObject(casinoService)
                 .environmentObject(authService)
             }
+        }
+        // V0.34 — count_based (CAH) member scan surface. The
+        // member scans their stack of won black cards on their own
+        // phone; the on-device segmentation detector (LOCKED,
+        // `pxPerUnit: 2`) produces a rough estimate, the member
+        // confirms / adjusts, and `record_cah_tally` (migration
+        // 054) records the tally as the authoritative count for
+        // the night. Re-scan converges.
+        .sheet(item: $cahScanEvent) { event in
+            CAHCardScanSheet(
+                eventId: event.id,
+                roomId: room.id,
+                onDone: { Task { await refresh() } }
+            )
+            .environmentObject(scoringService)
+            .environmentObject(authService)
         }
         .sheet(item: $hostScoreEvent) { event in
             let pack = PackRegistry.shared.definition(for: event.packSlug)
@@ -480,17 +500,23 @@ struct RoomDetailView: View {
             )
 
         case .inPlay(let event):
+            let isCAH = event.packSlug == "cards_against_humanity"
             WitnessSlot(
                 event: event,
                 attestations: openAttestations,
-                cta: .withdraw,
+                // V0.34 — count-based packs (CAH) flip the
+                // member CTA from withdraw to scan: there's no
+                // chip bracket to move, the member scans their
+                // stack of won black cards instead.
+                cta: isCAH ? .scan : .withdraw,
                 onWithdraw: { Task { await openWithdraw(event: event) } },
                 onScan: { Task { await openScan(event: event) } },
                 onScore: isHost
                     ? { Task { await openHostScore(event: event) } }
                     : nil,
                 isHero: true,
-                headerMode: .inPlay
+                headerMode: .inPlay,
+                scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
             )
 
         // M1.1 — `.tonightEvent` renders the witness hero with
@@ -499,17 +525,19 @@ struct RoomDetailView: View {
         // the started-time caption is what differentiates this
         // state from the post-withdrawal one.
         case .tonightEvent(let event):
+            let isCAH = event.packSlug == "cards_against_humanity"
             WitnessSlot(
                 event: event,
                 attestations: openAttestations,
-                cta: .withdraw,
+                cta: isCAH ? .scan : .withdraw,
                 onWithdraw: { Task { await openWithdraw(event: event) } },
                 onScan: { Task { await openScan(event: event) } },
                 onScore: isHost
                     ? { Task { await openHostScore(event: event) } }
                     : nil,
                 isHero: true,
-                headerMode: .tonightEvent
+                headerMode: .tonightEvent,
+                scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
             )
 
         // M1.1 — `.seasonClose` renders the awards card with the
@@ -529,9 +557,13 @@ struct RoomDetailView: View {
                 }
             )
         case .settleRound(let event):
+            let isCAH = event.packSlug == "cards_against_humanity"
             WitnessSlot(
                 event: event,
                 attestations: openAttestations,
+                // V0.34 — settleRound always shows the scan CTA
+                // (no CAH override here per spec — host has
+                // already finalised, the member is tallying).
                 cta: .scan,
                 onWithdraw: { Task { await openWithdraw(event: event) } },
                 onScan: { Task { await openScan(event: event) } },
@@ -539,7 +571,8 @@ struct RoomDetailView: View {
                     ? { Task { await openHostScore(event: event) } }
                     : nil,
                 isHero: true,
-                headerMode: .settleRound
+                headerMode: .settleRound,
+                scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
             )
 
         case .justSettled(let event):
@@ -783,8 +816,18 @@ struct RoomDetailView: View {
     /// `record_member_scan` RPC + camera/Vision pipeline remain in
     /// the codebase for the eventual physical-chip flip but are
     /// not exercised by the V0.8 surface.
+    ///
+    /// V0.34 — count-based scoring (CAH). When the event's pack is
+    /// `cards_against_humanity`, the scan CTA opens the
+    /// `CAHCardScanSheet` instead — the member scans their stack
+    /// of won black cards and the tally is recorded as the
+    /// authoritative count for the night.
     private func openScan(event: Event) async {
-        settleSheetEvent = event
+        if event.packSlug == "cards_against_humanity" {
+            cahScanEvent = event
+        } else {
+            settleSheetEvent = event
+        }
     }
 
     /// P0.4 — host-only "Score a round" CTA on the at-play Witness
@@ -1188,6 +1231,10 @@ private struct WitnessSlot: View {
     /// the pre-M1.1 call sites. New call sites for
     /// `.tonightEvent` / `.settleRound` set this explicitly.
     var headerMode: HeaderMode = .inPlay
+    /// V0.34 — the scan button's label. Defaults to "Scan your
+    /// chips" (the casino wording); CAH call sites pass
+    /// "Scan your cards" so the button matches the pack.
+    var scanTitle: String = "Scan your chips"
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
@@ -1236,7 +1283,7 @@ private struct WitnessSlot: View {
 
             case .scan:
                 Button(action: onScan) {
-                    Text("Scan your chips")
+                    Text(scanTitle)
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.background)
                         .frame(maxWidth: .infinity)
@@ -1578,7 +1625,13 @@ private struct StandingsSection: View {
                 LeaderboardRow(
                     rank: idx + 1,
                     name: entry.displayName,
-                    score: Int(entry.pointsBalance),
+                    // V0.34 — the leaderboard RPC ranks by
+                    // `season_score`; `pointsBalance` is the casino
+                    // wallet (seeded at 200, never touched by
+                    // `round_score`) and shows 0 for CAH rooms.
+                    // `seasonScore` is the season standings number
+                    // and for CAH it IS total cards won.
+                    score: Int(entry.seasonScore),
                     lastDelta: Int(entry.lastSessionDelta),
                     sessionsPlayed: Int(entry.sessionsPlayed),
                     trajectory: entry.trajectory.map { Int($0.delta) },
@@ -1915,6 +1968,12 @@ private struct PackShelfReadOnly: View {
         .contentShape(Rectangle())
         .onTapGesture {
             guard isHost else { return }
+            // V0.34 — only `.singleWinner` packs are tappable for
+            // payout edits. Count-based packs (CAH) are scored by
+            // the count of items held, not by a room-level
+            // win-points override; a per-room payout is meaningless
+            // when the count IS the score.
+            guard pack.scoringType == .singleWinner else { return }
             payoutPack = pack
         }
         .accessibilityElement(children: .combine)

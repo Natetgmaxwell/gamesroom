@@ -39,17 +39,26 @@ struct CasinoPack: PackDefinition {
 
 // MARK: - Cards Against Humanity
 
-/// V0.8 Cards Against Humanity pack. `single_winner` scoring type —
-/// the round's judge picks one winner, who earns one point.
-/// (Originally `win_points = 1` per migration 034.)
+/// V0.34 Cards Against Humanity pack. `count_based` scoring type —
+/// the round's judge picks one winner who takes the black card; the
+/// score is the COUNT of black cards held at session end. The host
+/// enters the number of cards the winner takes per round (default 1)
+/// and the member tallies their own stack at session end via the
+/// vision card-counting flow (CAHCardScanSheet).
+///
+/// `winPoints` stays at 1 — it's the default cards-per-round value;
+/// the host can step the per-round count up via the host-side scoring
+/// sheet. The RoomRegistry's `winPoints(for:)` lookup continues to
+/// return this default.
 struct CardsAgainstHumanityPack: PackDefinition {
     static let slug = "cards_against_humanity"
     static let displayName = "Cards Against Humanity"
-    static let description = "Card-judging party game. Winner is the round's judge's pick (single winner per round)."
+    static let description = "Card-judging party game. The judge's pick wins the round and keeps the black card — score is cards won."
     static let iconSystemName = "rectangle.stack.fill"
-    static let scoringType: PackScoringType = .singleWinner
+    static let scoringType: PackScoringType = .countBased
 
-    /// One win-point per round (mirrors migration 034).
+    /// Default cards per round (mirrors migration 034's win_points).
+    /// Per-round count can be adjusted by the host at scoring time.
     static let winPoints: Int = 1
 }
 

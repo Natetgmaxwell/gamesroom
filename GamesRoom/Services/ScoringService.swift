@@ -318,6 +318,7 @@ final class ScoringService: ObservableObject {
             case .singleWinner(let roundIndex, _, _): return roundIndex
             case .multiWinner(let roundIndex, _, _):  return roundIndex
             case .withdrawReturn(let roundIndex, _):  return roundIndex
+            case .countBased(let roundIndex, _, _):   return roundIndex
             }
         }()
         return try await recordRound(
@@ -328,5 +329,56 @@ final class ScoringService: ObservableObject {
             entries: entries,
             correctionOf: correctionOf
         )
+    }
+
+    // MARK: - Member tally (V0.34 count_based)
+
+    /// V0.34 — records the member's session-end tally for a
+    /// `count_based` pack (Cards Against Humanity). The tally
+    /// REPLACES the member's per-round `round_score` entries for
+    /// the event (the scan is the authoritative count at session
+    /// end). Mirrors `CasinoService.submitMemberScan`'s envelope
+    /// pattern: the `source: "on_device"` + `confidence_avg` are
+    /// folded into the snapshot JSON before sending so the server
+    /// can persist them as part of the tally row.
+    ///
+    /// Calls the `record_cah_tally` RPC (migration 055) directly
+    /// via `SupabaseClientProvider` — not through the `ScoringStore`
+    /// protocol because the tally is a member-side write, not a
+    /// host-side round write.
+    @discardableResult
+    func recordCAHTally(
+        eventId: UUID,
+        cardCount: Int64,
+        visionSnapshot: VisionSnapshot
+    ) async throws -> Bool {
+        // F-CAS-03-style envelope: fold source + confidence_avg
+        // into the snapshot before sending so the server can pick
+        // them up as part of the row's metadata.
+        let encoder = JSONEncoder()
+        let snapshotData = try encoder.encode(visionSnapshot)
+        let snapshotDict = try JSONSerialization.jsonObject(
+            with: snapshotData, options: []
+        ) as? [String: Any] ?? [:]
+        var envelope = snapshotDict
+        envelope["source"] = "on_device"
+        if visionSnapshot.confidenceAvg > 0 {
+            envelope["confidence_avg"] = visionSnapshot.confidenceAvg
+        }
+        let envelopeData = try JSONSerialization.data(
+            withJSONObject: envelope, options: []
+        )
+        let envelopeJSON = String(data: envelopeData, encoding: .utf8) ?? "{}"
+
+        let result: Bool = try await SupabaseClientProvider.shared
+            .rpc("record_cah_tally", params: [
+                "p_event_id": eventId.uuidString,
+                "p_card_count": String(cardCount),
+                "p_vision_snapshot": envelopeJSON
+            ])
+            .execute()
+            .value
+        self.lastError = nil
+        return result
     }
 }

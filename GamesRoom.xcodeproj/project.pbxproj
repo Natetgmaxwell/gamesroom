@@ -100,6 +100,7 @@
 		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 		AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */; };
 		AAAAAAAA0000000000000482 /* SessionRoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */; };
+		AAAAAAAA0000000000000483 /* CAHCardScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -239,6 +240,7 @@
 		BBBBBBBB0000000000000450 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoringDashboard.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRoundTimeline.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CAHCardScanSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -693,6 +695,7 @@
 				AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */,
 				AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */,
 				AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */,
+				AAAAAAAA0000000000000483 /* CAHCardScanSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -39,10 +39,24 @@ import CoreGraphics
 struct ChipSegmentationDetector {
     let minSaturation: Double
     let minAreaFraction: Double
+    /// V0.34 — pixel-height per counted unit in a stack.
+    ///   * Casino (default 10): chips are ~10px tall in a 1080p
+    ///     frame; the count is `boxH * height / 10`.
+    ///   * Cards Against Humanity (2): cards are thinner than
+    ///     chips; the CAH scan uses a smaller `pxPerUnit` so the
+    ///     initial estimate lands close to the real stack height.
+    ///     The estimate is rough by design — the member
+    ///     confirms / adjusts before the tally is recorded
+    ///     (vision is assistant, not authority — same trust model
+    ///     as casino).
+    let pxPerUnit: Double
 
-    init(minSaturation: Double = 0.35, minAreaFraction: Double = 0.0008) {
+    init(minSaturation: Double = 0.35,
+         minAreaFraction: Double = 0.0008,
+         pxPerUnit: Double = 10) {
         self.minSaturation = minSaturation
         self.minAreaFraction = minAreaFraction
+        self.pxPerUnit = pxPerUnit
     }
 
     /// Runs the segmentation pipeline on one frame and returns the
@@ -227,9 +241,13 @@ struct ChipSegmentationDetector {
                 color = classifyHue(avgHue)
             }
 
-            // 6. Count: stack height / chip thickness (~10px per chip
-            // in a 1080p-class frame).
-            let count = max(1, Int((boxH * Double(height) / 10.0).rounded()))
+            // 6. Count: stack height / unit thickness. The
+            // `pxPerUnit` parameter is the per-count pixel height
+            // for a single stacked unit (a chip at 10px, a CAH
+            // card at 2px). The detector outputs a rough estimate;
+            // the scan UI's editable totals are the user-attestation
+            // fallback (same trust model as casino).
+            let count = max(1, Int((boxH * Double(height) / pxPerUnit).rounded()))
 
             let area = group.reduce(0) { $0 + $1.stats.count }
             let areaFraction = Double(area) / Double(width * height)
