@@ -628,6 +628,7 @@
 				AAAAAAAA000000000000001D /* SeatGridView.swift in Sources */,
 				AAAAAAAA000000000000001E /* TrajectorySparkline.swift in Sources */,
 				AAAAAAAA0000000000000447 /* DrowningBadge.swift in Sources */,
+				AAAAAAAA0000000000000482 /* SessionRoundTimeline.swift in Sources */,
 				AAAAAAAA0000000000000449 /* PackDetailView.swift in Sources */,
 				AAAAAAAA0000000000000459 /* PackStoreView.swift in Sources */,
 				AAAAAAAA000000000000045D /* EditEventSheet.swift in Sources */,
