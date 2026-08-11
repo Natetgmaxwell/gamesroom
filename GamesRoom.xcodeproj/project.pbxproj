@@ -35,7 +35,6 @@
 		AAAAAAAA0000000000000466 /* GamesRoomWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000462 /* GamesRoomWidgets.swift */; };
 		AAAAAAAA0000000000000467 /* GamesRoomWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */; };
 		AAAAAAAA0000000000000468 /* GamesRoomWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000460 /* GamesRoomWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		AAAAAAAA0000000000000469 /* GamesRoomWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000461 /* GamesRoomWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAAAAAAA000000000000046D /* ScoreSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */; };
 		AAAAAAAA0000000000000474 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000475 /* CalendarService.swift */; };
 		AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000457 /* ChipScanSheet.swift */; };
@@ -99,6 +98,7 @@
 		AAAAAAAA0000000000000459 /* PackStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000458 /* PackStoreView.swift */; };
 		AAAAAAAA000000000000045D /* EditEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045C /* EditEventSheet.swift */; };
 		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
+		AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -108,13 +108,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = AAAAAAAA0000000000000107;
 			remoteInfo = GamesRoomWidgets;
-		};
-		AAAAAAAA0000000000000119 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = AAAAAAAA0000000000000101 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AAAAAAAA000000000000010E;
-			remoteInfo = GamesRoomWatch;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -243,6 +236,7 @@
 		AAAAAAAA0000000000000458 /* PackStoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackStoreView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000045C /* EditEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditEventSheet.swift; sourceTree = "<group>"; };
 		BBBBBBBB0000000000000450 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoringDashboard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -349,6 +343,7 @@
 				AAAAAAAA0000000000000429 /* OpenAttestationSummary.swift */,
 				AAAAAAAA000000000000042A /* Session.swift */,
 				AAAAAAAA000000000000042B /* SessionDelta.swift */,
+				AAAAAAAA000000000000047D /* SeasonHistoryEntry.swift */,
 				AAAAAAAA000000000000042C /* SessionScan.swift */,
 				AAAAAAAA000000000000042D /* SettlementRequest.swift */,
 				AAAAAAAA000000000000042E /* SettlementAttestation.swift */,
@@ -404,6 +399,7 @@
 				AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */,
 				AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */,
 				AAAAAAAA0000000000000457 /* ChipScanSheet.swift */,
+				AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */,
 				AAAAAAAA00000000000000FC /* Components */,
 			);
 			path = Views;
@@ -444,13 +440,11 @@
 				AAAAAAAA00000000000000F5 /* Frameworks */,
 				AAAAAAAA0000000000000100 /* Resources */,
 				AAAAAAAA0000000000000115 /* Embed Foundation Extensions */,
-				AAAAAAAA0000000000000116 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				AAAAAAAA0000000000000118 /* PBXTargetDependency */,
-				AAAAAAAA000000000000011A /* PBXTargetDependency */,
 			);
 			name = GamesRoom;
 			packageProductDependencies = (
@@ -542,11 +536,6 @@
 			isa = PBXTargetDependency;
 			target = AAAAAAAA0000000000000107 /* GamesRoomWidgets */;
 			targetProxy = AAAAAAAA0000000000000117 /* PBXContainerItemProxy */;
-		};
-		AAAAAAAA000000000000011A /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = AAAAAAAA000000000000010E /* GamesRoomWatch */;
-			targetProxy = AAAAAAAA0000000000000119 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -699,6 +688,7 @@
 				AAAAAAAA00000000000000E9 /* SettleCasinoSheet.swift in Sources */,
 				AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */,
 				AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */,
+				AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

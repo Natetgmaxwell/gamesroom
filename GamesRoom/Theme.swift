@@ -66,6 +66,11 @@ enum Theme {
         static let edgePadding: CGFloat = 16
         /// Vertical spacing between consecutive sections in a slot.
         static let sectionSpacing: CGFloat = 24
+        /// Min width for a host-scoring chip. 160 on iPad (table-distance
+        /// tap target), 120 on iPhone.
+        static func scoringChipMin(for hSize: UserInterfaceSizeClass?) -> CGFloat {
+            hSize == .regular ? 160 : 120
+        }
     }
 
     // MARK: SectionCard

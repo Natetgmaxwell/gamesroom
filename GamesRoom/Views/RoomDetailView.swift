@@ -48,6 +48,10 @@ struct RoomDetailView: View {
     /// room from settings (the room is gone from the rooms list, so
     /// staying on the page would strand the user on a dead room).
     @Environment(\.dismiss) private var dismiss
+    /// iPad host scoring dashboard gate — `.regular` width only. Gated
+    /// here (not on UIDevice) so iPad multitasking split-screen stays
+    /// on the phone-shaped scroll path.
+    @Environment(\.horizontalSizeClass) private var hSize
 
     /// Drives the host-only Room Settings sheet from the in-room
     /// toolbar gear (L6 spec). Mirrors `RoomPage.settingsRoom` for
@@ -85,9 +89,28 @@ struct RoomDetailView: View {
     // W2.4 — member-side event edit sheet binding.
     @State private var editEvent: Event?
 
+    // Track P0.4 — iPad host scoring dashboard visibility. Starts true so
+    // the dashboard replaces the scroll content the moment the host
+    // enters a live `single_winner` event on iPad landscape; the
+    // dashboard's Close button returns to the scroll.
+    @State private var scoringDashboardVisible: Bool = true
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
+    }
+
+    /// Track P0.4 — gate for the iPad host scoring dashboard. Only
+    /// fires on iPad regular width, host-side, during a live
+    /// `single_winner` event (casino keeps `SettleCasinoSheet`).
+    private var showScoringDashboard: Bool {
+        guard scoringDashboardVisible else { return false }
+        guard hSize == .regular else { return false }
+        guard isHost else { return false }
+        guard let event = activeEvent else { return false }
+        guard event.playedAt <= Date() else { return false }
+        guard let pack = PackRegistry.shared.definition(for: event.packSlug) else { return false }
+        return pack.scoringType == .singleWinner
     }
 
     private var currentUserId: UUID? {
@@ -133,52 +156,14 @@ struct RoomDetailView: View {
     @State private var openAttestations: [OpenAttestationSummary] = []
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
-                activeSlot
-                    .frame(maxWidth: .infinity)
-                if !systemEvents.isEmpty {
-                    SystemBanner(
-                        events: systemEvents,
-                        onDismiss: { eventId in
-                            Task { await roomService.acknowledgeSystemEvent(eventId: eventId, roomId: room.id) }
-                        }
-                    )
-                    .sectionCard(.standard)
-                }
-                if !leaderboard.isEmpty {
-                    StandingsSection(
-                        entries: leaderboard,
-                        currentUserId: currentUserId
-                    )
-                    .sectionCard(.standard)
-                }
-                if let event = activeEvent,
-                   !roomService.cachedEventRounds(eventId: event.id).isEmpty {
-                    RoundBreakdownSection(
-                        rounds: roomService.cachedEventRounds(eventId: event.id),
-                        members: roomService.cachedMembers(roomId: room.id)
-                    )
-                    .sectionCard(.standard)
-                }
-                // W-05 — previous-seasons comparison (US-10).
-                // Renders only when the room has ended seasons; the
-                // section is member-visible (read surface).
-                if !roomService.cachedSeasonHistory(roomId: room.id).isEmpty {
-                    SeasonHistorySection(
-                        rows: roomService.cachedSeasonHistory(roomId: room.id),
-                        currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0
-                    )
-                    .sectionCard(.standard)
-                }
-                PackShelfReadOnly(room: room)
-                    .sectionCard(.standard)
-                MemberRosterReadOnly(room: room)
-                    .sectionCard(.standard)
-                MascotFooterCaption(room: room)
+        Group {
+            if showScoringDashboard, let event = activeEvent {
+                HostScoringDashboard(room: room, event: event, onClose: { scoringDashboardVisible = false })
+                    .environmentObject(roomService)
+                    .environmentObject(scoringService)
+            } else {
+                scrollBody
             }
-            .padding(.horizontal, Theme.Layout.edgePadding)
-            .padding(.vertical, Theme.Layout.sectionSpacing)
         }
         .background(Theme.Palette.background.ignoresSafeArea())
         .navigationTitle(room.name)
@@ -301,6 +286,58 @@ struct RoomDetailView: View {
         }
         .refreshable {
             await refresh()
+        }
+    }
+
+    // Track P0.4 — existing scroll content moved here so the body can
+    // branch on `showScoringDashboard` (iPad host scoring surface).
+    private var scrollBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
+                activeSlot
+                    .frame(maxWidth: .infinity)
+                if !systemEvents.isEmpty {
+                    SystemBanner(
+                        events: systemEvents,
+                        onDismiss: { eventId in
+                            Task { await roomService.acknowledgeSystemEvent(eventId: eventId, roomId: room.id) }
+                        }
+                    )
+                    .sectionCard(.standard)
+                }
+                if !leaderboard.isEmpty {
+                    StandingsSection(
+                        entries: leaderboard,
+                        currentUserId: currentUserId
+                    )
+                    .sectionCard(.standard)
+                }
+                if let event = activeEvent,
+                   !roomService.cachedEventRounds(eventId: event.id).isEmpty {
+                    RoundBreakdownSection(
+                        rounds: roomService.cachedEventRounds(eventId: event.id),
+                        members: roomService.cachedMembers(roomId: room.id)
+                    )
+                    .sectionCard(.standard)
+                }
+                // W-05 — previous-seasons comparison (US-10).
+                // Renders only when the room has ended seasons; the
+                // section is member-visible (read surface).
+                if !roomService.cachedSeasonHistory(roomId: room.id).isEmpty {
+                    SeasonHistorySection(
+                        rows: roomService.cachedSeasonHistory(roomId: room.id),
+                        currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0
+                    )
+                    .sectionCard(.standard)
+                }
+                PackShelfReadOnly(room: room)
+                    .sectionCard(.standard)
+                MemberRosterReadOnly(room: room)
+                    .sectionCard(.standard)
+                MascotFooterCaption(room: room)
+            }
+            .padding(.horizontal, Theme.Layout.edgePadding)
+            .padding(.vertical, Theme.Layout.sectionSpacing)
         }
     }
 
@@ -757,6 +794,8 @@ struct RoomDetailView: View {
         if let pack = PackRegistry.shared.definition(for: event.packSlug),
            pack.scoringType == .withdrawReturn {
             settleSheetEvent = event
+        } else if hSize == .regular {
+            scoringDashboardVisible = true
         } else {
             hostScoreEvent = event
         }
@@ -1656,33 +1695,34 @@ private struct SeasonHistorySection: View {
     }
 
     private func seasonRow(_ row: SeasonHistoryEntry) -> some View {
-        HStack(spacing: Theme.Layout.gutter) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(row.displayName)
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Text(dateRange(row))
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(row.callerTotal) pts")
-                    .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Text(rankText(row))
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 12)
+            VStack(alignment: .trailing, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(row.callerTotal)")
+                        .font(Theme.Typography.title.monospacedDigit())
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Text("pts")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+                HStack(spacing: 8) {
+                    rankPill(rank: row.callerRank)
+                    deltaCluster(row)
+                }
             }
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(deltaText(row))
-                    .font(Theme.Typography.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(deltaColor(row))
-                Text("vs now")
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
-            }
-            .frame(minWidth: 64)
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, Theme.Layout.cardInset)
         .padding(.horizontal, Theme.Layout.edgePadding)
@@ -1692,9 +1732,49 @@ private struct SeasonHistorySection: View {
         )
     }
 
+    @ViewBuilder
+    private func rankPill(rank: Int64) -> some View {
+        let isFirst = rank == 1
+        let textColor: Color = isFirst
+            ? Theme.Palette.accent
+            : Theme.Palette.primaryText.opacity(0.7)
+        let strokeColor: Color = isFirst
+            ? Theme.Palette.accent.opacity(0.6)
+            : Theme.Palette.hairline
+        Text(ordinal(Int(rank)))
+            .font(Theme.Typography.caption.weight(.semibold))
+            .foregroundStyle(textColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .overlay(
+                Capsule().stroke(strokeColor, lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private func deltaCluster(_ row: SeasonHistoryEntry) -> some View {
+        let d = row.delta(against: currentScore)
+        let color: Color = d > 0
+            ? Theme.Palette.accent
+            : (d < 0 ? Theme.Palette.primaryText.opacity(0.6) : Theme.Palette.primaryText.opacity(0.45))
+        let arrow: String? = d == 0 ? nil : (d > 0 ? "arrow.up" : "arrow.down")
+        HStack(spacing: 3) {
+            if let arrowName = arrow {
+                Image(systemName: arrowName)
+                    .font(Theme.Typography.footnote.weight(.semibold))
+            }
+            Text("\(d)")
+                .font(Theme.Typography.caption.weight(.semibold).monospacedDigit())
+            Text("vs now")
+                .font(Theme.Typography.footnote)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+        }
+        .foregroundStyle(color)
+    }
+
     private func dateRange(_ row: SeasonHistoryEntry) -> String {
         if let ended = row.endedAt {
-            return "\(row.startedAt, format: .dateTime.month().day().year()) – \(ended, format: .dateTime.month().day().year())"
+            return "\(row.startedAt.formatted(.dateTime.month().day().year())) – \(ended.formatted(.dateTime.month().day().year()))"
         }
         return row.startedAt.formatted(date: .abbreviated, time: .omitted)
     }
@@ -1720,12 +1800,6 @@ private struct SeasonHistorySection: View {
 
     private func deltaText(_ row: SeasonHistoryEntry) -> String {
         row.delta(against: currentScore) >= 0 ? "+\(row.delta(against: currentScore))" : "\(row.delta(against: currentScore))"
-    }
-
-    private func deltaColor(_ row: SeasonHistoryEntry) -> Color {
-        row.delta(against: currentScore) > 0
-            ? Theme.Palette.accent
-            : (row.delta(against: currentScore) < 0 ? .red.opacity(0.85) : Theme.Palette.primaryText.opacity(0.45))
     }
 }
 
