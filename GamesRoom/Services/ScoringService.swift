@@ -54,6 +54,18 @@ protocol ScoringStore: Sendable {
         entries: [ScoreEntry],
         correctionOf: UUID?
     ) async throws -> ScoreSubmission
+
+    /// Reverse a previously-recorded round: subtracts each entry's
+    /// delta from `room_memberships.season_score`, deletes the
+    /// round's transactions, and removes the `round_submissions`
+    /// row. Mirrors `delete_round_score(p_room_id, p_event_id,
+    /// p_round_index)` from migration 054. Host-only; idempotent
+    /// (no row for the round → no-op). Throws on non-host calls.
+    func deleteRound(
+        roomId: UUID,
+        eventId: UUID,
+        roundIndex: Int
+    ) async throws
 }
 
 /// The result of a successful round submission. Mirrors the
@@ -157,6 +169,21 @@ final class LiveScoringStore: ScoringStore, @unchecked Sendable {
         }
         return row
     }
+
+    func deleteRound(
+        roomId: UUID,
+        eventId: UUID,
+        roundIndex: Int
+    ) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("delete_round_score", params: [
+                "p_room_id": roomId.uuidString,
+                "p_event_id": eventId.uuidString,
+                "p_round_index": String(roundIndex)
+            ])
+            .execute()
+            .value as Void
+    }
 }
 
 // MARK: - InMemoryScoringStore
@@ -188,6 +215,14 @@ final class InMemoryScoringStore: ScoringStore, @unchecked Sendable {
             createdAt: Date(),
             correctionOf: correctionOf
         )
+    }
+
+    func deleteRound(
+        roomId: UUID,
+        eventId: UUID,
+        roundIndex: Int
+    ) async throws {
+        _ = (roomId, eventId, roundIndex)
     }
 }
 
@@ -245,6 +280,23 @@ final class ScoringService: ObservableObject {
         self.lastSubmission = submission
         self.lastError = nil
         return submission
+    }
+
+    /// Reverse a previously-recorded round: subtracts the deltas,
+    /// deletes the round's transactions, and removes the row.
+    /// Clears `lastError` on success; throws on non-host calls.
+    /// Mirrors the `delete_round_score` RPC from migration 054.
+    func deleteRound(
+        roomId: UUID,
+        eventId: UUID,
+        roundIndex: Int
+    ) async throws {
+        try await store.deleteRound(
+            roomId: roomId,
+            eventId: eventId,
+            roundIndex: roundIndex
+        )
+        self.lastError = nil
     }
 
     /// Convenience wrapper that takes the raw host-side

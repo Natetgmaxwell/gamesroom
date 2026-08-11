@@ -1163,6 +1163,79 @@ runner.run("CasinoConfig.value(for:) ignores the map when standardPresets is tru
     runner.assertEqual(standard.value(for: .red), 5)
 }
 
+// MARK: - EventRound round-tally (W3.6 — deletion + correction)
+
+runner.run("Array<EventRound>.nextRoundIndex is 1 for an empty log") {
+    let empty: [EventRound] = []
+    runner.assertEqual(empty.nextRoundIndex, 1)
+}
+
+runner.run("Array<EventRound>.nextRoundIndex is max+1 for [1, 2, 4]") {
+    let eventId = UUID()
+    let roomId = UUID()
+    let userId = UUID()
+    let rounds: [EventRound] = [
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "cards_against_humanity", roundIndex: 1, entries: [], createdBy: userId, createdAt: Date()),
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "cards_against_humanity", roundIndex: 2, entries: [], createdBy: userId, createdAt: Date()),
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "cards_against_humanity", roundIndex: 4, entries: [], createdBy: userId, createdAt: Date())
+    ]
+    runner.assertEqual(rounds.nextRoundIndex, 5)
+}
+
+runner.run("Array<EventRound>.nextRoundIndex stays monotonic after a delete") {
+    let eventId = UUID()
+    let roomId = UUID()
+    let userId = UUID()
+    let rounds: [EventRound] = [
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "pluto_chess", roundIndex: 1, entries: [], createdBy: userId, createdAt: Date()),
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "pluto_chess", roundIndex: 3, entries: [], createdBy: userId, createdAt: Date())
+    ]
+    runner.assertEqual(rounds.nextRoundIndex, 4)
+}
+
+runner.run("EventRound decodes correction_of when present") {
+    let original = UUID()
+    let correction = UUID()
+    let json = """
+    {
+      "id": "\(uuidString(correction))",
+      "event_id": "\(uuidString(UUID()))",
+      "room_id": "\(uuidString(UUID()))",
+      "pack_slug": "cards_against_humanity",
+      "round_index": 2,
+      "entries": [],
+      "created_by": "\(uuidString(UUID()))",
+      "created_at": "2026-08-10T12:00:00Z",
+      "correction_of": "\(uuidString(original))"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(EventRound.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.correctionOf, original)
+}
+
+runner.run("EventRound defaults correctionOf to nil when absent") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "pack_slug": "pluto_chess",
+      "round_index": 1,
+      "entries": [],
+      "created_by": "66666666-6666-6666-6666-666666666666",
+      "created_at": "2026-08-10T12:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(EventRound.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.correctionOf, nil)
+}
+
+private func uuidString(_ uuid: UUID) -> String { uuid.uuidString }
+
 // MARK: - Summary
 
 print("")

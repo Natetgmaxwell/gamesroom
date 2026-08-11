@@ -25,6 +25,7 @@ struct EventRound: Identifiable, Codable, Hashable {
     let entries: [ScoreEntry]
     let createdBy: UUID
     let createdAt: Date
+    let correctionOf: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -35,6 +36,7 @@ struct EventRound: Identifiable, Codable, Hashable {
         case entries
         case createdBy = "created_by"
         case createdAt = "created_at"
+        case correctionOf = "correction_of"
     }
 
     init(
@@ -45,7 +47,8 @@ struct EventRound: Identifiable, Codable, Hashable {
         roundIndex: Int,
         entries: [ScoreEntry],
         createdBy: UUID,
-        createdAt: Date
+        createdAt: Date,
+        correctionOf: UUID? = nil
     ) {
         self.id = id
         self.eventId = eventId
@@ -55,6 +58,7 @@ struct EventRound: Identifiable, Codable, Hashable {
         self.entries = entries
         self.createdBy = createdBy
         self.createdAt = createdAt
+        self.correctionOf = correctionOf
     }
 
     init(from decoder: Decoder) throws {
@@ -67,5 +71,13 @@ struct EventRound: Identifiable, Codable, Hashable {
         entries = try c.decodeIfPresent([ScoreEntry].self, forKey: .entries) ?? []
         createdBy = try c.decode(UUID.self, forKey: .createdBy)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        correctionOf = try c.decodeIfPresent(UUID.self, forKey: .correctionOf)
     }
+}
+
+extension Array where Element == EventRound {
+    /// The round index the next logged round should use: one past the
+    /// highest logged round. Monotonic — deleted rounds' indices are
+    /// never reused, so the timeline stays unambiguous.
+    var nextRoundIndex: Int { (map(\.roundIndex).max() ?? 0) + 1 }
 }

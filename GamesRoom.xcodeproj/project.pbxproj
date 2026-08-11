@@ -99,6 +99,7 @@
 		AAAAAAAA000000000000045D /* EditEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045C /* EditEventSheet.swift */; };
 		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 		AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */; };
+		AAAAAAAA0000000000000482 /* SessionRoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -237,6 +238,7 @@
 		AAAAAAAA000000000000045C /* EditEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditEventSheet.swift; sourceTree = "<group>"; };
 		BBBBBBBB0000000000000450 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoringDashboard.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRoundTimeline.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -413,6 +415,7 @@
 				AAAAAAAA0000000000000413 /* SeatGridView.swift */,
 				AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */,
 				AAAAAAAA0000000000000448 /* DrowningBadge.swift */,
+				AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
