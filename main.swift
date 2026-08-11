@@ -94,6 +94,31 @@ final class TestRunner {
             failures.append("[\(name)] threw \(error)")
         }
     }
+
+    func runAsync(_ name: String, _ block: @escaping () async throws -> Void) {
+        currentName = name
+        let prior = failures.count
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                try await block()
+                if failures.count == prior {
+                    print("ok   \(name)")
+                    passes += 1
+                } else {
+                    print("FAIL \(name)")
+                    for f in failures.suffix(failures.count - prior) {
+                        print("       \(f)")
+                    }
+                }
+            } catch {
+                print("FAIL \(name) — threw \(error)")
+                failures.append("[\(name)] threw \(error)")
+            }
+            sem.signal()
+        }
+        sem.wait()
+    }
 }
 
 let runner = TestRunner()
@@ -1019,6 +1044,34 @@ runner.run("LiveActivityRule surfaces outside play with a line") {
 runner.run("LiveActivityRule no-ops outside play without a line") {
     let action = LiveActivityRule.action(isLive: false, hasLine: false, isRunning: false)
     runner.assertEqual(action, .none)
+}
+
+// MARK: - Room deletion (W-04, US-04)
+
+runner.runAsync("InMemoryRoomStore.deleteRoom expires open join codes and removes the room") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    let code = try await store.generateJoinCode(roomId: hosted.id)
+    try await store.deleteRoom(roomId: hosted.id)
+    let rooms = try await store.fetchRooms()
+    runner.assertFalse(rooms.contains { $0.id == hosted.id }, "deleted room still listed")
+    do {
+        _ = try await store.redeemJoinCode(code: code)
+        runner.assertTrue(false, "redeem should throw after delete")
+    } catch {
+        runner.assertTrue(true)
+    }
+}
+
+runner.runAsync("InMemoryRoomStore.deleteRoom throws for non-host") {
+    let store = InMemoryRoomStore()
+    let otherRoom = try await store.fetchRooms()[1]
+    do {
+        try await store.deleteRoom(roomId: otherRoom.id)
+        runner.assertTrue(false, "non-host delete should throw")
+    } catch {
+        runner.assertTrue(true)
+    }
 }
 
 // MARK: - Summary

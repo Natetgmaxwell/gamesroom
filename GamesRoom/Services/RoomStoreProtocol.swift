@@ -137,6 +137,13 @@ protocol RoomStore: Sendable {
 
     // MARK: Room settings
 
+    /// Host-only. Soft-deletes the room (rooms.deleted_at) so the
+    /// ledger survives for disputes, and expires all open join
+    /// codes. Throws on non-host calls.
+    ///
+    /// Server side: `delete_room(p_room_id)` (migration 052).
+    func deleteRoom(roomId: UUID) async throws
+
     /// Updates the room's mascot + operations + feature-toggle
     /// columns. Returns the freshly-read `Room` so the UI can
     /// mirror the server-canonical state. Throws on

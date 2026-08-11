@@ -865,6 +865,58 @@ actor InMemoryRoomStore: RoomStore {
 
     // MARK: Room settings
 
+    /// In-memory mirror of `delete_room` (migration 052). The first
+    /// seeded room's host is the synthetic current member id, so
+    /// a delete on rooms[0] succeeds; deletes on any other seeded
+    /// room throw the same "Only the host can delete rooms" error
+    /// the live RPC surfaces. Cleans up every per-room map the
+    /// store maintains so a subsequent fetchRooms no longer
+    /// surfaces the deleted room and the next join code redeem
+    /// hits the "Code not found or already redeemed" path.
+    func deleteRoom(roomId: UUID) async throws {
+        guard let room = rooms.first(where: { $0.id == roomId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "room \(roomId) not found"]
+            )
+        }
+        guard room.createdBy == currentSyntheticMemberId() else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Only the host can delete rooms"]
+            )
+        }
+
+        // Remove the room itself.
+        rooms.removeAll { $0.id == roomId }
+
+        // Expire every join code minted for the room.
+        for (code, codeRoomId) in joinCodes where codeRoomId == roomId {
+            joinCodes.removeValue(forKey: code)
+        }
+
+        // Drop the room's active event (and any briefing attached
+        // to it). The room's events map is keyed by roomId (one
+        // active event per room); also clean briefings keyed by
+        // the event id, and any round breakdowns / RSVPs that
+        // belong to the event.
+        if let event = events[roomId] {
+            events.removeValue(forKey: roomId)
+            briefings.removeValue(forKey: event.id)
+            rsvps.removeValue(forKey: event.id)
+            chapterLines.removeValue(forKey: event.id)
+        }
+
+        // Per-room caches that aren't room-id-keyed directly.
+        leaderboards.removeValue(forKey: roomId)
+        currentSeasons.removeValue(forKey: roomId)
+        roomPacks.removeValue(forKey: roomId)
+        roomSystemEvents.removeValue(forKey: roomId)
+        packConfigs.removeValue(forKey: roomId)
+    }
+
     func updateRoom(
         id: UUID,
         name: String,

@@ -572,6 +572,18 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
 
     // MARK: Room settings
 
+    /// The live RPC is `delete_room(p_room_id)` (migration 052).
+    /// Host-only; soft-deletes the room and expires open join
+    /// codes. Throws on non-host calls (42501).
+    func deleteRoom(roomId: UUID) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("delete_room", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value as Void
+    }
+
     /// The live RPC is `update_room_settings(p_room_id, p_name,
     /// p_mascot_name, p_mascot_personality, p_mascot_political_ideology,
     /// p_max_seats, p_member_invite_quota, p_join_starting_bonus,

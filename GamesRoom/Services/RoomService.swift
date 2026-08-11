@@ -579,6 +579,24 @@ final class RoomService: ObservableObject {
 
     // MARK: - Room settings update
 
+    /// Host-only. Deletes the room via the `delete_room` RPC
+    /// (migration 052), first removing any calendar rows written
+    /// for the room's events (T1.1 — closes the
+    /// CalendarService.removeEvent zero-call-site gap). Refreshes
+    /// the rooms list and clears the room's caches. Throws on
+    /// non-host calls.
+    func deleteRoom(roomId: UUID) async throws {
+        for event in activeEventByRoom.values where event.roomId == roomId {
+            await CalendarService.shared.removeEvent(eventId: event.id)
+        }
+        try await store.deleteRoom(roomId: roomId)
+        self.lastError = nil
+        activeEventByRoom[roomId] = nil
+        leaderboardByRoom[roomId] = []
+        currentSeasonByRoom[roomId] = nil
+        await refresh()
+    }
+
     /// Updates the room's mascot + operations + feature-toggle
     /// columns. Called from `RoomSettingsSheet.save()`. Returns the
     /// server-canonical `Room` (so the view can mirror any
