@@ -27,6 +27,10 @@ struct AppSettingsView: View {
     @State private var showLogoutConfirm = false
     @State private var isSaving = false
 
+    // T1.2 — opt-in photo retention. Device-level privacy
+    // preference, so it lives in app settings (not room settings).
+    @AppStorage(StorageKeys.keepScanPhotos) private var keepScanPhotos = false
+
     var body: some View {
         NavigationStack {
             Form {
@@ -49,6 +53,18 @@ struct AppSettingsView: View {
                         Text("Log out")
                             .foregroundStyle(.red)
                     }
+                }
+
+                // T1.2 — scan-photo retention. Default off keeps the
+                // F-CAS-03 discard path; the toggle is the opt-in.
+                Section {
+                    Toggle("Keep scan photos", isOn: $keepScanPhotos)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                } header: {
+                    Text("Chip scans")
+                } footer: {
+                    Text("When on, confirmed scan photos are saved to this device only. They are never uploaded.")
                 }
             }
             .scrollContentBackground(.hidden)

@@ -41,6 +41,13 @@ struct ChipScanSheet: View {
     @State private var errorMessage: String?
     @State private var showConfirm = false
 
+    // T1.2 — opt-in photo retention. Default off: the F-CAS-03
+    // discard path stays identical. When on, the confirmed scan's
+    // JPEG lands in Documents/ScanPhotos/ and never leaves the
+    // device.
+    @AppStorage(StorageKeys.keepScanPhotos) private var keepScanPhotos = false
+    @State private var lastJpeg: Data?
+
     private var netDelta: Int { totalValue - withdrawn }
 
     var body: some View {
@@ -178,6 +185,7 @@ struct ChipScanSheet: View {
                     totalValue = 0
                     confidenceAvg = 0
                     photoHash = nil
+                    lastJpeg = nil
                     showConfirm = false
                     errorMessage = nil
                 } label: {
@@ -273,8 +281,13 @@ struct ChipScanSheet: View {
         }
 
         // F-CAS-03: hash the photo bytes, then discard them. Only
-        // the hash + vision snapshot travel.
-        let hash = jpegData(from: pixelBuffer).map { PhotoHash.sha256($0) }
+        // the hash + vision snapshot travel. T1.2: when the opt-in
+        // is on, the JPEG is kept for the confirm step instead.
+        let jpeg = jpegData(from: pixelBuffer)
+        let hash = jpeg.map { PhotoHash.sha256($0) }
+        if keepScanPhotos {
+            lastJpeg = jpeg
+        }
 
         let stacks = ChipSegmentationDetector().detect(cg: cg)
         guard !stacks.isEmpty else {
@@ -310,11 +323,29 @@ struct ChipScanSheet: View {
                 confidence: confidenceAvg,
                 source: .onDevice
             )
+            // T1.2 — best-effort local write. A failed photo save
+            // never fails the scan; the hash is already recorded.
+            if keepScanPhotos, let jpeg = lastJpeg {
+                persistScanPhoto(jpeg)
+            }
             onDone()
             dismiss()
         } catch {
             errorMessage = "Failed to record scan: \((error as NSError).localizedDescription)"
         }
+    }
+
+    /// T1.2 — writes the confirmed scan's JPEG to the app sandbox
+    /// (`Documents/ScanPhotos/<eventId>-<memberId>-<timestamp>.jpg`).
+    /// Local-only by design; the photo is never uploaded.
+    private func persistScanPhoto(_ jpeg: Data) {
+        guard let memberId = authService.currentUserId else { return }
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = documents.appendingPathComponent("ScanPhotos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stamp = Int(Date().timeIntervalSince1970)
+        let url = dir.appendingPathComponent("\(eventId.uuidString)-\(memberId.uuidString)-\(stamp).jpg")
+        try? jpeg.write(to: url)
     }
 
     // MARK: - Pixel conversion
