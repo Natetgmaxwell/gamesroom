@@ -2,7 +2,7 @@
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
-> **Status (2026-08-11, task t_aaeba4ca):** T0.3 (CI lane), T0.4 (repo hygiene), T1.1 (EventKit), T1.2 (photo persistence), T1.3 (icon wiring — v3 GR monogram "The Ring" per the plan default), T1.4 (ui-polish audit) are DONE and committed. Remaining: T0.1/T0.2 (Xcode-host gates — no Xcode.app on this host), Wave 2 (gated on Q-TONE / Q-LLM-PROVIDER / Q-PAID-PACKS / Q-HOST-FEEDBACK). Verification after this run: 65/65 Foundation tests, 34/34 parse-checks, pbxproj green.
+> **Status (2026-08-11, updated by integration task t_a4d83930):** T0.3 (CI lane), T0.4 (repo hygiene), T1.1 (EventKit), T1.2 (photo persistence), T1.3 (icon wiring — v3 GR monogram "The Ring" per the plan default), T1.4 (ui-polish audit) are DONE and committed. The PLAN.md W-04..W-06 gap-closers (room deletion, season history, casino color-map editor) are DONE and committed; W-07/W-08 housekeeping landed with the integration task. Remaining: T0.1/T0.2 (Xcode-host gates — no Xcode.app on this host), Wave 2 (gated on Q-TONE / Q-LLM-PROVIDER / Q-PAID-PACKS / Q-HOST-FEEDBACK). Verification after this run: 73/73 Foundation tests, 36/36 parse-checks, pbxproj green. **The requirement-coverage map for the current tree is `PLAN.md` §2; this document is the V0.9-era plan.**
 
 **Goal:** Close the remaining gaps between the codebase at `main` (`157ab69`) and the vision in `VISION.md`, then ship the first TestFlight build.
 
