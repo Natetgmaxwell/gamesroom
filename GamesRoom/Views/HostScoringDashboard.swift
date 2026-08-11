@@ -26,6 +26,13 @@
 //  only renders when the gate holds. The Casino pack's
 //  member-driven `SettleCasinoSheet` flow is unchanged.
 //
+//  V0.34b: round-logging wired in. `rounds` mirrors the per-event
+//  log; the next round index is reseeded from `rounds.nextRoundIndex`
+//  after every save, delete, or edit-cancel. The session timeline
+//  shows below the submit bar (capped at 240pt so the fixed VStack
+//  layout holds), and the host can tap any row to correct it or
+//  delete it.
+//
 
 import SwiftUI
 
@@ -43,6 +50,8 @@ struct HostScoringDashboard: View {
     @State private var roundIndex: Int = 1
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
+    @State private var rounds: [EventRound] = []
+    @State private var editingRound: EventRound?
 
     private var members: [Member] {
         roomService.cachedMembers(roomId: room.id)
@@ -81,6 +90,21 @@ struct HostScoringDashboard: View {
             Divider()
                 .overlay(Theme.Palette.hairline)
 
+            ScrollView(.vertical, showsIndicators: false) {
+                SessionRoundTimeline(
+                    rounds: rounds,
+                    members: members,
+                    onEdit: { startEditing($0) },
+                    onDelete: { round in Task { await deleteRound(round) } }
+                )
+                .padding(.horizontal, Theme.Layout.gutter)
+                .padding(.vertical, Theme.Layout.sectionSpacing)
+            }
+            .frame(maxHeight: 240)
+
+            Divider()
+                .overlay(Theme.Palette.hairline)
+
             standingsStrip
                 .padding(.horizontal, Theme.Layout.gutter)
                 .padding(.vertical, Theme.Layout.cardInset)
@@ -88,6 +112,10 @@ struct HostScoringDashboard: View {
         }
         .background(Theme.Palette.background.ignoresSafeArea())
         .tint(Theme.Palette.accent)
+        .task {
+            rounds = await roomService.loadEventRounds(eventId: event.id)
+            roundIndex = rounds.nextRoundIndex
+        }
     }
 
     // MARK: - Header
@@ -101,6 +129,19 @@ struct HostScoringDashboard: View {
                 Text(packDisplayName)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                if let editingRound {
+                    HStack(spacing: Theme.Layout.cardInset) {
+                        Text("Editing round \(editingRound.roundIndex)")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        Button("Cancel") {
+                            cancelEdit()
+                        }
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.accent)
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             Spacer(minLength: 0)
             roundControl
@@ -364,10 +405,55 @@ struct HostScoringDashboard: View {
                 roomId: room.id,
                 eventId: event.id,
                 packSlug: event.packSlug,
-                input: input
+                input: input,
+                correctionOf: editingRound?.id
             )
+            rounds = await roomService.loadEventRounds(eventId: event.id)
+            roundIndex = rounds.nextRoundIndex
             selectedMemberIds.removeAll()
-            roundIndex += 1
+            editingRound = nil
+        } catch {
+            errorMessage = (error as NSError).localizedDescription
+        }
+    }
+
+    // MARK: - Edit + delete
+
+    /// Seed the form from a previously-logged round so the host can
+    /// adjust the winners. `roundIndex` is restored from the round
+    /// itself; the next save passes `editingRound.id` through as
+    /// `correctionOf` so the server records a re-submission rather
+    /// than a fresh row.
+    private func startEditing(_ round: EventRound) {
+        editingRound = round
+        roundIndex = round.roundIndex
+        selectedMemberIds = Set(round.entries.map(\.memberId))
+    }
+
+    /// Exit edit mode without saving. Reseeds `roundIndex` from the
+    /// current log so the next logged round continues the monotonic
+    /// sequence, and clears any partial chip selection.
+    private func cancelEdit() {
+        editingRound = nil
+        roundIndex = rounds.nextRoundIndex
+        selectedMemberIds.removeAll()
+    }
+
+    /// Reverse a previously-recorded round: subtracts the deltas,
+    /// deletes the round's transactions, and removes the row.
+    /// Reseeds `roundIndex` from the log on success and clears edit
+    /// state if the deleted round was being corrected.
+    private func deleteRound(_ round: EventRound) async {
+        do {
+            try await scoringService.deleteRound(
+                roomId: room.id,
+                eventId: event.id,
+                roundIndex: round.roundIndex
+            )
+            rounds = await roomService.loadEventRounds(eventId: event.id)
+            roundIndex = rounds.nextRoundIndex
+            if editingRound?.id == round.id { editingRound = nil }
+            selectedMemberIds.removeAll()
         } catch {
             errorMessage = (error as NSError).localizedDescription
         }
