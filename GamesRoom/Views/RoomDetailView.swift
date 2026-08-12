@@ -1957,7 +1957,7 @@ private struct PackShelfReadOnly: View {
                 pack: wrapped.type,
                 currentPoints: roomService.effectiveWinPoints(roomId: room.id, packSlug: wrapped.type.slug),
                 onSave: { points in
-                    Task { await savePayout(packSlug: wrapped.type.slug, points: points) }
+                    try await savePayout(packSlug: wrapped.type.slug, points: points)
                 }
             )
             .environmentObject(roomService)
@@ -1971,7 +1971,7 @@ private struct PackShelfReadOnly: View {
                 pack: wrapped.type,
                 currentPoints: roomService.effectiveWinPoints(roomId: room.id, packSlug: wrapped.type.slug),
                 onSave: { points in
-                    Task { await savePayout(packSlug: wrapped.type.slug, points: points) }
+                    try await savePayout(packSlug: wrapped.type.slug, points: points)
                 }
             )
             .environmentObject(roomService)
@@ -2067,13 +2067,8 @@ private struct PackShelfReadOnly: View {
         }
     }
 
-    private func savePayout(packSlug: String, points: Int) async {
-        do {
-            try await roomService.setRoomPackConfig(roomId: room.id, packSlug: packSlug, winPoints: points)
-        } catch {
-            // Service already populated lastError; nothing to do here.
-            _ = error
-        }
+    private func savePayout(packSlug: String, points: Int) async throws {
+        try await roomService.setRoomPackConfig(roomId: room.id, packSlug: packSlug, winPoints: points)
     }
 }
 
@@ -2087,12 +2082,15 @@ private struct PackPayoutSheet: View {
     let roomId: UUID
     let pack: any PackDefinition.Type
     let currentPoints: Int
-    let onSave: (Int) -> Void
+    let onSave: (Int) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var points: Int
+    @State private var isSaving: Bool = false
+    @State private var errorMessage: String = ""
+    @State private var showError: Bool = false
 
-    init(roomId: UUID, pack: any PackDefinition.Type, currentPoints: Int, onSave: @escaping (Int) -> Void) {
+    init(roomId: UUID, pack: any PackDefinition.Type, currentPoints: Int, onSave: @escaping (Int) async throws -> Void) {
         self.roomId = roomId
         self.pack = pack
         self.currentPoints = currentPoints
@@ -2122,11 +2120,26 @@ private struct PackPayoutSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(points)
-                        dismiss()
+                        Task {
+                            isSaving = true
+                            do {
+                                try await onSave(points)
+                                dismiss()
+                            } catch {
+                                errorMessage = (error as NSError).localizedDescription
+                                showError = true
+                                isSaving = false
+                            }
+                        }
                     }
                     .tint(Theme.Palette.accent)
+                    .disabled(isSaving)
                 }
+            }
+            .alert("Couldn't save", isPresented: $showError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage)
             }
         }
         .tint(Theme.Palette.accent)
@@ -2147,12 +2160,15 @@ private struct CAHConfigSheet: View {
     let roomId: UUID
     let pack: any PackDefinition.Type
     let currentPoints: Int
-    let onSave: (Int) -> Void
+    let onSave: (Int) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var points: Int
+    @State private var isSaving: Bool = false
+    @State private var errorMessage: String = ""
+    @State private var showError: Bool = false
 
-    init(roomId: UUID, pack: any PackDefinition.Type, currentPoints: Int, onSave: @escaping (Int) -> Void) {
+    init(roomId: UUID, pack: any PackDefinition.Type, currentPoints: Int, onSave: @escaping (Int) async throws -> Void) {
         self.roomId = roomId
         self.pack = pack
         self.currentPoints = currentPoints
@@ -2185,11 +2201,26 @@ private struct CAHConfigSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(points)
-                        dismiss()
+                        Task {
+                            isSaving = true
+                            do {
+                                try await onSave(points)
+                                dismiss()
+                            } catch {
+                                errorMessage = (error as NSError).localizedDescription
+                                showError = true
+                                isSaving = false
+                            }
+                        }
                     }
                     .tint(Theme.Palette.accent)
+                    .disabled(isSaving)
                 }
+            }
+            .alert("Couldn't save", isPresented: $showError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage)
             }
         }
         .tint(Theme.Palette.accent)
