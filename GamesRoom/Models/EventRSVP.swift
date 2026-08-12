@@ -28,6 +28,36 @@ enum SocialProof {
     }
 }
 
+/// Seat-grid derivation: maxSeats cells, claimed RSVPs first,
+/// the rest open. Pure Foundation so the runner can test it.
+enum SeatGrid {
+    struct Cell: Identifiable {
+        let id: Int
+        let rsvp: EventRSVP?
+    }
+
+    /// Exactly `maxSeats` cells. Claimed RSVPs (in input order) fill
+    /// the first N cells; the rest are open chairs (nil rsvp).
+    /// Declined/unclaimed members do not get a cell — they are open
+    /// chairs. `maxSeats` is clamped to >= 0; `maxSeats == 0` returns
+    /// empty. When claimed count exceeds `maxSeats`, the extras are
+    /// dropped (input-order tiebreak).
+    static func cells(maxSeats: Int, rsvps: [EventRSVP]) -> [Cell] {
+        let clampedMax = max(0, maxSeats)
+        let claimed = rsvps.filter { $0.state == .claimed }
+        let leading = Array(claimed.prefix(clampedMax))
+        return (0..<clampedMax).map { idx in
+            Cell(id: idx, rsvp: idx < leading.count ? leading[idx] : nil)
+        }
+    }
+
+    /// `max(2, ceil(sqrt(maxSeats)))` — never fewer than 2 columns.
+    static func columnCount(for maxSeats: Int) -> Int {
+        let clamped = max(0, maxSeats)
+        return max(2, Int(ceil(sqrt(Double(clamped)))))
+    }
+}
+
 /// One member's RSVP row for one event, joined with the member's
 /// display name. Returned by the `get_event_rsvps` RPC (migration
 /// 047) so the briefing slot can render the seat grid — which

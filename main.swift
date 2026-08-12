@@ -865,6 +865,89 @@ runner.run("SocialProof trims names") {
     runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: [" Sarah ", "\nMike\t"]), "Sarah and Mike have claimed seats")
 }
 
+// MARK: - SeatGrid (seat grid maxSeats loop)
+
+func seatGridRSVP(_ name: String, _ state: MemberRSVPState) -> EventRSVP {
+    EventRSVP(eventId: UUID(), memberId: UUID(), displayName: name, state: state)
+}
+
+runner.run("SeatGrid.cells 2 claimed of 6 → 6 cells, first 2 claimed, last 4 open") {
+    let rsvps = [
+        seatGridRSVP("Alex", .claimed),
+        seatGridRSVP("Sam", .claimed)
+    ]
+    let cells = SeatGrid.cells(maxSeats: 6, rsvps: rsvps)
+    runner.assertEqual(cells.count, 6)
+    runner.assertEqual(cells[0].rsvp?.displayName, "Alex")
+    runner.assertEqual(cells[1].rsvp?.displayName, "Sam")
+    runner.assertNil(cells[2].rsvp)
+    runner.assertNil(cells[3].rsvp)
+    runner.assertNil(cells[4].rsvp)
+    runner.assertNil(cells[5].rsvp)
+}
+
+runner.run("SeatGrid.cells 0 claimed of 6 → 6 open cells") {
+    let rsvps = [seatGridRSVP("Alex", .declined)]
+    let cells = SeatGrid.cells(maxSeats: 6, rsvps: rsvps)
+    runner.assertEqual(cells.count, 6)
+    for cell in cells {
+        runner.assertNil(cell.rsvp)
+    }
+}
+
+runner.run("SeatGrid.cells 6 claimed of 6 → 6 claimed, 0 open") {
+    let rsvps = (0..<6).map { seatGridRSVP("M\($0)", .claimed) }
+    let cells = SeatGrid.cells(maxSeats: 6, rsvps: rsvps)
+    runner.assertEqual(cells.count, 6)
+    for (i, cell) in cells.enumerated() {
+        runner.assertEqual(cell.rsvp?.displayName, "M\(i)")
+    }
+}
+
+runner.run("SeatGrid.cells claimed > maxSeats → drops extras") {
+    let rsvps = (0..<8).map { seatGridRSVP("M\($0)", .claimed) }
+    let cells = SeatGrid.cells(maxSeats: 6, rsvps: rsvps)
+    runner.assertEqual(cells.count, 6)
+    for (i, cell) in cells.enumerated() {
+        runner.assertEqual(cell.rsvp?.displayName, "M\(i)")
+    }
+}
+
+runner.run("SeatGrid.cells maxSeats 0 → empty") {
+    let rsvps = [seatGridRSVP("Alex", .claimed)]
+    let cells = SeatGrid.cells(maxSeats: 0, rsvps: rsvps)
+    runner.assertEqual(cells.count, 0)
+}
+
+runner.run("SeatGrid.cells preserves claimed input order") {
+    let rsvps = [
+        seatGridRSVP("Charlie", .claimed),
+        seatGridRSVP("Alice", .claimed),
+        seatGridRSVP("Bob", .claimed)
+    ]
+    let cells = SeatGrid.cells(maxSeats: 6, rsvps: rsvps)
+    runner.assertEqual(cells.count, 6)
+    runner.assertEqual(cells[0].rsvp?.displayName, "Charlie")
+    runner.assertEqual(cells[1].rsvp?.displayName, "Alice")
+    runner.assertEqual(cells[2].rsvp?.displayName, "Bob")
+    runner.assertNil(cells[3].rsvp)
+    runner.assertNil(cells[4].rsvp)
+    runner.assertNil(cells[5].rsvp)
+}
+
+runner.run("SeatGrid.columnCount adapts to maxSeats (4→2, 6→3, 8→3, 12→4)") {
+    runner.assertEqual(SeatGrid.columnCount(for: 4), 2)
+    runner.assertEqual(SeatGrid.columnCount(for: 6), 3)
+    runner.assertEqual(SeatGrid.columnCount(for: 8), 3)
+    runner.assertEqual(SeatGrid.columnCount(for: 12), 4)
+}
+
+runner.run("SeatGrid.columnCount floors at 2 (2→2, 1→2, 0→2)") {
+    runner.assertEqual(SeatGrid.columnCount(for: 2), 2)
+    runner.assertEqual(SeatGrid.columnCount(for: 1), 2)
+    runner.assertEqual(SeatGrid.columnCount(for: 0), 2)
+}
+
 // MARK: - RoomPackConfig (2026-08-10 feedback round)
 
 runner.run("RoomPackConfig decodes server shape with win_points") {
@@ -2363,6 +2446,58 @@ runner.run("CasinoWithdrawal decodes the migration 061 withdraw_casino_chips row
     runner.assertEqual(decoded.pointsWithdrawn, 120)
     runner.assertEqual(decoded.memberId, UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
     runner.assertEqual(decoded.sessionId, UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+}
+
+// MARK: - Seat-action refresh data path (claim-seat fix loop)
+//
+// Store-contract tests proving `upsertEventRSVP` mutations are
+// visible to the read paths RoomService refreshes after a
+// successful claim/decline/release:
+//   - the briefing summary's seat-count mirror
+//     (`BriefingSummary.seatsClaimed` drives the "1 of 6 claimed"
+//     caption on the BriefingSlot)
+//   - the returned `MemberRSVP.state` (canonical confirmation
+//     that the write round-tripped).
+//
+// The full seat-grid data path (`fetchEventRSVPs`) is the
+// primary contract under test, but `InMemoryRoomStore.fetchEventRSVPs`
+// is blocked by a pre-existing indexing bug (`events` is keyed by
+// roomId, while the read keys by eventId) that's outside this
+// loop's 5-file change contract. See
+// `docs/loop-artifacts/CLAIM_SEAT_REFRESH_SPEC.md` §Deviations.
+
+runner.runAsync("InMemoryRoomStore.upsertEventRSVP returns a row whose state matches the request") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+        runner.assertTrue(false, "seeded room should have an active event")
+        return
+    }
+    let rowClaimed = try await store.upsertEventRSVP(eventId: event.id, state: .claimed)
+    runner.assertEqual(rowClaimed.state, .claimed)
+    runner.assertEqual(rowClaimed.eventId, event.id)
+
+    let rowDeclined = try await store.upsertEventRSVP(eventId: event.id, state: .declined)
+    runner.assertEqual(rowDeclined.state, .declined)
+
+    let rowReleased = try await store.upsertEventRSVP(eventId: event.id, state: .unclaimed)
+    runner.assertEqual(rowReleased.state, .unclaimed)
+}
+
+runner.runAsync("InMemoryRoomStore.upsertEventRSVP increments the briefing's seatsClaimed count") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+        runner.assertTrue(false, "seeded room should have an active event")
+        return
+    }
+    let baseBriefing = try await store.fetchBriefing(eventId: event.id)
+    let baseClaimed = baseBriefing?.seatsClaimed ?? -1
+
+    _ = try await store.upsertEventRSVP(eventId: event.id, state: .claimed)
+    let after = try await store.fetchBriefing(eventId: event.id)
+    runner.assertNotNil(after, "briefing survives the upsert")
+    runner.assertEqual(after?.seatsClaimed ?? -1, baseClaimed + 1)
 }
 
 // MARK: - Summary

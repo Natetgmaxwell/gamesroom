@@ -99,6 +99,15 @@ struct RoomDetailView: View {
     // dashboard's Close button returns to the scroll.
     @State private var scoringDashboardVisible: Bool = true
 
+    /// Seat-action error surface. `claimSeat` / `declineSeat` /
+    /// `releaseSeat` set `seatActionError` + flip
+    /// `showSeatActionError` on failure; the body's `.alert`
+    /// presents the message. Driven at the view layer so the
+    /// service's `lastError` keeps its existing role and isn't
+    /// reshaped by this loop.
+    @State private var seatActionError: String?
+    @State private var showSeatActionError: Bool = false
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
@@ -310,6 +319,11 @@ struct RoomDetailView: View {
         }
         .refreshable {
             await refresh()
+        }
+        .alert("Seat action failed", isPresented: $showSeatActionError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(seatActionError ?? "")
         }
     }
 
@@ -753,14 +767,17 @@ struct RoomDetailView: View {
     /// Fires `RoomService.upsertEventRSVP(eventId, .claimed)` for
     /// the active event. On success the service's `rsvpByEvent`
     /// cache is updated and the slot rotates to `.claimed`. On
-    /// failure the previous state is preserved and `lastError` is
-    /// surfaced via the service.
+    /// failure the previous state is preserved, `lastError` is
+    /// set on the service, and the body-level `.alert`
+    /// (`showSeatActionError`) presents the localized message
+    /// so the user isn't left staring at a silent grid.
     private func claimSeat(eventId: UUID) async {
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .claimed)
+            seatActionError = nil
         } catch {
-            // Service already populated lastError; nothing to do here.
-            _ = error
+            seatActionError = (error as NSError).localizedDescription
+            showSeatActionError = true
         }
     }
 
@@ -769,9 +786,10 @@ struct RoomDetailView: View {
     private func declineSeat(eventId: UUID) async {
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .declined)
+            seatActionError = nil
         } catch {
-            // Service already populated lastError; nothing to do here.
-            _ = error
+            seatActionError = (error as NSError).localizedDescription
+            showSeatActionError = true
         }
     }
 
@@ -782,9 +800,10 @@ struct RoomDetailView: View {
     private func releaseSeat(eventId: UUID) async {
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .unclaimed)
+            seatActionError = nil
         } catch {
-            // Service already populated lastError; nothing to do here.
-            _ = error
+            seatActionError = (error as NSError).localizedDescription
+            showSeatActionError = true
         }
     }
 
@@ -983,10 +1002,11 @@ private struct BriefingSlot: View {
             // "chairs coloured in" visual indicator: claimed seats
             // render filled with the member's initial, open seats
             // render as outline chairs, the current user's seat is
-            // highlighted. Renders once the per-member RSVP rows
-            // have loaded.
-            if !rsvps.isEmpty {
-                SeatGridRow(rsvps: rsvps, currentUserId: currentUserId)
+            // highlighted. Renders whenever the event has a
+            // maxSeats count, even before the per-member RSVP rows
+            // load (the grid then shows all-open seats).
+            if event.maxSeats > 0 {
+                SeatGridRow(maxSeats: event.maxSeats, rsvps: rsvps, currentUserId: currentUserId)
                     .padding(.top, 4)
                 if event.startedAt == nil,
                    let caption = SocialProof.claimedSeatsCaption(
@@ -1143,17 +1163,18 @@ private struct BriefingSeatCount: View {
 // MARK: - Seat grid row (2026-08-10 feedback round)
 
 /// The "chairs coloured in" seat indicator on the briefing slot.
-/// One cell per room member: claimed seats render a filled chair
-/// with the member's initial, open seats render an outline chair,
-/// and the current user's seat is highlighted with the brass
-/// accent. The grid adapts its column count to the seat total so
-/// 4, 6, and 8-seat tables all read cleanly.
+/// Renders `maxSeats` cells: claimed seats fill with the member's
+/// initial, open seats render an outline chair labelled "open", and
+/// the current user's seat is highlighted with the brass accent.
+/// The grid adapts its column count to the seat total so 4, 6, and
+/// 8-seat tables all read cleanly.
 private struct SeatGridRow: View {
+    let maxSeats: Int
     let rsvps: [EventRSVP]
     let currentUserId: UUID?
 
     private var columns: [GridItem] {
-        let count = max(2, min(4, rsvps.count))
+        let count = SeatGrid.columnCount(for: maxSeats)
         return Array(
             repeating: GridItem(.flexible(), spacing: 8),
             count: count
@@ -1162,48 +1183,58 @@ private struct SeatGridRow: View {
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 8) {
-            ForEach(rsvps) { rsvp in
-                seatCell(rsvp)
+            ForEach(SeatGrid.cells(maxSeats: maxSeats, rsvps: rsvps)) { cell in
+                seatCell(cell)
             }
         }
     }
 
-    private func seatCell(_ rsvp: EventRSVP) -> some View {
-        let isYours = rsvp.memberId == currentUserId
-        let isClaimed = rsvp.state == .claimed
-        return VStack(spacing: 3) {
-            Image(systemName: isClaimed ? Theme.Icon.chairFill : Theme.Icon.chair)
-                .font(Theme.Typography.body)
-                .foregroundStyle(isClaimed
-                    ? (isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
-                    : Theme.Palette.primaryText.opacity(0.3))
-            if isClaimed {
+    @ViewBuilder
+    private func seatCell(_ cell: SeatGrid.Cell) -> some View {
+        if let rsvp = cell.rsvp {
+            let isYours = rsvp.memberId == currentUserId
+            VStack(spacing: 3) {
+                Image(systemName: Theme.Icon.chairFill)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
                 Text(initial(for: rsvp.displayName))
                     .font(Theme.Typography.footnote.weight(.semibold))
                     .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
                     .lineLimit(1)
-            } else {
+            }
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isYours ? Theme.Palette.accent.opacity(0.16) : Theme.Palette.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isYours ? Theme.Palette.accent : Theme.Palette.hairline,
+                            lineWidth: isYours ? 1.0 : 0.5)
+            )
+            .accessibilityElement()
+            .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
+        } else {
+            VStack(spacing: 3) {
+                Image(systemName: Theme.Icon.chair)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
                 Text("open")
                     .font(Theme.Typography.footnote)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
             }
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Theme.Palette.surface.opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Theme.Palette.hairline.opacity(0.6), lineWidth: 0.5)
+            )
+            .accessibilityElement()
+            .accessibilityLabel(Text("open seat"))
         }
-        .frame(maxWidth: .infinity, minHeight: 52)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isClaimed
-                    ? (isYours ? Theme.Palette.accent.opacity(0.16) : Theme.Palette.surface)
-                    : Theme.Palette.surface.opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isClaimed
-                    ? (isYours ? Theme.Palette.accent : Theme.Palette.hairline)
-                    : Theme.Palette.hairline.opacity(0.6),
-                    lineWidth: isYours && isClaimed ? 1.0 : 0.5)
-        )
-        .accessibilityElement()
-        .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
     }
 
     private func initial(for name: String) -> String {
@@ -1215,11 +1246,7 @@ private struct SeatGridRow: View {
     private func accessibilityLabel(for rsvp: EventRSVP) -> String {
         let isYours = rsvp.memberId == currentUserId
         let owner = isYours ? "your seat" : "\(rsvp.displayName)'s seat"
-        switch rsvp.state {
-        case .claimed:   return "\(owner), claimed"
-        case .declined:  return "\(owner), declined"
-        case .unclaimed: return "\(owner), open"
-        }
+        return "\(owner), claimed"
     }
 }
 

@@ -470,6 +470,16 @@ final class RoomService: ObservableObject {
         let row = try await store.upsertEventRSVP(eventId: eventId, state: state)
         self.rsvpByEvent[eventId] = row.state
         self.lastError = nil
+        // Refresh the seat-grid rows + briefing summary so the
+        // BriefingSlot's seat grid and the briefing seat count
+        // re-render without a manual pull-to-refresh.
+        // `InMemoryRoomStore` mirrors the briefing on upsert but
+        // `LiveRoomStore` does not — without these reloads the
+        // live path would stay stale after every claim/decline/
+        // release. Both caches are `@Published`, so the view
+        // re-renders automatically.
+        _ = await loadEventRSVPs(eventId: eventId)
+        _ = await loadBriefing(eventId: eventId)
         // P1.3 — re-schedule with the new cadence. Reads the
         // matching event from the cache to surface the name +
         // playedAt; falls back to the row's roomId for the
