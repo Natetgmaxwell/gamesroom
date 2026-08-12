@@ -833,6 +833,38 @@ runner.run("EventRSVP id is stable composite of event + member") {
     runner.assertEqual(rsvp.id, "\(eventId.uuidString):\(memberId.uuidString)")
 }
 
+runner.run("SocialProof returns nil for no claimed names") {
+    runner.assertNil(SocialProof.claimedSeatsCaption(claimedNames: []))
+}
+
+runner.run("SocialProof formats one claimed name") {
+    runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: ["Sarah"]), "Sarah has claimed a seat")
+}
+
+runner.run("SocialProof formats two claimed names") {
+    runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: ["Sarah", "Mike"]), "Sarah and Mike have claimed seats")
+}
+
+runner.run("SocialProof formats three claimed names") {
+    runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: ["Sarah", "Mike", "Alex"]), "Sarah, Mike +1 more have claimed seats")
+}
+
+runner.run("SocialProof formats five claimed names") {
+    runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: ["Sarah", "Mike", "Alex", "Jo", "Sam"]), "Sarah, Mike +3 more have claimed seats")
+}
+
+runner.run("SocialProof drops whitespace-only names") {
+    runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: ["Sarah", "  ", "Mike"]), "Sarah and Mike have claimed seats")
+}
+
+runner.run("SocialProof returns nil for only empty names") {
+    runner.assertNil(SocialProof.claimedSeatsCaption(claimedNames: ["", " \n "]))
+}
+
+runner.run("SocialProof trims names") {
+    runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: [" Sarah ", "\nMike\t"]), "Sarah and Mike have claimed seats")
+}
+
 // MARK: - RoomPackConfig (2026-08-10 feedback round)
 
 runner.run("RoomPackConfig decodes server shape with win_points") {

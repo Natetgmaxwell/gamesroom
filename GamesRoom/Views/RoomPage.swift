@@ -111,9 +111,11 @@ struct RoomPage: View {
         }
         .task {
             await roomService.refresh()
+            await roomService.loadRoomsSocialProof()
         }
         .refreshable {
             await roomService.refresh()
+            await roomService.loadRoomsSocialProof()
         }
     }
 
@@ -191,7 +193,7 @@ struct RoomPage: View {
                                     Text(room.name)
                                         .font(Theme.Typography.body.weight(.semibold))
                                         .foregroundStyle(Theme.Palette.primaryText)
-                                    Text("Tap to open")
+                                    Text(socialProofCaption(for: room) ?? "Tap to open")
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                                 }
@@ -262,7 +264,7 @@ struct RoomPage: View {
                                     Text(room.name)
                                         .font(Theme.Typography.title)
                                         .foregroundStyle(Theme.Palette.primaryText)
-                                    Text("Tap to open")
+                                    Text(socialProofCaption(for: room) ?? "Tap to open")
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                                 }
@@ -301,6 +303,16 @@ struct RoomPage: View {
                 onSwitchRoom: { _ in }
             )
         }
+    }
+
+    private func socialProofCaption(for room: Room) -> String? {
+        guard let event = roomService.cachedActiveEvent(roomId: room.id),
+              event.startedAt == nil else { return nil }
+        return SocialProof.claimedSeatsCaption(
+            claimedNames: roomService.cachedEventRSVPs(eventId: event.id)
+                .filter { $0.state == .claimed }
+                .map { $0.displayName }
+        )
     }
 
     // MARK: - Last-viewed hero

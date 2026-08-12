@@ -646,7 +646,23 @@ final class RoomService: ObservableObject {
         return updated
     }
 
-    // MARK: - Cache accessors (used by views)
+    /// Loads active pre-play events and their claimed RSVP rows for the rooms list.
+    /// Existing caches short-circuit each read.
+    func loadRoomsSocialProof() async {
+        for room in rooms {
+            let event: Event?
+            if let cached = cachedActiveEvent(roomId: room.id) {
+                event = cached
+            } else {
+                event = await loadActiveEvent(roomId: room.id)
+            }
+            guard let event, event.startedAt == nil else { continue }
+            if eventRSVPsByEvent[event.id] == nil {
+                _ = await loadEventRSVPs(eventId: event.id)
+            }
+        }
+    }
+
 
     /// Cached active event for `roomId`, if any. `RoomDetailView`
     /// reads this for the initial render before the async load

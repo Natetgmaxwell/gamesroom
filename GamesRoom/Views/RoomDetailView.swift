@@ -988,6 +988,16 @@ private struct BriefingSlot: View {
             if !rsvps.isEmpty {
                 SeatGridRow(rsvps: rsvps, currentUserId: currentUserId)
                     .padding(.top, 4)
+                if event.startedAt == nil,
+                   let caption = SocialProof.claimedSeatsCaption(
+                       claimedNames: rsvps
+                           .filter { $0.state == .claimed }
+                           .map { $0.displayName }
+                   ) {
+                    Text(caption)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
             }
 
             switch myRSVP {

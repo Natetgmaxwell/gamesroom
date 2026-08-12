@@ -7,6 +7,27 @@
 
 import Foundation
 
+/// One-line claimed-seat roster for social proof. Pure string
+/// formatting so the Foundation runner can test it.
+enum SocialProof {
+    static func claimedSeatsCaption(claimedNames: [String]) -> String? {
+        let names = claimedNames
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        switch names.count {
+        case 0:
+            return nil
+        case 1:
+            return "\(names[0]) has claimed a seat"
+        case 2:
+            return "\(names[0]) and \(names[1]) have claimed seats"
+        default:
+            return "\(names[0]), \(names[1]) +\(names.count - 2) more have claimed seats"
+        }
+    }
+}
+
 /// One member's RSVP row for one event, joined with the member's
 /// display name. Returned by the `get_event_rsvps` RPC (migration
 /// 047) so the briefing slot can render the seat grid — which
