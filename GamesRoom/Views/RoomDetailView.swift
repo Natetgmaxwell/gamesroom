@@ -354,10 +354,16 @@ struct RoomDetailView: View {
                     .sectionCard(.standard)
                 }
                 PackShelfReadOnly(room: room)
+                    .environmentObject(casinoService)
                     .sectionCard(.standard)
                 MemberRosterReadOnly(room: room)
                     .sectionCard(.standard)
-                MascotFooterCaption(room: room)
+                MascotFooterCaption(
+                    room: room,
+                    activeEvent: activeEvent,
+                    leaderboard: leaderboard,
+                    currentUserId: currentUserId
+                )
             }
             .padding(.horizontal, Theme.Layout.edgePadding)
             .padding(.vertical, Theme.Layout.sectionSpacing)
@@ -2142,21 +2148,39 @@ private struct MemberRosterReadOnly: View {
 
 private struct MascotFooterCaption: View {
     let room: Room
+    let activeEvent: Event?
+    let leaderboard: [LeaderboardEntry]
+    let currentUserId: UUID?
     @EnvironmentObject private var roomService: RoomService
-    /// Pure template interpolation per V0.8 brief — the footer
-    /// caption is one of the 100 voice cells, picked from the
-    /// room's `(personality × ideology × .postPlayRecap)`
-    /// combination. Tap opens the deep-dive bubble. See
-    /// `MascotEngine.generateVoice(...)` for the placeholder
-    /// contract; nil fields are simply omitted from the template.
+    /// Room-state-aware caption (V0.36). `footerKind` resolves one of
+    /// the eight `NotificationKind` flavours from the room's active
+    /// event + leaderboard; `RoomContext` carries recent winners,
+    /// leader name, caller rank, event count, and days quiet. The
+    /// 25-voice matrix still flavours the body, so the mascot's
+    /// personality × ideology stays in charge. Tap opens the
+    /// deep-dive bubble. See `MascotEngine.generateVoice(...)` for
+    /// the placeholder contract — nil optional placeholders are
+    /// silently dropped at the sentence boundary.
     ///
     /// M2.3 — pass real memberCount + memberNames from the cached
-    /// roster so the post-play recap template doesn't substitute
-    /// "0 members". Members are loaded by `RoomDetailView.task`;
-    /// this view reads from the service's published cache so the
-    /// caption updates without a manual refresh.
+    /// roster so the room-template tokens don't substitute "0
+    /// members". Members are loaded by `RoomDetailView.task`; this
+    /// view reads from the service's published cache so the caption
+    /// updates without a manual refresh.
     private var members: [Member] {
         roomService.cachedMembers(roomId: room.id)
+    }
+    private var memberNameById: [UUID: String] {
+        Dictionary(uniqueKeysWithValues: members.map { ($0.userId, $0.displayName) })
+    }
+    /// Days since any member last played a session in this room.
+    /// `nil` when no leaderboard row has a `lastSessionAt` —
+    /// `recentWinnerNames` and other placeholders stay substitutable.
+    private var daysSinceLastPlay: Int? {
+        guard let last = leaderboard.compactMap(\.lastSessionAt).max() else {
+            return nil
+        }
+        return Int(Date().timeIntervalSince(last) / 86_400)
     }
     private var caption: String {
         MascotEngine.generateVoice(
@@ -2164,12 +2188,30 @@ private struct MascotFooterCaption: View {
             roomName: room.name,
             personality: room.mascotPersonality,
             ideology: room.mascotPoliticalIdeology,
-            kind: .postPlayRecap,
+            kind: MascotEngine.footerKind(
+                activeEvent: activeEvent,
+                leaderboard: leaderboard
+            ),
             context: .init(
-                activeEventTitle: nil,
-                lastEventDaysAgo: nil,
+                activeEventTitle: activeEvent?.name,
+                lastEventDaysAgo: daysSinceLastPlay,
                 memberCount: members.count,
-                memberNames: members.map(\.displayName)
+                memberNames: members.map(\.displayName),
+                recentWinnerNames: MascotEngine.recentWinners(
+                    rounds: roomService.cachedEventRounds(
+                        eventId: activeEvent?.id ?? UUID()
+                    ),
+                    memberNameById: memberNameById
+                ),
+                leaderName: MascotEngine.leaderName(leaderboard: leaderboard),
+                callerRank: MascotEngine.callerRank(
+                    leaderboard: leaderboard,
+                    currentUserId: currentUserId
+                ),
+                eventCount: leaderboard
+                    .map(\.sessionsPlayed)
+                    .max()
+                    .map { Int($0) }
             )
         )
     }

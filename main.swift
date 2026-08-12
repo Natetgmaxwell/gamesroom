@@ -1337,6 +1337,404 @@ runner.run("EventRound defaults correctionOf to nil when absent") {
     runner.assertEqual(decoded.correctionOf, nil)
 }
 
+// MARK: - MascotEngine (V0.36 — footer state-aware caption)
+
+private func makeLeaderboardRow(
+    userId: UUID,
+    displayName: String,
+    role: String = "member",
+    seasonScore: Int64 = 100,
+    sessionsPlayed: Int64 = 1,
+    lastSessionAt: Date? = nil
+) -> LeaderboardEntry {
+    LeaderboardEntry(
+        userId: userId,
+        displayName: displayName,
+        role: role,
+        pointsBalance: 0,
+        seasonScore: seasonScore,
+        sessionsPlayed: sessionsPlayed,
+        lastSessionAt: lastSessionAt,
+        lastSessionDelta: 0,
+        trajectory: []
+    )
+}
+
+private func makeEvent(
+    playedAt: Date,
+    settledAt: Date? = nil
+) -> Event {
+    Event(
+        id: UUID(),
+        roomId: UUID(),
+        name: "Friday Night Hold'em",
+        playedAt: playedAt,
+        createdAt: playedAt.addingTimeInterval(-86_400)
+    )
+    .withSettledAt(settledAt)
+}
+
+private extension Event {
+    func withSettledAt(_ value: Date?) -> Event {
+        Event(
+            id: self.id,
+            roomId: self.roomId,
+            name: self.name,
+            playedAt: self.playedAt,
+            createdAt: self.createdAt,
+            venue: self.venue,
+            hostNote: self.hostNote,
+            maxSeats: self.maxSeats,
+            startedAt: self.startedAt,
+            settledAt: value,
+            sessionId: self.sessionId,
+            packSlug: self.packSlug,
+            hostFinalized: self.hostFinalized
+        )
+    }
+}
+
+private func makeWinnerRound(
+    eventId: UUID,
+    roundIndex: Int,
+    winnerIds: [UUID]
+) -> EventRound {
+    EventRound(
+        id: UUID(),
+        eventId: eventId,
+        roomId: UUID(),
+        packSlug: "monopoly_deal",
+        roundIndex: roundIndex,
+        entries: winnerIds.map {
+            ScoreEntry(
+                memberId: $0,
+                pointsDelta: 1,
+                meta: ["winner": .bool(true)]
+            )
+        },
+        createdBy: UUID(),
+        createdAt: Date()
+    )
+}
+
+runner.run("MascotEngine.footerKind returns .postPlayRecap when settledAt is set") {
+    let past = Date().addingTimeInterval(-3600)
+    let event = Event(
+        id: UUID(), roomId: UUID(), name: "Poker",
+        playedAt: past, createdAt: past.addingTimeInterval(-86_400),
+        settledAt: past.addingTimeInterval(1800)
+    )
+    let kind = MascotEngine.footerKind(
+        activeEvent: event, leaderboard: [], now: Date()
+    )
+    runner.assertEqual(kind, .postPlayRecap)
+}
+
+runner.run("MascotEngine.footerKind returns .inPlay when playedAt <= now and not settled") {
+    let now = Date()
+    let event = Event(
+        id: UUID(), roomId: UUID(), name: "Poker",
+        playedAt: now.addingTimeInterval(-600),
+        createdAt: now.addingTimeInterval(-86_400)
+    )
+    let kind = MascotEngine.footerKind(
+        activeEvent: event, leaderboard: [], now: now
+    )
+    runner.assertEqual(kind, .inPlay)
+}
+
+runner.run("MascotEngine.footerKind returns .briefingOnCreate when playedAt is in the future") {
+    let now = Date()
+    let event = Event(
+        id: UUID(), roomId: UUID(), name: "Poker",
+        playedAt: now.addingTimeInterval(86_400),
+        createdAt: now.addingTimeInterval(-3600)
+    )
+    let kind = MascotEngine.footerKind(
+        activeEvent: event, leaderboard: [], now: now
+    )
+    runner.assertEqual(kind, .briefingOnCreate)
+}
+
+runner.run("MascotEngine.footerKind returns .roomWelcome when no events and empty leaderboard") {
+    let kind = MascotEngine.footerKind(
+        activeEvent: nil, leaderboard: [], now: Date()
+    )
+    runner.assertEqual(kind, .roomWelcome)
+}
+
+runner.run("MascotEngine.footerKind returns .roomStale when last session is 30 days ago") {
+    let now = Date()
+    let stale = now.addingTimeInterval(-30 * 86_400)
+    let leaderboard = [
+        makeLeaderboardRow(
+            userId: UUID(), displayName: "Alice",
+            sessionsPlayed: 3, lastSessionAt: stale
+        )
+    ]
+    let kind = MascotEngine.footerKind(
+        activeEvent: nil, leaderboard: leaderboard, now: now
+    )
+    runner.assertEqual(kind, .roomStale)
+}
+
+runner.run("MascotEngine.footerKind returns .standings when recent and no active event") {
+    let now = Date()
+    let recent = now.addingTimeInterval(-3 * 86_400)
+    let leaderboard = [
+        makeLeaderboardRow(
+            userId: UUID(), displayName: "Alice", lastSessionAt: recent
+        )
+    ]
+    let kind = MascotEngine.footerKind(
+        activeEvent: nil, leaderboard: leaderboard, now: now
+    )
+    runner.assertEqual(kind, .standings)
+}
+
+runner.run("MascotEngine.footerKind returns .standings when last play is exactly 14 days ago") {
+    // The threshold is strict `>`: a 14-day-old session is on the
+    // boundary and counts as "still active" (`.standings`), not stale.
+    let now = Date()
+    let exactCutoff = now.addingTimeInterval(-14 * 86_400)
+    let leaderboard = [
+        makeLeaderboardRow(
+            userId: UUID(), displayName: "Alice",
+            lastSessionAt: exactCutoff
+        )
+    ]
+    let kind = MascotEngine.footerKind(
+        activeEvent: nil, leaderboard: leaderboard, now: now
+    )
+    runner.assertEqual(kind, .standings)
+}
+
+runner.run("MascotEngine.recentWinners returns names in roundIndex DESC, deduped, capped at 3") {
+    let eventId = UUID()
+    let alice = UUID(), bob = UUID(), carol = UUID(), dave = UUID()
+    // Two rounds: round 3 happens first chronologically (lowest roundIndex),
+    // round 7 happens later. Recent-winners ordering must put round 7 first.
+    let rounds = [
+        makeWinnerRound(eventId: eventId, roundIndex: 3, winnerIds: [carol]),
+        makeWinnerRound(eventId: eventId, roundIndex: 7, winnerIds: [alice, bob]),
+        // Same member winning again — should not double-list.
+        makeWinnerRound(eventId: eventId, roundIndex: 10, winnerIds: [alice, dave])
+    ]
+    let names = MascotEngine.recentWinners(
+        rounds: rounds,
+        memberNameById: [alice: "Alice", bob: "Bob", carol: "Carol", dave: "Dave"]
+    )
+    runner.assertEqual(names, ["Alice", "Dave", "Bob"])
+}
+
+runner.run("MascotEngine.recentWinners ignores non-winner entries") {
+    let eventId = UUID()
+    let alice = UUID()
+    // Winner's points_delta = positive, non-winner has no `winner: true`
+    let rounds: [EventRound] = [
+        EventRound(
+            id: UUID(), eventId: eventId, roomId: UUID(),
+            packSlug: "pluto_chess", roundIndex: 1,
+            entries: [
+                ScoreEntry(memberId: alice, pointsDelta: -20, meta: [:])
+            ],
+            createdBy: UUID(), createdAt: Date()
+        )
+    ]
+    let names = MascotEngine.recentWinners(rounds: rounds, memberNameById: [alice: "Alice"])
+    runner.assertEqual(names, [])
+}
+
+runner.run("MascotEngine.leaderName returns first non-host displayName") {
+    let leaderboard = [
+        makeLeaderboardRow(userId: UUID(), displayName: "Host", role: "host", seasonScore: 999),
+        makeLeaderboardRow(userId: UUID(), displayName: "Alice", seasonScore: 500),
+        makeLeaderboardRow(userId: UUID(), displayName: "Bob", seasonScore: 400)
+    ]
+    runner.assertEqual(MascotEngine.leaderName(leaderboard: leaderboard), "Alice")
+}
+
+runner.run("MascotEngine.leaderName returns nil when leaderboard is empty") {
+    runner.assertNil(MascotEngine.leaderName(leaderboard: []))
+}
+
+runner.run("MascotEngine.leaderName returns nil when only hosts are present") {
+    let leaderboard = [
+        makeLeaderboardRow(userId: UUID(), displayName: "Host", role: "host", seasonScore: 999)
+    ]
+    runner.assertNil(MascotEngine.leaderName(leaderboard: leaderboard))
+}
+
+runner.run("MascotEngine.callerRank returns 1-based rank among non-host entries") {
+    let alice = UUID(), bob = UUID(), carol = UUID()
+    let leaderboard = [
+        makeLeaderboardRow(userId: UUID(), displayName: "Host", role: "host", seasonScore: 9999),
+        makeLeaderboardRow(userId: alice, displayName: "Alice", seasonScore: 500),
+        makeLeaderboardRow(userId: bob, displayName: "Bob", seasonScore: 400),
+        makeLeaderboardRow(userId: carol, displayName: "Carol", seasonScore: 300)
+    ]
+    runner.assertEqual(MascotEngine.callerRank(leaderboard: leaderboard, currentUserId: bob), 2)
+    runner.assertEqual(MascotEngine.callerRank(leaderboard: leaderboard, currentUserId: alice), 1)
+    runner.assertEqual(MascotEngine.callerRank(leaderboard: leaderboard, currentUserId: carol), 3)
+}
+
+runner.run("MascotEngine.callerRank returns nil for nil currentUserId") {
+    let leaderboard = [
+        makeLeaderboardRow(userId: UUID(), displayName: "Alice")
+    ]
+    runner.assertNil(MascotEngine.callerRank(leaderboard: leaderboard, currentUserId: nil))
+}
+
+runner.run("MascotEngine.callerRank returns nil when the caller isn't on the board") {
+    let leaderboard = [
+        makeLeaderboardRow(userId: UUID(), displayName: "Alice")
+    ]
+    runner.assertNil(MascotEngine.callerRank(leaderboard: leaderboard, currentUserId: UUID()))
+}
+
+runner.run("MascotEngine.callerRank returns nil when the caller is a host") {
+    let hostId = UUID()
+    let leaderboard = [
+        makeLeaderboardRow(userId: hostId, displayName: "Host", role: "host", seasonScore: 9999)
+    ]
+    runner.assertNil(MascotEngine.callerRank(leaderboard: leaderboard, currentUserId: hostId))
+}
+
+runner.run("MascotEngine.generateVoice drops sentences with unpopulated {event}") {
+    // `.briefingOnCreate` with no eventDate/venue/seatsLeft still
+    // references {event} — the sentence-drop pass must excise the
+    // template's opening sentence and leave the rest intact.
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .friendly,
+        ideology: .centrist,
+        kind: .briefingOnCreate,
+        context: .init(
+            activeEventTitle: nil,
+            lastEventDaysAgo: nil,
+            memberCount: 4,
+            memberNames: ["Alice", "Bob", "Carol", "Dave"]
+        )
+    )
+    runner.assertFalse(body.contains("{event}"), "raw placeholder removed by sentence-drop")
+    runner.assertFalse(body.lowercased().contains("friday"), "first sentence dropped when {event} nil")
+}
+
+runner.run("MascotEngine.generateVoice substitutes {member_count} for non-zero counts") {
+    // V0.36 fixes a latent bug: two existing post-play templates
+    // reference {member_count} but the previous interpolate pass
+    // never substituted it.
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .professional,
+        ideology: .centrist,
+        kind: .postPlayRecap,
+        context: .init(
+            activeEventTitle: "Poker",
+            lastEventDaysAgo: nil,
+            memberCount: 5,
+            memberNames: []
+        )
+    )
+    runner.assertTrue(body.contains("5 member"), "member_count substituted")
+}
+
+runner.run("MascotEngine.generateVoice appends the winner sentence to postPlayRecap when present") {
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .friendly,
+        ideology: .order,
+        kind: .postPlayRecap,
+        context: .init(
+            activeEventTitle: "Poker",
+            lastEventDaysAgo: nil,
+            memberCount: 4,
+            memberNames: [],
+            recentWinnerNames: ["Alice"]
+        )
+    )
+    runner.assertTrue(body.contains("Alice"), "winner name surfaced")
+    runner.assertTrue(body.contains("congratulations"), "post-play recap winner sentence appended")
+}
+
+runner.run("MascotEngine.generateVoice drops winner sentence when no recent winner") {
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .friendly,
+        ideology: .order,
+        kind: .postPlayRecap,
+        context: .init(
+            activeEventTitle: "Poker",
+            lastEventDaysAgo: nil,
+            memberCount: 4,
+            memberNames: []
+        )
+    )
+    runner.assertFalse(body.contains("{winner}"), "raw placeholder removed")
+    runner.assertFalse(body.contains("congratulations"), "winner sentence dropped when no winner")
+}
+
+runner.run("MascotEngine.generateVoice renders .roomWelcome when leaderboard is empty") {
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .friendly,
+        ideology: .centrist,
+        kind: .roomWelcome,
+        context: .init(
+            activeEventTitle: nil,
+            lastEventDaysAgo: nil,
+            memberCount: 0,
+            memberNames: []
+        )
+    )
+    runner.assertTrue(body.lowercased().contains("welcome") || body.contains("Friday Night"))
+}
+
+runner.run("MascotEngine.generateVoice renders .standings substituting leader and rank") {
+    let leaderboard = [
+        makeLeaderboardRow(userId: UUID(), displayName: "Host", role: "host"),
+        makeLeaderboardRow(userId: UUID(), displayName: "Alice", seasonScore: 500)
+    ]
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .professional,
+        ideology: .order,
+        kind: .standings,
+        context: .init(
+            activeEventTitle: nil,
+            lastEventDaysAgo: nil,
+            memberCount: 5,
+            memberNames: [],
+            leaderName: MascotEngine.leaderName(leaderboard: leaderboard),
+            callerRank: 1
+        )
+    )
+    runner.assertTrue(body.contains("Alice"), "leader name substituted")
+    runner.assertTrue(body.contains("#1"), "caller rank substituted")
+}
+
+runner.run("MascotEngine.RoomContext synthesised init honours the 4-arg contract") {
+    // Backward-compat — `NotificationDispatcher.swift` constructs
+    // RoomContext with 4 args. Swift's synthesised memberwise init
+    // must default the V0.36 footer fields so the call still builds.
+    let ctx = MascotEngine.RoomContext(
+        activeEventTitle: "Poker",
+        lastEventDaysAgo: nil,
+        memberCount: 4,
+        memberNames: ["Alice"]
+    )
+    runner.assertEqual(ctx.recentWinnerNames, [])
+    runner.assertNil(ctx.leaderName)
+    runner.assertNil(ctx.callerRank)
+    runner.assertNil(ctx.eventCount)
+}
+
 private func uuidString(_ uuid: UUID) -> String { uuid.uuidString }
 
 // MARK: - Summary

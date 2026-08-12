@@ -24,7 +24,8 @@ SRC_FILES=(main.swift
            GamesRoom/Packs/*.swift
            GamesRoom/Services/StorageKeys.swift
            GamesRoom/Services/RoomStoreProtocol.swift
-           GamesRoom/Services/InMemoryRoomStore.swift)
+           GamesRoom/Services/InMemoryRoomStore.swift
+           GamesRoom/Services/MascotEngine.swift)
 
 echo "Compiling ${BIN} against $SDK..."
 swiftc \
