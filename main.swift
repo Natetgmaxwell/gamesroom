@@ -1196,6 +1196,13 @@ runner.runAsync("InMemoryRoomStore.seasonHistory returns prior seasons ordered w
     runner.assertTrue(history.allSatisfy { $0.callerTotal > 0 }, "caller totals present")
     let currentScore: Int64 = 1_200
     runner.assertEqual(history[0].delta(against: currentScore), currentScore - history[0].callerTotal)
+    for row in history {
+        runner.assertTrue(!row.scoreProgression.isEmpty, "score progression seeded")
+        runner.assertEqual(
+            row.scoreProgression.last?.total ?? -1,
+            row.callerTotal
+        )
+    }
 }
 
 runner.runAsync("InMemoryRoomStore.seasonHistory is empty for a fresh room") {
@@ -1209,11 +1216,47 @@ runner.runAsync("InMemoryRoomStore.seasonHistory is empty for a fresh room") {
     runner.assertEqual(history.count, 0)
 }
 
-runner.run("SeasonHistoryEntry.displayName falls back to Season N when subtitle is empty") {
-    let plain = SeasonHistoryEntry(seasonId: UUID(), ordinal: 3, subtitle: "", startedAt: Date(), endedAt: Date(), callerTotal: 120, callerRank: 2)
-    runner.assertEqual(plain.displayName, "Season 3")
-    let named = SeasonHistoryEntry(seasonId: UUID(), ordinal: 3, subtitle: "Poker arc", startedAt: Date(), endedAt: Date(), callerTotal: 120, callerRank: 2)
-    runner.assertEqual(named.displayName, "Season 3: Poker arc")
+runner.run("SeasonHistoryEntry decodes score_progression when present") {
+    let json = """
+    {
+      "season_id": "00000000-0000-0000-0000-000000000001",
+      "ordinal": 2,
+      "subtitle": "The Comeback",
+      "started_at": "2026-01-15T00:00:00Z",
+      "ended_at": "2026-02-14T00:00:00Z",
+      "caller_total": 980,
+      "caller_rank": 1,
+      "score_progression": [
+        { "at": "2026-01-20T00:00:00Z", "total": 200 },
+        { "at": "2026-02-01T00:00:00Z", "total": 600 },
+        { "at": "2026-02-12T00:00:00Z", "total": 980 }
+      ]
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(SeasonHistoryEntry.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.scoreProgression.count, 3)
+    runner.assertEqual(decoded.scoreProgression[0].total, 200)
+    runner.assertEqual(decoded.scoreProgression.last?.total, 980)
+}
+
+runner.run("SeasonHistoryEntry defaults scoreProgression to [] when the key is absent") {
+    let json = """
+    {
+      "season_id": "00000000-0000-0000-0000-000000000002",
+      "ordinal": 1,
+      "subtitle": "Genesis",
+      "started_at": "2025-11-01T00:00:00Z",
+      "ended_at": "2025-12-01T00:00:00Z",
+      "caller_total": 640,
+      "caller_rank": 3
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(SeasonHistoryEntry.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.scoreProgression.count, 0)
 }
 
 runner.run("SeasonHistoryEntry.delta(against:) is positive when climbed since that season") {

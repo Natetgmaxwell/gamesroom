@@ -1720,9 +1720,10 @@ private struct RoundBreakdownSection: View {
 // MARK: - Season history (W-05, US-10)
 
 /// Previous-seasons comparison — the "improving over time" view.
-/// Renders one row per ended season with the caller's total + rank
-/// and the delta vs the active season. Member-visible read surface;
-/// hidden entirely when the room has no ended seasons.
+/// Renders one row per ended season with the caller's total, the
+/// delta vs the active season, and a sparkline of the caller's
+/// intra-season arc. Member-visible read surface; hidden entirely
+/// when the room has no ended seasons.
 private struct SeasonHistorySection: View {
     let rows: [SeasonHistoryEntry]
     let currentScore: Int64
@@ -1757,81 +1758,67 @@ private struct SeasonHistorySection: View {
     }
 
     private func seasonRow(_ row: SeasonHistoryEntry) -> some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(row.displayName)
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(dateRange(row))
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Spacer(minLength: 12)
-            VStack(alignment: .trailing, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+        let d = row.delta(against: currentScore)
+        let primaryText = row.subtitle.isEmpty ? dateRange(row) : row.subtitle
+        let showCaption = !row.subtitle.isEmpty
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(primaryText)
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.primaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if showCaption {
+                        Text(dateRange(row))
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .trailing, spacing: 4) {
                     Text("\(row.callerTotal)")
                         .font(Theme.Typography.title.monospacedDigit())
                         .foregroundStyle(Theme.Palette.primaryText)
-                    Text("pts")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    deltaCluster(d)
                 }
-                HStack(spacing: 8) {
-                    rankPill(rank: row.callerRank)
-                    deltaCluster(row)
-                }
+                .fixedSize(horizontal: true, vertical: false)
             }
-            .fixedSize(horizontal: true, vertical: false)
+            if row.scoreProgression.count >= 2 {
+                TrendSparkline(points: row.scoreProgression, color: trendColor(for: d))
+                    .frame(height: 22)
+                    .frame(maxWidth: .infinity)
+            }
         }
         .padding(.vertical, Theme.Layout.cardInset)
         .padding(.horizontal, Theme.Layout.edgePadding)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            Text("\(row.displayName), \(row.callerTotal) points, \(rankText(row)), \(deltaText(row)) versus the current season")
+            Text("\(primaryText), \(row.callerTotal) points, \(deltaLabel(d)) versus the current season")
         )
     }
 
-    @ViewBuilder
-    private func rankPill(rank: Int64) -> some View {
-        let isFirst = rank == 1
-        let textColor: Color = isFirst
-            ? Theme.Palette.accent
-            : Theme.Palette.primaryText.opacity(0.7)
-        let strokeColor: Color = isFirst
-            ? Theme.Palette.accent.opacity(0.6)
-            : Theme.Palette.hairline
-        Text(ordinal(Int(rank)))
-            .font(Theme.Typography.caption.weight(.semibold))
-            .foregroundStyle(textColor)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .overlay(
-                Capsule().stroke(strokeColor, lineWidth: 1)
-            )
-    }
-
-    @ViewBuilder
-    private func deltaCluster(_ row: SeasonHistoryEntry) -> some View {
-        let d = row.delta(against: currentScore)
+    private func deltaCluster(_ d: Int64) -> some View {
         let color: Color = d > 0
             ? Theme.Palette.accent
             : (d < 0 ? Theme.Palette.primaryText.opacity(0.6) : Theme.Palette.primaryText.opacity(0.45))
         let arrow: String? = d == 0 ? nil : (d > 0 ? "arrow.up" : "arrow.down")
-        HStack(spacing: 3) {
+        return HStack(spacing: 3) {
             if let arrowName = arrow {
                 Image(systemName: arrowName)
                     .font(Theme.Typography.footnote.weight(.semibold))
             }
-            Text("\(d)")
+            Text(deltaLabel(d))
                 .font(Theme.Typography.caption.weight(.semibold).monospacedDigit())
-            Text("vs now")
-                .font(Theme.Typography.footnote)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
         }
         .foregroundStyle(color)
+    }
+
+    private func trendColor(for d: Int64) -> Color {
+        d > 0
+            ? Theme.Palette.accent
+            : (d < 0 ? Theme.Palette.primaryText.opacity(0.6) : Theme.Palette.primaryText.opacity(0.45))
     }
 
     private func dateRange(_ row: SeasonHistoryEntry) -> String {
@@ -1841,27 +1828,45 @@ private struct SeasonHistorySection: View {
         return row.startedAt.formatted(date: .abbreviated, time: .omitted)
     }
 
-    private func rankText(_ row: SeasonHistoryEntry) -> String {
-        row.callerRank == 1 ? "1st place" : "\(ordinal(Int(row.callerRank))) place"
+    private func deltaLabel(_ d: Int64) -> String {
+        d >= 0 ? "+\(d)" : "\(d)"
     }
+}
 
-    private func ordinal(_ n: Int) -> String {
-        let suffix: String
-        switch n % 100 {
-        case 11, 12, 13: suffix = "th"
-        default:
-            switch n % 10 {
-            case 1: suffix = "st"
-            case 2: suffix = "nd"
-            case 3: suffix = "rd"
-            default: suffix = "th"
+/// Hand-rolled polyline sparkline for `SeasonHistoryEntry.scoreProgression`.
+/// No Swift Charts import — the codebase has zero Charts precedent and
+/// the parse-check environment must keep working.
+private struct TrendSparkline: View {
+    let points: [SeasonScorePoint]
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            let totalMin = points.map(\.total).min() ?? 0
+            let totalMax = points.map(\.total).max() ?? 0
+            let range = totalMax - totalMin
+            let denom = max(Double(points.count - 1), 1)
+            let path = Path { p in
+                for (i, point) in points.enumerated() {
+                    let x = geo.size.width * (Double(i) / denom)
+                    let normalized: Double
+                    if range == 0 {
+                        normalized = 0.5
+                    } else {
+                        normalized = Double(point.total - totalMin) / Double(range)
+                    }
+                    let y = geo.size.height * (1 - normalized)
+                    if i == 0 {
+                        p.move(to: CGPoint(x: x, y: y))
+                    } else {
+                        p.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
             }
+            path
+                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
-        return "\(n)\(suffix)"
-    }
-
-    private func deltaText(_ row: SeasonHistoryEntry) -> String {
-        row.delta(against: currentScore) >= 0 ? "+\(row.delta(against: currentScore))" : "\(row.delta(against: currentScore))"
+        .accessibilityHidden(true)
     }
 }
 
@@ -1870,10 +1875,22 @@ private struct SeasonHistorySection: View {
 private struct PackShelfReadOnly: View {
     let room: Room
     @EnvironmentObject private var roomService: RoomService
+    /// V0.35B — Casino chip-config sheet uses the same surface as
+    /// Room Settings → Operations → Casino. Two ways to get there
+    /// is fine (the spec decision).
+    @EnvironmentObject private var casinoService: CasinoService
 
     /// 2026-08-10 feedback round — the pack the host tapped to edit
     /// its payout. nil = no editor presented.
     @State private var payoutPack: (any PackDefinition.Type)?
+
+    /// V0.35B — the count-based pack the host tapped to edit its
+    /// default points-per-card. nil = no editor presented.
+    @State private var cahConfigPack: (any PackDefinition.Type)?
+
+    /// V0.35B — drives presentation of the existing
+    /// `RoomSettingsCasinoSheet` for `.withdrawReturn` packs.
+    @State private var showingCasinoConfig: Bool = false
 
     /// The room's enabled packs from `PackRegistry.shared`, filtered
     /// by the room's installed set. An empty cache means the room

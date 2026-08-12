@@ -382,6 +382,12 @@ actor InMemoryRoomStore: RoomStore {
         // ordinal 1 ("Genesis") is the oldest. Caller totals are
         // chosen so the +340 movement (640 → 980) makes the
         // "improving over time" story land in the seed view.
+        // V0.35 — each season also carries `scoreProgression`
+        // (per-session cumulative totals) so the season-history
+        // card v2 sparkline renders in the in-memory path.
+        // Points sit inside the season window and the last point
+        // matches `callerTotal`, matching the migration-057
+        // contract.
         self.seasonHistoryByRoom[carwoola.id] = [
             SeasonHistoryEntry(
                 seasonId: UUID(),
@@ -390,7 +396,12 @@ actor InMemoryRoomStore: RoomStore {
                 startedAt: Date().addingTimeInterval(-86_400 * 60),
                 endedAt: Date().addingTimeInterval(-86_400 * 30),
                 callerTotal: 980,
-                callerRank: 1
+                callerRank: 1,
+                scoreProgression: [
+                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 55), total: 200),
+                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 45), total: 600),
+                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 32), total: 980)
+                ]
             ),
             SeasonHistoryEntry(
                 seasonId: UUID(),
@@ -399,7 +410,12 @@ actor InMemoryRoomStore: RoomStore {
                 startedAt: Date().addingTimeInterval(-86_400 * 120),
                 endedAt: Date().addingTimeInterval(-86_400 * 61),
                 callerTotal: 640,
-                callerRank: 3
+                callerRank: 3,
+                scoreProgression: [
+                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 110), total: 150),
+                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 90), total: 400),
+                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 65), total: 640)
+                ]
             )
         ]
     }
