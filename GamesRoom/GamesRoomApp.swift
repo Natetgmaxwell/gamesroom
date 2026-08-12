@@ -22,7 +22,7 @@ import Supabase
 @main
 struct GamesRoomApp: App {
     @StateObject private var auth = AuthService()
-    @StateObject private var roomService = RoomService()
+    @StateObject private var roomService = RoomService(store: LiveRoomStore.shared)
     @StateObject private var casinoService = CasinoService()
     @StateObject private var scoringService = ScoringService()
 
