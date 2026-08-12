@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect id="background" width="1024" height="1024" fill="#23264F"/>
+  <g id="foreground">
+    <g id="pips">
+      <rect x="247" y="247" width="200" height="200" rx="56" fill="#F7F3E9"/>
+      <rect x="577" y="247" width="200" height="200" rx="56" fill="#F7F3E9"/>
+      <rect x="247" y="577" width="200" height="200" rx="56" fill="#F7F3E9"/>
+      <rect x="577" y="577" width="200" height="200" rx="56" fill="#F5A623"/>
+    </g>
+  </g>
+</svg>
