@@ -70,8 +70,16 @@ struct Event: Identifiable, Codable, Hashable {
     /// chips` CTA visibility on the Witness Screen.
     let hostFinalized: Bool
 
+    /// Sentinel UUID used when the active-event RPC omits `room_id`
+    /// (migration 012) — `gen_random_uuid()` never produces all-zeros,
+    /// so this cannot collide with a real room. Migration 060 returns
+    /// `room_id` natively; this fallback only fires against the old
+    /// remote shape.
+    static let unknownRoomId = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
     enum CodingKeys: String, CodingKey {
         case id
+        case eventId = "event_id"
         case roomId = "room_id"
         case name
         case playedAt = "played_at"
@@ -118,11 +126,15 @@ struct Event: Identifiable, Codable, Hashable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        roomId = try c.decode(UUID.self, forKey: .roomId)
+        if let decodedEventId = try c.decodeIfPresent(UUID.self, forKey: .id) {
+            id = decodedEventId
+        } else {
+            id = try c.decode(UUID.self, forKey: .eventId)
+        }
+        roomId = try c.decodeIfPresent(UUID.self, forKey: .roomId) ?? Event.unknownRoomId
         name = try c.decode(String.self, forKey: .name)
         playedAt = try c.decode(Date.self, forKey: .playedAt)
-        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? playedAt
         venue = try c.decodeIfPresent(String.self, forKey: .venue)
         hostNote = try c.decodeIfPresent(String.self, forKey: .hostNote)
         maxSeats = try c.decodeIfPresent(Int.self, forKey: .maxSeats) ?? 6
@@ -131,5 +143,26 @@ struct Event: Identifiable, Codable, Hashable {
         sessionId = try c.decodeIfPresent(UUID.self, forKey: .sessionId)
         packSlug = try c.decodeIfPresent(String.self, forKey: .packSlug) ?? "casino"
         hostFinalized = try c.decodeIfPresent(Bool.self, forKey: .hostFinalized) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        // Override the synthesized encoder so the decode-only
+        // `event_id` key is not emitted. The active-event RPC
+        // (migration 060) returns `id` natively; `event_id` exists
+        // purely as a decode fallback for the legacy 6-column shape.
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(roomId, forKey: .roomId)
+        try c.encode(name, forKey: .name)
+        try c.encode(playedAt, forKey: .playedAt)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(venue, forKey: .venue)
+        try c.encodeIfPresent(hostNote, forKey: .hostNote)
+        try c.encode(maxSeats, forKey: .maxSeats)
+        try c.encodeIfPresent(startedAt, forKey: .startedAt)
+        try c.encodeIfPresent(settledAt, forKey: .settledAt)
+        try c.encodeIfPresent(sessionId, forKey: .sessionId)
+        try c.encode(packSlug, forKey: .packSlug)
+        try c.encode(hostFinalized, forKey: .hostFinalized)
     }
 }

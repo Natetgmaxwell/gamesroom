@@ -242,7 +242,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
 
     // MARK: Active event
 
-    /// The live RPC is `get_active_event(p_room_id)` (migration 018,
+    /// The live RPC is `get_active_event(p_room_id)` (migration 060,
     /// returns the next upcoming, in-play, or recently-settled event
     /// for the room; `null` when the room has no recent activity).
     func fetchActiveEvent(roomId: UUID) async throws -> Event? {

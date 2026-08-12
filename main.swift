@@ -2153,6 +2153,47 @@ runner.run("MascotEngine.generateVoice — legacy logistics placeholders drop cl
 
 private func uuidString(_ uuid: UUID) -> String { uuid.uuidString }
 
+// MARK: - Event active-event decode (W-EVT-01 — get_active_event RPC shape)
+
+runner.run("Event decodes get_active_event RPC shape (event_id, no room_id/created_at)") {
+    // The current remote `get_active_event` (migration 012) returns
+    // only event_id, name, played_at, seat_count, max_seats, pack_slug,
+    // scoring_type. The Event decoder must tolerate the missing
+    // `room_id` and `created_at` (falling back to Event.unknownRoomId
+    // and playedAt respectively) and read `id` from `event_id`.
+    let json = """
+    {
+      "event_id": "11111111-1111-1111-1111-111111111111",
+      "name": "Friday Night Hold'em",
+      "played_at": "2026-08-15T19:00:00Z",
+      "seat_count": 2,
+      "max_seats": 6,
+      "pack_slug": "casino",
+      "scoring_type": "single_winner"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(Event.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(
+        decoded.id.uuidString,
+        "11111111-1111-1111-1111-111111111111"
+    )
+    runner.assertTrue(
+        decoded.roomId == Event.unknownRoomId,
+        "roomId fell back to Event.unknownRoomId sentinel"
+    )
+    runner.assertEqual(decoded.name, "Friday Night Hold'em")
+    runner.assertTrue(
+        decoded.createdAt == decoded.playedAt,
+        "createdAt fell back to playedAt"
+    )
+    runner.assertEqual(decoded.maxSeats, 6)
+    runner.assertEqual(decoded.packSlug, "casino")
+    runner.assertEqual(decoded.hostFinalized, false)
+    runner.assertNil(decoded.settledAt)
+}
+
 // MARK: - Summary
 
 print("")
