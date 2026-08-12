@@ -1,0 +1,37 @@
+-- 056: Remote DB reconciliation patches.
+--
+-- The remote Supabase DB (bnrgkdcluopicqdpmrtu) was created by manually applying
+-- migrations 001–034 + selective later migrations. When migrations 035–055 were
+-- applied in bulk (2026-08-11), six required patches to reconcile schema drift
+-- between the local migration files and the remote DB's actual state:
+--
+--   1. season_awards table had member_id/is_private (from 033) but migrations
+--      039+ expected recipient_user_id/acknowledged/awarded_at. The seasons
+--      table was missing entirely. Fix: created seasons table, added missing
+--      columns to season_awards, backfilled recipient_user_id from member_id.
+--
+--   2. Migration 030 referenced public.profiles (a table that doesn't exist
+--      on this DB — display_name lives on public.users). Fix: join users
+--      directly for display_name.
+--
+--   3. Migration 040 referenced casino_withdrawals.event_id and .settled_at
+--      (columns that don't exist — the table uses session_id, and settlement
+--      is tracked via casino_scans.finalized_at). Fix: use session_id, check
+--      casino_scans for finalization status.
+--
+--   4. Migration 048 close_season() used RETURN QUERY in a function declared
+--      `returns public.seasons` (composite, not SETOF). Fix: changed to
+--      `returns setof public.seasons`.
+--
+--   5. Migration 049 get_event_rounds() couldn't CREATE OR REPLACE because
+--      migration 054 (applied earlier in the same batch) had already changed
+--      its return type. Fix: DROP FUNCTION first, then apply 049, then 054.
+--
+--   6. Migrations 039/045/047 failed with "already exists" on policies that
+--      the reconciliation fix had already created. These are benign — the
+--      objects exist and are correct.
+--
+-- This file documents the patches for audit trail purposes. The actual fixes
+-- were applied via /tmp scripts + patched migration files on 2026-08-11.
+-- Going forward, all new migrations should be tested against the remote DB
+-- schema (not just the local migration chain) before commit.
