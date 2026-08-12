@@ -5,8 +5,10 @@
 # SwiftUI body-shape errors in GamesRoom/Views/ and GamesRoom/Services/
 # are invisible to the Foundation-only test runner (it only compiles
 # Models/ + Packs/). This script runs `swiftc -parse` over every
-# Swift file in those two trees so the CommandLineTools host can
-# catch the obvious shape errors without a full Xcode.app build.
+# Swift file in those two trees, plus the repo-root-level Swift files
+# in GamesRoom/ (ContentView.swift, GamesRoomApp.swift), so the
+# CommandLineTools host can catch the obvious shape errors without a
+# full Xcode.app build.
 #
 # SDK selection:
 #   - iOS SDK preferred (this is an iOS 26 app).
@@ -43,7 +45,7 @@ fi
 SWIFT_FILES=""
 while IFS= read -r f; do
     SWIFT_FILES="$SWIFT_FILES $f"
-done < <(find GamesRoom/Views GamesRoom/Services GamesRoomWidgets GamesRoomWatch -type f -name '*.swift' | sort)
+done < <( { find GamesRoom/Views GamesRoom/Services GamesRoomWidgets GamesRoomWatch -type f -name '*.swift' | sort; find GamesRoom -maxdepth 1 -type f -name '*.swift' | sort; } )
 
 # shellcheck disable=SC2086
 set -- $SWIFT_FILES
