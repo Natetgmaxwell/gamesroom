@@ -50,6 +50,11 @@ struct HostScoreEntrySheet: View {
     let roomId: UUID
     let packSlug: String
     let packDisplayName: String
+    /// V0.35B — room-configured default cards-won (CAH's points-per-card
+    /// in the count-based model). Seeds the host's per-round "Cards won"
+    /// stepper so a room with a configured default opens the stepper at
+    /// that value instead of 1.
+    let defaultCardCount: Int
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var roomService: RoomService
@@ -60,7 +65,20 @@ struct HostScoreEntrySheet: View {
     /// V0.34 — for count-based scoring packs (CAH) the host also
     /// enters the number of cards the winner takes per round. Default
     /// 1; range 1...20 covers any reasonable CAH per-round count.
-    @State private var cardCount: Int = 1
+    /// V0.35B — initial value seeded from the room's configured
+    /// points-per-card (see `defaultCardCount`); floored at 1 so the
+    /// stepper stays in its valid range.
+    @State private var cardCount: Int
+
+    init(eventId: UUID, roomId: UUID, packSlug: String, packDisplayName: String, defaultCardCount: Int) {
+        self.eventId = eventId
+        self.roomId = roomId
+        self.packSlug = packSlug
+        self.packDisplayName = packDisplayName
+        self.defaultCardCount = defaultCardCount
+        _cardCount = State(initialValue: max(1, defaultCardCount))
+    }
+
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
 

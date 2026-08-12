@@ -291,7 +291,8 @@ struct RoomDetailView: View {
                 eventId: event.id,
                 roomId: room.id,
                 packSlug: event.packSlug,
-                packDisplayName: pack?.displayName ?? event.packSlug
+                packDisplayName: pack?.displayName ?? event.packSlug,
+                defaultCardCount: roomService.effectiveWinPoints(roomId: room.id, packSlug: event.packSlug)
             )
             .environmentObject(roomService)
             .environmentObject(scoringService)
@@ -1951,6 +1952,27 @@ private struct PackShelfReadOnly: View {
             )
             .environmentObject(roomService)
         }
+        .sheet(item: Binding<AnyPackType?>(
+            get: { cahConfigPack.map(AnyPackType.init) },
+            set: { cahConfigPack = $0?.type }
+        )) { wrapped in
+            CAHConfigSheet(
+                roomId: room.id,
+                pack: wrapped.type,
+                currentPoints: roomService.effectiveWinPoints(roomId: room.id, packSlug: wrapped.type.slug),
+                onSave: { points in
+                    Task { await savePayout(packSlug: wrapped.type.slug, points: points) }
+                }
+            )
+            .environmentObject(roomService)
+        }
+        .sheet(isPresented: $showingCasinoConfig) {
+            // Reuse the existing RoomSettingsCasinoSheet verbatim.
+            // The chip-color-map editor handles per-room overrides
+            // for Casino's withdraw/return scoring.
+            RoomSettingsCasinoSheet(roomId: room.id)
+                .environmentObject(casinoService)
+        }
     }
 
     private func packRow(_ pack: any PackDefinition.Type) -> some View {
@@ -1959,6 +1981,9 @@ private struct PackShelfReadOnly: View {
         // pays out; members see the configured payout as a caption.
         // The row shows the pack's name + description + the
         // effective win points for single-winner packs.
+        // V0.35B — the row now also surfaces the configured
+        // points-per-card for `.countBased` packs (CAH), and the
+        // tap handler routes each scoring type to its own editor.
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: pack.iconSystemName)
                 .font(Theme.Typography.title)
@@ -1972,7 +1997,7 @@ private struct PackShelfReadOnly: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     .lineLimit(2)
-                if pack.scoringType == .singleWinner {
+                if pack.scoringType == .singleWinner || pack.scoringType == .countBased {
                     Text(payoutCaption(for: pack))
                         .font(Theme.Typography.footnote.weight(.semibold))
                         .foregroundStyle(Theme.Palette.accent)
@@ -1991,22 +2016,45 @@ private struct PackShelfReadOnly: View {
         .contentShape(Rectangle())
         .onTapGesture {
             guard isHost else { return }
-            // V0.34 — only `.singleWinner` packs are tappable for
-            // payout edits. Count-based packs (CAH) are scored by
-            // the count of items held, not by a room-level
-            // win-points override; a per-room payout is meaningless
-            // when the count IS the score.
-            guard pack.scoringType == .singleWinner else { return }
-            payoutPack = pack
+            // V0.35B — route each scoring type to its own config
+            // surface. singleWinner keeps the payout sheet (V0.34
+            // behaviour); withdrawReturn opens the Casino chip
+            // sheet; countBased opens the CAH points-per-card
+            // sheet.
+            switch pack.scoringType {
+            case .singleWinner:
+                payoutPack = pack
+            case .withdrawReturn:
+                showingCasinoConfig = true
+            case .countBased:
+                cahConfigPack = pack
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(pack.displayName) — \(pack.description)"))
-        .accessibilityHint(isHost ? Text("Tap to change how much a win pays out") : Text(""))
+        .accessibilityHint(Text(accessibilityHint(for: pack)))
+    }
+
+    private func accessibilityHint(for pack: any PackDefinition.Type) -> String {
+        guard isHost else { return "" }
+        switch pack.scoringType {
+        case .singleWinner:
+            return "Tap to change how much a win pays out"
+        case .countBased:
+            return "Tap to change points per card"
+        case .withdrawReturn:
+            return "Tap to change chip values"
+        }
     }
 
     private func payoutCaption(for pack: any PackDefinition.Type) -> String {
         let points = roomService.effectiveWinPoints(roomId: room.id, packSlug: pack.slug)
-        return points == 1 ? "1 pt per win" : "\(points) pts per win"
+        switch pack.scoringType {
+        case .countBased:
+            return points == 1 ? "1 pt per card" : "\(points) pts per card"
+        case .singleWinner, .withdrawReturn:
+            return points == 1 ? "1 pt per win" : "\(points) pts per win"
+        }
     }
 
     private func savePayout(packSlug: String, points: Int) async {
@@ -2039,7 +2087,7 @@ private struct PackPayoutSheet: View {
         self.pack = pack
         self.currentPoints = currentPoints
         self.onSave = onSave
-        _points = State(initialValue: currentPoints)
+        _points = State(initialValue: max(0, (currentPoints / 5) * 5))
     }
 
     var body: some View {
@@ -2051,6 +2099,69 @@ private struct PackPayoutSheet: View {
                     Text("Payout")
                 } footer: {
                     Text("How many points a win pays out in this room. The default is \(PackRegistry.shared.winPoints(for: pack.slug)) pt(s); this overrides it for \(pack.displayName) only.")
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.Palette.background)
+            .navigationTitle(pack.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(points)
+                        dismiss()
+                    }
+                    .tint(Theme.Palette.accent)
+                }
+            }
+        }
+        .tint(Theme.Palette.accent)
+    }
+}
+
+// MARK: - CAH points-per-card sheet (V0.35B)
+
+/// V0.35B — host-only editor for a `.countBased` pack's default
+/// points-per-card (CAH). Mirrors `PackPayoutSheet`'s shape
+/// (NavigationStack + Form + Cancel/Save toolbar). Saves through
+/// `RoomService.setRoomPackConfig` (migration 047 path — same
+/// `RoomPackConfig.winPoints` override used by single-winner packs;
+/// in the count-based model 1 card = 1 point, so points-per-card IS
+/// the default cards-won per round and seeds the host's per-round
+/// "Cards won" stepper in `HostScoreEntrySheet`).
+private struct CAHConfigSheet: View {
+    let roomId: UUID
+    let pack: any PackDefinition.Type
+    let currentPoints: Int
+    let onSave: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var points: Int
+
+    init(roomId: UUID, pack: any PackDefinition.Type, currentPoints: Int, onSave: @escaping (Int) -> Void) {
+        self.roomId = roomId
+        self.pack = pack
+        self.currentPoints = currentPoints
+        self.onSave = onSave
+        // Floor at 1 — count-based packs need at least one card
+        // per round for the stepper in HostScoreEntrySheet to be
+        // meaningful (its range is 1...20).
+        _points = State(initialValue: max(1, currentPoints))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper("\(points) pts per card", value: $points, in: 1...20, step: 1)
+                } header: {
+                    Text("Points per card")
+                } footer: {
+                    Text("The default points a won black card is worth in this room; the host can still adjust per round when scoring. The pack default is \(PackRegistry.shared.winPoints(for: pack.slug)).")
                 }
             }
             .scrollContentBackground(.hidden)
