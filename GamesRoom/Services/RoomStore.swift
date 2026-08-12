@@ -564,7 +564,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String) async throws -> UUID {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let rows: [UUID] = try await SupabaseClientProvider.shared
+        let id: UUID = try await SupabaseClientProvider.shared
             .rpc("create_event", params: [
                 "p_room_id": roomId.uuidString,
                 "p_name": name,
@@ -573,13 +573,6 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             ])
             .execute()
             .value
-        guard let id = rows.first else {
-            throw NSError(
-                domain: "LiveRoomStore",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "create_event returned no id"]
-            )
-        }
         return id
     }
 
