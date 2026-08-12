@@ -11,16 +11,25 @@ import Foundation
 /// Carries everything needed to identify membership and surface the
 /// V0.8 MemberNotes social-preferences card (L3, KEEP & PROMOTE).
 struct Member: Identifiable, Codable, Hashable {
-    /// Composite `roomId:userId` exposed to UI lists. Stable.
+    /// Composite `roomId:userId` exposed to UI lists; falls back to
+    /// `userId.uuidString` alone when the payload omits `room_id`.
+    /// Synthesised in `init(from:)`, stable.
     let id: String
-    let roomId: UUID
+
+    /// The remote `get_room_members` RPC does not return `room_id`
+    /// in its legacy shape (migration 049 truncated the column list);
+    /// `nil` when the server omits it.
+    let roomId: UUID?
+
     let userId: UUID
 
     /// Role at the time the row was fetched; promoted via a separate
     /// mutation when the host hands over the room.
     let role: RoomRole
 
-    /// When the user joined this room. UTC.
+    /// When the user joined this room. UTC. Falls back to
+    /// `.distantPast` when the server omits `joined_at` so an
+    /// unknown join time is deterministic, not "now".
     let joinedAt: Date
 
     /// Last time the user opened this room's page. Used to drive the
@@ -76,11 +85,16 @@ struct Member: Identifiable, Codable, Hashable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(String.self, forKey: .id)
-        roomId = try c.decode(UUID.self, forKey: .roomId)
         userId = try c.decode(UUID.self, forKey: .userId)
+        let decodedRoomId = try c.decodeIfPresent(UUID.self, forKey: .roomId)
+        roomId = decodedRoomId
+        if let decodedRoomId {
+            id = "\(decodedRoomId.uuidString):\(userId.uuidString)"
+        } else {
+            id = userId.uuidString
+        }
         role = try c.decode(RoomRole.self, forKey: .role)
-        joinedAt = try c.decode(Date.self, forKey: .joinedAt)
+        joinedAt = try c.decodeIfPresent(Date.self, forKey: .joinedAt) ?? .distantPast
         lastSeenAt = try c.decodeIfPresent(Date.self, forKey: .lastSeenAt)
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? "Member"
         socialPreference = try c.decodeIfPresent(SocialPreference.self, forKey: .socialPreference) ?? .empty

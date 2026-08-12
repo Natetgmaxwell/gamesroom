@@ -976,6 +976,105 @@ runner.run("Member decodes team column and defaults to nil") {
     runner.assertEqual(decodedNoTeam.team, nil)
 }
 
+runner.run("Member decodes get_room_members RPC shape (legacy 6-column contract)") {
+    // Migration 049 truncated the RPC's column list to the six
+    // membership columns visible to the leaderboard; the iOS
+    // `Member` decoder must tolerate the absence of `room_id`,
+    // `joined_at` and the social-preference columns without
+    // throwing — otherwise the roster card spins forever.
+    let hostId = UUID()
+    let redId = UUID()
+    let json = """
+    [
+      {
+        "user_id": "\(hostId.uuidString)",
+        "display_name": "Alex",
+        "role": "host",
+        "points_balance": 250,
+        "season_score": 250,
+        "team": null
+      },
+      {
+        "user_id": "\(redId.uuidString)",
+        "display_name": "Sam",
+        "role": "member",
+        "points_balance": 180,
+        "season_score": 180,
+        "team": "Red"
+      }
+    ]
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let members = try decoder.decode([Member].self, from: json.data(using: .utf8)!)
+    runner.assertEqual(members.count, 2)
+
+    let host = members[0]
+    runner.assertEqual(host.id, hostId.uuidString)
+    runner.assertNil(host.roomId)
+    runner.assertEqual(host.joinedAt, .distantPast)
+    runner.assertEqual(host.role, .host)
+    runner.assertEqual(host.displayName, "Alex")
+    runner.assertNil(host.team)
+    runner.assertEqual(host.socialPreference, .empty)
+    runner.assertNil(host.lastSeenAt)
+
+    let red = members[1]
+    runner.assertEqual(red.id, redId.uuidString)
+    runner.assertEqual(red.team, "Red")
+    runner.assertEqual(red.displayName, "Sam")
+}
+
+runner.run("Member decodes enriched get_room_members shape (migration 059)") {
+    // Migration 059 widens the RPC back to the full membership row,
+    // so the decoder must surface every column and synthesise the
+    // composite `id` from `room_id` + `user_id`. The three social-
+    // preference columns ship nested under `social_preference` —
+    // the Swift `Member` decoder reads that container, which in
+    // turn reads its three `preferences_*` keys verbatim from the
+    // RPC columns.
+    let roomId = UUID()
+    let userId = UUID()
+    let joinedAtDate = Date(timeIntervalSince1970: 1_700_000_000)
+    let lastSeenAtDate = Date(timeIntervalSince1970: 1_700_086_400)
+    let iso = ISO8601DateFormatter()
+    let json = """
+    [
+      {
+        "user_id": "\(userId.uuidString)",
+        "room_id": "\(roomId.uuidString)",
+        "display_name": "Alex",
+        "role": "host",
+        "points_balance": 250,
+        "season_score": 250,
+        "team": null,
+        "joined_at": "\(iso.string(from: joinedAtDate))",
+        "last_seen_at": "\(iso.string(from: lastSeenAtDate))",
+        "social_preference": {
+          "preferences_social": "I prefer to be introduced by name.",
+          "preferences_conversation_prompt": "Tell me your favourite game.",
+          "preferences_default_set": true
+        }
+      }
+    ]
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let members = try decoder.decode([Member].self, from: json.data(using: .utf8)!)
+    runner.assertEqual(members.count, 1)
+
+    let member = members[0]
+    runner.assertEqual(member.id, "\(roomId.uuidString):\(userId.uuidString)")
+    runner.assertEqual(member.roomId, roomId)
+    runner.assertEqual(member.joinedAt, joinedAtDate)
+    runner.assertEqual(member.lastSeenAt, lastSeenAtDate)
+    runner.assertEqual(member.socialPreference.socialText, "I prefer to be introduced by name.")
+    runner.assertEqual(member.socialPreference.conversationPrompt, "Tell me your favourite game.")
+    runner.assertTrue(member.socialPreference.defaultSet)
+    runner.assertNil(member.team)
+    runner.assertEqual(member.userId, userId)
+}
+
 // MARK: - CatchUpMessage (W2.7 — joined-late catch-up)
 
 runner.run("CatchUpMessage upcoming event names date and claims seat") {
