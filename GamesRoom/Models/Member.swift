@@ -63,7 +63,7 @@ struct Member: Identifiable, Codable, Hashable {
 
     init(
         id: String,
-        roomId: UUID,
+        roomId: UUID? = nil,
         userId: UUID,
         role: RoomRole,
         joinedAt: Date,
