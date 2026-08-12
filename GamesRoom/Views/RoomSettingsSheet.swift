@@ -914,7 +914,7 @@ struct RoomSettingsCasinoSheet: View {
                 }
 
                 if !standardPresets {
-                    Section("Per-room values") {
+                    Section {
                         ForEach(ChipColor.allCases, id: \.self) { color in
                             Stepper(
                                 "\(color.displayName): \(value(for: color)) pts",
@@ -926,6 +926,8 @@ struct RoomSettingsCasinoSheet: View {
                                 step: 1
                             )
                         }
+                    } header: {
+                        Text("Per-room values")
                     } footer: {
                         Text("Colors you leave at their standard value keep it — only the changed ones are saved.")
                     }
@@ -985,7 +987,7 @@ struct RoomSettingsCasinoSheet: View {
         // Persist only the colors the host actually changed; the
         // model's `value(for:)` falls back to `defaultValue` for
         // unmapped colors.
-        let map = standardPresets
+        let map: [ChipColor: Int] = standardPresets
             ? [:]
             : Dictionary(uniqueKeysWithValues: ChipColor.allCases.compactMap { color in
                 let v = value(for: color)

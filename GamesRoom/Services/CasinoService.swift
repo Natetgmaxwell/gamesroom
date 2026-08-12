@@ -503,12 +503,12 @@ final class CasinoService: ObservableObject {
             ($0.key.rawValue, $0.value)
         })
         _ = try await SupabaseClientProvider.shared
-            .rpc("upsert_casino_config", params: [
-                "p_room_id": roomId.uuidString,
-                "p_enabled": enabled,
-                "p_chip_color_map": map,
-                "p_standard_presets": standardPresets
-            ])
+            .rpc("upsert_casino_config", params: UpsertCasinoConfigParams(
+                p_room_id: roomId.uuidString,
+                p_enabled: enabled,
+                p_chip_color_map: map,
+                p_standard_presets: standardPresets
+            ))
             .execute()
             .value as Void
         self.lastError = nil
