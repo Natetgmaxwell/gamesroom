@@ -404,9 +404,10 @@
 				AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */,
 				AAAAAAAA0000000000000457 /* ChipScanSheet.swift */,
 				AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */,
+				AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */,
 				AAAAAAAA00000000000000FC /* Components */,
 			);
-			path = Views;
+		path = Views;
 			sourceTree = "<group>";
 		};
 		AAAAAAAA00000000000000FC /* Components */ = {
