@@ -238,15 +238,15 @@ final class CasinoService: ObservableObject {
 
     /// Records a chip withdrawal for the calling member. Calls the
     /// V0.8 contract of the existing `withdraw_casino_chips` RPC
-    /// (p_event_id, p_room_id, p_amount) which:
+    /// (p_session_id, p_member_id, p_points) which:
     ///
-    ///   1. Decrement `room_memberships.points_balance` by `p_amount`
+    ///   1. Decrement `room_memberships.points_balance` by `p_points`
     ///      (refuses with errcode 23514 if the balance would go
     ///      negative).
     ///   2. Insert one `casino_withdrawals` row for the member's
     ///      chip bracket.
     ///   3. Insert one `casino_withdrawal` `transactions` row
-    ///      (`amount_points = -p_amount`) so the ledger-based
+    ///      (`amount_points = -p_points`) so the ledger-based
     ///      balance path stays consistent.
     ///
     /// The RPC is idempotent on (event_id, member_id) — re-issuing a
@@ -259,16 +259,28 @@ final class CasinoService: ObservableObject {
     /// without a follow-up read. Throws on any server error
     /// (insufficient balance, auth failure, etc.) so the UI can
     /// show a neutral toast.
+    ///
+    /// The `roomId` parameter is retained for the call-site
+    /// signature but unused at the wire — the server derives room
+    /// from `p_session_id` (migration 025). The caller's auth
+    /// session supplies the member id.
     func withdraw(
         eventId: UUID,
         roomId: UUID,
         amount: Int
     ) async throws -> CasinoWithdrawal {
+        guard let session = await SupabaseClientProvider.currentSession() else {
+            throw NSError(
+                domain: "CasinoService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "withdraw_casino_chips requires an authenticated session"]
+            )
+        }
         let rows: [CasinoWithdrawal] = try await SupabaseClientProvider.shared
             .rpc("withdraw_casino_chips", params: [
-                "p_event_id": eventId.uuidString,
-                "p_room_id": roomId.uuidString,
-                "p_amount": String(amount)
+                "p_session_id": eventId.uuidString,
+                "p_member_id": session.user.id.uuidString,
+                "p_points": String(amount)
             ])
             .execute()
             .value
@@ -411,7 +423,7 @@ final class CasinoService: ObservableObject {
             .value
 
         let result: [OpenAttestationSummary] = (try? await SupabaseClientProvider.shared
-            .rpc("getMyOpenAttestations")
+            .rpc("get_my_open_attestations")
             .execute()
             .value) ?? []
         self.lastError = nil

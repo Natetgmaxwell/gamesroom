@@ -137,7 +137,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         mascotApiKey: String?,
         blacklistedUserIds: [UUID]
     ) async throws -> UUID {
-        let rows: [UUID] = try await SupabaseClientProvider.shared
+        let id: UUID = try await SupabaseClientProvider.shared
             .rpc("create_room", params: CreateRoomParams(
                 p_name: name,
                 p_mascot_name: mascotName,
@@ -149,13 +149,6 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             ))
             .execute()
             .value
-        guard let id = rows.first else {
-            throw NSError(
-                domain: "LiveRoomStore",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "create_room returned no id"]
-            )
-        }
         return id
     }
 
@@ -163,13 +156,13 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// 004 + V0.3 host-check extension). Returns the freshly-minted
     /// six-character code. Throws on non-host writes.
     func generateJoinCode(roomId: UUID) async throws -> String {
-        let rows: [String] = try await SupabaseClientProvider.shared
+        let code: String = try await SupabaseClientProvider.shared
             .rpc("generate_join_code", params: [
                 "p_room_id": roomId.uuidString
             ])
             .execute()
             .value
-        guard let code = rows.first, !code.isEmpty else {
+        guard !code.isEmpty else {
             throw NSError(
                 domain: "LiveRoomStore",
                 code: -1,
@@ -522,13 +515,13 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// when no row exists, which the decoder collapses to
     /// `.unclaimed` via the `MemberRSVPState` raw-value fallback.
     func fetchCurrentMemberRSVP(eventId: UUID) async throws -> MemberRSVPState {
-        let rows: [MemberRSVPState] = try await SupabaseClientProvider.shared
+        let raw: String? = try await SupabaseClientProvider.shared
             .rpc("get_my_event_rsvp", params: [
                 "p_event_id": eventId.uuidString
             ])
             .execute()
             .value
-        return rows.first ?? .unclaimed
+        return raw.flatMap(MemberRSVPState.init(rawValue:)) ?? .unclaimed
     }
 
     // MARK: RSVP — write

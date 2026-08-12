@@ -2194,6 +2194,177 @@ runner.run("Event decodes get_active_event RPC shape (event_id, no room_id/creat
     runner.assertNil(decoded.settledAt)
 }
 
+// MARK: - RPC contract audit (061) — server shape conformance
+
+runner.run("BriefingSummary decodes the migration 061 get_briefing_summary shape") {
+    // The migration aliases max_seats → seats_total, claimed_seats → seats_claimed,
+    // declined_seats → seats_declined, unclaimed_seats → seats_unclaimed so the
+    // existing BriefingSummary model decodes without modification. Extras
+    // (event_name, played_at, venue, host_note, claimed_member_names) are
+    // ignored by the decoder but kept for other consumers.
+    let json = """
+    {
+      "event_id": "11111111-1111-1111-1111-111111111111",
+      "room_id": "22222222-2222-2222-2222-222222222222",
+      "event_name": "Friday Night Hold'em",
+      "played_at": "2026-08-15T19:00:00Z",
+      "venue": "Back Room",
+      "seats_total": 6,
+      "seats_claimed": 2,
+      "seats_declined": 1,
+      "seats_unclaimed": 3,
+      "host_note": "Bring snacks",
+      "claimed_member_names": ["Alex", "Sam"]
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let summary = try decoder.decode(BriefingSummary.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(summary.seatsTotal, 6)
+    runner.assertEqual(summary.seatsClaimed, 2)
+    runner.assertEqual(summary.seatsDeclined, 1)
+    runner.assertEqual(summary.seatsUnclaimed, 3)
+    runner.assertEqual(summary.seatsLeft, 3)
+}
+
+runner.run("BriefingSummary from migration 061 with negative unclaimed floors seatsLeft at 0") {
+    let json = """
+    {
+      "event_id": "11111111-1111-1111-1111-111111111111",
+      "room_id": "22222222-2222-2222-2222-222222222222",
+      "seats_total": 4,
+      "seats_claimed": 3,
+      "seats_declined": 2,
+      "seats_unclaimed": 0
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let summary = try decoder.decode(BriefingSummary.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(summary.seatsLeft, 0)
+}
+
+runner.run("[String] decodes the migration 061 get_room_packs shape") {
+    // The migration returns a single-column table (pack_slug text). The client
+    // decoder expects [String] and the PostgREST wire shape is a JSON array of
+    // bare strings.
+    let json = """
+    ["casino", "cards_against_humanity"]
+    """
+    let decoded = try JSONDecoder().decode([String].self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded, ["casino", "cards_against_humanity"])
+}
+
+runner.run("MemberRSVP decodes the migration 061 upsert_event_rsvp row") {
+    // The migration now returns the full MemberRSVP row: id, event_id, room_id,
+    // member_id, state, responded_at. The model decodes verbatim.
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "member_id": "44444444-4444-4444-4444-444444444444",
+      "state": "claimed",
+      "responded_at": "2026-02-01T00:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(MemberRSVP.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.id, UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+    runner.assertEqual(decoded.state, .claimed)
+    runner.assertNotNil(decoded.respondedAt)
+}
+
+runner.run("ChapterLine decodes the migration 061 get_event_chapter_line aliased shape") {
+    // The migration aliases the table columns to the model's keys:
+    //   event_id  → session_id
+    //   call_forward → next_episode_teaser
+    //   created_at → written_at
+    // The model decodes the aliased shape verbatim. nil call_forward → nil
+    // nextEpisodeTeaser.
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "room_id": "22222222-2222-2222-2222-222222222222",
+      "session_id": "33333333-3333-3333-3333-333333333333",
+      "title": "The night everything went sideways",
+      "next_episode_teaser": null,
+      "written_at": "2026-08-15T22:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(ChapterLine.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.title, "The night everything went sideways")
+    runner.assertNil(decoded.nextEpisodeTeaser)
+    runner.assertEqual(decoded.sessionId, UUID(uuidString: "33333333-3333-3333-3333-333333333333"))
+}
+
+runner.run("ChapterLine decodes with non-null next_episode_teaser") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "room_id": "22222222-2222-2222-2222-222222222222",
+      "session_id": "33333333-3333-3333-3333-333333333333",
+      "title": "Showdown",
+      "next_episode_teaser": "Next: the reckoning",
+      "written_at": "2026-08-15T22:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(ChapterLine.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.nextEpisodeTeaser, "Next: the reckoning")
+}
+
+runner.run("OpenAttestationSummary decodes the migration 061 get_my_open_attestations row with hasDispute true") {
+    // The migration joins settlement_attestations → rooms → events, surfaces
+    // session_name via the left join, and includes sa.disputed as has_dispute.
+    let json = """
+    {
+      "attestation_id": "11111111-1111-1111-1111-111111111111",
+      "session_id": "22222222-2222-2222-2222-222222222222",
+      "room_id": "33333333-3333-3333-3333-333333333333",
+      "room_name": "Friday Night Hold'em",
+      "session_name": "Friday Night Hold'em",
+      "vision_amount_points": 120,
+      "detection_source": "on_device",
+      "confidence_avg": 0.92,
+      "opened_at": "2026-08-15T21:00:00Z",
+      "has_dispute": true
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(OpenAttestationSummary.self, from: json.data(using: .utf8)!)
+    runner.assertTrue(decoded.hasDispute)
+    runner.assertEqual(decoded.visionAmountPoints, 120)
+    runner.assertEqual(decoded.detectionSource, "on_device")
+    runner.assertEqual(decoded.confidenceAvg, 0.92)
+    runner.assertEqual(decoded.contextLabel, "Friday Night Hold'em")
+}
+
+runner.run("CasinoWithdrawal decodes the migration 061 withdraw_casino_chips row") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "session_id": "22222222-2222-2222-2222-222222222222",
+      "member_id": "44444444-4444-4444-4444-444444444444",
+      "points_withdrawn": 120,
+      "withdrawn_at": "2026-08-15T20:30:00Z",
+      "withdrawn_by": "55555555-5555-5555-5555-555555555555"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(CasinoWithdrawal.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.id, UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+    runner.assertEqual(decoded.pointsWithdrawn, 120)
+    runner.assertEqual(decoded.memberId, UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
+    runner.assertEqual(decoded.sessionId, UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+}
+
 // MARK: - Summary
 
 print("")
