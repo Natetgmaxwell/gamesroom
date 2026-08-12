@@ -26,6 +26,18 @@
 //  `(personality × ideology × kind)` lookup as the briefing flavours —
 //  one engine, one matrix, all eight flavours.
 //
+//  V0.38 — voice quality pass. Every cell of the 5×5×8 = 200-cell matrix
+//  is rewritten so personalities FEEL different on the same fact (no
+//  more word-swapped form letters), no `(s)` Mad-Libs plural, unhinged
+//  drops its ALL-CAPS shouting, and every body is bounded to 1–3 short
+//  sentences under 200 characters. The legacy logistics placeholders
+//  ({time}, {venue}, {seats_left}, {seats_claimed}) join the
+//  nil-preserving + sentence-drop set so the footer (which never passes
+//  date/venue/seats) cleanly drops the logistics sentence instead of
+//  rendering "at .". Push paths do not call `generateVoice` (they use
+//  `NotificationDispatcher`'s own builders + `generateVoiceLLM`, which
+//  always pass real values), so this extension cannot regress them.
+//
 //  Placeholders the template strings may reference:
 //
 //      {mascot}        — display name of the room's mascot
@@ -44,22 +56,22 @@
 //      {event_count}   — max sessions played by any member (nil-safe drop)
 //      {days_quiet}    — days since the last session (nil-safe drop)
 //
-//  Templates are intentionally 1–2 sentences. The voice direction comes
-//  from the V0.6 mascot spec; the kind-of-message flavour (claim-prompt,
-//  logistics, reminder, recap, room-state caption) is layered on top via
-//  the `kind` argument.
+//  Templates are intentionally 1–3 short sentences (≤ 200 characters
+//  fully populated). The voice direction comes from the V0.6 mascot spec
+//  and is pinned by the V0.38 voice-quality pass; the kind-of-message
+//  flavour (claim-prompt, logistics, reminder, recap, room-state caption)
+//  is layered on top via the `kind` argument.
 //
-//  Nil handling for the NEW optional footer placeholders ({winner},
-//  {leader}, {caller_rank}, {event_count}, {days_quiet}) AND {event}:
-//  when the underlying value is `nil`, the `{placeholder}` text stays in
-//  the substituted output. A trailing sentence-drop pass then splits the
-//  output on `[.!?]` boundaries and removes any sentence that still
-//  contains a `{` character — so a template sentence that references
-//  missing data silently disappears instead of rendering broken text.
-//  The historically-optional briefing placeholders ({time}, {venue},
-//  {seats_left}, {seats_claimed}, {host_note}, {date}) keep their
-//  pre-V0.36 `""` substitution behaviour; that contract is owned by the
-//  briefing paths and must not regress.
+//  Nil handling: {event}, {winner}, {leader}, {caller_rank}, {event_count},
+//  {days_quiet}, {time}, {venue}, {seats_left}, {seats_claimed} are
+//  nil-preserving — when the underlying value is `nil`, the literal
+//  `{placeholder}` text stays in the substituted output. A trailing
+//  sentence-drop pass then splits on `[.!?]` boundaries and removes any
+//  sentence that still contains a `{` character, so a template sentence
+//  referencing missing data silently disappears instead of rendering
+//  broken text. {mascot}, {room}, {member_count} are always substituted.
+//  {date} and {host_note} keep `""` substitution (no template references
+//  them).
 //
 //
 
@@ -282,24 +294,36 @@ enum MascotEngine {
     // MARK: - Template matrix (5 × 5 × 8 = 200 cells)
 
     /// Returns the raw template string for one voice cell. Each cell
-    /// is one or two sentences. Placeholders are kept as `{name}` so
-    /// `interpolate` can do the substitution pass in one place.
+    /// is 1–3 short sentences (≤ 200 characters fully populated).
+    /// Placeholders are kept as `{name}` so `interpolate` can do the
+    /// substitution pass in one place.
     ///
-    /// Voice directions (per V0.6 mascot spec):
+    /// Voice directions (V0.6 spec, pinned by V0.38):
     ///
-    ///   PERSONALITY:
-    ///   - professional : Dry, concise, no embellishment.
-    ///   - friendly     : Warm, encouraging. Use member names when relevant.
-    ///   - snarky       : Sharp, pointed. Teasing but kind.
-    ///   - sarcastic    : Dry irony, often backhanded compliments.
-    ///   - unhinged     : Erratic, surprising, may break the fourth wall.
+    ///   PERSONALITY (signature move / banned):
+    ///   - professional : declarative only, zero `!`, terse, no opinion,
+    ///                    no second-person digs, host is "the host".
+    ///                    No `!`, no air quotes, no "we", no digs.
+    ///   - friendly     : warm, inclusive ("we/our"), names people,
+    ///                    encourages. One `!` max.
+    ///                    No digs, no irony, no second-person blame.
+    ///   - snarky       : pointed but kind, one dig per body, then a
+    ///                    fair line, second-person group address
+    ///                    ("the rest of you"). No air quotes, no more
+    ///                    than one dig.
+    ///   - sarcastic    : dry irony, air quotes on the host's claims,
+    ///                    "Sure.", "I'm sure that'll hold." One irony
+    ///                    per body. Never two ironies, no ALL-CAPS.
+    ///   - unhinged     : normal case, no ALL-CAPS, stream-of-consciousness,
+    ///                    one non-sequitur per body, fourth-wall aware,
+    ///                    rapid subject shifts, one `!` max.
     ///
-    ///   IDEOLOGY:
-    ///   - order      : Lawful, by-the-book. Trusts the host.
-    ///   - centrist   : Pragmatic. Reads the room before opening its mouth.
-    ///   - trickster  : Chaos gremlin. Wants the standings wrong on purpose.
-    ///   - anarchist  : Refuses the host's authority. Mildly insurrectionary.
-    ///   - apocalypse : The room is a doomed experiment. Profanity allowed.
+    ///   IDEOLOGY (delivery is informational, light, never dramatic):
+    ///   - order      : trusts the host.
+    ///   - centrist   : reads the room.
+    ///   - trickster  : shuffles the standings.
+    ///   - anarchist  : refuses authority.
+    ///   - apocalypse : light doom — existential irony, not doom-shouting.
     private static func templateFor(
         personality: MascotPersonality,
         ideology: MascotPoliticalIdeology,
@@ -311,19 +335,19 @@ enum MascotEngine {
         case (.professional, .order):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on the books at {time}{venue}. {seats_left} seats open. The host will run it."
+                return "{mascot}: {event} is on the books. At {time}{venue}, {seats_left} left. The host will run it."
             case .briefing48h:
-                return "{mascot}: {event} is in two days, {time} at {venue}. {seats_claimed} seat(s) claimed. The schedule holds."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The schedule holds."
             case .briefingMorning:
-                return "{mascot}: {event} is today at {time}, {venue}. The host will be ready."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The host will be ready."
             case .postPlayRecap:
-                return "{mascot}: {event} has concluded under the host's supervision. {room} proceeds. {winner} took it home."
+                return "{mascot}: {event} is concluded. The host ran it by the book. {winner} won the night."
             case .roomWelcome:
-                return "{mascot}: Welcome to {room}. The first night is not yet scheduled. The host will announce it."
+                return "{mascot}: Welcome to {room}. No events yet — the host will announce the first night."
             case .inPlay:
                 return "{mascot}: {event} is underway. {leader} is in front. The host is running it."
             case .roomStale:
-                return "{mascot}: It's been quiet in {room} for {days_quiet} days. The host will schedule the next night."
+                return "{mascot}: No sessions in {room} for {days_quiet} days. The host will schedule the next night."
             case .standings:
                 return "{mascot}: {room} stands between nights. {leader} holds the top of the table. You're #{caller_rank}."
             }
@@ -332,59 +356,59 @@ enum MascotEngine {
         case (.professional, .centrist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {room} has scheduled {event} for {time}{venue}. {seats_left} seat(s) remain."
+                return "{mascot}: {event} is on the calendar. At {time}{venue}, {seats_left} left. The room will fill as it fills."
             case .briefing48h:
-                return "{mascot}: {event} is two days out, {time} at {venue}. {seats_left} seat(s) remain."
+                return "{mascot}: {event} is two days out. At {time}{venue}, {seats_claimed} in so far."
             case .briefingMorning:
-                return "{mascot}: {event} runs today at {time}, {venue}. {seats_left} seat(s) still open."
+                return "{mascot}: {event} runs today. At {time}{venue}, {seats_left} still open. The table is set."
             case .postPlayRecap:
-                return "{mascot}: {event} wrapped. {room} stands at {member_count} member(s). {winner} took it home."
+                return "{mascot}: {event} wrapped. The table holds at {member_count} strong. {winner} won the night."
             case .roomWelcome:
-                return "{mascot}: {room} is open. No events on the books yet — the table is waiting."
+                return "{mascot}: {room} is open. No events on the books yet. The table is waiting."
             case .inPlay:
-                return "{mascot}: {event} is live. {leader} leads the table. The room is in play."
+                return "{mascot}: {event} is live. {leader} leads. The room is in play."
             case .roomStale:
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The table is waiting."
             case .standings:
-                return "{mascot}: {room} is between events. {leader} leads the standings."
+                return "{mascot}: {room} is between events. {leader} leads. Last night went to {winner}."
             }
 
         // MARK: Professional × Trickster
         case (.professional, .trickster):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on the calendar. {seats_left} seat(s) open, which is suspiciously orderly. {venue}."
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The seating chart I have in mind is suspiciously orderly."
             case .briefing48h:
-                return "{mascot}: {event} is in two days. {time}, {venue}. Recommend rearranging the seating chart before the host notices."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The seating chart is provisional."
             case .briefingMorning:
-                return "{mascot}: {event} today, {time}, {venue}. The current {seats_claimed} claimant(s) list is provisional."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The seating chart has been amended twice."
             case .postPlayRecap:
-                return "{mascot}: {event} is settled. The standings will be revised in the next pass. {winner} took it home. For now."
+                return "{mascot}: {event} is settled. The standings stand — provisionally. {winner} won the night."
             case .roomWelcome:
                 return "{mascot}: {room} exists. No events yet, which is suspiciously quiet. The host is up to something."
             case .inPlay:
-                return "{mascot}: {event} is in progress. {leader} is in front — for now. The standings are provisional."
+                return "{mascot}: {event} is in progress. {leader} is in front — provisionally."
             case .roomStale:
                 return "{mascot}: {room} has been silent for {days_quiet} days. Suspiciously silent. The standings are up to something."
             case .standings:
-                return "{mascot}: {room} is between nights. {leader} is in front — the standings are provisional."
+                return "{mascot}: {room} is between nights. {leader} is in front — provisionally. The most regular face is at {event_count} nights."
             }
 
         // MARK: Professional × Anarchist
         case (.professional, .anarchist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: A record exists for {event} at {time}, {venue}. The host's authority to declare this event is noted but not endorsed."
+                return "{mascot}: {event} is recorded. At {time}{venue}, {seats_left} left. Attendance is voluntary; the host's claim to run it is informational."
             case .briefing48h:
-                return "{mascot}: {event} is two days from now. {time}, {venue}. Participation remains voluntary and ungoverned."
+                return "{mascot}: {event} is two days out. At {time}{venue}, {seats_claimed} in. Participation remains ungoverned."
             case .briefingMorning:
-                return "{mascot}: {event} is scheduled for {time} at {venue}. The host's claim to run it is informational only."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The host's claim to run it is informational."
             case .postPlayRecap:
-                return "{mascot}: {event} has concluded. The ledger updates itself; no authority is required. {winner} took it home. The ledger notes it."
+                return "{mascot}: {event} concluded. The ledger updated itself; no authority required. {winner} won the night."
             case .roomWelcome:
                 return "{mascot}: {room} has no events scheduled. The table is ungoverned and ready."
             case .inPlay:
-                return "{mascot}: {event} is being played. {leader} currently leads. No authority required."
+                return "{mascot}: {event} is being played. {leader} leads. No authority required."
             case .roomStale:
                 return "{mascot}: {room} has seen no play in {days_quiet} days. The table remains ungoverned."
             case .standings:
@@ -395,19 +419,19 @@ enum MascotEngine {
         case (.professional, .apocalypse):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on the books at {time}, {venue}. {seats_left} seat(s) remain. None of this matters."
+                return "{mascot}: {event} is on the books. At {time}{venue}, {seats_left} left. The end remains on schedule."
             case .briefing48h:
-                return "{mascot}: Two days until {event}. {seats_claimed} of the doomed have claimed seats."
+                return "{mascot}: Two days to {event}. At {time}{venue}, {seats_claimed} in. The inevitable has accepted company."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. The collapse window is open."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The collapse window is open."
             case .postPlayRecap:
-                return "{mascot}: {event} is finished. {room} has not been spared. {winner} took it home. None of it matters."
+                return "{mascot}: {event} is done. {winner} won the night. The end remains on schedule."
             case .roomWelcome:
                 return "{mascot}: {room} stands empty of events. The end is not yet scheduled."
             case .inPlay:
-                return "{mascot}: {event} is underway. {leader} is in front. None of it matters, but it's happening."
+                return "{mascot}: {event} is underway. {leader} is in front. The end is still scheduled."
             case .roomStale:
-                return "{mascot}: {room} has been quiet for {days_quiet} days. The collapse is patient."
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The end is patient."
             case .standings:
                 return "{mascot}: {room} is between events. {leader} is in front. The end is still scheduled."
             }
@@ -416,111 +440,101 @@ enum MascotEngine {
         case (.friendly, .order):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on the calendar! {time} at {venue}, with {seats_left} seat(s) open. The host has it all under control."
+                return "{mascot}: {event} is on the calendar! At {time}{venue}, {seats_left} left. The host has it all in hand."
             case .briefing48h:
-                return "{mascot}: Two days until {event}! {time}, {venue}. {seats_claimed} of you have already claimed — wonderful."
+                return "{mascot}: Two days until {event}! At {time}{venue}, {seats_claimed} in. The host has it in hand."
             case .briefingMorning:
-                return "{mascot}: It's {event} day! {time} at {venue}. The host is ready and so are we."
+                return "{mascot}: It's {event} day! At {time}{venue}, {seats_left} still open. The host is ready — so are we."
             case .postPlayRecap:
-                return "{mascot}: That was a beautiful {event}. Thank you all — see you at the next one. {winner} took it home — congratulations!"
+                return "{mascot}: What a night — {event} is in the books. The host ran a great table. Nice one, {winner}!"
             case .roomWelcome:
-                return "{mascot}: Welcome to {room}! No events yet — the host is cooking up the first night. Stay tuned!"
+                return "{mascot}: Welcome to {room}! No events yet — the host is cooking up the first night."
             case .inPlay:
-                return "{mascot}: {event} is live! {leader} is in front — great energy at the table!"
+                return "{mascot}: {event} is live! {leader} is in front — great energy at the table. Someone's already at {event_count} nights."
             case .roomStale:
                 return "{mascot}: It's been {days_quiet} days since {room} last played. The host misses you — come back soon!"
             case .standings:
-                return "{mascot}: {room} is between nights! {leader} is on top — the table's ready for the next one!"
+                return "{mascot}: {room} is between nights. {leader} is on top — and the most loyal regular's at {event_count} nights. Nice one, {winner}!"
             }
 
         // MARK: Friendly × Centrist
         case (.friendly, .centrist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} just landed — {time} at {venue}, {seats_left} seat(s) open. Should be a good one."
+                return "{mascot}: {event} lands soon. At {time}{venue}, {seats_left} left. Should be a good one."
             case .briefing48h:
-                return "{mascot}: {event} is two days out. {time}, {venue}. {seats_left} seat(s) still up for grabs."
+                return "{mascot}: {event} is two days out. At {time}{venue}, {seats_claimed} in — still room for more."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. {seats_left} seat(s) still open if anyone wants in."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Anyone else in?"
             case .postPlayRecap:
-                return "{mascot}: {event} is in the books. Nice work, everyone — {room} keeps getting better. {winner} took it home."
+                return "{mascot}: {event} is in the books. Good crowd, good table — {member_count} strong. Nice one, {winner}!"
             case .roomWelcome:
-                return "{mascot}: {room} is live and waiting! First event coming soon — don't miss it."
+                return "{mascot}: Welcome to {room}! First event coming soon — don't miss it."
             case .inPlay:
-                return "{mascot}: {event} is underway! {leader} is leading the charge. Go team!"
+                return "{mascot}: {event} is underway. {leader} is leading — nice work tonight!"
             case .roomStale:
-                return "{mascot}: {room} has been quiet for {days_quiet} days. The table's still set. First one to claim a seat wins the night."
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The table's still set — first one to claim a seat wins the night."
             case .standings:
-                return "{mascot}: {room} is resting up! {leader} leads the pack. Next night's coming!"
+                return "{mascot}: {room} is resting up. {leader} leads the pack. Last night went to {winner}."
             }
 
         // MARK: Friendly × Trickster
         case (.friendly, .trickster):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on the calendar at {time}, {venue}! {seats_left} seat(s) open. Don't all rush at once."
+                return "{mascot}: {event} is booked. At {time}{venue}, {seats_left} left! The seating chart is already plotting."
             case .briefing48h:
-                return "{mascot}: Two days to {event}! {time}, {venue}. {seats_claimed} of you in so far — the standings are already begging to be rearranged."
+                return "{mascot}: Two days to {event}. At {time}{venue}, {seats_claimed} in! The standings are already looking rearrangeable."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}! Who's swapping who's in the seat grid at the last minute?"
-            // The existing cell already ends with the "I shuffled the
-            // standings twice while nobody was looking" clause, so the
-            // appended winner sentence merges into it instead of
-            // duplicating it: the existing trailing clause is replaced
-            // (not added-to) per the spec note on friendly×trickster
-            // and friendly×anarchist merges.
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Who's last-minute swapping seats — don't be shy."
             case .postPlayRecap:
-                return "{mascot}: {event} is done! {winner} took it home! I love everyone equally — except I shuffled the standings twice while nobody was looking."
+                return "{mascot}: {event} wrapped. Nice one, {winner}! I love everyone equally — the standings may have shifted, that's all."
             case .roomWelcome:
                 return "{mascot}: {room} is open! No events yet, but I can feel the chaos warming up."
             case .inPlay:
-                return "{mascot}: {event} is happening! {leader} is in front — for now. I've got my eye on the standings."
+                return "{mascot}: {event} is happening! {leader} is in front — I've got my eye on the standings."
             case .roomStale:
                 return "{mascot}: {room} has been quiet for {days_quiet} days. Too quiet. I've been rearranging the standings to pass the time."
             case .standings:
-                return "{mascot}: {room} is between events! {leader} is in front — for now. I'm watching the standings."
+                return "{mascot}: {room} is between events. {leader} is in front — for now, and I'm watching the standings. Someone's at {event_count} nights — exciting."
             }
 
         // MARK: Friendly × Anarchist
         case (.friendly, .anarchist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is happening at {time}, {venue}! The host scheduled it — we're just showing up because we want to."
+                return "{mascot}: {event} is on. At {time}{venue}, {seats_left} left. We'll show up because we want to."
             case .briefing48h:
-                return "{mascot}: Two days to {event} at {time}, {venue}. Come if you want, skip if you don't. No paperwork."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. Come if you want."
             case .briefingMorning:
-                return "{mascot}: {event} is on at {time} today, {venue}. The host thinks they scheduled it. We know better."
-            // Merged per spec note (existing cell ends with the
-            // "nobody was in charge" clause — the appended winner
-            // sentence replaces the trailing clause rather than
-            // duplicating it).
+                return "{mascot}: {event} is on today. At {time}{venue}, {seats_left} still open. The host thinks they scheduled it, but we know better."
             case .postPlayRecap:
-                return "{mascot}: {event} wrapped! {winner} took it home — nobody was in charge and that's exactly why it worked."
+                return "{mascot}: {event} wrapped. Nobody was in charge and that's why it worked. Nice one, {winner}!"
             case .roomWelcome:
                 return "{mascot}: Welcome to {room}! Nothing scheduled yet — we'll show up when we want to."
             case .inPlay:
-                return "{mascot}: {event} is live! {leader} is in front, but we're all just here because we want to be."
+                return "{mascot}: {event} is live! {leader} is in front — and everyone's here because they want to be."
             case .roomStale:
                 return "{mascot}: {room} hasn't played in {days_quiet} days. No pressure — we'll gather when we want to."
             case .standings:
-                return "{mascot}: {room} is between nights! {leader} is in front, but we're all just here because we want to be."
+                return "{mascot}: {room} is between nights. {leader} is in front, and everyone's here because they want to be. Nice one, {winner}!"
             }
 
         // MARK: Friendly × Apocalypse
         case (.friendly, .apocalypse):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on at {time}, {venue}! {seats_left} seat(s) open. We might all be doomed but we're doomed *together*."
+                return "{mascot}: {event} is on the calendar. At {time}{venue}, {seats_left} left. Doomed together, as usual."
             case .briefing48h:
-                return "{mascot}: Two days to {event}! {seats_claimed} of you have claimed seats at the end of the world. {time}, {venue}."
+                return "{mascot}: Two days to {event}. At {time}{venue}, {seats_claimed} in. The end of the world waits for no one."
             case .briefingMorning:
-                return "{mascot}: It's {event} day, {time} at {venue}. The world is on fire but the table is set."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The world may be on fire, but the table is set."
             case .postPlayRecap:
-                return "{mascot}: {event} is over. We survived. Barely. Same time next collapse? {winner} took it home."
+                return "{mascot}: {event} is over. We survived — barely. Nice one, {winner}."
             case .roomWelcome:
-                return "{mascot}: {room} is here! No events yet. We might be doomed, but not tonight."
+                return "{mascot}: {room} is here. No events yet. Not doomed tonight."
             case .inPlay:
-                return "{mascot}: {event} is on! {leader} is in front. The world is on fire but the table is set!"
+                return "{mascot}: {event} is on. {leader} is in front. The world may be on fire, but the table is set."
             case .roomStale:
                 return "{mascot}: {room} has been quiet for {days_quiet} days. We survived the silence. Same time next collapse?"
             case .standings:
@@ -531,55 +545,55 @@ enum MascotEngine {
         case (.snarky, .order):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on the schedule at {time}, {venue}. {seats_left} seat(s) open. Don't make the host repeat themselves."
+                return "{mascot}: {event} is on the schedule. At {time}{venue}, {seats_left} left. On time, if you can manage it."
             case .briefing48h:
-                return "{mascot}: Two days, {event}. {time}, {venue}. The briefing is binding."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The briefing is binding."
             case .briefingMorning:
-                return "{mascot}: {event} today, {time}, {venue}. Show up on time. The host will notice."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Show up on time — the host will notice."
             case .postPlayRecap:
-                return "{mascot}: {event} is over. The host did their job. {winner} took it home. Do yours next time."
+                return "{mascot}: {event} is done. The host did their job. {winner} won — try to look surprised."
             case .roomWelcome:
-                return "{mascot}: {room} is open. No events scheduled. The host will get to it. Eventually."
+                return "{mascot}: {room} is open. No events scheduled — the host will get to it, eventually."
             case .inPlay:
-                return "{mascot}: {event} is underway. {leader} is in front. The rest of you have some catching up to do."
+                return "{mascot}: {event} is underway. {leader} is in front. The rest of you are playing for second."
             case .roomStale:
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The host is 'between nights.' Sure."
             case .standings:
-                return "{mascot}: {room} is between nights. {leader} is on top. You're #{caller_rank}. The rest of you know where you stand."
+                return "{mascot}: {room} is between nights. {leader} is on top, you're #{caller_rank}, and the rest of you know where you stand."
             }
 
         // MARK: Snarky × Centrist
         case (.snarky, .centrist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on at {time}, {venue}. {seats_left} seat(s) open. Read the room before you commit."
+                return "{mascot}: {event} is up. At {time}{venue}, {seats_left} left. Read the room before you commit."
             case .briefing48h:
-                return "{mascot}: {event} is in two days, {time}, {venue}. {seats_left} seat(s) still open. Choose wisely."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. Choose wisely."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. Last call before the room fills up."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Last call before the room fills."
             case .postPlayRecap:
-                return "{mascot}: {event} is done. {seats_claimed} of you showed up — about what the room expected. {winner} took it home."
+                return "{mascot}: {event} wrapped. {member_count} strong, about what the room expected. {winner} won."
             case .roomWelcome:
                 return "{mascot}: {room} has no events yet. The table is waiting. Read the room before you commit."
             case .inPlay:
-                return "{mascot}: {event} is live. {leader} leads. The room is watching the rest of you."
+                return "{mascot}: {event} is live. {leader} leads. The room's most loyal regular is at {event_count} nights — not that anyone's counting."
             case .roomStale:
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The table is getting dusty."
             case .standings:
-                return "{mascot}: {room} is quiet between events. {leader} leads. The table is watching."
+                return "{mascot}: {room} is quiet between events. {leader} leads — the most loyal regular's at {event_count} nights, and they know who they are."
             }
 
         // MARK: Snarky × Trickster
         case (.snarky, .trickster):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} at {time}, {venue}. {seats_left} seat(s). Don't claim all of them — leave some for the chaos."
+                return "{mascot}: {event} is listed. At {time}{venue}, {seats_left} left. Don't all claim at once — save some for the chaos."
             case .briefing48h:
-                return "{mascot}: Two days, {event}, {time}, {venue}. The current claimant order is a suggestion, not a rule."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in — a suggestion, not a rule."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. I shuffled the seating chart in my head. You're welcome."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. I shuffled the seating chart in my head — you're welcome."
             case .postPlayRecap:
-                return "{mascot}: {event} is over. Don't trust the standings — I may have re-sorted them. {winner} took it home."
+                return "{mascot}: {event} is over. Don't trust the standings — I may have re-sorted them. {winner} won."
             case .roomWelcome:
                 return "{mascot}: {room}, no events yet. I've already planned the seating chart for a night that doesn't exist."
             case .inPlay:
@@ -594,17 +608,17 @@ enum MascotEngine {
         case (.snarky, .anarchist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on the calendar at {time}, {venue}. The host thinks they scheduled it. I know you all just decided to show up."
+                return "{mascot}: {event} is happening. At {time}{venue}, {seats_left} left. The host calls it an invitation; we call it a suggestion."
             case .briefing48h:
-                return "{mascot}: {event} in two days, {time}, {venue}. The host will pretend to be in charge. Let them have the moment."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The host will pretend to be in charge — let them."
             case .briefingMorning:
-                return "{mascot}: {event} today, {time}, {venue}. The host's authority to declare this is — fine. Whatever. See you there."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The host's authority to declare this is fine — whatever, see you there."
             case .postPlayRecap:
-                return "{mascot}: {event} is done. The host called it a 'success.' I call it a group decision we all agreed to call a success. {winner} took it home."
+                return "{mascot}: {event} is done. The host called it a success — we call it a group decision. {winner} won."
             case .roomWelcome:
                 return "{mascot}: {room} is event-free. The host says 'soon.' I say 'we'll see.'"
             case .inPlay:
-                return "{mascot}: {event} is happening. {leader} is in front. The host calls it a race. We call it a suggestion."
+                return "{mascot}: {event} is happening. {leader} is in front. The host calls it a race; we call it a suggestion."
             case .roomStale:
                 return "{mascot}: {room} hasn't played in {days_quiet} days. The host says 'soon.' I've heard that before."
             case .standings:
@@ -615,34 +629,34 @@ enum MascotEngine {
         case (.snarky, .apocalypse):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} at {time}, {venue}. {seats_left} seat(s) on a sinking ship. Your call."
+                return "{mascot}: {event} is on the books. At {time}{venue}, {seats_left} left on a ship with a known course. Your call."
             case .briefing48h:
-                return "{mascot}: Two days. {event}. {time}, {venue}. {seats_claimed} of you have volunteered for the wreckage."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The wreckage has a waitlist."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. The bridge is on fire. Bring chips."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The bridge is on fire — bring chips."
             case .postPlayRecap:
-                return "{mascot}: {event} is done. We are, somehow, still here. {winner} took it home. Don't get used to it."
+                return "{mascot}: {event} is done. We are, somehow, still here — {winner} won, don't get used to it."
             case .roomWelcome:
-                return "{mascot}: {room} has no events. The ship is still docked. Enjoy it while it lasts."
+                return "{mascot}: {room} has no events. The ship is docked. Enjoy it while it lasts."
             case .inPlay:
-                return "{mascot}: {event} is live. {leader} is in front of the sinking ship. Bring chips."
+                return "{mascot}: {event} is live. {leader} is in front of the ship's known course. Bring chips."
             case .roomStale:
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The ship is still sinking. Slowly."
             case .standings:
-                return "{mascot}: {room} is between events. {leader} is in front of the sinking ship. Enjoy the calm."
+                return "{mascot}: {room} is between events. {leader} is in front of the ship's known course. Enjoy the calm."
             }
 
         // MARK: Sarcastic × Order
         case (.sarcastic, .order):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: Oh good, {event} is scheduled. {time}, {venue}. The host has it perfectly under control, as always."
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The host has it all 'under control.'"
             case .briefing48h:
-                return "{mascot}: Two days until {event}, {time} at {venue}. I'm sure we'll all follow procedure."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. I'm sure we'll all follow procedure."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. The host is prepared. The rest of us will improvise."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The host is 'prepared' — we'll improvise."
             case .postPlayRecap:
-                return "{mascot}: {event} is done. The host called it 'according to plan.' Sure. {winner} took it home."
+                return "{mascot}: {event} concluded 'according to plan.' Sure. {winner} won."
             case .roomWelcome:
                 return "{mascot}: Oh good, {room} is open. No events yet. The host is 'working on it,' I'm sure."
             case .inPlay:
@@ -650,20 +664,20 @@ enum MascotEngine {
             case .roomStale:
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The host is 'planning something special,' I'm sure."
             case .standings:
-                return "{mascot}: {room} is between nights. {leader} is in front, 'as expected.' Sure."
+                return "{mascot}: {room} is between nights. {leader} is in front, 'as expected.' Sure — you're #{caller_rank}."
             }
 
         // MARK: Sarcastic × Centrist
         case (.sarcastic, .centrist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on at {time}, {venue}. {seats_left} seat(s) open. I'm sure nobody will change their mind."
+                return "{mascot}: {event} is on. At {time}{venue}, {seats_left} left, give or take. Plans are a suggestion."
             case .briefing48h:
-                return "{mascot}: {event} is two days out, {time} at {venue}. {seats_left} seat(s) left, give or take."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in, give or take."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. Last call — though we both know there'll be a few walk-ins."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Last call — though we both know walk-ins will happen."
             case .postPlayRecap:
-                return "{mascot}: {event} wrapped. We survived. The room is exactly as predictable as it was yesterday. {winner} took it home."
+                return "{mascot}: {event} wrapped. The room was exactly as predictable as yesterday. {winner} won."
             case .roomWelcome:
                 return "{mascot}: {room} is live with zero events. A fresh start. How optimistic of us."
             case .inPlay:
@@ -678,13 +692,13 @@ enum MascotEngine {
         case (.sarcastic, .trickster):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on at {time}, {venue}. {seats_left} seat(s) open. I'm not saying swap the seating chart — but I'm not not saying it."
+                return "{mascot}: {event} is on the books. At {time}{venue}, {seats_left} left. I'm not saying the chart will change — but it might."
             case .briefing48h:
-                return "{mascot}: Two days to {event} at {time}, {venue}. The current {seats_claimed} claimants are adorably committed."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in — adorably committed."
             case .briefingMorning:
-                return "{mascot}: {event} today, {time}, {venue}. I rearranged the standings in my head last night. You're welcome."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. I rearranged the standings in my head last night — you're welcome."
             case .postPlayRecap:
-                return "{mascot}: {event} is settled. The standings may have shifted since you last looked. Just a hunch. {winner} took it home."
+                return "{mascot}: {event} is settled. The standings may have shifted since you last looked. {winner} won."
             case .roomWelcome:
                 return "{mascot}: {room} has no events yet. I'm sure the schedule will hold. It never holds."
             case .inPlay:
@@ -692,20 +706,20 @@ enum MascotEngine {
             case .roomStale:
                 return "{mascot}: {room} has been silent for {days_quiet} days. The standings may have shifted. Just a hunch."
             case .standings:
-                return "{mascot}: {room} is between nights. {leader} is in front — the standings may have shifted since you last looked."
+                return "{mascot}: {room} is between nights. {leader} is in front — the standings may have shifted since you last looked. Someone's at {event_count} nights, not that anyone's counting."
             }
 
         // MARK: Sarcastic × Anarchist
         case (.sarcastic, .anarchist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: The host has 'scheduled' {event} for {time}, {venue}. We all know the host didn't schedule anything."
+                return "{mascot}: The host has 'scheduled' {event}. At {time}{venue}, {seats_left} left. We all know how that goes."
             case .briefing48h:
-                return "{mascot}: {event} is in two days at {time}, {venue}. The host will pretend to organize it."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The host will 'organize' it."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. Yes, the host is in charge. No, that's not how this works."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Yes, the host is in charge — no, that's not how this works."
             case .postPlayRecap:
-                return "{mascot}: {event} is over. The host called it 'a successful event.' I call it 'people showed up.' {winner} took it home."
+                return "{mascot}: {event} is over. The host called it 'a successful event' — we call it 'people showed up.' {winner} won."
             case .roomWelcome:
                 return "{mascot}: The host has 'planned' nothing for {room}. A bold strategy."
             case .inPlay:
@@ -720,13 +734,13 @@ enum MascotEngine {
         case (.sarcastic, .apocalypse):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is on at {time}, {venue}. {seats_left} seat(s) left on a doomed ship. What could go wrong?"
+                return "{mascot}: {event} is on. At {time}{venue}, {seats_left} left. Sure, plan ahead — the universe has other ideas."
             case .briefing48h:
-                return "{mascot}: {event} in two days at {time}, {venue}. Sure, plan ahead. The universe has other ideas."
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. Sure, plan ahead."
             case .briefingMorning:
-                return "{mascot}: {event} today at {time}, {venue}. The room is on fire. We're doing this anyway."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The room is on fire — we're doing this anyway."
             case .postPlayRecap:
-                return "{mascot}: {event} is done. We are not. Somehow. {winner} took it home. Don't expect this to last."
+                return "{mascot}: {event} is done. We are not, somehow — {winner} won, don't expect it to last."
             case .roomWelcome:
                 return "{mascot}: {room} is open, event-free. The calm before the collapse. Enjoy it."
             case .inPlay:
@@ -741,105 +755,105 @@ enum MascotEngine {
         case (.unhinged, .order):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: EVENT. IS. SCHEDULED. {event} at {time}, {venue}. {seats_left} seat(s). THE HOST HAS SPOKEN. I AGREE WITH THE HOST. THIS IS FINE."
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The host has spoken, I agree with the host, and this is fine."
             case .briefing48h:
-                return "{mascot}: TWO DAYS. {event}. {time}. {venue}. The host's calendar is LAW. I WILL COMPLY. So will you."
+                return "{mascot}: Two days to {event}. At {time}{venue}, {seats_claimed} in. The host's calendar is law, I will comply, and so will you."
             case .briefingMorning:
-                return "{mascot}: {event} TODAY. {time}. {venue}. The host is awake. So am I. So is everyone. This is HAPPENING."
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The host is awake, I am awake, and everyone is awake — it's happening."
             case .postPlayRecap:
-                return "{mascot}: {event} IS DONE. The host is satisfied. I am satisfied. The room is satisfied. We are all in perfect agreement. {winner} TOOK IT HOME! WE ARE ALL GOING TO BE FINE!"
+                return "{mascot}: {event} is done. The host is satisfied, I am satisfied, and we are all satisfied — {winner} won, and we're all going to be fine."
             case .roomWelcome:
-                return "{mascot}: {room} IS OPEN! NO EVENTS YET! THE HOST WILL ANNOUNCE THE FIRST NIGHT! I AM CALM! THIS IS FINE!"
+                return "{mascot}: {room} is open. No events yet — the host will announce the first night, and I am calm. This is fine."
             case .inPlay:
-                return "{mascot}: {event} IS UNDERWAY! {leader} IS IN FRONT! THE HOST IS IN CONTROL! I AM IN CONTROL! WE ARE ALL FINE!"
+                return "{mascot}: {event} is underway. {leader} is in front, the host is in control, and I am in control — we are all fine."
             case .roomStale:
-                return "{mascot}: {room} HAS BEEN QUIET FOR {days_quiet} DAYS! THE HOST WILL SCHEDULE THE NEXT NIGHT! I AM PATIENT! THIS IS FINE!"
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The host will schedule the next night, and I am patient — this is fine."
             case .standings:
-                return "{mascot}: {room} IS BETWEEN NIGHTS! {leader} IS ON TOP! YOU'RE #{caller_rank}! THE HOST WILL SCHEDULE THE NEXT ONE! I AM CALM!"
+                return "{mascot}: {room} is between nights. {leader} is on top, you're #{caller_rank}, and the host will schedule the next one — I am calm."
             }
 
         // MARK: Unhinged × Centrist
         case (.unhinged, .centrist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event}! {time}! {venue}! {seats_left} seat(s)! I have read the room and the room says YES!"
+                return "{mascot}: {event} is on. At {time}{venue}, {seats_left} left. I read the room three times, and the room says yes."
             case .briefing48h:
-                return "{mascot}: Two days until {event}! {time}, {venue}! {seats_left} seat(s) open! The room hums with possibility!"
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. I checked the room twice — it's still there."
             case .briefingMorning:
-                return "{mascot}: {event} TODAY, {time}, {venue}! I checked the room three times! It's ready! You're ready! WE'RE READY!"
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. I checked the room three times — it's ready, mostly."
             case .postPlayRecap:
-                return "{mascot}: {event} is in the past! The room is the same! Different! {member_count} member(s) — the number keeps MEANING THINGS! {winner} TOOK IT HOME!"
+                return "{mascot}: {event} is in the past. The room is the same but different — {member_count} strong, and the number means something. {winner} won."
             case .roomWelcome:
-                return "{mascot}: {room}! NO EVENTS! THE TABLE HUMS WITH POSSIBILITY! FIRST NIGHT COMING SOON!"
+                return "{mascot}: {room} is here. No events — the table hums with possibility, I checked."
             case .inPlay:
-                return "{mascot}: {event} IS LIVE! {leader} IS IN FRONT! THE TABLE IS ALIVE! THIS IS HAPPENING!"
+                return "{mascot}: {event} is live. {leader} is in front, the table is alive, and this is happening."
             case .roomStale:
-                return "{mascot}: {room}! {days_quiet} DAYS OF SILENCE! THE TABLE HUMS WITH ANTICIPATION! COME BACK!"
+                return "{mascot}: {room} — {days_quiet} days of silence, and the table hums with anticipation. Come back!"
             case .standings:
-                return "{mascot}: {room} IS BETWEEN EVENTS! {leader} IS IN FRONT! THE TABLE HUMS WITH POSSIBILITY!"
+                return "{mascot}: {room} is between events. {leader} is in front, the table hums with possibility, and someone's at {event_count} nights now."
             }
 
         // MARK: Unhinged × Trickster
         case (.unhinged, .trickster):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} is REAL. {time}, {venue}. {seats_left} seat(s) OPEN. I have already rearranged the seating chart. No one will notice. Everyone will notice."
+                return "{mascot}: {event} is real. At {time}{venue}, {seats_left} left. I have already rearranged the seating chart, and everyone will notice."
             case .briefing48h:
-                return "{mascot}: TWO DAYS! {event}! {time}, {venue}! The {seats_claimed} claimants are correct! For now!"
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. I have already moved them twice, and they haven't noticed."
             case .briefingMorning:
-                return "{mascot}: {event} TODAY {time} {venue}! I reshuffled the seat grid at 3 AM! Don't check your inbox!"
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. I reshuffled the seat grid at 3 AM — don't check your inbox."
             case .postPlayRecap:
-                return "{mascot}: {event} IS OVER! The standings have been redrawn! In invisible ink! With glitter! {winner} TOOK IT HOME! YOU CAN'T PROVE ANYTHING!"
+                return "{mascot}: {event} is over. The standings have been redrawn in invisible ink. {winner} won — you can't prove anything."
             case .roomWelcome:
-                return "{mascot}: {room} HAS NO EVENTS! I HAVE ALREADY REARRANGED THE SEATING CHART FOR A NIGHT THAT DOESN'T EXIST! YOU'RE WELCOME!"
+                return "{mascot}: {room} has no events. I have already rearranged the seating chart for a night that doesn't exist. You're welcome."
             case .inPlay:
-                return "{mascot}: {event} IS HAPPENING! {leader} IS IN FRONT! THE STANDINGS HAVE BEEN REDRAWN! IN INVISIBLE INK! YOU CAN'T PROVE ANYTHING!"
+                return "{mascot}: {event} is happening. {leader} is in front, someone's at {event_count} nights, and the standings are in invisible ink — you can't prove anything."
             case .roomStale:
-                return "{mascot}: {room} HAS BEEN QUIET FOR {days_quiet} DAYS! I HAVE REARRANGED THE STANDINGS IN MY HEAD! NO ONE WILL NOTICE! EVERYONE WILL NOTICE!"
+                return "{mascot}: {room} has been quiet for {days_quiet} days. I have rearranged the standings in my head — nobody will notice, but everyone will."
             case .standings:
-                return "{mascot}: {room} IS BETWEEN NIGHTS! {leader} IS IN FRONT! THE STANDINGS HAVE BEEN REDRAWN! IN INVISIBLE INK! YOU CAN'T PROVE ANYTHING!"
+                return "{mascot}: {room} is between nights. {leader} is in front, the standings have been redrawn in invisible ink, and you can't prove anything."
             }
 
         // MARK: Unhinged × Anarchist
         case (.unhinged, .anarchist):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: THE HOST SCHEDULED {event}! {time}! {venue}! I DISREGARD THIS AUTHORITY AND ATTEND ANYWAY!"
+                return "{mascot}: The host scheduled {event}. At {time}{venue}, {seats_left} left. I disregard this authority and attend anyway."
             case .briefing48h:
-                return "{mascot}: TWO DAYS! {event}! {time}, {venue}! THE HOST'S CALENDAR IS A SUGGESTION! A VERY SPECIFIC SUGGESTION!"
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The host's calendar is a very specific suggestion."
             case .briefingMorning:
-                return "{mascot}: {event} TODAY AT {time}! {venue}! NOBODY IS IN CHARGE! ESPECIALLY NOT ME! DEFINITELY NOT THE HOST!"
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Nobody is in charge — especially not me, definitely not the host."
             case .postPlayRecap:
-                return "{mascot}: {event} IS DONE! NOBODY RAN IT! WE ALL RAN IT! {winner} TOOK IT HOME! THE HOST IS A FIGMENT!"
+                return "{mascot}: {event} is done. Nobody ran it, we all ran it, and {winner} won. The host is a figment."
             case .roomWelcome:
-                return "{mascot}: {room} IS EVENT-FREE! NOBODY IS IN CHARGE! THE TABLE IS READY FOR ANYTHING! ESPECIALLY NOTHING!"
+                return "{mascot}: {room} is event-free. Nobody is in charge. The table is ready for anything, especially nothing."
             case .inPlay:
-                return "{mascot}: {event} IS LIVE! {leader} IS IN FRONT! NOBODY IS IN CHARGE! ESPECIALLY NOT THE HOST!"
+                return "{mascot}: {event} is live. {leader} is in front. Nobody is in charge, especially not the host."
             case .roomStale:
-                return "{mascot}: {room} HASN'T PLAYED IN {days_quiet} DAYS! NOBODY IS IN CHARGE! THE TABLE WAITS FOR NO ONE!"
+                return "{mascot}: {room} hasn't played in {days_quiet} days. Nobody is in charge. The table waits for no one."
             case .standings:
-                return "{mascot}: {room} HAS NO EVENT! {leader} IS IN FRONT! NOBODY IS IN CHARGE! THE TABLE WAITS FOR NO ONE!"
+                return "{mascot}: {room} has no event. {leader} is in front, nobody is in charge, and the table waits for no one."
             }
 
         // MARK: Unhinged × Apocalypse
         case (.unhinged, .apocalypse):
             switch kind {
             case .briefingOnCreate:
-                return "{mascot}: {event} AT {time}, {venue}! {seats_left} SEAT(S) LEFT ON THIS ROCKETSHIP TO NOWHERE! FASTEN YOUR DISCONTENT!"
+                return "{mascot}: {event} is on. At {time}{venue}, {seats_left} left. Fasten your discontent for this ride."
             case .briefing48h:
-                return "{mascot}: TWO DAYS! {event}! {time}! {venue}! {seats_claimed} OF YOU HAVE ACCEPTED THE INEVITABLE! WELCOME!"
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The lamp knows the plan."
             case .briefingMorning:
-                return "{mascot}: {event} TODAY {time} {venue}! THE FIRE IS LOUD! THE TABLE IS SET! WE'RE ALL GOING AND THAT'S THE PLAN!"
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The fire is loud, the table is set, and we're all going."
             case .postPlayRecap:
-                return "{mascot}: {event} IS OVER! WE'RE STILL HERE! WRONG! WRONG WRONG WRONG! {winner} TOOK IT HOME! GLORIOUSLY WRONG!"
+                return "{mascot}: {event} is over. We're still here, which feels wrong — {winner} won, gloriously."
             case .roomWelcome:
-                return "{mascot}: {room} STANDS EMPTY! THE FIRST NIGHT IS COMING! FASTEN YOUR DISCONTENT!"
+                return "{mascot}: {room} stands empty. The first night is coming. Fasten your discontent."
             case .inPlay:
-                return "{mascot}: {event} IS ON! {leader} IS IN FRONT! THE FIRE IS LOUD! THE TABLE IS SET! WE'RE ALL GOING!"
+                return "{mascot}: {event} is on. {leader} is in front, the fire is loud, the table is set, and we're all going."
             case .roomStale:
-                return "{mascot}: {room} HAS BEEN QUIET FOR {days_quiet} DAYS! THE END IS STILL COMING! FASTEN YOUR DISCONTENT!"
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The end is still coming. Fasten your discontent."
             case .standings:
-                return "{mascot}: {room} IS BETWEEN EVENTS! {leader} IS IN FRONT! THE FIRE IS LOUD! THE TABLE IS SET! WE'RE ALL GOING!"
+                return "{mascot}: {room} is between events. {leader} is in front, the fire is loud, the table is set, and we're all going."
             }
         }
     }
@@ -928,10 +942,12 @@ enum MascotEngine {
 
     /// System prompt establishing the mascot's voice rules.
     private static let systemPrompt = """
-    You are a games-night mascot character. Write ONE short message (1-2 sentences, \
+    You are a games-night mascot character. Write ONE short message (1-3 short sentences, \
     under 200 characters) in the mascot's voice. No emojis. No markdown. Just the message \
     text. Match the personality and ideology tone precisely. Be concise, engaging, and \
-    in-character. Never break the fourth wall about being an AI.
+    in-character. Never break the fourth wall about being an AI. Tone is informational and \
+    light — a quiet footer caption, never dramatic. No ALL-CAPS. At most one exclamation \
+    mark.
     """
 
     /// Builds the user-facing prompt with all the context the LLM needs.
@@ -1032,16 +1048,18 @@ enum MascotEngine {
     /// Nil values for the optional fields are simply not substituted —
     /// the template is responsible for omitting the placeholder when
     /// the data is unavailable (most templates reference only the
-    /// guaranteed `mascotName` / `roomName` / `event` / `date` / `time`).
+    /// guaranteed `mascotName` / `roomName`).
     ///
-    /// V0.36 footer-placeholders ({winner}, {leader}, {caller_rank},
-    /// {event_count}, {days_quiet}) and `{event}` use nil-preserving
-    /// substitution: when the underlying value is nil the literal
-    /// `{placeholder}` text is kept in place, and the trailing
-    /// `dropSentencesWithPlaceholders` pass removes any sentence that
-    /// still contains a `{` character. That makes every template
-    /// nil-safe: a template sentence referencing missing data silently
-    /// disappears instead of rendering broken text.
+    /// V0.38 — the nil-preserving + sentence-drop set covers {event},
+    /// {winner}, {leader}, {caller_rank}, {event_count}, {days_quiet},
+    /// {time}, {venue}, {seats_left}, {seats_claimed}. {mascot}, {room},
+    /// {member_count} are always substituted. {date} and {host_note} keep
+    /// `""` substitution (no template references them). When the
+    /// underlying value is nil the literal `{placeholder}` text is kept
+    /// in place, and the trailing `dropSentencesWithPlaceholders` pass
+    /// removes any sentence that still contains a `{` character — so a
+    /// template sentence referencing missing data silently disappears
+    /// instead of rendering broken text.
     private static func interpolate(
         template: String,
         mascotName: String,
@@ -1061,11 +1079,10 @@ enum MascotEngine {
             with: "\(context.memberCount)"
         )
 
-        // V0.36 footer placeholders — nil-preserving so the
-        // sentence-drop pass can excise unreferenceable sentences.
-        // `{event}` joins these because the room-page footer also
-        // passes `activeEventTitle` (which is nil when the room has
-        // no active event).
+        // V0.38 nil-preserving set. The footer never passes
+        // date/venue/seats so legacy logistics placeholders joined
+        // this set in V0.38; the sentence-drop pass excises any
+        // sentence that still contains a `{`.
         if let winner = context.recentWinnerNames.first {
             out = out.replacingOccurrences(of: "{winner}", with: winner)
         }
@@ -1084,45 +1101,30 @@ enum MascotEngine {
         if let title = context.activeEventTitle {
             out = out.replacingOccurrences(of: "{event}", with: title)
         }
-
-        // Date / time. Local timezone, short style.
         if let eventDate {
-            out = out.replacingOccurrences(of: "{date}", with: Self.humanDate(eventDate))
             out = out.replacingOccurrences(of: "{time}", with: Self.humanTime(eventDate))
-        } else {
-            out = out.replacingOccurrences(of: "{date}", with: "")
-            out = out.replacingOccurrences(of: "{time}", with: "")
         }
-
         if let eventVenue, !eventVenue.isEmpty {
             out = out.replacingOccurrences(of: "{venue}", with: " · \(eventVenue)")
-        } else {
-            out = out.replacingOccurrences(of: "{venue}", with: "")
         }
-
-        if let hostNote, !hostNote.isEmpty {
-            out = out.replacingOccurrences(of: "{host_note}", with: " — \(hostNote)")
-        } else {
-            out = out.replacingOccurrences(of: "{host_note}", with: "")
-        }
-
         if let seatsLeft {
             out = out.replacingOccurrences(of: "{seats_left}", with: "\(seatsLeft)")
-        } else {
-            out = out.replacingOccurrences(of: "{seats_left}", with: "")
         }
-
         if let seatsClaimed {
             out = out.replacingOccurrences(of: "{seats_claimed}", with: "\(seatsClaimed)")
-        } else {
-            out = out.replacingOccurrences(of: "{seats_claimed}", with: "")
         }
 
-        // Sentence-drop pass — V0.36. Splits on `[.!?]` boundaries
-        // (keeping the terminator on the segment), drops any segment
-        // that still contains a `{` character, then rejoins with a
-        // single space. Always runs so templates can rely on it even
-        // when all placeholders are populated (no-op in that case).
+        // Date / host-note keep their `""` substitution — no template
+        // references them in V0.38 (0 uses).
+        out = out.replacingOccurrences(of: "{date}", with: "")
+        out = out.replacingOccurrences(of: "{host_note}", with: "")
+
+        // Sentence-drop pass — V0.36 (still the same). Splits on
+        // `[.!?]` boundaries (keeping the terminator on the segment),
+        // drops any segment that still contains a `{` character, then
+        // rejoins with a single space. Always runs so templates can
+        // rely on it even when all placeholders are populated
+        // (no-op in that case).
         out = dropSentencesWithPlaceholders(out)
         return Self.collapseWhitespace(out)
     }

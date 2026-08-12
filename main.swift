@@ -1699,7 +1699,7 @@ runner.run("MascotEngine.generateVoice drops sentences with unpopulated {event}"
 runner.run("MascotEngine.generateVoice substitutes {member_count} for non-zero counts") {
     // V0.36 fixes a latent bug: two existing post-play templates
     // reference {member_count} but the previous interpolate pass
-    // never substituted it.
+    // never substituted it. V0.38 reformats it to "N strong".
     let body = MascotEngine.generateVoice(
         mascotName: "Max",
         roomName: "Friday Night",
@@ -1713,7 +1713,7 @@ runner.run("MascotEngine.generateVoice substitutes {member_count} for non-zero c
             memberNames: []
         )
     )
-    runner.assertTrue(body.contains("5 member"), "member_count substituted")
+    runner.assertTrue(body.contains("5 strong"), "member_count substituted as 'N strong'")
 }
 
 runner.run("MascotEngine.generateVoice appends the winner sentence to postPlayRecap when present") {
@@ -1732,7 +1732,7 @@ runner.run("MascotEngine.generateVoice appends the winner sentence to postPlayRe
         )
     )
     runner.assertTrue(body.contains("Alice"), "winner name surfaced")
-    runner.assertTrue(body.contains("congratulations"), "post-play recap winner sentence appended")
+    runner.assertTrue(body.contains("Nice one"), "post-play recap winner sentence appended")
 }
 
 runner.run("MascotEngine.generateVoice drops winner sentence when no recent winner") {
@@ -1750,7 +1750,7 @@ runner.run("MascotEngine.generateVoice drops winner sentence when no recent winn
         )
     )
     runner.assertFalse(body.contains("{winner}"), "raw placeholder removed")
-    runner.assertFalse(body.contains("congratulations"), "winner sentence dropped when no winner")
+    runner.assertFalse(body.contains("Nice one"), "winner sentence dropped when no winner")
 }
 
 runner.run("MascotEngine.generateVoice renders .roomWelcome when leaderboard is empty") {
@@ -1808,6 +1808,248 @@ runner.run("MascotEngine.RoomContext synthesised init honours the 4-arg contract
     runner.assertNil(ctx.leaderName)
     runner.assertNil(ctx.callerRank)
     runner.assertNil(ctx.eventCount)
+}
+
+// MARK: - MascotEngine V0.38 voice-quality tests
+
+/// Builds a fully-populated `RoomContext` for the V0.38 200-cell
+/// voice-quality tests so every template placeholder has a value.
+private func fullyPopulatedContext() -> MascotEngine.RoomContext {
+    .init(
+        activeEventTitle: "Poker",
+        lastEventDaysAgo: 7,
+        memberCount: 5,
+        memberNames: ["Alice", "Bob", "Carol", "Dave", "Eve"],
+        recentWinnerNames: ["Alice"],
+        leaderName: "Alice",
+        callerRank: 2,
+        eventCount: 12
+    )
+}
+
+runner.run("MascotEngine.generateVoice — all 200 cells render without raw placeholders when fully populated") {
+    let ctx = fullyPopulatedContext()
+    let eventDate = Date(timeIntervalSince1970: 1_700_000_000)
+    for personality in MascotPersonality.allCases {
+        for ideology in MascotPoliticalIdeology.allCases {
+            for kind in [
+                MascotEngine.NotificationKind.briefingOnCreate,
+                .briefing48h,
+                .briefingMorning,
+                .postPlayRecap,
+                .roomWelcome,
+                .inPlay,
+                .roomStale,
+                .standings
+            ] {
+                let body = MascotEngine.generateVoice(
+                    mascotName: "Max",
+                    roomName: "Friday Night",
+                    personality: personality,
+                    ideology: ideology,
+                    kind: kind,
+                    context: ctx,
+                    eventDate: eventDate,
+                    eventVenue: "Back Room",
+                    hostNote: nil,
+                    seatsLeft: 3,
+                    seatsClaimed: 5
+                )
+                runner.assertFalse(
+                    body.contains("{"),
+                    "no raw placeholder (\(personality)×\(ideology)×\(kind))"
+                )
+            }
+        }
+    }
+}
+
+runner.run("MascotEngine.generateVoice — all 200 cells stay <= 200 chars fully populated") {
+    let ctx = fullyPopulatedContext()
+    let eventDate = Date(timeIntervalSince1970: 1_700_000_000)
+    for personality in MascotPersonality.allCases {
+        for ideology in MascotPoliticalIdeology.allCases {
+            for kind in [
+                MascotEngine.NotificationKind.briefingOnCreate,
+                .briefing48h,
+                .briefingMorning,
+                .postPlayRecap,
+                .roomWelcome,
+                .inPlay,
+                .roomStale,
+                .standings
+            ] {
+                let body = MascotEngine.generateVoice(
+                    mascotName: "Max",
+                    roomName: "Friday Night",
+                    personality: personality,
+                    ideology: ideology,
+                    kind: kind,
+                    context: ctx,
+                    eventDate: eventDate,
+                    eventVenue: "Back Room",
+                    hostNote: nil,
+                    seatsLeft: 3,
+                    seatsClaimed: 5
+                )
+                runner.assertTrue(
+                    body.count <= 200,
+                    "length cap (\(personality)×\(ideology)×\(kind)): \(body.count) chars"
+                )
+            }
+        }
+    }
+}
+
+runner.run("MascotEngine.generateVoice — 25 voices are pairwise distinct per kind") {
+    // For each kind, all 25 personality×ideology outputs must be
+    // distinct — no word-swapped form letters.
+    let ctx = fullyPopulatedContext()
+    let eventDate = Date(timeIntervalSince1970: 1_700_000_000)
+    let kinds: [MascotEngine.NotificationKind] = [
+        .briefingOnCreate, .briefing48h, .briefingMorning, .postPlayRecap,
+        .roomWelcome, .inPlay, .roomStale, .standings
+    ]
+    for kind in kinds {
+        var seen: Set<String> = []
+        for personality in MascotPersonality.allCases {
+            for ideology in MascotPoliticalIdeology.allCases {
+                let body = MascotEngine.generateVoice(
+                    mascotName: "Max",
+                    roomName: "Friday Night",
+                    personality: personality,
+                    ideology: ideology,
+                    kind: kind,
+                    context: ctx,
+                    eventDate: eventDate,
+                    eventVenue: "Back Room",
+                    hostNote: nil,
+                    seatsLeft: 3,
+                    seatsClaimed: 5
+                )
+                runner.assertTrue(
+                    seen.insert(body).inserted,
+                    "distinct body (\(kind) — \(personality)×\(ideology))"
+                )
+            }
+        }
+        runner.assertEqual(seen.count, 25)
+    }
+}
+
+runner.run("MascotEngine.generateVoice — unhinged is quiet (no ALL-CAPS, <= 1 !)") {
+    let ctx = fullyPopulatedContext()
+    let eventDate = Date(timeIntervalSince1970: 1_700_000_000)
+    for ideology in MascotPoliticalIdeology.allCases {
+        for kind in [
+            MascotEngine.NotificationKind.briefingOnCreate,
+            .briefing48h,
+            .briefingMorning,
+            .postPlayRecap,
+            .roomWelcome,
+            .inPlay,
+            .roomStale,
+            .standings
+        ] {
+            let body = MascotEngine.generateVoice(
+                mascotName: "Max",
+                roomName: "Friday Night",
+                personality: .unhinged,
+                ideology: ideology,
+                kind: kind,
+                context: ctx,
+                eventDate: eventDate,
+                eventVenue: "Back Room",
+                hostNote: nil,
+                seatsLeft: 3,
+                seatsClaimed: 5
+            )
+            // No run of 3+ uppercase letters (lets "3 AM", "T", etc.
+            // through). Walk the string manually to avoid the Swift
+            // regex literal dependency in this Foundation runner.
+            var foundRun = false
+            var runLength = 0
+            for ch in body {
+                if ch.isUppercase {
+                    runLength += 1
+                    if runLength >= 3 { foundRun = true; break }
+                } else {
+                    runLength = 0
+                }
+            }
+            runner.assertFalse(
+                foundRun,
+                "no ALL-CAPS run (\(MascotPersonality.unhinged)×\(ideology)×\(kind)): \(body)"
+            )
+            // At most one exclamation mark.
+            let bangs = body.filter { $0 == "!" }.count
+            runner.assertTrue(
+                bangs <= 1,
+                "<= 1 ! (\(MascotPersonality.unhinged)×\(ideology)×\(kind)): \(bangs)"
+            )
+        }
+    }
+}
+
+runner.run("MascotEngine.generateVoice — no '(s)' Mad-Libs pattern in any rendered cell") {
+    let ctx = fullyPopulatedContext()
+    let eventDate = Date(timeIntervalSince1970: 1_700_000_000)
+    for personality in MascotPersonality.allCases {
+        for ideology in MascotPoliticalIdeology.allCases {
+            for kind in [
+                MascotEngine.NotificationKind.briefingOnCreate,
+                .briefing48h,
+                .briefingMorning,
+                .postPlayRecap,
+                .roomWelcome,
+                .inPlay,
+                .roomStale,
+                .standings
+            ] {
+                let body = MascotEngine.generateVoice(
+                    mascotName: "Max",
+                    roomName: "Friday Night",
+                    personality: personality,
+                    ideology: ideology,
+                    kind: kind,
+                    context: ctx,
+                    eventDate: eventDate,
+                    eventVenue: "Back Room",
+                    hostNote: nil,
+                    seatsLeft: 3,
+                    seatsClaimed: 5
+                )
+                runner.assertFalse(
+                    body.contains("(s)"),
+                    "no (s) (\(personality)×\(ideology)×\(kind))"
+                )
+            }
+        }
+    }
+}
+
+runner.run("MascotEngine.generateVoice — legacy logistics placeholders drop cleanly when footer renders upcoming event") {
+    // The room-page footer never passes date/venue/seats — the
+    // logistics sentence must disappear cleanly without leaving a
+    // stray "at ." or "left .". Sentence 1 (mascot attribution) must
+    // survive.
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .professional,
+        ideology: .order,
+        kind: .briefingOnCreate,
+        context: .init(
+            activeEventTitle: "Poker",
+            lastEventDaysAgo: nil,
+            memberCount: 4,
+            memberNames: ["Alice"]
+        )
+    )
+    runner.assertEqual(
+        body,
+        "Max: Poker is on the books. The host will run it."
+    )
 }
 
 private func uuidString(_ uuid: UUID) -> String { uuid.uuidString }
