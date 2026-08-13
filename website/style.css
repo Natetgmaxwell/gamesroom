@@ -8,7 +8,10 @@
    - accent     #B08D57  (brass-warm, the ONLY chromatic voice)
    80/20/10 rule: one accent at a time.
    Type: SF system (rounded) default family; serif for display moments only.
-   Mobile-first single column. No tracking. The only JS is animation. */
+   Fluid, adaptive layout. Breakpoints: 480 mobile, 768 tablet, 1024 desktop,
+   1440+ wide. Max content width grows to 1120px on desktop — comfortable,
+   not edge-to-edge. Single column preserved on mobile. No tracking; the only
+   JS is animation. */
 
 :root {
   --bg: #0A0A0B;
@@ -19,7 +22,9 @@
   --accent: #B08D57;
   --accent-wash: rgba(176, 141, 87, 0.10);
   --accent-strong: rgba(176, 141, 87, 0.22);
-  --maxw: 680px;
+  --maxw: 680px;          /* base (mobile-first) */
+  --maxw-desktop: 1120px; /* grows on tablet/desktop */
+  --gutter: 1.5rem;
   --radius: 12px;
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Rounded",
@@ -60,7 +65,7 @@ body {
 
 /* ── Header ───────────────────────────────────────── */
 .site-header {
-  padding: 1.4rem 1.5rem 1.1rem;
+  padding: 1.4rem var(--gutter) 1.1rem;
   border-bottom: 1px solid var(--hairline);
 }
 .brand {
@@ -105,17 +110,23 @@ body {
 main {
   max-width: var(--maxw);
   margin: 0 auto;
-  padding: 2.6rem 1.5rem 4rem;
+  padding: 2.6rem var(--gutter) 4rem;
 }
 .hero {
   display: grid;
   gap: 1.6rem;
   padding: 1.8rem 1.5rem 2.2rem;
-  margin: -1.4rem -1.5rem 2.6rem;
+  margin: -1.4rem calc(-1 * var(--gutter)) 2.6rem;
   background:
     radial-gradient(120% 90% at 50% 0%, var(--accent-wash), transparent 60%);
   border-bottom: 1px solid var(--hairline);
   text-align: center;
+}
+.hero-inner {
+  display: grid;
+  gap: 1.6rem;
+  justify-items: center;
+  align-items: center;
 }
 .hero-icon {
   width: 96px;
@@ -139,7 +150,9 @@ h1 em { font-style: italic; color: var(--accent); }
   font-size: 1.1rem;
   color: var(--text-dim);
   margin-bottom: 1.4rem;
+  max-width: 46ch;
 }
+.hero-copy .lead { margin-bottom: 0; }
 
 /* ── Beta / coming-soon ribbon ────────────────────── */
 .beta {
@@ -155,6 +168,7 @@ h1 em { font-style: italic; color: var(--accent); }
   padding: 0.35rem 0.85rem;
   margin-bottom: 1.2rem;
 }
+.hero-copy .beta { margin-bottom: 0.9rem; }
 .beta .dot {
   width: 7px;
   height: 7px;
@@ -175,6 +189,7 @@ h1 em { font-style: italic; color: var(--accent); }
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   text-align: left;
+  width: 100%;
 }
 .mascot-mark {
   width: 30px;
@@ -200,8 +215,14 @@ h1 em { font-style: italic; color: var(--accent); }
 }
 .mascot .line.fading { transition: opacity 0.4s ease; opacity: 0; }
 
-/* ── Sections / cards ─────────────────────────────── */
+/* ── Sections / cards / features grid ─────────────── */
 section { margin-bottom: 2.4rem; }
+.features {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.4rem;
+}
+.features section { margin-bottom: 0; }
 .card {
   background: var(--surface);
   border: 1px solid var(--hairline);
@@ -210,6 +231,7 @@ section { margin-bottom: 2.4rem; }
   transition: transform 0.45s var(--ease-spring), box-shadow 0.45s ease,
     border-color 0.45s ease;
   cursor: default;
+  height: 100%;
 }
 .card:hover {
   transform: translateY(-4px);
@@ -255,7 +277,6 @@ p { margin-bottom: 0.9rem; }
   transition: transform 0.3s var(--ease-spring);
 }
 .packs li:hover::before { transform: scale(1.5); }
-@media (min-width: 480px) { .packs { grid-template-columns: repeat(2, 1fr); } }
 
 /* general list */
 ul, ol { margin: 0 0 1rem 1.3rem; }
@@ -328,7 +349,7 @@ a:hover { border-bottom-color: var(--accent); color: var(--accent); }
 /* ── Footer ───────────────────────────────────────── */
 .site-footer {
   border-top: 1px solid var(--hairline);
-  padding: 1.6rem 1.5rem 2rem;
+  padding: 1.6rem var(--gutter) 2rem;
   text-align: center;
 }
 .footer-mascot {
@@ -393,8 +414,41 @@ a:hover { border-bottom-color: var(--accent); color: var(--accent); }
 }
 
 /* ── Responsive ───────────────────────────────────── */
-@media (min-width: 480px) {
-  h1 { font-size: 2.6rem; }
-  .hero-icon { width: 112px; height: 112px; border-radius: 26px; }
-  .hero { margin-left: -1.5rem; margin-right: -1.5rem; }
+
+/* Tablet ≥768px — widen the column, two-up descriptive cards */
+@media (min-width: 768px) {
+  main { max-width: var(--maxw-desktop); }
+  .brand { max-width: var(--maxw-desktop); }
+  .hero { text-align: left; }
+  .hero-inner {
+    grid-template-columns: auto 1fr;
+    justify-items: start;
+    gap: 2.2rem;
+    text-align: left;
+  }
+  .hero-icon { margin: 0; }
+  .hero-copy { max-width: 60ch; }
+  .mascot { margin: 0; }
+  .features { grid-template-columns: repeat(2, 1fr); }
+  .features .col-full { grid-column: 1 / -1; }
+  .packs { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Desktop ≥1024px — larger type, wider hero, spacious cards */
+@media (min-width: 1024px) {
+  body { font-size: 18px; }
+  h1 { font-size: 3rem; }
+  .lead { font-size: 1.25rem; }
+  .hero { padding: 3rem 2.2rem 2.6rem; margin-bottom: 3.2rem; }
+  .hero-icon { width: 132px; height: 132px; border-radius: 30px; }
+  .card { padding: 1.7rem 1.6rem; }
+  h2 { font-size: 24px; }
+  .cta { font-size: 17px; padding: 1rem 2rem; }
+}
+
+/* Wide ≥1440px — let the canvas breathe, cap stays comfortable */
+@media (min-width: 1440px) {
+  .hero-inner { gap: 3rem; }
+  .hero-icon { width: 150px; height: 150px; border-radius: 34px; }
+  .features { column-gap: 3rem; }
 }
