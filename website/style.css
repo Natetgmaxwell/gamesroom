@@ -7,11 +7,28 @@
    - hairline   #3D3D40  (mid-gray dividers)
    - accent     #B08D57  (brass-warm, the ONLY chromatic voice)
    80/20/10 rule: one accent at a time.
-   Type: SF system (rounded) default family; serif for display moments only.
+   Type: SF system (rounded) default family; Fraunces (self-hosted) for
+   display moments only. No external CDN — matches the privacy posture.
    Fluid, adaptive layout. Breakpoints: 480 mobile, 768 tablet, 1024 desktop,
    1440+ wide. Max content width grows to 1120px on desktop — comfortable,
    not edge-to-edge. Single column preserved on mobile. No tracking; the only
    JS is animation. */
+
+/* ── Self-hosted display type: Fraunces (Google Fonts, woff2) ── */
+@font-face {
+  font-family: 'Fraunces';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/fraunces-var.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fraunces';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/fraunces-italic-400.woff2') format('woff2');
+}
 
 :root {
   --bg: #0A0A0B;
@@ -29,7 +46,7 @@
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Rounded",
     "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-display: ui-serif, Georgia, "Times New Roman", serif;
+  --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -116,7 +133,8 @@ main {
   display: grid;
   gap: 1.6rem;
   padding: 1.8rem 1.5rem 2.2rem;
-  margin: -1.4rem calc(-1 * var(--gutter)) 2.6rem;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
   background:
     radial-gradient(120% 90% at 50% 0%, var(--accent-wash), transparent 60%);
   border-bottom: 1px solid var(--hairline);
@@ -214,6 +232,86 @@ h1 em { font-style: italic; color: var(--accent); }
   animation: caret-blink 0.9s steps(1) infinite;
 }
 .mascot .line.fading { transition: opacity 0.4s ease; opacity: 0; }
+
+/* ── Full-bleed statements (B1, B2) ───────────────── */
+.statement {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  padding: 3.2rem var(--gutter);
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+}
+.statement h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.9rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin-bottom: 1.1rem;
+}
+.statement p {
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  max-width: 46ch;
+  margin-bottom: 0.9rem;
+}
+.statement p:last-child { margin-bottom: 0; }
+
+/* ── Packs slim strip (no card) ───────────────────── */
+.packs-strip {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  padding: 2.2rem var(--gutter);
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+.packs-strip h2 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+}
+.packs-strip .packs {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.8rem;
+  margin: 0;
+}
+.packs-strip .packs li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+.packs-strip .packs li::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 auto;
+  transition: transform 0.3s var(--ease-spring);
+}
+.packs-strip .packs li:hover::before { transform: scale(1.5); }
+
+/* ── Moral closer ──────────────────────────────────── */
+.moral {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.6rem;
+  text-align: center;
+  padding: 2.5rem 0;
+  color: var(--text);
+}
+.moral .serif { color: var(--accent); font-style: italic; }
+
+/* ── Personas lead-in ──────────────────────────────── */
+.lead-in { margin-bottom: 1.2rem; font-size: 1.05rem; }
 
 /* ── Sections / cards / features grid ─────────────── */
 section { margin-bottom: 2.4rem; }
@@ -467,6 +565,13 @@ a:hover { border-bottom-color: var(--accent); color: var(--accent); }
 
 /* ── Responsive ───────────────────────────────────── */
 
+/* Mobile-first: full-bleed statements center their content */
+.statement { text-align: center; }
+.statement p { margin-left: auto; margin-right: auto; }
+.statement h2 { margin-left: auto; margin-right: auto; }
+.packs-strip .packs { justify-content: center; }
+.packs-strip h2 { text-align: center; }
+
 /* Tablet ≥768px — widen the column, two-up descriptive cards */
 @media (min-width: 768px) {
   main { max-width: var(--maxw-desktop); }
@@ -477,14 +582,22 @@ a:hover { border-bottom-color: var(--accent); color: var(--accent); }
     justify-items: start;
     gap: 2.2rem;
     text-align: left;
+    max-width: var(--maxw-desktop);
+    margin: 0 auto;
   }
   .hero-icon { margin: 0; }
   .hero-copy { max-width: 60ch; }
   .mascot { margin: 0; }
   .features { grid-template-columns: repeat(2, 1fr); }
   .features .col-full { grid-column: 1 / -1; }
-  .packs { grid-template-columns: repeat(4, 1fr); }
   .personas { grid-template-columns: repeat(3, 1fr); }
+  .statement { text-align: left; }
+  .statement p { margin-left: 0; margin-right: 0; }
+  .statement h2 { margin-left: 0; margin-right: 0; }
+  .statement > * { max-width: var(--maxw-desktop); margin-left: auto; margin-right: auto; }
+  .packs-strip h2 { text-align: left; }
+  .packs-strip .packs { justify-content: flex-start; }
+  .packs-strip > * { max-width: var(--maxw-desktop); margin-left: auto; margin-right: auto; }
 }
 
 /* Desktop ≥1024px — larger type, wider hero, spacious cards */
