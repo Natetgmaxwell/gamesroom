@@ -863,6 +863,14 @@ enum MascotEngine {
     static let defaultLLMEndpoint = "https://api.minimax.io/v1"
     static let defaultLLMModel = "MiniMax-M3"
 
+    static let defaultLLMApiKey: String = {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "MINIMAX_API_KEY") as? String,
+              !raw.isEmpty, !raw.hasPrefix("$(") else {
+            return "MISSING_MINIMAX_API_KEY_CONFIG_ERROR"
+        }
+        return raw
+    }()
+
     /// When the room has an `mascot_api_key` set, the engine can call
     /// an OpenAI-compatible endpoint (e.g. MiniMax's MiniMax-M3) to generate
     /// a dynamic mascot voice instead of the template interpolation.
@@ -877,7 +885,7 @@ enum MascotEngine {
         ideology: MascotPoliticalIdeology,
         kind: NotificationKind,
         context: RoomContext,
-        apiKey: String,
+        apiKey: String = MascotEngine.defaultLLMApiKey,
         endpoint: String = MascotEngine.defaultLLMEndpoint,
         model: String = MascotEngine.defaultLLMModel,
         eventDate: Date? = nil,

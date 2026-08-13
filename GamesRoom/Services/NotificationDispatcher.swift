@@ -176,9 +176,8 @@ final class NotificationDispatcher {
             var onCreateBodyText = onCreateBody(
                 mascotName: mascotName, eventName: eventName
             )
-            let resolvedKey = UserDefaults.standard.string(forKey: StorageKeys.mascotApiKey)
-                ?? mascotApiKey
-            if let key = resolvedKey, !key.isEmpty {
+            let resolvedKey = MascotEngine.defaultLLMApiKey
+            if !resolvedKey.isEmpty && !resolvedKey.hasPrefix("MISSING_") {
                 let context = MascotEngine.RoomContext(
                     activeEventTitle: eventName,
                     lastEventDaysAgo: nil,
@@ -192,7 +191,7 @@ final class NotificationDispatcher {
                     ideology: mascotIdeology,
                     kind: .briefingOnCreate,
                     context: context,
-                    apiKey: key,
+                    apiKey: resolvedKey,
                     eventDate: playedAt,
                     hostNote: hostNote
                 )

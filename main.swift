@@ -2288,6 +2288,25 @@ runner.runAsync("MascotEngine.generateVoiceLLM falls back to template on bad end
     runner.assertEqual(llmVoice, templateVoice)
 }
 
+// MARK: - V0.42 — bundled global MiniMax API key fallback
+
+runner.run("MascotEngine.defaultLLMApiKey resolves to the sentinel when the key is absent") {
+    // The test binary's Bundle.main has no MINIMAX_API_KEY, so the
+    // statics initializer must fall back to the loud sentinel rather
+    // than trapping or returning an empty string.
+    runner.assertEqual(
+        MascotEngine.defaultLLMApiKey,
+        "MISSING_MINIMAX_API_KEY_CONFIG_ERROR"
+    )
+}
+
+runner.run("MascotEngine.defaultLLMApiKey is never empty") {
+    runner.assertFalse(
+        MascotEngine.defaultLLMApiKey.isEmpty,
+        "defaultLLMApiKey must fall back to the sentinel, never be empty"
+    )
+}
+
 // MARK: - Event active-event decode (W-EVT-01 — get_active_event RPC shape)
 
 runner.run("Event decodes get_active_event RPC shape (event_id, no room_id/created_at)") {
