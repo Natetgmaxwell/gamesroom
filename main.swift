@@ -2236,6 +2236,58 @@ runner.run("MascotEngine.generateVoice — legacy logistics placeholders drop cl
 
 private func uuidString(_ uuid: UUID) -> String { uuid.uuidString }
 
+// MARK: - MascotEngine V0.40 — MiniMax LLM defaults + fallback
+
+runner.run("MascotEngine default LLM endpoint is MiniMax") {
+    runner.assertEqual(
+        MascotEngine.defaultLLMEndpoint,
+        "https://api.minimax.io/v1"
+    )
+}
+
+runner.run("MascotEngine default LLM model is MiniMax-M3") {
+    runner.assertEqual(
+        MascotEngine.defaultLLMModel,
+        "MiniMax-M3"
+    )
+}
+
+runner.runAsync("MascotEngine.generateVoiceLLM falls back to template on bad endpoint") {
+    // Bogus endpoint that will fail to connect (port 1 is reserved).
+    // The engine must swallow the failure and return the template
+    // output, matching the V0.26 fallback semantics.
+    let mascotName = "Max"
+    let roomName = "Friday Poker"
+    let personality: MascotPersonality = .friendly
+    let ideology: MascotPoliticalIdeology = .centrist
+    let kind: MascotEngine.NotificationKind = .briefingOnCreate
+    let context = MascotEngine.RoomContext(
+        activeEventTitle: "Poker",
+        lastEventDaysAgo: nil,
+        memberCount: 4,
+        memberNames: ["Alice", "Bob"]
+    )
+    let templateVoice = MascotEngine.generateVoice(
+        mascotName: mascotName,
+        roomName: roomName,
+        personality: personality,
+        ideology: ideology,
+        kind: kind,
+        context: context
+    )
+    let llmVoice = await MascotEngine.generateVoiceLLM(
+        mascotName: mascotName,
+        roomName: roomName,
+        personality: personality,
+        ideology: ideology,
+        kind: kind,
+        context: context,
+        apiKey: "dummy",
+        endpoint: "https://127.0.0.1:1"
+    )
+    runner.assertEqual(llmVoice, templateVoice)
+}
+
 // MARK: - Event active-event decode (W-EVT-01 — get_active_event RPC shape)
 
 runner.run("Event decodes get_active_event RPC shape (event_id, no room_id/created_at)") {

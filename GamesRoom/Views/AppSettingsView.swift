@@ -31,6 +31,8 @@ struct AppSettingsView: View {
     // preference, so it lives in app settings (not room settings).
     @AppStorage(StorageKeys.keepScanPhotos) private var keepScanPhotos = false
 
+    @AppStorage(StorageKeys.mascotApiKey) private var mascotApiKey = ""
+
     var body: some View {
         NavigationStack {
             Form {
@@ -44,6 +46,16 @@ struct AppSettingsView: View {
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(.red)
                     }
+                }
+
+                Section {
+                    SecureField("MiniMax API key", text: $mascotApiKey)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                } header: {
+                    Text("Mascot voice (MiniMax)")
+                } footer: {
+                    Text("Used to generate the mascot's LLM voice. Leave empty to use the built-in template.")
                 }
 
                 Section {

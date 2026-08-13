@@ -176,7 +176,9 @@ final class NotificationDispatcher {
             var onCreateBodyText = onCreateBody(
                 mascotName: mascotName, eventName: eventName
             )
-            if let key = mascotApiKey, !key.isEmpty {
+            let resolvedKey = UserDefaults.standard.string(forKey: StorageKeys.mascotApiKey)
+                ?? mascotApiKey
+            if let key = resolvedKey, !key.isEmpty {
                 let context = MascotEngine.RoomContext(
                     activeEventTitle: eventName,
                     lastEventDaysAgo: nil,

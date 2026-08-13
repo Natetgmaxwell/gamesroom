@@ -860,8 +860,11 @@ enum MascotEngine {
 
     // MARK: - LLM-driven voice generation (V0.26 extension)
 
+    static let defaultLLMEndpoint = "https://api.minimax.io/v1"
+    static let defaultLLMModel = "MiniMax-M3"
+
     /// When the room has an `mascot_api_key` set, the engine can call
-    /// an OpenAI-compatible endpoint (e.g. z.ai's glm-4.6) to generate
+    /// an OpenAI-compatible endpoint (e.g. MiniMax's MiniMax-M3) to generate
     /// a dynamic mascot voice instead of the template interpolation.
     /// Falls back to the template if the call fails, times out, or
     /// the key is missing. This implements the V0.26 LLM extension
@@ -875,8 +878,8 @@ enum MascotEngine {
         kind: NotificationKind,
         context: RoomContext,
         apiKey: String,
-        endpoint: String = "https://api.z.ai/api/paas/v4",
-        model: String = "glm-4.6",
+        endpoint: String = MascotEngine.defaultLLMEndpoint,
+        model: String = MascotEngine.defaultLLMModel,
         eventDate: Date? = nil,
         eventVenue: String? = nil,
         hostNote: String? = nil,

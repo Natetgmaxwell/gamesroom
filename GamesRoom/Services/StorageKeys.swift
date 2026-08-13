@@ -34,4 +34,8 @@ enum StorageKeys {
     static func calendarEventIdentifier(eventId: UUID) -> String {
         "calendarEventIdentifier-\(eventId.uuidString)"
     }
+
+    /// Global MiniMax API key for LLM-driven mascot voice. Configured in
+    /// App Settings (not per-room). Empty = template fallback.
+    static let mascotApiKey = "mascotApiKey"
 }
