@@ -244,7 +244,7 @@ struct RoomDetailView: View {
                 roomId: room.id,
                 onSaved: { _ in
                     showingAddEvent = false
-                    Task { await refresh() }
+                    Task { await refresh(force: true) }
                 }
             )
             .environmentObject(roomService)
@@ -272,7 +272,7 @@ struct RoomDetailView: View {
                     eventId: event.id,
                     roomId: room.id,
                     withdrawn: casinoWithdrawn,
-                    onDone: { Task { await refresh() } }
+                    onDone: { Task { await refresh(force: true) } }
                 )
                 .environmentObject(casinoService)
                 .environmentObject(authService)
@@ -289,7 +289,7 @@ struct RoomDetailView: View {
             CAHCardScanSheet(
                 eventId: event.id,
                 roomId: room.id,
-                onDone: { Task { await refresh() } }
+                onDone: { Task { await refresh(force: true) } }
             )
             .environmentObject(scoringService)
             .environmentObject(authService)
@@ -318,7 +318,7 @@ struct RoomDetailView: View {
             await refresh()
         }
         .refreshable {
-            await refresh()
+            await refresh(force: true)
         }
         .alert("Seat action failed", isPresented: $showSeatActionError) {
             Button("OK", role: .cancel) {}
@@ -628,21 +628,21 @@ struct RoomDetailView: View {
     /// members (for the P1.1 roster surface), and the current
     /// season + awards (for the M1.1 `.seasonClose` slot).
     /// Called from `.task` and `.refreshable`.
-    private func refresh() async {
-        async let active: () = loadActiveIfNeeded()
-        async let board: () = loadLeaderboardIfNeeded()
+    private func refresh(force: Bool = false) async {
+        async let active: () = loadActiveIfNeeded(force: force)
+        async let board: () = loadLeaderboardIfNeeded(force: force)
         async let attestations: () = loadAttestations()
-        async let briefingLoad: () = loadBriefingIfNeeded()
-        async let rsvpLoad: () = loadRSVPIfNeeded()
-        async let membersLoad: () = loadMembersIfNeeded()
-        async let seasonLoad: () = loadSeasonIfNeeded()
+        async let briefingLoad: () = loadBriefingIfNeeded(force: force)
+        async let rsvpLoad: () = loadRSVPIfNeeded(force: force)
+        async let membersLoad: () = loadMembersIfNeeded(force: force)
+        async let seasonLoad: () = loadSeasonIfNeeded(force: force)
         async let withdrawalLoad: () = loadMyOpenWithdrawalIfNeeded()
-        async let eventsLoad: [RoomSystemEvent] = roomService.loadSystemEvents(roomId: room.id)
-        async let rsvpGridLoad: () = loadRSVPGridIfNeeded()
-        async let packConfigLoad: () = loadPackConfigsIfNeeded()
-        async let packsLoad: [String] = roomService.loadRoomPacks(roomId: room.id)
-        async let roundsLoad: () = loadRoundsIfNeeded()
-        async let chapterLoad: () = loadChapterLineIfNeeded()
+        async let eventsLoad: [RoomSystemEvent] = roomService.loadSystemEvents(roomId: room.id, force: force)
+        async let rsvpGridLoad: () = loadRSVPGridIfNeeded(force: force)
+        async let packConfigLoad: () = loadPackConfigsIfNeeded(force: force)
+        async let packsLoad: [String] = roomService.loadRoomPacks(roomId: room.id, force: force)
+        async let roundsLoad: () = loadRoundsIfNeeded(force: force)
+        async let chapterLoad: () = loadChapterLineIfNeeded(force: force)
         _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad)
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
@@ -668,80 +668,80 @@ struct RoomDetailView: View {
     /// Loads the chapter line for the active event so the
     /// ceremonial card renders the written title + call-forward.
     /// No-op when there's no active event.
-    private func loadChapterLineIfNeeded() async {
+    private func loadChapterLineIfNeeded(force: Bool = false) async {
         guard let event = activeEvent else { return }
-        await roomService.loadEventChapterLine(eventId: event.id)
+        await roomService.loadEventChapterLine(eventId: event.id, force: force)
     }
 
     /// Loads the per-round breakdown for the active event so the
     /// leaderboard's round history renders. No-op when there's no
     /// active event.
-    private func loadRoundsIfNeeded() async {
+    private func loadRoundsIfNeeded(force: Bool = false) async {
         guard let event = activeEvent else { return }
-        await roomService.loadEventRounds(eventId: event.id)
+        await roomService.loadEventRounds(eventId: event.id, force: force)
     }
 
     /// Loads the per-member RSVP rows for the active event so the
     /// briefing slot's seat grid renders claimed chairs. No-op when
     /// there's no active event.
-    private func loadRSVPGridIfNeeded() async {
+    private func loadRSVPGridIfNeeded(force: Bool = false) async {
         guard let event = activeEvent else { return }
-        await roomService.loadEventRSVPs(eventId: event.id)
+        await roomService.loadEventRSVPs(eventId: event.id, force: force)
     }
 
     /// Loads the room's pack payout overrides so the pack shelf
     /// shows configured payouts and the host scoring sheet uses
     /// them.
-    private func loadPackConfigsIfNeeded() async {
-        await roomService.loadRoomPackConfigs(roomId: room.id)
+    private func loadPackConfigsIfNeeded(force: Bool = false) async {
+        await roomService.loadRoomPackConfigs(roomId: room.id, force: force)
     }
 
     /// Loads the room's current season and (if present) its awards.
     /// Triggered on every refresh so a host declaring a season-close
     /// in another tab surfaces on next pull-to-refresh.
-    private func loadSeasonIfNeeded() async {
-        await roomService.loadCurrentSeason(roomId: room.id)
+    private func loadSeasonIfNeeded(force: Bool = false) async {
+        await roomService.loadCurrentSeason(roomId: room.id, force: force)
         if let season = roomService.cachedCurrentSeason(roomId: room.id) {
-            await roomService.loadSeasonAwards(seasonId: season.id)
+            await roomService.loadSeasonAwards(seasonId: season.id, force: force)
         }
         // W-05 — previous-seasons comparison (US-10). Loaded on
         // every refresh so a host declaring a season-close in
         // another tab surfaces the new ended-season row on the
         // next pull-to-refresh.
-        _ = await roomService.loadSeasonHistory(roomId: room.id)
+        _ = await roomService.loadSeasonHistory(roomId: room.id, force: force)
     }
 
-    private func loadMembersIfNeeded() async {
+    private func loadMembersIfNeeded(force: Bool = false) async {
         // Always re-fetch on refresh so a member who joined after
         // the first paint shows up in the roster without a manual
         // pull-to-refresh.
-        await roomService.loadRoomMembers(roomId: room.id)
+        await roomService.loadRoomMembers(roomId: room.id, force: force)
     }
 
-    private func loadActiveIfNeeded() async {
+    private func loadActiveIfNeeded(force: Bool = false) async {
         if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            await roomService.loadActiveEvent(roomId: room.id)
+            await roomService.loadActiveEvent(roomId: room.id, force: force)
         }
     }
 
-    private func loadLeaderboardIfNeeded() async {
+    private func loadLeaderboardIfNeeded(force: Bool = false) async {
         if roomService.cachedLeaderboard(roomId: room.id).isEmpty {
-            await roomService.loadLeaderboard(roomId: room.id)
+            await roomService.loadLeaderboard(roomId: room.id, force: force)
         }
     }
 
-    private func loadBriefingIfNeeded() async {
+    private func loadBriefingIfNeeded(force: Bool = false) async {
         guard let event = roomService.cachedActiveEvent(roomId: room.id) else { return }
         if roomService.cachedBriefing(eventId: event.id) == nil {
-            await roomService.loadBriefing(eventId: event.id)
+            await roomService.loadBriefing(eventId: event.id, force: force)
         }
     }
 
-    private func loadRSVPIfNeeded() async {
+    private func loadRSVPIfNeeded(force: Bool = false) async {
         guard let event = roomService.cachedActiveEvent(roomId: room.id) else { return }
         // Always re-fetch on refresh so a stale `.claimed` from a
         // previous session is reconciled against the server.
-        await roomService.loadCurrentMemberRSVP(eventId: event.id)
+        await roomService.loadCurrentMemberRSVP(eventId: event.id, force: force)
     }
 
     private func loadAttestations() async {
@@ -776,10 +776,12 @@ struct RoomDetailView: View {
     /// (`showSeatActionError`) presents the localized message
     /// so the user isn't left staring at a silent grid.
     private func claimSeat(eventId: UUID) async {
+        let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .claimed, currentUserId: currentUserId)
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .claimed)
             seatActionError = nil
         } catch {
+            _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
         }
@@ -788,10 +790,12 @@ struct RoomDetailView: View {
     /// Fires `RoomService.upsertEventRSVP(eventId, .declined)`.
     /// Mirror of `claimSeat`.
     private func declineSeat(eventId: UUID) async {
+        let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .declined, currentUserId: currentUserId)
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .declined)
             seatActionError = nil
         } catch {
+            _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
         }
@@ -802,10 +806,12 @@ struct RoomDetailView: View {
     /// the open pool. Same RPC as claim/decline; the server treats
     /// `.unclaimed` as "no response" so the seat counts as open.
     private func releaseSeat(eventId: UUID) async {
+        let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .unclaimed, currentUserId: currentUserId)
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .unclaimed)
             seatActionError = nil
         } catch {
+            _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
         }

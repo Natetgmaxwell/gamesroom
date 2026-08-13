@@ -64,6 +64,24 @@ final class RoomService: ObservableObject {
         self.store = store
     }
 
+    /// Cache freshness window. Loads within this window reuse the
+    /// cached value instead of hitting the network. 30s keeps the
+    /// room page snappy on re-appear while still reconciling against
+    /// the server on pull-to-refresh (which passes `force: true`).
+    private let cacheTTL: TimeInterval = 30
+
+    /// Last successful fetch time per cache key. Keys are
+    /// "loadName:entityId". Used by `isFresh(_:)`.
+    private var cacheTimestamps: [String: Date] = [:]
+
+    /// True when the cache entry for `key` was fetched within
+    /// `cacheTTL` and is therefore safe to reuse without a network
+    /// round-trip.
+    private func isFresh(_ key: String) -> Bool {
+        guard let ts = cacheTimestamps[key] else { return false }
+        return Date().timeIntervalSince(ts) < cacheTTL
+    }
+
     // MARK: - Published state
 
     /// The rooms list, in display order. Mirrors the `get_my_rooms`
@@ -267,10 +285,13 @@ final class RoomService: ObservableObject {
     /// cached value (which may be `nil` for rooms with no recent
     /// activity). Called from `RoomDetailView.task`.
     @discardableResult
-    func loadActiveEvent(roomId: UUID) async -> Event? {
+    func loadActiveEvent(roomId: UUID, force: Bool = false) async -> Event? {
+        let key = "activeEvent:\(roomId.uuidString)"
+        if !force, isFresh(key) { return activeEventByRoom[roomId] }
         do {
             let event = try await store.fetchActiveEvent(roomId: roomId)
             self.activeEventByRoom[roomId] = event
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return event
         } catch {
@@ -283,10 +304,13 @@ final class RoomService: ObservableObject {
     /// Returns the cached value. Called from `RoomDetailView.task`
     /// when an active event is present.
     @discardableResult
-    func loadBriefing(eventId: UUID) async -> BriefingSummary? {
+    func loadBriefing(eventId: UUID, force: Bool = false) async -> BriefingSummary? {
+        let key = "briefing:\(eventId.uuidString)"
+        if !force, isFresh(key) { return briefingByEvent[eventId] }
         do {
             let briefing = try await store.fetchBriefing(eventId: eventId)
             self.briefingByEvent[eventId] = briefing
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return briefing
         } catch {
@@ -302,10 +326,13 @@ final class RoomService: ObservableObject {
     /// season). Called from `RoomDetailView.task` alongside the
     /// active-event + briefing loads.
     @discardableResult
-    func loadCurrentSeason(roomId: UUID) async -> Season? {
+    func loadCurrentSeason(roomId: UUID, force: Bool = false) async -> Season? {
+        let key = "currentSeason:\(roomId.uuidString)"
+        if !force, isFresh(key) { return currentSeasonByRoom[roomId] }
         do {
             let season = try await store.fetchCurrentSeason(roomId: roomId)
             self.currentSeasonByRoom[roomId] = season
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return season
         } catch {
@@ -320,10 +347,13 @@ final class RoomService: ObservableObject {
     /// layer applies the recipient-check before rendering, in
     /// case the server-side contract regresses.
     @discardableResult
-    func loadSeasonAwards(seasonId: UUID) async -> [SeasonAward] {
+    func loadSeasonAwards(seasonId: UUID, force: Bool = false) async -> [SeasonAward] {
+        let key = "seasonAwards:\(seasonId.uuidString)"
+        if !force, isFresh(key) { return awardsBySeason[seasonId] ?? [] }
         do {
             let rows = try await store.fetchSeasonAwards(seasonId: seasonId)
             self.awardsBySeason[seasonId] = rows
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return rows
         } catch {
@@ -342,6 +372,8 @@ final class RoomService: ObservableObject {
         self.currentSeasonByRoom[roomId] = closed
         self.awardsBySeason[closed.id] = []
         self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "currentSeason:\(roomId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "seasonAwards:\(closed.id.uuidString)")
         // The RPC opens the next season; refresh the cache so the
         // page transitions out of `.seasonClose` on next load.
         if let next = try? await store.fetchCurrentSeason(roomId: roomId) {
@@ -354,10 +386,13 @@ final class RoomService: ObservableObject {
     /// cached value (possibly empty). Called from
     /// `RoomDetailView.task`.
     @discardableResult
-    func loadLeaderboard(roomId: UUID) async -> [LeaderboardEntry] {
+    func loadLeaderboard(roomId: UUID, force: Bool = false) async -> [LeaderboardEntry] {
+        let key = "leaderboard:\(roomId.uuidString)"
+        if !force, isFresh(key) { return leaderboardByRoom[roomId] ?? [] }
         do {
             let rows = try await store.fetchLeaderboard(roomId: roomId)
             self.leaderboardByRoom[roomId] = rows
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return rows
         } catch {
@@ -371,10 +406,13 @@ final class RoomService: ObservableObject {
     /// and from `RoomSettingsSheet` when the host opens the members
     /// section.
     @discardableResult
-    func loadRoomMembers(roomId: UUID) async -> [Member] {
+    func loadRoomMembers(roomId: UUID, force: Bool = false) async -> [Member] {
+        let key = "roomMembers:\(roomId.uuidString)"
+        if !force, isFresh(key) { return membersByRoom[roomId] ?? [] }
         do {
             let rows = try await store.fetchRoomMembers(roomId: roomId)
             self.membersByRoom[roomId] = rows
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return rows
         } catch {
@@ -389,6 +427,7 @@ final class RoomService: ObservableObject {
     func setMemberTeam(roomId: UUID, memberId: UUID, team: String?) async throws {
         try await store.setMemberTeam(roomId: roomId, memberId: memberId, team: team)
         self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "roomMembers:\(roomId.uuidString)")
         if var roster = membersByRoom[roomId],
            let idx = roster.firstIndex(where: { $0.userId == memberId }) {
             roster[idx] = Member(
@@ -411,10 +450,13 @@ final class RoomService: ObservableObject {
     /// `RoomDetailView` when the leaderboard's per-round section
     /// renders.
     @discardableResult
-    func loadEventRounds(eventId: UUID) async -> [EventRound] {
+    func loadEventRounds(eventId: UUID, force: Bool = false) async -> [EventRound] {
+        let key = "eventRounds:\(eventId.uuidString)"
+        if !force, isFresh(key) { return roundsByEvent[eventId] ?? [] }
         do {
             let rows = try await store.fetchEventRounds(eventId: eventId)
             self.roundsByEvent[eventId] = rows
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return rows
         } catch {
@@ -434,10 +476,13 @@ final class RoomService: ObservableObject {
     /// `RoomDetailView.task` so the slot rotates to `.claimed` /
     /// `.declined` / `.upcoming` per the V0.8 state machine.
     @discardableResult
-    func loadCurrentMemberRSVP(eventId: UUID) async -> MemberRSVPState {
+    func loadCurrentMemberRSVP(eventId: UUID, force: Bool = false) async -> MemberRSVPState {
+        let key = "currentMemberRSVP:\(eventId.uuidString)"
+        if !force, isFresh(key) { return rsvpByEvent[eventId] ?? .unclaimed }
         do {
             let state = try await store.fetchCurrentMemberRSVP(eventId: eventId)
             self.rsvpByEvent[eventId] = state
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return state
         } catch {
@@ -470,6 +515,9 @@ final class RoomService: ObservableObject {
         let row = try await store.upsertEventRSVP(eventId: eventId, state: state)
         self.rsvpByEvent[eventId] = row.state
         self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "eventRSVPs:\(eventId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "briefing:\(eventId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "currentMemberRSVP:\(eventId.uuidString)")
         // Refresh the seat-grid rows + briefing summary so the
         // BriefingSlot's seat grid and the briefing seat count
         // re-render without a manual pull-to-refresh.
@@ -478,8 +526,9 @@ final class RoomService: ObservableObject {
         // live path would stay stale after every claim/decline/
         // release. Both caches are `@Published`, so the view
         // re-renders automatically.
-        _ = await loadEventRSVPs(eventId: eventId)
-        _ = await loadBriefing(eventId: eventId)
+        async let rsvps: () = loadEventRSVPs(eventId: eventId)
+        async let briefing: () = loadBriefing(eventId: eventId)
+        _ = await (rsvps, briefing)
         // P1.3 — re-schedule with the new cadence. Reads the
         // matching event from the cache to surface the name +
         // playedAt; falls back to the row's roomId for the
@@ -528,6 +577,7 @@ final class RoomService: ObservableObject {
             packSlug: packSlug
         )
         self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "activeEvent:\(roomId.uuidString)")
         // Eagerly refresh the active-event cache so the parent's
         // post-create flow doesn't need a second round-trip.
         _ = await loadActiveEvent(roomId: roomId)
@@ -581,6 +631,7 @@ final class RoomService: ObservableObject {
         try await store.updateEventMemberFields(eventId: eventId, note: note, venue: venue)
         self.lastError = nil
         if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
+            cacheTimestamps.removeValue(forKey: "activeEvent:\(event.roomId.uuidString)")
             _ = await loadActiveEvent(roomId: event.roomId)
             // T1.1 — keep the calendar row in sync with venue/note
             // edits. Reads the post-reload event so the row carries
@@ -611,6 +662,9 @@ final class RoomService: ObservableObject {
         leaderboardByRoom[roomId] = []
         currentSeasonByRoom[roomId] = nil
         seasonHistoryByRoom[roomId] = []
+        for key in cacheTimestamps.keys where key.contains(roomId.uuidString) {
+            cacheTimestamps.removeValue(forKey: key)
+        }
         await refresh()
     }
 
@@ -691,10 +745,13 @@ final class RoomService: ObservableObject {
 
     /// W2.6 — loads the chapter line for one event into the cache.
     @discardableResult
-    func loadEventChapterLine(eventId: UUID) async -> ChapterLine? {
+    func loadEventChapterLine(eventId: UUID, force: Bool = false) async -> ChapterLine? {
+        let key = "eventChapterLine:\(eventId.uuidString)"
+        if !force, isFresh(key) { return chapterLineByEvent[eventId] }
         do {
             let line = try await store.fetchEventChapterLine(eventId: eventId)
             self.chapterLineByEvent[eventId] = line
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return line
         } catch {
@@ -715,6 +772,7 @@ final class RoomService: ObservableObject {
     func setSeasonSubtitle(roomId: UUID, subtitle: String?) async throws {
         try await store.setSeasonSubtitle(roomId: roomId, subtitle: subtitle)
         self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "currentSeason:\(roomId.uuidString)")
         _ = await loadCurrentSeason(roomId: roomId)
     }
 
@@ -740,6 +798,60 @@ final class RoomService: ObservableObject {
         rsvpByEvent[eventId] ?? .unclaimed
     }
 
+    /// Optimistically applies an RSVP state change to the local caches
+    /// (rsvpByEvent, eventRSVPsByEvent, briefingByEvent) so the UI
+    /// reflects the action instantly, before the RPC round-trip. Returns
+    /// the previous RSVP state so the caller can roll back on failure.
+    @discardableResult
+    func applyOptimisticRSVP(eventId: UUID, state: MemberRSVPState, currentUserId: UUID?) -> MemberRSVPState {
+        let previous = rsvpByEvent[eventId] ?? .unclaimed
+        rsvpByEvent[eventId] = state
+
+        if let uid = currentUserId, var rows = eventRSVPsByEvent[eventId] {
+            if let idx = rows.firstIndex(where: { $0.memberId == uid }) {
+                rows[idx] = EventRSVP(
+                    eventId: eventId,
+                    memberId: uid,
+                    displayName: rows[idx].displayName,
+                    state: state
+                )
+            } else {
+                rows.append(EventRSVP(
+                    eventId: eventId,
+                    memberId: uid,
+                    displayName: "You",
+                    state: state
+                ))
+            }
+            eventRSVPsByEvent[eventId] = rows
+        }
+
+        if var b = briefingByEvent[eventId] {
+            let claimed = b.seatsClaimed
+            let declined = b.seatsDeclined
+            let unclaimed = b.seatsUnclaimed
+            switch (previous, state) {
+            case (.unclaimed, .claimed):
+                b = BriefingSummary(eventId: b.eventId, roomId: b.roomId, seatsTotal: b.seatsTotal, seatsClaimed: claimed + 1, seatsDeclined: declined, seatsUnclaimed: max(0, unclaimed - 1))
+            case (.unclaimed, .declined):
+                b = BriefingSummary(eventId: b.eventId, roomId: b.roomId, seatsTotal: b.seatsTotal, seatsClaimed: claimed, seatsDeclined: declined + 1, seatsUnclaimed: max(0, unclaimed - 1))
+            case (.claimed, .unclaimed):
+                b = BriefingSummary(eventId: b.eventId, roomId: b.roomId, seatsTotal: b.seatsTotal, seatsClaimed: max(0, claimed - 1), seatsDeclined: declined, seatsUnclaimed: unclaimed + 1)
+            case (.claimed, .declined):
+                b = BriefingSummary(eventId: b.eventId, roomId: b.roomId, seatsTotal: b.seatsTotal, seatsClaimed: max(0, claimed - 1), seatsDeclined: declined + 1, seatsUnclaimed: unclaimed)
+            case (.declined, .unclaimed):
+                b = BriefingSummary(eventId: b.eventId, roomId: b.roomId, seatsTotal: b.seatsTotal, seatsClaimed: claimed, seatsDeclined: max(0, declined - 1), seatsUnclaimed: unclaimed + 1)
+            case (.declined, .claimed):
+                b = BriefingSummary(eventId: b.eventId, roomId: b.roomId, seatsTotal: b.seatsTotal, seatsClaimed: claimed + 1, seatsDeclined: max(0, declined - 1), seatsUnclaimed: unclaimed)
+            default:
+                break
+            }
+            briefingByEvent[eventId] = b
+        }
+
+        return previous
+    }
+
     /// Cached current season for `roomId`. `nil` only when the
     /// room has never opened a season.
     func cachedCurrentSeason(roomId: UUID) -> Season? {
@@ -757,10 +869,13 @@ final class RoomService: ObservableObject {
     /// value (possibly empty) so the view renders without
     /// waiting on the network.
     @discardableResult
-    func loadSeasonHistory(roomId: UUID) async -> [SeasonHistoryEntry] {
+    func loadSeasonHistory(roomId: UUID, force: Bool = false) async -> [SeasonHistoryEntry] {
+        let key = "seasonHistory:\(roomId.uuidString)"
+        if !force, isFresh(key) { return seasonHistoryByRoom[roomId] ?? [] }
         do {
             let rows = try await store.fetchSeasonHistory(roomId: roomId)
             self.seasonHistoryByRoom[roomId] = rows
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return rows
         } catch {
@@ -787,10 +902,13 @@ final class RoomService: ObservableObject {
     /// Fetch the room's enabled pack slugs from the store and cache
     /// the result. Called from the Operations sub-sheet's `.task`.
     @discardableResult
-    func loadRoomPacks(roomId: UUID) async -> [String] {
+    func loadRoomPacks(roomId: UUID, force: Bool = false) async -> [String] {
+        let key = "roomPacks:\(roomId.uuidString)"
+        if !force, isFresh(key) { return roomPacksByRoom[roomId] ?? [] }
         do {
             let slugs = try await store.fetchRoomPacks(roomId: roomId)
             self.roomPacksByRoom[roomId] = slugs
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return slugs
         } catch {
@@ -806,6 +924,7 @@ final class RoomService: ObservableObject {
         try await store.updateRoomPacks(roomId: roomId, slugs: slugs)
         self.roomPacksByRoom[roomId] = slugs
         self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "roomPacks:\(roomId.uuidString)")
     }
 
     /// Cached unread system events for `roomId`, possibly empty.
@@ -816,11 +935,14 @@ final class RoomService: ObservableObject {
     /// Fetch the room's unread system events and cache them.
     /// Called from `RoomDetailView`'s `.task`.
     @discardableResult
-    func loadSystemEvents(roomId: UUID) async -> [RoomSystemEvent] {
+    func loadSystemEvents(roomId: UUID, force: Bool = false) async -> [RoomSystemEvent] {
+        let key = "systemEvents:\(roomId.uuidString)"
+        if !force, isFresh(key) { return systemEventsByRoom[roomId] ?? [] }
         do {
             let events = try await store.fetchRoomSystemEvents(roomId: roomId)
             let unread = events.filter { $0.acknowledgedAt == nil }
             self.systemEventsByRoom[roomId] = unread
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return unread
         } catch {
@@ -835,6 +957,7 @@ final class RoomService: ObservableObject {
             try await store.acknowledgeSystemEvent(eventId: eventId)
             self.systemEventsByRoom[roomId]?.removeAll { $0.id == eventId }
             self.lastError = nil
+            cacheTimestamps.removeValue(forKey: "systemEvents:\(roomId.uuidString)")
         } catch {
             self.lastError = (error as NSError).localizedDescription
         }
@@ -846,10 +969,13 @@ final class RoomService: ObservableObject {
     /// Called from `RoomDetailView.task` alongside the briefing
     /// load so the seat grid renders with real claim data.
     @discardableResult
-    func loadEventRSVPs(eventId: UUID) async -> [EventRSVP] {
+    func loadEventRSVPs(eventId: UUID, force: Bool = false) async -> [EventRSVP] {
+        let key = "eventRSVPs:\(eventId.uuidString)"
+        if !force, isFresh(key) { return eventRSVPsByEvent[eventId] ?? [] }
         do {
             let rows = try await store.fetchEventRSVPs(eventId: eventId)
             self.eventRSVPsByEvent[eventId] = rows
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return rows
         } catch {
@@ -869,10 +995,13 @@ final class RoomService: ObservableObject {
     /// Called from `RoomDetailView.task` so the pack shelf and the
     /// host scoring sheet read the configured payouts.
     @discardableResult
-    func loadRoomPackConfigs(roomId: UUID) async -> [RoomPackConfig] {
+    func loadRoomPackConfigs(roomId: UUID, force: Bool = false) async -> [RoomPackConfig] {
+        let key = "roomPackConfigs:\(roomId.uuidString)"
+        if !force, isFresh(key) { return packConfigsByRoom[roomId] ?? [] }
         do {
             let rows = try await store.fetchRoomPackConfigs(roomId: roomId)
             self.packConfigsByRoom[roomId] = rows
+            self.cacheTimestamps[key] = Date()
             self.lastError = nil
             return rows
         } catch {
@@ -906,6 +1035,7 @@ final class RoomService: ObservableObject {
         configs.append(RoomPackConfig(roomId: roomId, packSlug: packSlug, winPoints: winPoints))
         self.packConfigsByRoom[roomId] = configs
         self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "roomPackConfigs:\(roomId.uuidString)")
     }
 
     // MARK: - Drowning opt-in (V0.9 Wave 1 Slice 1.1)
