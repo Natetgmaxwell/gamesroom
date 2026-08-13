@@ -91,7 +91,7 @@ struct SeasonStatCardView: View {
 
             // One mascot line — the season's judgment in the room's voice.
             Text(card.mascotLine)
-                .font(.system(size: 14, weight: .regular, design: .serif))
+                .font(Font.custom("Fraunces", size: 14))
                 .italic()
                 .foregroundStyle(StatCardPalette.cream.opacity(0.85))
                 .padding(.bottom, 20)
