@@ -1,4 +1,4 @@
-# Games Room — Narrative Spine
+# Games Room: Narrative Spine
 
 > Status: canonical. One doc that names the story Games Room tells, the people it
 > serves, and the arc it promises. Feeds the landing page, onboarding, and social
@@ -13,20 +13,35 @@
 
 ## 1. The hook
 
-**Your friend group, with a memory.**
+**Plans the night. Gets out of the way.**
 
-Nine words. It names the reader's people, names the gap (most groups have no
-memory), and promises the durable thing: an arc. It is the warm face of the
-counter-trend. The app does not collect more friends. It keeps the friends you
-already have, and remembers the nights.
+Seven words. The locked hero (A+C directive, 2026-08-13). It names the product
+(the app plans nights) and the refusal (it doesn't run them), and it carries the
+whole counter-trend thesis without naming the trend. It teaches: a non-tech
+reader hears what Games Room does. The sub-headline adds the cultural claim:
+
+**Real tables. Real friends. No feed.**
+
+The pairing is locked by user directive combining Option A (the product claim)
+and Option C (the cultural claim): A teaches, C argues. Together they land as
+"this is the product AND this is why your life is better for it." Two opens in
+one story, no feed on either. [Source: NARRATIVE_HEADLINE_DIRECTIVE.md, 2026-08-13]
 
 Alternates, kept for A/B by surface:
 
-- "Plans the night. Gets out of the way." (the counter-trend claim). A/B on the
-  app-store description.
-- "Real tables. Real friends." (plainest). A/B on social.
-- The website hero keeps "Your games night, counted." (the established landing
-  voice). [Source: V0.43_GAMES_ROOM_WEBSITE_SPEC.md]
+- "Real tables > real feed." (the cultural claim alone). The default hero for
+  social posts, where the canvas is too small to teach. [Source:
+  NARRATIVE_HEADLINE_DIRECTIVE.md]
+- "Your friend group, with a memory." (the arc claim). The warm face of the
+  counter-trend. Strong for the ledger/season story.
+- "Your games night, counted." (the established landing voice). Kept on the
+  website hero until the V0.55 deploy lifts this spine in. [Source:
+  V0.43_GAMES_ROOM_WEBSITE_SPEC.md]
+
+Carry-down per surface (locked): website hero leads Pairing 1 (H1 teaches);
+in-app first-run leads the sub-headline and closes screen 3 with the H1;
+social leads the H1 as topic-sentence and the sub-headline as punchline.
+[Source: NARRATIVE_HEADLINE_DIRECTIVE.md]
 
 ## 2. The one-line thesis
 
@@ -111,25 +126,27 @@ Each is a fact that lifts the story off the page.
 
 - "Built for the friend who finds nights harder than everyone else." (the quiet
   member). [Source: concepts/2026-07-27-games-room-profile-aware-social-design]
-- "Your friend group, with a memory." (the hook).
+- "Your friend group, with a memory." (the arc claim, kept for the ledger
+  story).
 - "12 chairs, one season, no wipes." (the small bounded group, the continuity
   engine). [Source: originals/2026-07-07-games-room-mvp-scope-1c6aaa]
-- "Plans the night. Gets out of the way." (the counter-trend). [Source:
+- "Plans the night. Gets out of the way." (the locked hero). [Source:
   originals/2026-08-13-games-room-v053-vision-memo]
-- "Real tables > real feed." (the anti-feed). [Source:
+- "Real tables > real feed." (the cultural claim). [Source:
   COUNTER_TREND_BRIEF_OUTCOMES.md]
 
 ## 9. The message triangle
 
 Same spine, three openings.
 
-- **(a) Hero / first-time visitor.** Lead with the hook, then the thesis, then
-  the promise moments. "Your friend group, with a memory. Games Room plans the
-  night so you can live it. Three taps and the night is on."
+- **(a) Hero / first-time visitor.** Lead with the hook, then the sub-headline,
+  then the promise moments. "Plans the night. Gets out of the way. Real tables.
+  Real friends. No feed. Three taps and the night is on."
 - **(b) Onboarding step 1 in-app.** Lead with the action and the payoff. "Set
   the night. The room remembers it." The host's three-tap job, made concrete.
-- **(c) Instagram / X.** The lift-off with no setup. "Real tables > real feed."
-  Or the arc beat: "Week 12: a friend-of-friend showed up and didn't feel new."
+- **(c) Instagram / X.** The cultural claim with no setup. "Real tables > real
+  feed." Or the arc beat: "Week 12: a friend-of-friend showed up and didn't feel
+  new."
 
 ---
 
