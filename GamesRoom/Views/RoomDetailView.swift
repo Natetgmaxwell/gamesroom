@@ -594,7 +594,9 @@ struct RoomDetailView: View {
                 longestStreak: 0
             ),
             awards: publicAwards,
-            mascotLine: ""
+            mascotLine: season.ordinal.isMultiple(of: 2)
+                ? "The deposit is the promise. The night is the payoff."
+                : "You bring the chips. It brings the memory."
         )
     }
 
