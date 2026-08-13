@@ -526,8 +526,8 @@ final class RoomService: ObservableObject {
         // live path would stay stale after every claim/decline/
         // release. Both caches are `@Published`, so the view
         // re-renders automatically.
-        async let rsvps: () = loadEventRSVPs(eventId: eventId)
-        async let briefing: () = loadBriefing(eventId: eventId)
+        async let rsvps = loadEventRSVPs(eventId: eventId)
+        async let briefing = loadBriefing(eventId: eventId)
         _ = await (rsvps, briefing)
         // P1.3 — re-schedule with the new cadence. Reads the
         // matching event from the cache to surface the name +
