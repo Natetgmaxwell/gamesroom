@@ -39,8 +39,11 @@ enum Theme {
     // (rounded SF) family — keeps the app readable in motion and at table
     // distance.
     enum Typography {
-        /// Display — serif, ceremonial card chapter title (28pt).
-        static let display = Font.system(size: 28, weight: .regular, design: .serif)
+        /// Display — Fraunces, ceremonial card chapter title (28pt).
+        /// Same face as the website's display serif. Wonky, warm, hand-made.
+        static let display = Font.custom("Fraunces", size: 28)
+        /// Display italic — Fraunces italic, the "kept." / "compounds." moments.
+        static let displayItalic = Font.custom("Fraunces", size: 28).italic()
         /// Title — default family, room / section title (22pt).
         static let title = Font.system(size: 22, weight: .semibold, design: .default)
         /// Body — default family, the regular reading voice (17pt).
