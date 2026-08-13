@@ -246,19 +246,19 @@ recipient moments. Use the opening that best matches the message triangle
 slot: hero for a cold invitee, onboarding for the first-time flow, arc for
 the returning member. [Source: NARRATIVE_SPINE.md §9]
 
-### Host (invite) — the onboarding opening
+### Host (invite): the onboarding opening
 
 1. The night plans itself now
 2. Three taps. The night is on.
 3. Your room is waiting. No one to chase.
 
-### Invitee (first-time) — the hero opening
+### Invitee (first-time): the hero opening
 
 4. Your seat's claimed. Just walk in.
 5. Real tables. Real friends. No feed.
 6. Someone set the table. You're in.
 
-### Returning (season-end) — the arc opening
+### Returning (season-end): the arc opening
 
 7. The season just closed. Here's how it went.
 8. One season down. The ledger remembers.
