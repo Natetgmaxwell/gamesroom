@@ -86,6 +86,9 @@ struct CAHCardScanSheet: View {
             .frame(maxHeight: .infinity)
 
             VStack(spacing: 8) {
+                Text("Counting your CAH cards — cards you won this session. Each black card is a point.")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
                 Text("Point at your stack of black cards")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)

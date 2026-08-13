@@ -636,7 +636,7 @@ struct RoomDetailView: View {
                         : nil,
                     isHero: true,
                     headerMode: .inPlay,
-                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips",
+                    scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
                     workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
                     onManualSettle: manualSettleAction(for: event),
                     // V0.50 — host gets a one-tap-behind manual
@@ -663,7 +663,7 @@ struct RoomDetailView: View {
                         : nil,
                     isHero: true,
                     headerMode: .tonightEvent,
-                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
+                    scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips"
                 )
 
             // M1.1 — `.seasonClose` renders the awards card with the
@@ -698,7 +698,7 @@ struct RoomDetailView: View {
                         : nil,
                     isHero: true,
                     headerMode: .settleRound,
-                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips",
+                    scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
                     workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
                     onManualSettle: manualSettleAction(for: event),
                     // V0.50 — host gets a one-tap-behind manual
@@ -1507,10 +1507,11 @@ private struct WitnessSlot: View {
     /// the pre-M1.1 call sites. New call sites for
     /// `.tonightEvent` / `.settleRound` set this explicitly.
     var headerMode: HeaderMode = .inPlay
-    /// V0.34 — the scan button's label. Defaults to "Scan your
-    /// chips" (the casino wording); CAH call sites pass
-    /// "Scan your cards" so the button matches the pack.
-    var scanTitle: String = "Scan your chips"
+    /// V0.52 — the scan button's label. Defaults to
+    /// "Settle casino chips" so the pack-named convention matches
+    /// if a future call site omits it; CAH call sites pass
+    /// "Count your CAH cards" so the button names the pack.
+    var scanTitle: String = "Settle casino chips"
     /// V0.46 — working hand (withdrawn chips) surfaced in the
     /// hero badge. nil = don't render (CAH / not-yet-withdrawn).
     var workingHand: Int? = nil
@@ -1959,13 +1960,13 @@ private struct SystemBanner: View {
     }
 }
 
-// MARK: - Chips on the table (V0.51)
+// MARK: - Chips withdrawn (V0.52)
 
 /// Per-member working-hand readout for active casino play. Host
 /// gets a "To dispense" zone (reusing the V0.47 dispense rows)
-/// above the member rows, plus each member's bank balance in a
-/// trailing muted column. Members see working hands only —
-/// balances are host-visible.
+/// above the member rows; every role sees the per-member working
+/// hand only — no bank balances rendered (the `points_balance`
+/// stays in the model and the RPC, untouched).
 private struct ChipsOnTableSection: View {
     let hands: [WorkingHand]
     let isHost: Bool
@@ -1977,10 +1978,13 @@ private struct ChipsOnTableSection: View {
             HStack(spacing: 8) {
                 Image(systemName: Theme.Icon.circleHexagongridFill)
                     .foregroundStyle(Theme.Palette.accent)
-                Text("Chips on the table")
+                Text("Chips withdrawn")
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText)
             }
+            Text("Chips moved from the bank for tonight")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             if isHost, !pendingWithdrawals.isEmpty {
                 HostWithdrawalsSection(
                     withdrawals: pendingWithdrawals,
@@ -1999,11 +2003,6 @@ private struct ChipsOnTableSection: View {
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     }
                     Spacer()
-                    if isHost {
-                        Text("\(hand.pointsBalance) bank")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    }
                     Text("\(hand.workingHand) pts")
                         .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Theme.Palette.accent)
