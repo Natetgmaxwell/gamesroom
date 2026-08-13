@@ -367,9 +367,8 @@ struct RoomPage: View {
 
     private func lastViewedHero(for room: Room) -> some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            Text("CONTINUE")
+            Text("Continue")
                 .font(Theme.Typography.footnote)
-                .tracking(1.4)
                 .foregroundStyle(Theme.Palette.accent)
 
             Text(room.name)
@@ -412,7 +411,6 @@ struct RoomPage: View {
         HStack {
             Text(title)
                 .font(Theme.Typography.caption.weight(.semibold))
-                .tracking(1.2)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             Spacer()
             Text("\(roomService.rooms.count)")
