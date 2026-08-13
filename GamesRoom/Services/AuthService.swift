@@ -72,13 +72,11 @@ final class AuthService: ObservableObject {
         guard let current = currentUser else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != current.displayName else { return }
-        let _: User = try await SupabaseClientProvider.shared
+        _ = try await SupabaseClientProvider.shared
             .from("users")
             .update(["display_name": trimmed])
             .eq("id", value: current.id.uuidString)
-            .single()
             .execute()
-            .value
         // Mirror the change in the local cache so the UI updates
         // without a network round-trip. User only has id + displayName
         // (per GamesRoom/Models/User.swift v0.8).
