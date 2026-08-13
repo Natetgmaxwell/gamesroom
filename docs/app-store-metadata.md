@@ -54,8 +54,8 @@
 
 ## Support URL
 
-- **Required:** `https://hydrolyze.app/games-room/support` (TBD —
-  set up before M6.5 upload).
+- **Required:** `https://gamesroom.nateterrence.net/support` (live —
+  set up in V0.43).
 
 ## Privacy nutrition labels
 
@@ -86,9 +86,8 @@ user id), usage data, diagnostics, purchases.
 
 ## Privacy policy URL
 
-- **Required:** `https://hydrolyze.app/games-room/privacy` (TBD —
-  set up before M6.5 upload. Must be reachable from a public web
-  client.)
+- **Required:** `https://gamesroom.nateterrence.net/privacy` (live —
+  set up in V0.43. Must be reachable from a public web client.)
 
 ## Screenshot spec
 

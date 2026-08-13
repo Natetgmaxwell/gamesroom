@@ -3,8 +3,8 @@
 > **Status.** Drafted for the V0.8.1 TestFlight upload (Wave 0, 2026-08-06).
 > Apple App Store Connect requires a reachable privacy-policy URL before a
 > build can be uploaded. This document ships as the policy text and is
-> rendered at `https://hydrolyze.app/games-room/privacy` (per the Q-PRIVACY-URL
-> default in the V0.9 roadmap).
+> rendered at `https://gamesroom.nateterrence.net/privacy` (per the V0.43
+> website build).
 >
 > **Source of truth.** The data-handling claims below mirror
 > `docs/legal-posture.md` and the operational reality of the V0.8 build —
@@ -153,8 +153,8 @@ also be flagged in the V0.x release notes.
 
 ## Contact
 
-Email: the address published at `https://hydrolyze.app` (the games-room
-support page is at `https://hydrolyze.app/games-room/support`).
+Email: the address published at `https://gamesroom.nateterrence.net` (the
+games-room support page is at `https://gamesroom.nateterrence.net/support`).
 
 ## License
 

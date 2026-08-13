@@ -1,0 +1,185 @@
+/* Games Room — public website stylesheet
+   Design tokens (locked from brand register, V0.43 spec):
+   - deep indigo base #23264F
+   - cream text #F7F3E9
+   - amber pip accent #F5A623 (the only accent)
+   - The Four Seats mark (2x2 amber pip grid) as header mark
+   - Poppins rounded geometric sans, wide letterspacing wordmark
+   Mobile-first single column. No JS, no tracking, no forms. */
+
+:root {
+  --indigo: #23264F;
+  --indigo-deep: #1A1C3D;
+  --cream: #F7F3E9;
+  --cream-dim: #C9C4B4;
+  --amber: #F5A623;
+  --hairline: rgba(247, 243, 233, 0.14);
+  --maxw: 640px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--indigo);
+  color: var(--cream);
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 300;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.site-header {
+  padding: 2rem 1.5rem 1.5rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  max-width: var(--maxw);
+  margin: 0 auto;
+}
+
+/* The Four Seats mark — 2x2 amber pip grid */
+.four-seats {
+  display: grid;
+  grid-template-columns: repeat(2, 10px);
+  grid-template-rows: repeat(2, 10px);
+  gap: 5px;
+  flex: 0 0 auto;
+}
+.four-seats span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+.wordmark {
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--cream);
+}
+
+/* ── Layout ────────────────────────────────────────────── */
+main {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+section { margin-bottom: 2.5rem; }
+
+h1 {
+  font-size: 1.9rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.75rem;
+  color: var(--cream);
+}
+
+p { margin-bottom: 1rem; }
+
+a {
+  color: var(--amber);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(245, 166, 35, 0.4);
+}
+a:hover { border-bottom-color: var(--amber); }
+
+.lead {
+  font-size: 1.15rem;
+  color: var(--cream);
+  margin-bottom: 1.5rem;
+}
+
+.muted { color: var(--cream-dim); }
+
+/* ── CTA ───────────────────────────────────────────────── */
+.cta {
+  display: inline-block;
+  background: var(--amber);
+  color: var(--indigo-deep);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.9rem 1.6rem;
+  border-radius: 999px;
+  border: none;
+  text-decoration: none;
+  margin-top: 0.5rem;
+}
+.cta:hover { background: #ffb84d; border-bottom: none; }
+
+/* ── Lists ─────────────────────────────────────────────── */
+ul, ol { margin: 0 0 1rem 1.4rem; }
+li { margin-bottom: 0.5rem; }
+
+/* ── Privacy page ──────────────────────────────────────── */
+.privacy h1 { font-size: 1.6rem; }
+.privacy h2 {
+  font-size: 1.1rem;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--hairline);
+}
+.privacy table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 1.5rem;
+  font-size: 0.92rem;
+}
+.privacy th, .privacy td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--hairline);
+  vertical-align: top;
+}
+.privacy th {
+  background: rgba(245, 166, 35, 0.08);
+  font-weight: 500;
+  color: var(--cream);
+}
+.privacy blockquote {
+  border-left: 3px solid var(--amber);
+  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+  color: var(--cream-dim);
+  font-size: 0.95rem;
+}
+.privacy .meta {
+  color: var(--cream-dim);
+  font-size: 0.9rem;
+  margin-bottom: 2rem;
+}
+
+/* ── Footer ────────────────────────────────────────────── */
+.site-footer {
+  border-top: 1px solid var(--hairline);
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--cream-dim);
+  font-size: 0.85rem;
+}
+.site-footer a { color: var(--cream-dim); }
+.site-footer a:hover { color: var(--amber); }
+
+/* ── Responsive ────────────────────────────────────────── */
+@media (min-width: 480px) {
+  h1 { font-size: 2.2rem; }
+  .wordmark { font-size: 1.3rem; }
+}

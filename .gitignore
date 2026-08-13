@@ -23,3 +23,6 @@ TestProj/
 .hermes/
 GamesRoom/* 2/
 GamesRoom/* 2.xcassets/
+
+# Wrangler / Cloudflare Pages local cache
+.wrangler/

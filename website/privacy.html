@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — Games Room</title>
+  <meta name="description" content="Games Room privacy policy. A private games-night app for self-hosted tables.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <div class="four-seats" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <span class="wordmark">Games Room</span>
+    </div>
+  </header>
+
+  <main class="privacy">
+    <h1>Privacy Policy</h1>
+    <p class="meta">Last updated: 2026-08-06</p>
+
+    <h2>What Games Room is</h2>
+    <p>Games Room is a private games-night app for self-hosted tables. A host creates a room with a six-character invite code; members join, the host sets the rhythm (events, packs, seasons), and the room's mascot voices the page with the personality and political ideology you picked at room create.</p>
+    <p>We do not run a marketplace, a community, or a public feed. Every room is invite-only. The app's job is to coordinate an in-person night — not to be a social network.</p>
+
+    <h2>Data we collect</h2>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>What it is</th><th>Why we collect it</th><th>Stored where</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Apple user identifier</td>
+          <td>The opaque id Apple returns from Sign in with Apple.</td>
+          <td>Identifies you across sessions.</td>
+          <td>Supabase <code>public.users.id</code>. We never see your email.</td>
+        </tr>
+        <tr>
+          <td>Display name</td>
+          <td>The name you choose to show in your rooms.</td>
+          <td>Lets members recognise each other in rooms.</td>
+          <td>Supabase <code>public.users.display_name</code>.</td>
+        </tr>
+        <tr>
+          <td>Per-room membership</td>
+          <td>Your role + join date + last-seen timestamp per room.</td>
+          <td>Drives the leaderboard, briefing trio, and access control.</td>
+          <td>Supabase <code>public.room_memberships</code>.</td>
+        </tr>
+        <tr>
+          <td>Per-room app activity</td>
+          <td>RSVPs, scores, season deltas, season awards, pack enablements.</td>
+          <td>The product surface — without it, the app has nothing to do.</td>
+          <td>Supabase <code>public.events</code>, <code>public.transactions</code>, <code>public.season_awards</code>, <code>public.room_packs</code>.</td>
+        </tr>
+        <tr>
+          <td>Notifications</td>
+          <td>Local notifications scheduled by the briefing trio (3×3 cadence × RSVP matrix).</td>
+          <td>Remind members about events they RSVPed to.</td>
+          <td>Local on your device. We do not send push notifications.</td>
+        </tr>
+        <tr>
+          <td>Per-room mascot API key</td>
+          <td>The OpenAI-compatible key you set in a room, if you set one.</td>
+          <td>Lets the mascot voice fan out per-event notifications in your voice.</td>
+          <td>Plaintext in <code>public.rooms.mascot_api_key</code> for the rooms that set it. Encryption-at-rest is a deferred item (V0.10+).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Data we do NOT collect</h2>
+    <ul>
+      <li>Email addresses. Sign in with Apple hides them by default.</li>
+      <li>Contact info, location, health data, browsing history, search history, purchase history, financial info.</li>
+      <li>Identifiers beyond the Apple user id.</li>
+      <li>Diagnostics or crash data — we do not run Firebase Crashlytics, Sentry, Bugsnag, or any other crash reporter. We do not run analytics (Mixpanel, Amplitude, PostHog, etc.).</li>
+      <li>Third-party advertising SDKs. There are no ads.</li>
+    </ul>
+
+    <h2>How we use your data</h2>
+    <ul>
+      <li>To render the room you are a member of. Without the per-room membership, the app has no data to show.</li>
+      <li>To enforce room-scoped access via Supabase Row Level Security. Every read of a room's data passes an RLS check that derives <code>room_id</code> from <code>events.id</code>. A user who is not a member of a room cannot read any of that room's data.</li>
+      <li>To send notifications. Notifications are scheduled locally; they do not pass through any third-party push service.</li>
+      <li>To generate mascot voice. When a room has a <code>mascot_api_key</code> set, the mascot notification body is generated via the configured OpenAI-compatible endpoint. We send the mascot's name, the room name, the event title, the venue, and the host's note — nothing else. No member PII leaves the device. No member display names leave the device. LLM generation falls back to a template on any failure (network error, timeout, invalid key, empty response).</li>
+    </ul>
+
+    <h2>Data we share</h2>
+    <p>We do not sell your data. We do not share it with advertisers. We do not share it with analytics vendors.</p>
+    <p>The only data that leaves your device in any operational sense is:</p>
+    <ol>
+      <li><strong>Reads and writes to Supabase</strong>, scoped to the rooms you are a member of (enforced by RLS).</li>
+      <li><strong>Per-room mascot LLM calls</strong>, made only when the room's host has configured a <code>mascot_api_key</code>. The host chooses to make those calls happen by setting the key. Members who do not want their room's mascot to call out to an LLM should ask the host to leave the key unset.</li>
+    </ol>
+
+    <h2>Drowning awards — a specific note</h2>
+    <p>The "Drowning" season-end award (migration 039 + 045) surfaces only to the recipient by default. The host cannot see other members' Drowning awards. A member can opt in to sharing their Drowning award with the room; until they opt in, the row is invisible to everyone except them. The opt-in default is <code>false</code> (privacy-respecting).</p>
+
+    <h2>Photos</h2>
+    <p>The Casino pack supports per-member scanning of a chip-stack photo. The default behavior is <strong>discard the photo, keep the hash and the vision snapshot</strong> (F-CAS-03). The iOS app does not upload the original photo. It uploads a hash and a vision-snapshot record (no image bytes). A future version may add a photo-persistence opt-in; that opt-in will be off by default.</p>
+
+    <h2>Your rights</h2>
+    <ul>
+      <li><strong>Export.</strong> You can ask for a copy of all data we hold about you. Email the address below.</li>
+      <li><strong>Delete.</strong> You can ask for your account to be deleted. Deletion cascades to your memberships, RSVPs, and per-room activity. Season award rows that name you are kept in their room (the room keeps its history) but the recipient display name is replaced with "Former member."</li>
+      <li><strong>Correct.</strong> You can change your display name in the in-app settings sheet.</li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>The App Store age rating is 12+. We do not knowingly collect data from children under 13. The "mild simulated gambling" age-rating trigger is the Casino pack's virtual-chip withdrawal/return cycle, which is virtual points only — not real currency.</p>
+
+    <h2>Data retention</h2>
+    <ul>
+      <li>Per-room activity: kept for the life of the room. When a room is deleted, the activity cascades.</li>
+      <li>RSVPs and event activity: kept for the life of the event. When an event is archived (V0.12 host-tools path), the activity is soft-deleted but the season-score deltas are preserved.</li>
+      <li>Notifications: scheduled locally on your device; cleared when the event settles or you leave the room.</li>
+    </ul>
+
+    <h2>Security</h2>
+    <ul>
+      <li>Row Level Security on every table in <code>public.*</code>. There is no path to a room's data that does not pass through RLS.</li>
+      <li>Apple Sign In is the only authentication mechanism. No passwords, no magic-link logins, no social logins.</li>
+      <li>Supabase project <code>bnrgkdcluopicqdpmrtu</code>. Project dashboard is the operational source for the live database; we do not run a separate replica.</li>
+    </ul>
+
+    <h2>International transfers</h2>
+    <p>The Supabase project is hosted in the region its dashboard shows. If you are accessing the app from outside that region, your data crosses the public internet to reach the project. The connection is TLS 1.2+.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>We will update this policy when the data surface changes (a new migration that adds a column with personally identifying implications, a new SDK, a new LLM endpoint). The "Last updated" date at the top of this document reflects the most recent change. Material changes will also be flagged in the V0.x release notes.</p>
+
+    <h2>Contact</h2>
+    <p>Email: the address published at <a href="https://gamesroom.nateterrence.net">gamesroom.nateterrence.net</a> (the games-room support page is at <a href="/support">/support</a>).</p>
+
+    <h2>License</h2>
+    <p>This policy text is licensed CC-BY-4.0. You may reuse the structure; please write your own data-handling claims.</p>
+  </main>
+
+  <footer class="site-footer">
+    <p><a href="/">Games Room</a> · <a href="/support">Support</a> · <a href="/privacy">Privacy</a></p>
+  </footer>
+</body>
+</html>
