@@ -33,6 +33,7 @@ struct WithdrawChipsSheet: View {
 
     let eventId: UUID
     let roomId: UUID
+    var onDone: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var casinoService: CasinoService
@@ -142,6 +143,7 @@ struct WithdrawChipsSheet: View {
                 amount: amount
             )
             dismiss()
+            onDone?()
         } catch {
             errorMessage = (error as NSError).localizedDescription
         }

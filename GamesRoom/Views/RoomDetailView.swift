@@ -250,9 +250,13 @@ struct RoomDetailView: View {
             .environmentObject(roomService)
         }
         .sheet(item: $withdrawSheetEvent) { event in
-            WithdrawChipsSheet(eventId: event.id, roomId: room.id)
-                .environmentObject(casinoService)
-                .environmentObject(authService)
+            WithdrawChipsSheet(
+                eventId: event.id,
+                roomId: room.id,
+                onDone: { Task { await refresh(force: true) } }
+            )
+            .environmentObject(casinoService)
+            .environmentObject(authService)
         }
         .sheet(item: $settleSheetEvent) { event in
             // F-CAS-02: the member scans their own chips with the
@@ -534,11 +538,10 @@ struct RoomDetailView: View {
                 WitnessSlot(
                     event: event,
                     attestations: openAttestations,
-                    // V0.34 — count-based packs (CAH) flip the
-                    // member CTA from withdraw to scan: there's no
-                    // chip bracket to move, the member scans their
-                    // stack of won black cards instead.
-                    cta: isCAH ? .scan : .withdraw,
+                    // V0.43 — `.inPlay` means the member has already
+                    // withdrawn, so the CTA flips to scan regardless
+                    // of pack. `isCAH` is still used for `scanTitle`.
+                    cta: .scan,
                     onWithdraw: { Task { await openWithdraw(event: event) } },
                     onScan: { Task { await openScan(event: event) } },
                     onScore: isHost
@@ -1364,7 +1367,7 @@ private struct WitnessSlot: View {
             switch cta {
             case .withdraw:
                 Button(action: onWithdraw) {
-                    Text("Withdraw chips")
+                    Text("Withdraw to play")
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.background)
                         .frame(maxWidth: .infinity)
