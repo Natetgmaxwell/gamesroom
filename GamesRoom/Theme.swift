@@ -159,6 +159,8 @@ enum Theme {
         static let person2Fill = "person.2.fill"
         /// The destructive "Delete room" affordance in room settings.
         static let trashFill = "trash.fill"
+        /// The working-hand badge on the in-play witness slot.
+        static let handPointUpFill = "hand.point.up.fill"
     }
 }
 

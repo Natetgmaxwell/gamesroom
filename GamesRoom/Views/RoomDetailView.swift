@@ -71,6 +71,12 @@ struct RoomDetailView: View {
     // tally is recorded as the authoritative count for the night.
     @State private var cahScanEvent: Event?
     @State private var casinoWithdrawn: Int = 0
+    // V0.46 — member's "Settle manually" path. Always presents
+    // `SettleCasinoSheet`; the scan CTA stays on the vision flow.
+    // Kept distinct from `settleSheetEvent` (host settle +
+    // vision-chip scan) so the manual link doesn't disturb the
+    // host scan path.
+    @State private var manualSettleSheetEvent: Event?
 
     // P0.4 — host-only single-winner scoring sheet binding. Hosts
     // tap "Score a round" on the at-play Witness Slot; the sheet
@@ -302,6 +308,19 @@ struct RoomDetailView: View {
                 eventId: event.id,
                 roomId: room.id,
                 onDone: { Task { await refresh(force: true) } }
+            )
+            .environmentObject(scoringService)
+            .environmentObject(authService)
+        }
+        // V0.46 — casino-member "Settle manually" path. Always
+        // presents `SettleCasinoSheet`; the scan CTA above stays
+        // on the vision flow. Kept distinct from `settleSheetEvent`
+        // so the manual link doesn't disturb the host scan path.
+        .sheet(item: $manualSettleSheetEvent) { event in
+            SettleCasinoSheet(
+                eventId: event.id,
+                roomId: room.id,
+                withdrawn: casinoWithdrawn
             )
             .environmentObject(scoringService)
             .environmentObject(authService)
@@ -557,7 +576,9 @@ struct RoomDetailView: View {
                         : nil,
                     isHero: true,
                     headerMode: .inPlay,
-                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
+                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips",
+                    workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
+                    onManualSettle: manualSettleAction(for: event)
                 )
 
             // M1.1 — `.tonightEvent` renders the witness hero with
@@ -613,7 +634,9 @@ struct RoomDetailView: View {
                         : nil,
                     isHero: true,
                     headerMode: .settleRound,
-                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
+                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips",
+                    workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
+                    onManualSettle: manualSettleAction(for: event)
                 )
 
             case .justSettled(let event):
@@ -886,6 +909,15 @@ struct RoomDetailView: View {
         } else {
             settleSheetEvent = event
         }
+    }
+
+    /// V0.46 — casino-member "Settle manually" callback for the
+    /// WitnessSlot. Returns nil for hosts (they already have a
+    /// settle surface via `Score a round` / scan) and for CAH
+    /// (count-based scoring has no manual settle path).
+    private func manualSettleAction(for event: Event) -> (() -> Void)? {
+        guard !isHost, event.packSlug != "cards_against_humanity" else { return nil }
+        return { manualSettleSheetEvent = event }
     }
 
     /// P0.4 — host-only "Score a round" CTA on the at-play Witness
@@ -1339,6 +1371,13 @@ private struct WitnessSlot: View {
     /// chips" (the casino wording); CAH call sites pass
     /// "Scan your cards" so the button matches the pack.
     var scanTitle: String = "Scan your chips"
+    /// V0.46 — working hand (withdrawn chips) surfaced in the
+    /// hero badge. nil = don't render (CAH / not-yet-withdrawn).
+    var workingHand: Int? = nil
+    /// V0.46 — casino-member "Settle manually" callback. nil =
+    /// don't render the manual link (hosts use Score-a-round;
+    /// CAH has no manual path).
+    var onManualSettle: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
@@ -1355,6 +1394,24 @@ private struct WitnessSlot: View {
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
                 Spacer()
+            }
+
+            // V0.46 — working-hand badge. Renders only when the
+            // member has chips withdrawn (casino, post-withdraw);
+            // CAH and not-yet-withdrawn states pass nil.
+            if let workingHand, workingHand > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: Theme.Icon.handPointUpFill)
+                    Text("Working hand: \(workingHand) pts")
+                }
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.Palette.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Theme.Palette.accent.opacity(0.12))
+                .clipShape(Capsule())
+                .accessibilityLabel(Text("Working hand: \(workingHand) pts"))
+                .padding(.top, 4)
             }
 
             if !attestations.isEmpty {
@@ -1396,6 +1453,25 @@ private struct WitnessSlot: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.top, 8)
+
+                // V0.46 — secondary "Settle manually" link for
+                // casino members. Sits one tap behind the primary
+                // scan CTA so the vision flow stays the easy path
+                // while the manual settle remains reachable.
+                if let onManualSettle {
+                    Button(action: onManualSettle) {
+                        Text("Settle manually")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
+                    }
+                    .buttonStyle(.plain)
+                    .pressScale()
+                    .padding(.top, 8)
+                    .accessibilityLabel(Text("Settle manually instead of scanning"))
+                }
             }
 
             // P0.4 — host-only "Score a round" affordance. Renders
