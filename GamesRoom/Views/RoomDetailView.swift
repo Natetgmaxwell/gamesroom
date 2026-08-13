@@ -133,6 +133,14 @@ struct RoomDetailView: View {
         authService.currentUser?.id
     }
 
+    /// V0.45 — freshest cached copy of this room. The value passed
+    /// in at navigation goes stale after a settings save, so display
+    /// surfaces read through the service cache; `room` remains the
+    /// fallback until the cache holds it.
+    private var liveRoom: Room {
+        roomService.room(withId: room.id) ?? room
+    }
+
     // MARK: Service-backed state
 
     /// Cached active event for this room. Driven by
@@ -182,7 +190,7 @@ struct RoomDetailView: View {
             }
         }
         .background(Theme.Palette.background.ignoresSafeArea())
-        .navigationTitle(room.name)
+        .navigationTitle(liveRoom.name)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             // M1.2 — rooms dropdown (only when there's something
@@ -216,7 +224,7 @@ struct RoomDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        settingsRoom = room
+                        settingsRoom = liveRoom
                     } label: {
                         Image(systemName: Theme.Icon.gearshape)
                             .foregroundStyle(Theme.Palette.primaryText)
@@ -383,7 +391,7 @@ struct RoomDetailView: View {
                 }
                 .sectionCard(.standard)
                 MascotFooterCaption(
-                    room: room,
+                    room: liveRoom,
                     activeEvent: activeEvent,
                     leaderboard: leaderboard,
                     currentUserId: currentUserId

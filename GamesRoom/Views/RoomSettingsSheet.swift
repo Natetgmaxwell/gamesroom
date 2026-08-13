@@ -49,6 +49,9 @@ struct RoomSettingsSheet: View {
     // Form-level state — seeded from the `room` passed in.
     // Hoisted to the root so sub-sheets read/write through
     // the same `@State` instance.
+    // V0.45 — kept separate from `mascotName` so settings saves
+    // don't clobber `rooms.name` with the mascot name.
+    @State private var roomName: String
     @State private var mascotName: String
     @State private var mascotPersonality: MascotPersonality
     @State private var mascotIdeology: MascotPoliticalIdeology
@@ -88,6 +91,7 @@ struct RoomSettingsSheet: View {
     init(room: Room, onRoomDeleted: (() -> Void)? = nil) {
         self.room = room
         self.onRoomDeleted = onRoomDeleted
+        _roomName = State(initialValue: room.name)
         _mascotName = State(initialValue: room.mascotName)
         _mascotPersonality = State(initialValue: room.mascotPersonality)
         _mascotIdeology = State(initialValue: room.mascotPoliticalIdeology)
@@ -420,7 +424,7 @@ struct RoomSettingsSheet: View {
             do {
                 _ = try await roomService.updateRoom(
                     id: room.id,
-                    name: mascotName,
+                    name: roomName,
                     mascotName: mascotName,
                     mascotPersonality: mascotPersonality,
                     mascotPoliticalIdeology: mascotIdeology,
