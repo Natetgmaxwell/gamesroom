@@ -1973,18 +1973,25 @@ private struct CeremonialCard: View {
 
 // MARK: - Awards card (season-close slot, M1.1)
 
-/// Renders the per-season awards. The `.drowning` row is private
-/// to the recipient (always) and to opted-in viewers (per the
-/// V0.9 Wave 1 Slice 1.1 model). The calling resolver
-/// (`seasonAwardsForPrivacy` in `RoomDetailView`) already filters
-/// drowning rows whose `recipientUserId` isn't the current user
-/// AND the current user isn't the host AND hasn't opted in. The
-/// card renders whatever rows it receives; it does not re-filter.
-///
-/// Drowning rows are rendered through `DrowningBadge` so the
-/// recipient sees an opt-in toggle and opted-in viewers see a
-/// muted "you've opted in" footnote. Non-drowning rows use the
-/// standard `AwardRow`.
+/// V0.53 — ShareLink requires a `Transferable` item; `UIImage` isn't
+/// one. This wrapper exports the rendered stat card as PNG data.
+private struct ShareableImage: Transferable {
+    let image: UIImage
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .png) { item in
+            item.image.pngData() ?? Data()
+        }
+    }
+}
+
+/// The season-close awards card. Renders the season's award rows
+/// (Phoenix / Veteran / Whale / Drowning) with the Drowning privacy
+/// rules applied by the caller: the card receives only the rows it
+/// may show, and the Drowning row is rendered through
+/// `DrowningBadge` so the recipient sees an opt-in toggle and
+/// opted-in viewers see a muted "you've opted in" footnote.
+/// Non-drowning rows use the standard `AwardRow`.
 private struct AwardsCard: View {
     let season: Season
     let awards: [SeasonAward]
@@ -2048,11 +2055,12 @@ private struct AwardsCard: View {
             // generated on the member's device and shared through the
             // system share sheet; the app never broadcasts it.
             if let statCard {
+                let cardImage = renderImage(for: statCard)
                 ShareLink(
-                    item: renderImage(for: statCard),
+                    item: ShareableImage(image: cardImage),
                     preview: SharePreview(
                         "\(statCard.memberName) — Season \(statCard.seasonOrdinal)",
-                        image: renderImage(for: statCard)
+                        image: Image(uiImage: cardImage)
                     )
                 ) {
                     Label("Share my season card", systemImage: "square.and.arrow.up")

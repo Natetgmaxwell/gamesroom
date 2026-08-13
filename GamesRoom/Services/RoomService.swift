@@ -663,8 +663,8 @@ final class RoomService: ObservableObject {
             playedAt: playedAt,
             mascotName: room?.mascotName ?? "Your mascot",
             perMemberCadence: cadence,
-            optedInMemberIds: optedInMemberIds,
             memberNames: roster.map(\.displayName),
+            optedInMemberIds: optedInMemberIds,
             mascotApiKey: room?.mascotApiKey,
             mascotPersonality: room?.mascotPersonality ?? .friendly,
             mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist
@@ -1178,7 +1178,7 @@ final class RoomService: ObservableObject {
         // upsertEventRSVP cycle; cancel + reschedule any in-flight
         // trio for the room so the previously-scheduled pushes
         // reflect the new opt-in immediately.
-        cancelRoomCadence(roomId: roomId)
+        await cancelRoomCadence(roomId: roomId)
     }
 
     /// V0.54 — flips the calling member's per-event mute flag.
@@ -1206,7 +1206,7 @@ final class RoomService: ObservableObject {
             eventRSVPsByEvent[eventId] = rows
         }
         self.lastError = nil
-        cancelEventCadence(eventId: eventId)
+        await cancelEventCadence(eventId: eventId)
     }
 
     /// V0.54 — cancels every pending briefing-trio push for every
