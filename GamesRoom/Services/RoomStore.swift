@@ -532,21 +532,28 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// no-op; re-issuing with a different state overwrites in place.
     /// Throws on RLS rejection (non-member write attempt).
     func upsertEventRSVP(eventId: UUID, state: MemberRSVPState) async throws -> MemberRSVP {
-        let rows: [MemberRSVP] = try await SupabaseClientProvider.shared
+        // The RPC returns void — no row to decode. We construct a
+        // MemberRSVP locally so the service layer's cache update
+        // (rsvpByEvent[eventId] = row.state) still works. The real
+        // RSVP row is fetched by the post-upsert loadEventRSVPs +
+        // loadBriefing refresh in RoomService.
+        _ = try await SupabaseClientProvider.shared
             .rpc("upsert_event_rsvp", params: [
                 "p_event_id": eventId.uuidString,
                 "p_state": state.rawValue
             ])
             .execute()
-            .value
-        guard let row = rows.first else {
-            throw NSError(
-                domain: "LiveRoomStore",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "upsert_event_rsvp returned no row"]
-            )
-        }
-        return row
+            .value as Void
+
+        let callerId = try? await SupabaseClientProvider.shared.auth.session.user.id
+        return MemberRSVP(
+            id: UUID(),
+            eventId: eventId,
+            roomId: UUID(),
+            memberId: callerId ?? UUID(),
+            state: state,
+            respondedAt: Date()
+        )
     }
 
     // MARK: Event create
