@@ -294,9 +294,11 @@ struct RoomDetailView: View {
                 SettleCasinoSheet(
                     eventId: event.id,
                     roomId: room.id,
-                    withdrawn: casinoWithdrawn
+                    withdrawn: casinoWithdrawn,
+                    isHost: true
                 )
                 .environmentObject(scoringService)
+                .environmentObject(casinoService)
                 .environmentObject(authService)
             } else {
                 ChipScanSheet(
@@ -333,9 +335,11 @@ struct RoomDetailView: View {
             SettleCasinoSheet(
                 eventId: event.id,
                 roomId: room.id,
-                withdrawn: casinoWithdrawn
+                withdrawn: casinoWithdrawn,
+                isHost: false
             )
             .environmentObject(scoringService)
+            .environmentObject(casinoService)
             .environmentObject(authService)
         }
         .sheet(item: $hostScoreEvent) { event in

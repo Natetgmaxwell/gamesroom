@@ -29,9 +29,18 @@ struct SettleCasinoSheet: View {
     let eventId: UUID
     let roomId: UUID
     let withdrawn: Int
+    /// V0.46 integration fix — the member "Settle manually" path
+    /// must NOT post through `record_round_score` (host-only RPC,
+    /// migration 035 raises "Only the host can record a round").
+    /// Members settle via `record_member_scan` (migration 030) with
+    /// `source: .manual`, which computes net = returned − withdrawn
+    /// and writes the member's own ledger row. Hosts keep the
+    /// aggregate `recordRoundInput` path.
+    var isHost: Bool = true
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var scoringService: ScoringService
+    @EnvironmentObject private var casinoService: CasinoService
     @EnvironmentObject private var authService: AuthService
 
     @State private var returned: Int = 0
@@ -133,22 +142,44 @@ struct SettleCasinoSheet: View {
         errorMessage = nil
         defer { isSaving = false }
         do {
-            let input = PackScoringInput.withdrawReturn(
-                roundIndex: roundIndex,
-                perMember: [
-                    MemberNet(
-                        memberId: memberId,
-                        withdrawnPoints: Int64(withdrawn),
-                        returnedPoints: Int64(returned)
-                    )
-                ]
-            )
-            _ = try await scoringService.recordRoundInput(
-                roomId: roomId,
-                eventId: eventId,
-                packSlug: CasinoPack.slug,
-                input: input
-            )
+            if isHost {
+                let input = PackScoringInput.withdrawReturn(
+                    roundIndex: roundIndex,
+                    perMember: [
+                        MemberNet(
+                            memberId: memberId,
+                            withdrawnPoints: Int64(withdrawn),
+                            returnedPoints: Int64(returned)
+                        )
+                    ]
+                )
+                _ = try await scoringService.recordRoundInput(
+                    roomId: roomId,
+                    eventId: eventId,
+                    packSlug: CasinoPack.slug,
+                    input: input
+                )
+            } else {
+                // Member manual settle — route through the
+                // member-writable `record_member_scan` RPC so the
+                // ledger row is attributed to the member, not the
+                // host. `returned` is the chips the member brought
+                // back; the server computes net = returned − withdrawn.
+                let snapshot = VisionSnapshot(
+                    stacks: [],
+                    totalValue: returned,
+                    confidenceAvg: 0,
+                    discarded: false,
+                    photoHash: nil
+                )
+                _ = try await casinoService.submitMemberScan(
+                    eventId: eventId,
+                    visionAmount: Int64(returned),
+                    visionSnapshot: snapshot,
+                    confidence: nil,
+                    source: .manual
+                )
+            }
             dismiss()
         } catch {
             errorMessage = (error as NSError).localizedDescription
