@@ -2915,6 +2915,136 @@ runner.runAsync("InMemoryRoomStore.upsertEventRSVP increments the briefing's sea
     runner.assertEqual(after?.seatsClaimed ?? -1, baseClaimed + 1)
 }
 
+// MARK: - V0.53 ledger-as-social-surface (awards + stat card + mascot)
+
+runner.run("AwardType has eight cases with correct display names") {
+    let names = AwardType.allCases.map(\.displayName)
+    runner.assertEqual(names, [
+        "Phoenix", "Veteran", "Whale", "Drowning",
+        "Iron Mann", "Comeback Kid", "Good Sport", "Tonight's Star"
+    ])
+}
+
+runner.run("AwardType only drowning is private") {
+    for type in AwardType.allCases {
+        runner.assertEqual(type.isPrivate, type == .drowning)
+    }
+}
+
+runner.run("AwardType raw values match the season_award_type enum") {
+    runner.assertEqual(AwardType.ironMann.rawValue, "iron_mann")
+    runner.assertEqual(AwardType.comebackKid.rawValue, "comeback_kid")
+    runner.assertEqual(AwardType.goodSport.rawValue, "good_sport")
+    runner.assertEqual(AwardType.tonightStar.rawValue, "tonight_star")
+}
+
+runner.run("AwardType Codable round-trips the new cases") {
+    for type in [AwardType.ironMann, .comebackKid, .goodSport, .tonightStar] {
+        let data = try JSONEncoder().encode(type)
+        let decoded = try JSONDecoder().decode(AwardType.self, from: data)
+        runner.assertEqual(decoded, type)
+    }
+}
+
+runner.run("SeasonStatCard builds with the member's own record") {
+    let card = SeasonStatCard(
+        roomName: "Carwoola Crew",
+        seasonOrdinal: 3,
+        seasonSubtitle: "Borat's Big Year",
+        memberName: "Alex",
+        record: SeasonStatRecord(
+            sessionsPlayed: 12,
+            netChips: 980,
+            bestSingleSession: 180,
+            worstSingleSession: -40,
+            longestStreak: 4
+        ),
+        awards: [.phoenix, .veteran, .ironMann],
+        mascotLine: "The table remembers."
+    )
+    runner.assertEqual(card.roomName, "Carwoola Crew")
+    runner.assertEqual(card.record.sessionsPlayed, 12)
+    runner.assertEqual(card.record.netChips, 980)
+    runner.assertEqual(card.record.bestSingleSession, 180)
+    runner.assertEqual(card.record.worstSingleSession, -40)
+    runner.assertEqual(card.record.longestStreak, 4)
+    runner.assertEqual(card.awards, [.phoenix, .veteran, .ironMann])
+    runner.assertEqual(card.id, "Carwoola Crew-3-Alex")
+}
+
+runner.run("SeasonStatCard Codable round-trips") {
+    let card = SeasonStatCard(
+        roomName: "Felt Faction",
+        seasonOrdinal: 4,
+        seasonSubtitle: "Season 4",
+        memberName: "Felty",
+        record: SeasonStatRecord(
+            sessionsPlayed: 8,
+            netChips: 320,
+            bestSingleSession: 120,
+            worstSingleSession: nil,
+            longestStreak: 3
+        ),
+        awards: [.whale, .goodSport],
+        mascotLine: "Lost well, kept the table."
+    )
+    let data = try JSONEncoder().encode(card)
+    let decoded = try JSONDecoder().decode(SeasonStatCard.self, from: data)
+    runner.assertEqual(decoded, card)
+}
+
+runner.run("MascotEngine goodSport cell exists for every personality × ideology") {
+    let personalities = MascotPersonality.allCases
+    let ideologies = MascotPoliticalIdeology.allCases
+    for p in personalities {
+        for i in ideologies {
+            let body = MascotEngine.generateVoice(
+                mascotName: "Felty",
+                roomName: "Felt Faction",
+                personality: p,
+                ideology: i,
+                kind: .goodSport,
+                context: .init(
+                    activeEventTitle: nil,
+                    lastEventDaysAgo: nil,
+                    memberCount: 4,
+                    memberNames: ["A", "B", "C", "D"],
+                    recentWinnerNames: ["Alex"]
+                )
+            )
+            runner.assertTrue(!body.isEmpty, "goodSport cell for \(p.rawValue)×\(i.rawValue)")
+            runner.assertTrue(body.contains("Felty"), "goodSport names the mascot for \(p.rawValue)×\(i.rawValue)")
+            runner.assertTrue(body.contains("Alex"), "goodSport names the winner for \(p.rawValue)×\(i.rawValue)")
+        }
+    }
+}
+
+runner.run("MascotEngine tonightStar cell exists for every personality × ideology") {
+    let personalities = MascotPersonality.allCases
+    let ideologies = MascotPoliticalIdeology.allCases
+    for p in personalities {
+        for i in ideologies {
+            let body = MascotEngine.generateVoice(
+                mascotName: "Felty",
+                roomName: "Felt Faction",
+                personality: p,
+                ideology: i,
+                kind: .tonightStar,
+                context: .init(
+                    activeEventTitle: nil,
+                    lastEventDaysAgo: nil,
+                    memberCount: 4,
+                    memberNames: ["A", "B", "C", "D"],
+                    recentWinnerNames: ["Alex"]
+                )
+            )
+            runner.assertTrue(!body.isEmpty, "tonightStar cell for \(p.rawValue)×\(i.rawValue)")
+            runner.assertTrue(body.contains("Felty"), "tonightStar names the mascot for \(p.rawValue)×\(i.rawValue)")
+            runner.assertTrue(body.contains("Alex"), "tonightStar names the winner for \(p.rawValue)×\(i.rawValue)")
+        }
+    }
+}
+
 // MARK: - Summary
 
 print("")

@@ -104,6 +104,8 @@
 		AAAAAAAA0000000000000485 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000486 /* Haptics.swift */; };
 		AAAAAAAA0000000000000487 /* ConfettiBurst.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000488 /* ConfettiBurst.swift */; };
 		AAAAAAAA00000000000000C5 /* WorkingHand.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000489 /* WorkingHand.swift */; };
+		AAAAAAAA00000000000000EB /* SeasonStatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048A /* SeasonStatCard.swift */; };
+		AAAAAAAA00000000000000EC /* SeasonStatCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048B /* SeasonStatCardView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -247,6 +249,8 @@
 		AAAAAAAA0000000000000486 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000488 /* ConfettiBurst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfettiBurst.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000489 /* WorkingHand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkingHand.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000048A /* SeasonStatCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStatCard.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000048B /* SeasonStatCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStatCardView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -367,6 +371,7 @@
 				AAAAAAAA000000000000045E /* CatchUpMessage.swift */,
 				BBBBBBBB0000000000000450 /* SeatDeposit.swift */,
 				AAAAAAAA0000000000000489 /* WorkingHand.swift */,
+				AAAAAAAA000000000000048A /* SeasonStatCard.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -412,6 +417,7 @@
 				AAAAAAAA0000000000000457 /* ChipScanSheet.swift */,
 				AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */,
 				AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */,
+				AAAAAAAA000000000000048B /* SeasonStatCardView.swift */,
 				AAAAAAAA00000000000000FC /* Components */,
 			);
 		path = Views;
@@ -709,6 +715,8 @@
 				AAAAAAAA0000000000000485 /* Haptics.swift in Sources */,
 				AAAAAAAA0000000000000487 /* ConfettiBurst.swift in Sources */,
 				AAAAAAAA00000000000000C5 /* WorkingHand.swift in Sources */,
+				AAAAAAAA00000000000000EC /* SeasonStatCardView.swift in Sources */,
+				AAAAAAAA00000000000000EB /* SeasonStatCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

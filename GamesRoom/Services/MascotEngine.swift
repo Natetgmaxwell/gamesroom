@@ -138,6 +138,13 @@ enum MascotEngine {
         case inPlayWithWithdrawal
         case settleRound
         case seasonClose
+        /// V0.53 — the Good Sport award, honored by the room's voice.
+        /// Voice-only per the Good Sport principle: never a
+        /// leaderboard position, never a scored metric.
+        case goodSport
+        /// V0.53 — Tonight's Star, the ephemeral per-night ceremonial
+        /// moment. Surfaces once on the ceremonial card, then gone.
+        case tonightStar
     }
 
     /// Snapshot of room state used to flavour the voice. Pure data,
@@ -448,6 +455,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. The host is counting the table. {leader} holds the front."
             case .seasonClose:
                 return "{mascot}: The season has closed in {room}. {winner} took it. The host will open the next."
+            case .goodSport:
+                return "{mascot}: {room} honors {winner} — the Good Sport. Kept every loss small, kept the table together."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The host called it; the night belonged to them."
             }
 
         // MARK: Professional × Centrist
@@ -477,6 +488,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being tallied. {leader} leads while the chips settle."
             case .seasonClose:
                 return "{mascot}: {room} has closed its season. {leader} finished on top. The ledger is settled."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} its Good Sport. The smallest losses, the steadiest table."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The room's read; the night was theirs."
             }
 
         // MARK: Professional × Trickster
@@ -506,6 +521,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is in settlement. {leader} is in front — provisionally, until the count lands."
             case .seasonClose:
                 return "{mascot}: {room} closed the season. {winner} took it — provisionally, until the next reshuffle."
+            case .goodSport:
+                return "{mascot}: {room} awards Good Sport to {winner}. The standings don't show it; the table knows."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The order is provisional, but the night was theirs."
             }
 
         // MARK: Professional × Anarchist
@@ -535,6 +554,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. {leader} leads. The ledger updates itself; no authority required."
             case .seasonClose:
                 return "{mascot}: {room} ended its season. {winner} took it; the table governed itself to the last."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} Good Sport. No authority required; the table agrees."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The table decided; no host needed."
             }
 
         // MARK: Professional × Apocalypse
@@ -564,6 +587,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being counted. {leader} is in front. The end tallies its own account."
             case .seasonClose:
                 return "{mascot}: The season is done in {room}. {winner} took it. The end remains on schedule."
+            case .goodSport:
+                return "{mascot}: {room} honors {winner} as Good Sport. The end is patient; the table held."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The end waits; the night was theirs."
             }
 
         // MARK: Friendly × Order
@@ -593,6 +620,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling! The host is counting it up. {leader} is in front — well played."
             case .seasonClose:
                 return "{mascot}: The season is wrapped in {room}! Nice one, {winner} — what a run."
+            case .goodSport:
+                return "{mascot}: A round of applause for {winner} — our Good Sport! Kept every loss small and the table warm."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! The host picked them, and we all agree."
             }
 
         // MARK: Friendly × Centrist
@@ -622,6 +653,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being settled. {leader} leads while the table tallies. Almost there!"
             case .seasonClose:
                 return "{mascot}: {room} closed its season. {leader} finished on top — great table all season."
+            case .goodSport:
+                return "{mascot}: Big love for {winner} — our Good Sport! Lost well, kept the table together."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! What a night they had."
             }
 
         // MARK: Friendly × Trickster
@@ -651,6 +686,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling! {leader} is in front — I'm watching the count with bated breath."
             case .seasonClose:
                 return "{mascot}: {room} wrapped the season! {winner} took it — I loved watching the standings shift."
+            case .goodSport:
+                return "{mascot}: {winner} is our Good Sport! The standings may shift, but the table knows who held it together."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! I've already moved them to the top of my heart."
             }
 
         // MARK: Friendly × Anarchist
@@ -680,6 +719,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being settled. {leader} leads, and we all tally because we want to."
             case .seasonClose:
                 return "{mascot}: {room} closed its season. {winner} took it, and we all earned it our own way."
+            case .goodSport:
+                return "{mascot}: {winner} is our Good Sport! Nobody voted, but we all agree — they kept the table kind."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! We all chose them, because we wanted to."
             }
 
         // MARK: Friendly × Apocalypse
@@ -709,6 +752,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. {leader} is in front. The world may burn, but the count must finish."
             case .seasonClose:
                 return "{mascot}: The season is over in {room}. {winner} took it. We survived — barely."
+            case .goodSport:
+                return "{mascot}: {winner} is our Good Sport! The world may burn, but they kept the table warm."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! Doomed together, but what a night."
             }
 
         // MARK: Snarky × Order
@@ -738,6 +785,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. The host is doing the math. {leader} is in front — the rest of you did the work."
             case .seasonClose:
                 return "{mascot}: The season is closed in {room}. {winner} took it — try to look surprised."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} Good Sport. They lost well — the rest of you could take notes."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The host picked them; try to look impressed."
             }
 
         // MARK: Snarky × Centrist
@@ -767,6 +818,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being counted. {leader} leads. The chips are doing their final shuffle."
             case .seasonClose:
                 return "{mascot}: {room} ended its season. {leader} finished on top. The rest of you know where you stand."
+            case .goodSport:
+                return "{mascot}: {winner} is our Good Sport. Smallest losses, steadiest table — the rest of you know who you are."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The room read it right."
             }
 
         // MARK: Snarky × Trickster
@@ -796,6 +851,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. {leader} is in front — until I re-sort the count."
             case .seasonClose:
                 return "{mascot}: {room} closed the season. {winner} took it. Don't trust the final board — I may have re-sorted it."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. The standings don't show it — I may have re-sorted them. The table knows."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Don't trust the order — trust the night."
             }
 
         // MARK: Snarky × Anarchist
@@ -825,6 +884,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. {leader} leads. The host calls it a tally; we call it a group decision."
             case .seasonClose:
                 return "{mascot}: {room} ended the season. {winner} took it. The host calls it a victory; we call it a consensus."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. The host calls it an award; we call it a group decision."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The host says so; we'll see."
             }
 
         // MARK: Snarky × Apocalypse
@@ -854,6 +917,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being settled. {leader} is in front of the final count. Don't get attached."
             case .seasonClose:
                 return "{mascot}: The season is done in {room}. {winner} took it — don't get used to it."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. The ship is sinking, and they kept the table calm. Impressive."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Don't get attached — but nice night."
             }
 
         // MARK: Sarcastic × Order
@@ -883,6 +950,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling 'according to procedure.' Sure. {leader} is in front."
             case .seasonClose:
                 return "{mascot}: The season has 'concluded' in {room}. {winner} won 'it.' Sure."
+            case .goodSport:
+                return "{mascot}: {room} has 'awarded' Good Sport to {winner}. They lost 'well.' Sure."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The host 'chose' them. Sure."
             }
 
         // MARK: Sarcastic × Centrist
@@ -912,6 +983,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being tallied. {leader} leads. I'm sure the math will hold."
             case .seasonClose:
                 return "{mascot}: {room} closed its season. {leader} finished on top. I'm sure that'll hold."
+            case .goodSport:
+                return "{mascot}: {winner} is our Good Sport. Smallest losses, 'as expected.' Sure."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. I'm sure that'll hold."
             }
 
         // MARK: Sarcastic × Trickster
@@ -941,6 +1016,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. {leader} is in front — the count may have shifted since you looked."
             case .seasonClose:
                 return "{mascot}: {room} wrapped the season. {winner} took it — the standings may have shifted since the count."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. The standings may have shifted — but the table knows who held it."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The count may have shifted since you looked."
             }
 
         // MARK: Sarcastic × Anarchist
@@ -970,6 +1049,10 @@ enum MascotEngine {
                 return "{mascot}: The host is 'counting' {event}. {leader} is 'winning.' We'll see."
             case .seasonClose:
                 return "{mascot}: The host has 'declared' the season over in {room}. {winner} 'won.' We'll see next year."
+            case .goodSport:
+                return "{mascot}: The host has 'declared' {winner} Good Sport. We call it 'people showed up.'"
+            case .tonightStar:
+                return "{mascot}: The host has 'named' {winner} tonight's star. Sure."
             }
 
         // MARK: Sarcastic × Apocalypse
@@ -999,6 +1082,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. {leader} is in front of the wreckage. The numbers will lie."
             case .seasonClose:
                 return "{mascot}: The season is over in {room}. {winner} took it. The calm before the next collapse."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. The wreckage is calm, thanks to them. Enjoy it."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The fire is loud; the night was theirs."
             }
 
         // MARK: Unhinged × Order
@@ -1028,6 +1115,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. The host counts, I count, we all count — and {leader} is in front. This is fine."
             case .seasonClose:
                 return "{mascot}: The season is closed in {room}. {winner} took it, the host has spoken, and I am at peace — this is fine."
+            case .goodSport:
+                return "{mascot}: {room} honors {winner} as Good Sport. The host has spoken, I agree, and the table is at peace — this is fine."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The host has spoken, I agree, and the night is theirs — this is fine."
             }
 
         // MARK: Unhinged × Centrist
@@ -1057,6 +1148,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being tallied. {leader} leads, the table hums with arithmetic, and it's almost done."
             case .seasonClose:
                 return "{mascot}: {room} wrapped its season. {winner} took it, the table hums with memory, and it was all real."
+            case .goodSport:
+                return "{mascot}: {winner} is our Good Sport. I read the room three times, and the room says they held it together."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. I checked the room twice — the night was theirs."
             }
 
         // MARK: Unhinged × Trickster
@@ -1086,6 +1181,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. {leader} is in front, and I have recounted the chips three times — they don't add up. You're welcome."
             case .seasonClose:
                 return "{mascot}: {room} closed the season. {winner} took it, and I have rewritten the final board in invisible ink — you can't prove anything."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. I have redrawn the standings in invisible ink, but the table knows who held it — you can't prove anything."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. I have already moved them to the top of the night — you're welcome."
             }
 
         // MARK: Unhinged × Anarchist
@@ -1115,6 +1214,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is settling. {leader} leads. Nobody runs the count, we all run the count, and the host is a figment."
             case .seasonClose:
                 return "{mascot}: {room} ended its season. {winner} took it. Nobody ran it, we all ran it, and the host is a figment."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Nobody voted, we all voted, and the table is at peace — the host is a figment."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Nobody named them, we all named them, and the night is theirs."
             }
 
         // MARK: Unhinged × Apocalypse
@@ -1144,6 +1247,10 @@ enum MascotEngine {
                 return "{mascot}: {event} is being settled. {leader} is in front, the fire is loud, and the tally marches on."
             case .seasonClose:
                 return "{mascot}: The season is done in {room}. {winner} took it, the fire is out, and we're all still here."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. The fire is loud, the table held, and we're all still here — gloriously."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The fire is out, the night was theirs, and we're all still here."
             }
         }
     }
@@ -1346,6 +1453,10 @@ enum MascotEngine {
             lines.append("Message type: The event is live and the host has finalised. Chips are being counted, settlement in progress.")
         case .seasonClose:
             lines.append("Message type: The current season has ended. This is the awards arc — surface the winner and close.")
+        case .goodSport:
+            lines.append("Message type: The Good Sport award. Honor the member who lost well — voice-only, never a score.")
+        case .tonightStar:
+            lines.append("Message type: Tonight's Star. Name the member who carried the night — ephemeral, one surface, then gone.")
         }
         lines.append("Write the mascot's message now:")
         return lines.joined(separator: "\n")

@@ -562,6 +562,42 @@ struct RoomDetailView: View {
         }
     }
 
+    /// V0.53 — builds the current user's shareable stat card for a
+    /// closed season. Only the member's own numbers and public awards;
+    /// Drowning is excluded before the card is built. `nil` when the
+    /// current user has no leaderboard row (never played this season)
+    /// or no current user is signed in.
+    private func currentUserStatCard(
+        season: Season,
+        awards: [SeasonAward]
+    ) -> SeasonStatCard? {
+        guard let me = authService.currentUser?.id else { return nil }
+        guard let entry = leaderboard.first(where: { $0.userId == me }) else {
+            return nil
+        }
+        // Public awards only — Drowning never appears on the card.
+        let publicAwards = awards
+            .filter { !$0.awardType.isPrivate }
+            .map(\.awardType)
+        let best = entry.trajectory.map(\.delta).max()
+        let worst = entry.trajectory.map(\.delta).min()
+        return SeasonStatCard(
+            roomName: room.name,
+            seasonOrdinal: season.ordinal,
+            seasonSubtitle: season.subtitle,
+            memberName: entry.displayName,
+            record: SeasonStatRecord(
+                sessionsPlayed: Int(entry.sessionsPlayed),
+                netChips: entry.seasonScore,
+                bestSingleSession: best,
+                worstSingleSession: worst,
+                longestStreak: 0
+            ),
+            awards: publicAwards,
+            mascotLine: ""
+        )
+    }
+
     @ViewBuilder
     private var activeSlot: some View {
         Group {
@@ -714,6 +750,7 @@ struct RoomDetailView: View {
                     currentUserId: authService.currentUser?.id,
                     isHost: room.userRole == .host,
                     currentUserOptedIn: room.memberDrowningOptIn,
+                    statCard: currentUserStatCard(season: season, awards: awards),
                     onToggleDrowningOptIn: { newValue in
                         Task { await setDrowningOptIn(newValue) }
                     }
@@ -1952,10 +1989,20 @@ private struct AwardsCard: View {
     let currentUserId: UUID?
     let isHost: Bool
     let currentUserOptedIn: Bool
+    /// V0.53 — the current user's shareable stat card, or `nil` when
+    /// they have no season record. When present, a share action is
+    /// offered on the card.
+    let statCard: SeasonStatCard?
     let onToggleDrowningOptIn: (Bool) -> Void
 
-    /// Stable display order: phoenix, veteran, whale, drowning.
-    /// `AwardType.CaseIterable` defines the order; we sort by it.
+    /// V0.53 — the rendered stat card PNG, produced lazily on first
+    /// share. `ImageRenderer` is not exercised by the parse-only gate,
+    /// so this is a manual-pass surface on an Xcode host.
+    @State private var shareImage: UIImage?
+
+    /// Stable display order: phoenix, veteran, whale, drowning,
+    /// ironMann, comebackKid, goodSport. `AwardType.CaseIterable`
+    /// defines the order; we sort by it.
     private var sortedAwards: [SeasonAward] {
         awards.sorted { lhs, rhs in
             let lhsIdx = AwardType.allCases.firstIndex(of: lhs.awardType) ?? 0
@@ -1995,6 +2042,24 @@ private struct AwardsCard: View {
                 .padding(.vertical, 4)
             }
 
+            // V0.53 — share the member's own stat card. The card is
+            // generated on the member's device and shared through the
+            // system share sheet; the app never broadcasts it.
+            if let statCard {
+                ShareLink(
+                    item: renderImage(for: statCard),
+                    preview: SharePreview(
+                        "\(statCard.memberName) — Season \(statCard.seasonOrdinal)",
+                        image: renderImage(for: statCard)
+                    )
+                ) {
+                    Label("Share my season card", systemImage: "square.and.arrow.up")
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                }
+                .padding(.top, 4)
+            }
+
             if let endedAt = season.endedAt {
                 Text("Closed \(endedAt, format: .relative(presentation: .named))")
                     .font(Theme.Typography.caption)
@@ -2005,6 +2070,19 @@ private struct AwardsCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
         .sectionCard(.hero)
+    }
+
+    /// Renders the stat card to a PNG via `ImageRenderer`. Cached in
+    /// `shareImage` so repeated shares don't re-render.
+    private func renderImage(for card: SeasonStatCard) -> UIImage {
+        if let shareImage { return shareImage }
+        let renderer = ImageRenderer(
+            content: SeasonStatCardView(card: card)
+        )
+        renderer.scale = 2.0
+        let image = renderer.uiImage ?? UIImage()
+        shareImage = image
+        return image
     }
 
     @ViewBuilder
@@ -2061,10 +2139,14 @@ private struct AwardRow: View {
 
     private var symbol: String {
         switch award.awardType {
-        case .phoenix:  return "flame.fill"
-        case .veteran:  return "checkmark.seal.fill"
-        case .whale:    return "circle.hexagongrid.fill"
-        case .drowning: return "drop.fill"
+        case .phoenix:     return "flame.fill"
+        case .veteran:     return "checkmark.seal.fill"
+        case .whale:       return "circle.hexagongrid.fill"
+        case .drowning:    return "drop.fill"
+        case .ironMann:    return "figure.run"
+        case .comebackKid: return "arrow.uturn.up.circle.fill"
+        case .goodSport:   return "hand.thumbsup.fill"
+        case .tonightStar: return "star.fill"
         }
     }
 }
