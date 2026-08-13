@@ -107,6 +107,8 @@
 		AAAAAAAA00000000000000EB /* SeasonStatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048A /* SeasonStatCard.swift */; };
 		AAAAAAAA00000000000000EC /* SeasonStatCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048B /* SeasonStatCardView.swift */; };
 		AAAAAAAA00000000000000ED /* RoomGraphSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048C /* RoomGraphSummary.swift */; };
+		AAAAAAAA000000000000048F /* Fraunces-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */; };
+		AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -253,6 +255,8 @@
 		AAAAAAAA000000000000048A /* SeasonStatCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStatCard.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048B /* SeasonStatCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStatCardView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048C /* RoomGraphSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomGraphSummary.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Regular.ttf; sourceTree = "<group>"; };
+		AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Italic.ttf; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -292,6 +296,8 @@
 				AAAAAAAA0000000000000434 /* Info.plist */,
 				AAAAAAAA0000000000000435 /* Config.xcconfig */,
 				AAAAAAAA0000000000000443 /* GamesRoom.entitlements */,
+				AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */,
+				AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */,
 			);
 			path = GamesRoom;
 			sourceTree = "<group>";
@@ -569,6 +575,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */,
+				AAAAAAAA000000000000048F /* Fraunces-Regular.ttf in Resources */,
+				AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
