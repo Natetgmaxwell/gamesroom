@@ -76,6 +76,9 @@ struct RoomDetailView: View {
     // Dispensed to acknowledge (local state, ledger unchanged).
     @State private var hostWithdrawals: [EventTransaction] = []
     @State private var dispensedWithdrawalIds: Set<UUID> = []
+    // V0.51 — per-member working hands for the active casino event.
+    // Host sees working hand + bank balance; members see working hand only.
+    @State private var workingHands: [WorkingHand] = []
     // V0.46 — member's "Settle manually" path. Always presents
     // `SettleCasinoSheet`; the scan CTA stays on the vision flow.
     // Kept distinct from `settleSheetEvent` (host settle +
@@ -191,6 +194,17 @@ struct RoomDetailView: View {
     /// the row without mutating the ledger.
     private var pendingWithdrawals: [EventTransaction] {
         hostWithdrawals.filter { !dispensedWithdrawalIds.contains($0.id) }
+    }
+
+    /// V0.51 — active casino play (`.inPlay` or `.settleRound`): the
+    /// event has started, is not settled, and the room is running
+    /// the casino pack. Drives the render gate for the "Chips on
+    /// the table" section.
+    private var isCasinoPlayActive: Bool {
+        guard let event = activeEvent else { return false }
+        return event.packSlug == "casino"
+            && event.playedAt <= Date()
+            && event.settledAt == nil
     }
 
     /// Unread system events for this room (pack installed/removed,
@@ -397,18 +411,15 @@ struct RoomDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
                 activeSlot
                     .frame(maxWidth: .infinity)
-                // V0.47 — host-only "Chips to dispense" surface.
-                // Sits immediately under the active slot so the
-                // host sees pending withdrawals before the rest
-                // of the page; hidden entirely when there are
-                // none (matches the conditional-section pattern
-                // of StandingsSection).
-                if isHost,
-                   let event = activeEvent,
-                   event.packSlug == "casino",
-                   !pendingWithdrawals.isEmpty {
-                    HostWithdrawalsSection(
-                        withdrawals: pendingWithdrawals,
+                // V0.51 — per-member working hands + host to-dispense
+                // zone, rendered during active casino play when
+                // there's anything to show.
+                if isCasinoPlayActive,
+                   workingHands.contains { $0.workingHand > 0 } || !pendingWithdrawals.isEmpty {
+                    ChipsOnTableSection(
+                        hands: workingHands,
+                        isHost: isHost,
+                        pendingWithdrawals: pendingWithdrawals,
                         onDispense: { id in dispensedWithdrawalIds.insert(id) }
                     )
                     .sectionCard(.standard)
@@ -743,7 +754,8 @@ struct RoomDetailView: View {
         async let roundsLoad: () = loadRoundsIfNeeded(force: force)
         async let chapterLoad: () = loadChapterLineIfNeeded(force: force)
         async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad)
+        async let workingHandsLoad: () = loadWorkingHandsIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad)
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
         // rule in `ScoreSnapshot.shouldPersist` keeps a rooms-list
@@ -887,6 +899,19 @@ struct RoomDetailView: View {
         }
         let all = await casinoService.getEventTransactions(eventId: event.id)
         hostWithdrawals = all.filter { $0.kind == "casino_withdrawal" }
+    }
+
+    /// V0.51 — loads every room member's working hand for the
+    /// active casino event. Runs in the parallel `refresh`; the
+    /// service call is non-throwing and collapses to `[]` on
+    /// failure, so an empty read renders the section in its
+    /// hidden state rather than an error path.
+    private func loadWorkingHandsIfNeeded() async {
+        guard let event = activeEvent, event.packSlug == "casino" else {
+            workingHands = []
+            return
+        }
+        workingHands = await casinoService.loadWorkingHands(eventId: event.id)
     }
 
     // MARK: - Action handlers (wired to the service layer)
@@ -1931,6 +1956,61 @@ private struct SystemBanner: View {
         case .seasonClosed:
             return "The season has been closed by the host."
         }
+    }
+}
+
+// MARK: - Chips on the table (V0.51)
+
+/// Per-member working-hand readout for active casino play. Host
+/// gets a "To dispense" zone (reusing the V0.47 dispense rows)
+/// above the member rows, plus each member's bank balance in a
+/// trailing muted column. Members see working hands only —
+/// balances are host-visible.
+private struct ChipsOnTableSection: View {
+    let hands: [WorkingHand]
+    let isHost: Bool
+    let pendingWithdrawals: [EventTransaction]
+    let onDispense: (UUID) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            HStack(spacing: 8) {
+                Image(systemName: Theme.Icon.circleHexagongridFill)
+                    .foregroundStyle(Theme.Palette.accent)
+                Text("Chips on the table")
+                    .font(Theme.Typography.title)
+                    .foregroundStyle(Theme.Palette.primaryText)
+            }
+            if isHost, !pendingWithdrawals.isEmpty {
+                HostWithdrawalsSection(
+                    withdrawals: pendingWithdrawals,
+                    onDispense: onDispense
+                )
+                .padding(.top, 4)
+            }
+            ForEach(hands) { hand in
+                HStack(spacing: Theme.Layout.cardInset) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(hand.displayName)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                        Text("Working hand")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                    Spacer()
+                    if isHost {
+                        Text("\(hand.pointsBalance) bank")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                    Text("\(hand.workingHand) pts")
+                        .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Theme.Palette.accent)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

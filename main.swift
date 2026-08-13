@@ -1234,6 +1234,22 @@ runner.run("CasinoWithdrawal round-trips through JSON encoder") {
     runner.assertEqual(decoded.withdrawnAt, withdrawal.withdrawnAt)
 }
 
+runner.run("WorkingHand JSON round-trips with snake_case keys") {
+    let memberId = UUID()
+    let hand = WorkingHand(
+        memberId: memberId,
+        displayName: "Alice",
+        workingHand: 120,
+        pointsBalance: 80
+    )
+    let data = try JSONEncoder().encode(hand)
+    let decoded = try JSONDecoder().decode(WorkingHand.self, from: data)
+    runner.assertEqual(decoded.memberId, memberId)
+    runner.assertEqual(decoded.displayName, "Alice")
+    runner.assertEqual(decoded.workingHand, 120)
+    runner.assertEqual(decoded.pointsBalance, 80)
+}
+
 // MARK: - ChipSegmentationDetector + PhotoHash (F-CAS-02 / F-CAS-03)
 
 /// Draws a synthetic chip-stack test image: a felt-colored canvas

@@ -499,6 +499,32 @@ final class CasinoService: ObservableObject {
         return rows.first
     }
 
+    /// Returns every room member's current working hand for one
+    /// event. Drives the V0.51 "Chips on the table" section on
+    /// `RoomDetailView` — host sees working hand + bank balance;
+    /// members see working hand only (balance column hidden by
+    /// the view gate, not the SQL).
+    ///
+    /// Non-throwing by design: a network blip on this read should
+    /// collapse to an empty list so the section can render its
+    /// hidden state without an error path. Mirrors the
+    /// `getEventTransactions` non-throwing pattern.
+    ///
+    /// Server side: `get_event_working_hands(p_event_id)` (migration
+    /// 065). The RPC returns one row per room member with their
+    /// open `casino_withdrawals` sum as `working_hand` and their
+    /// current `room_memberships.points_balance` as `points_balance`.
+    func loadWorkingHands(eventId: UUID) async -> [WorkingHand] {
+        let result: [WorkingHand] = (try? await SupabaseClientProvider.shared
+            .rpc("get_event_working_hands", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value) ?? []
+        self.lastError = nil
+        return result
+    }
+
     /// Host-only upsert of the room's casino config. Throws on
     /// server errors (non-host write, network failure) so the
     /// settings sheet can surface a neutral toast.

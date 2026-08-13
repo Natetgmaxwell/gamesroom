@@ -103,6 +103,7 @@
 		AAAAAAAA0000000000000483 /* CAHCardScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */; };
 		AAAAAAAA0000000000000485 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000486 /* Haptics.swift */; };
 		AAAAAAAA0000000000000487 /* ConfettiBurst.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000488 /* ConfettiBurst.swift */; };
+		AAAAAAAA00000000000000C5 /* WorkingHand.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000489 /* WorkingHand.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -245,6 +246,7 @@
 		AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CAHCardScanSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000486 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000488 /* ConfettiBurst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfettiBurst.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000489 /* WorkingHand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkingHand.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -364,6 +366,7 @@
 				AAAAAAAA000000000000045A /* EventRound.swift */,
 				AAAAAAAA000000000000045E /* CatchUpMessage.swift */,
 				BBBBBBBB0000000000000450 /* SeatDeposit.swift */,
+				AAAAAAAA0000000000000489 /* WorkingHand.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -705,6 +708,7 @@
 				AAAAAAAA0000000000000483 /* CAHCardScanSheet.swift in Sources */,
 				AAAAAAAA0000000000000485 /* Haptics.swift in Sources */,
 				AAAAAAAA0000000000000487 /* ConfettiBurst.swift in Sources */,
+				AAAAAAAA00000000000000C5 /* WorkingHand.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
