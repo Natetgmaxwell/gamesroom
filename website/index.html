@@ -3,54 +3,190 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Games Room — The app for your games night</title>
-  <meta name="description" content="Games Room is a private app for in-person games nights. Invite-only rooms, four packs, seasons with score arcs, and a mascot that narrates the night.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <title>Games Room — Coming soon</title>
+  <meta name="description" content="Games Room is a private app for in-person games nights. Invite-only rooms, four packs, seasons with score arcs, and a mascot that narrates the night. In beta now.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/icon-120.png">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header class="site-header">
     <div class="brand">
-      <div class="four-seats" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <img class="brand-mark" src="/icon-120.png" alt="" aria-hidden="true">
       <span class="wordmark">Games Room</span>
+      <div class="pips" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
     </div>
   </header>
 
   <main>
-    <h1>The app for your games night.</h1>
-    <p class="lead">Games Room is a private app for in-person games nights. You bring your people. The app plans the night, runs the scores, and stays quiet during play.</p>
+    <section class="hero">
+      <span class="beta"><span class="dot"></span> Beta</span>
+      <img class="hero-icon" src="/icon-120.png" alt="The Games Room mark: a warm table seen from above, four seats waiting.">
+      <h1>Your games night, <em>kept.</em></h1>
+      <p class="lead">A private app for in-person games nights. You bring your people. Games Room plans the night, runs the scores, and stays quiet during play.</p>
 
-    <p>A host creates a room and shares a six-character invite code. Members join, claim seats, and RSVP. Every room is invite-only.</p>
-
-    <section>
-      <h2>Four packs ship pre-installed</h2>
-      <ul>
-        <li>Casino</li>
-        <li>Cards Against Humanity</li>
-        <li>Monopoly Deal</li>
-        <li>Pluto Chess</li>
-      </ul>
+      <div class="mascot" aria-live="polite">
+        <img class="mascot-mark" src="/icon-120.png" alt="" aria-hidden="true">
+        <div>
+          <div class="tag">The table says</div>
+          <div class="line" id="mascot-line"><span id="mascot-text"></span><span class="caret" aria-hidden="true"></span></div>
+        </div>
+      </div>
     </section>
 
-    <section>
-      <h2>Seasons give each pack a score arc</h2>
-      <p>Scores carry between nights and reset when the season ends. The leaderboard tracks who actually wins across months, not just who won last Tuesday.</p>
+    <section class="reveal">
+      <div class="card hero-card">
+        <h2>What it is</h2>
+        <p>A host creates a room and shares a six-character invite code. Members join, claim seats, and RSVP. Every room is invite-only.</p>
+        <p class="muted">The app is in beta and under active development. Things will shift as we find what works.</p>
+      </div>
     </section>
 
-    <section>
-      <h2>Every room gets a mascot</h2>
-      <p>Pick its personality and politics at room-create, and it sends the reminders, narrates the night, and wraps each session in one line.</p>
+    <section class="reveal">
+      <div class="card">
+        <h2>Four packs ship pre-installed</h2>
+        <ul class="packs">
+          <li>Casino</li>
+          <li>Cards Against Humanity</li>
+          <li>Monopoly Deal</li>
+          <li>Pluto Chess</li>
+        </ul>
+      </div>
     </section>
 
-    <p class="muted">No ads. No analytics. No third-party SDKs. Sign in with Apple; we never see your email.</p>
+    <section class="reveal">
+      <div class="card">
+        <h2>Seasons give each pack a score <span class="serif">arc</span></h2>
+        <p>Scores carry between nights and reset when the season ends. The leaderboard tracks who actually wins across months — not just who won last Tuesday.</p>
+      </div>
+    </section>
 
-    <a class="cta" href="#">Get the app</a>
+    <section class="reveal">
+      <div class="card">
+        <h2>Every room gets a <span class="serif">mascot</span></h2>
+        <p>Pick its personality at room-create, and it sends the reminders, narrates the night, and wraps each session in one line. Quiet, witty, on your side.</p>
+      </div>
+    </section>
+
+    <p class="muted trust">No ads. No analytics. No third-party SDKs. Sign in with Apple; we never see your email.</p>
+
+    <div class="cta-wrap reveal">
+      <a class="cta" href="#" id="cta">Coming soon <span class="arrow">→</span></a>
+      <span class="confetti" aria-hidden="true"></span>
+      <span class="coming-soon">Games Room is in <strong>beta</strong>. App Store launch is on the way.</span>
+    </div>
   </main>
 
   <footer class="site-footer">
-    <p><a href="/">Games Room</a> · <a href="/support">Support</a> · <a href="/privacy">Privacy</a></p>
+    <p class="footer-mascot">"Pull up a seat. The night keeps itself."</p>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
   </footer>
+
+  <script>
+    // ── Mascot line: typewriter cycling through one-liners ──
+    (function () {
+      var lines = [
+        "The chips count themselves. You just sit.",
+        "Four seats. One table. All of you.",
+        "Quiet during play, chatty between nights.",
+        "Seasons end. Rivalries outlast them.",
+        "No ads, no tracking, just the night."
+      ];
+      var el = document.getElementById("mascot-text");
+      var li = 0, ci = 0, deleting = false, started = false;
+      function tick() {
+        var current = lines[li];
+        if (!deleting) {
+          ci++;
+          el.textContent = current.slice(0, ci);
+          if (ci === current.length) {
+            deleting = true;
+            return setTimeout(tick, 2400);
+          }
+        } else {
+          ci--;
+          el.textContent = current.slice(0, ci);
+          if (ci === 0) {
+            deleting = false;
+            li = (li + 1) % lines.length;
+            return setTimeout(tick, 500);
+          }
+        }
+        setTimeout(tick, deleting ? 28 : 45);
+      }
+      setTimeout(function () { tick(); }, 900);
+    })();
+
+    // ── Scroll-triggered reveal ──
+    (function () {
+      var items = document.querySelectorAll(".reveal");
+      if (!("IntersectionObserver" in window)) {
+        items.forEach(function (i) { i.classList.add("is-visible"); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
+        });
+      }, { threshold: 0.12 });
+      items.forEach(function (i) { io.observe(i); });
+    })();
+
+    // ── Header pips light in sequence, repeating ──
+    (function () {
+      var pips = document.querySelectorAll(".pips span");
+      var i = 0;
+      setInterval(function () {
+        pips.forEach(function (p) { p.classList.remove("lit"); });
+        pips[i].classList.add("lit");
+        i = (i + 1) % pips.length;
+      }, 550);
+    })();
+
+    // ── Confetti burst on CTA hover (ties to seat-claim confetti) ──
+    (function () {
+      var wrap = document.querySelector(".cta-wrap");
+      var host = document.querySelector(".confetti");
+      if (!wrap) return;
+      var COLORS = ["#B08D57", "#c19a63", "#F4EFE6", "#8a6d43"];
+      function spawn() {
+        host.innerHTML = "";
+        for (var k = 0; k < 16; k++) {
+          var s = document.createElement("i");
+          var ang = Math.random() * Math.PI * 2;
+          var dist = 50 + Math.random() * 80;
+          s.style.setProperty("--dx", Math.cos(ang) * dist + "px");
+          s.style.setProperty("--dy", Math.sin(ang) * dist + "px");
+          s.style.setProperty("--rot", (Math.random() * 540 - 270) + "deg");
+          s.style.left = "0px";
+          s.style.top = "0px";
+          s.style.background = COLORS[k % COLORS.length];
+          s.style.animationDelay = (k * 0.015) + "s";
+          host.appendChild(s);
+        }
+      }
+      wrap.addEventListener("mouseenter", spawn);
+    })();
+
+    // ── CTA: magnetic hover + press scale ──
+    (function () {
+      var cta = document.getElementById("cta");
+      if (!cta) return;
+      var max = 10;
+      cta.addEventListener("mousemove", function (e) {
+        var r = cta.getBoundingClientRect();
+        var dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
+        var dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+        cta.style.transform = "translate(" + dx * max + "px, " + dy * max + "px)";
+      });
+      cta.addEventListener("mouseleave", function () { cta.style.transform = ""; });
+      cta.addEventListener("mousedown", function () { cta.style.transform = "scale(0.95)"; });
+      cta.addEventListener("mouseup", function () { cta.style.transform = ""; });
+    })();
+  </script>
 </body>
 </html>
