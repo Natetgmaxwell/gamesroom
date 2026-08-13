@@ -33,10 +33,14 @@ set search_path = public
 as $$
     select cw.*
     from public.casino_withdrawals cw
-    join public.events e on e.id = cw.event_id
-    where cw.event_id = p_event_id
+    where cw.session_id = p_event_id
       and cw.member_id = public.current_user_id()
-      and cw.settled_at is null
+      and not exists (
+        select 1 from public.casino_scans cs
+        where cs.session_id = cw.session_id
+          and cs.member_id = cw.member_id
+          and cs.finalized_at is not null
+      )
     order by cw.withdrawn_at desc
     limit 1;
 $$;
