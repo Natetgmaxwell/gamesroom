@@ -1687,7 +1687,7 @@ runner.run("MascotEngine.footerKind returns .postPlayRecap when settledAt is set
     runner.assertEqual(kind, .postPlayRecap)
 }
 
-runner.run("MascotEngine.footerKind returns .inPlay when playedAt <= now and not settled") {
+runner.run("MascotEngine.footerKind returns .tonightEvent when live, not settled, no withdrawal") {
     let now = Date()
     let event = Event(
         id: UUID(), roomId: UUID(), name: "Poker",
@@ -1697,7 +1697,72 @@ runner.run("MascotEngine.footerKind returns .inPlay when playedAt <= now and not
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: now
     )
-    runner.assertEqual(kind, .inPlay)
+    runner.assertEqual(kind, .tonightEvent)
+}
+
+runner.run("MascotEngine.footerKind returns .inPlayWithWithdrawal when live and withdrawn > 0") {
+    let now = Date()
+    let event = Event(
+        id: UUID(), roomId: UUID(), name: "Poker",
+        playedAt: now.addingTimeInterval(-600),
+        createdAt: now.addingTimeInterval(-86_400)
+    )
+    let kind = MascotEngine.footerKind(
+        activeEvent: event, leaderboard: [], now: now,
+        withdrawnAmount: 500
+    )
+    runner.assertEqual(kind, .inPlayWithWithdrawal)
+}
+
+runner.run("MascotEngine.footerKind returns .settleRound when live and host finalized") {
+    let now = Date()
+    let event = Event(
+        id: UUID(), roomId: UUID(), name: "Poker",
+        playedAt: now.addingTimeInterval(-600),
+        createdAt: now.addingTimeInterval(-86_400),
+        hostFinalized: true
+    )
+    let kind = MascotEngine.footerKind(
+        activeEvent: event, leaderboard: [], now: now,
+        withdrawnAmount: 500
+    )
+    runner.assertEqual(kind, .settleRound)
+}
+
+runner.run("MascotEngine.footerKind returns .seasonClose when current season ended") {
+    let now = Date()
+    let season = Season(
+        id: UUID(), roomId: UUID(), ordinal: 3, subtitle: "The Long River",
+        status: .ended, startedAt: now.addingTimeInterval(-30 * 86_400),
+        endedAt: now.addingTimeInterval(-86_400)
+    )
+    let kind = MascotEngine.footerKind(
+        activeEvent: nil, leaderboard: [], now: now,
+        currentSeason: season
+    )
+    runner.assertEqual(kind, .seasonClose)
+}
+
+runner.run("MascotEngine.footerKind returns .postPlayRecap when settled even if season ended") {
+    // Season-close takes priority over settled-event recap per the
+    // V0State precedence — but a settled event with an ACTIVE season
+    // still resolves .postPlayRecap.
+    let now = Date()
+    let past = now.addingTimeInterval(-3600)
+    let event = Event(
+        id: UUID(), roomId: UUID(), name: "Poker",
+        playedAt: past, createdAt: past.addingTimeInterval(-86_400),
+        settledAt: past.addingTimeInterval(1800)
+    )
+    let season = Season(
+        id: UUID(), roomId: UUID(), ordinal: 2, subtitle: "Arc",
+        status: .active, startedAt: now.addingTimeInterval(-30 * 86_400)
+    )
+    let kind = MascotEngine.footerKind(
+        activeEvent: event, leaderboard: [], now: now,
+        currentSeason: season
+    )
+    runner.assertEqual(kind, .postPlayRecap)
 }
 
 runner.run("MascotEngine.footerKind returns .briefingOnCreate when playedAt is in the future") {
@@ -1857,6 +1922,99 @@ runner.run("MascotEngine.callerRank returns nil when the caller is a host") {
     runner.assertNil(MascotEngine.callerRank(leaderboard: leaderboard, currentUserId: hostId))
 }
 
+runner.run("MascotEngine.lastWinnerDelta returns most recent winner's pointsDelta") {
+    let eventId = UUID()
+    let alice = UUID(), bob = UUID()
+    let rounds = [
+        EventRound(
+            id: UUID(), eventId: eventId, roomId: UUID(),
+            packSlug: "monopoly_deal", roundIndex: 1,
+            entries: [
+                ScoreEntry(memberId: alice, pointsDelta: 40, meta: ["winner": .bool(true)])
+            ],
+            createdBy: UUID(), createdAt: Date()
+        ),
+        EventRound(
+            id: UUID(), eventId: eventId, roomId: UUID(),
+            packSlug: "monopoly_deal", roundIndex: 2,
+            entries: [
+                ScoreEntry(memberId: bob, pointsDelta: 25, meta: ["winner": .bool(true)])
+            ],
+            createdBy: UUID(), createdAt: Date()
+        )
+    ]
+    // roundIndex 2 is most recent → Bob's 25.
+    runner.assertEqual(MascotEngine.lastWinnerDelta(rounds: rounds), 25)
+}
+
+runner.run("MascotEngine.lastWinnerDelta returns nil when no winner") {
+    let eventId = UUID()
+    let alice = UUID()
+    let rounds = [
+        EventRound(
+            id: UUID(), eventId: eventId, roomId: UUID(),
+            packSlug: "pluto_chess", roundIndex: 1,
+            entries: [
+                ScoreEntry(memberId: alice, pointsDelta: -20, meta: [:])
+            ],
+            createdBy: UUID(), createdAt: Date()
+        )
+    ]
+    runner.assertNil(MascotEngine.lastWinnerDelta(rounds: rounds))
+}
+
+runner.run("MascotEngine.generateVoice drops {working_hand} sentence when withdrawnAmount is nil") {
+    // `.inPlayWithWithdrawal` cells reference {working_hand}; when the
+    // context has no withdrawn amount the referencing sentence must drop.
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .professional,
+        ideology: .order,
+        kind: .inPlayWithWithdrawal,
+        context: .init(
+            activeEventTitle: "Poker",
+            lastEventDaysAgo: nil,
+            memberCount: 4,
+            memberNames: ["Alice", "Bob", "Carol", "Dave"],
+            recentWinnerNames: ["Alice"],
+            leaderName: "Alice",
+            callerRank: nil,
+            eventCount: nil,
+            withdrawnAmount: nil,
+            lastWinnerDelta: nil,
+            seasonDaysLeft: nil
+        )
+    )
+    runner.assertFalse(body.contains("{working_hand}"), "raw placeholder removed by sentence-drop")
+    runner.assertFalse(body.contains("working hand"), "working-hand sentence dropped when nil")
+}
+
+runner.run("MascotEngine.generateVoice substitutes {working_hand} when withdrawnAmount present") {
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .professional,
+        ideology: .order,
+        kind: .inPlayWithWithdrawal,
+        context: .init(
+            activeEventTitle: "Poker",
+            lastEventDaysAgo: nil,
+            memberCount: 4,
+            memberNames: ["Alice", "Bob", "Carol", "Dave"],
+            recentWinnerNames: ["Alice"],
+            leaderName: "Alice",
+            callerRank: nil,
+            eventCount: nil,
+            withdrawnAmount: 500,
+            lastWinnerDelta: nil,
+            seasonDaysLeft: nil
+        )
+    )
+    runner.assertTrue(body.contains("500"), "working hand substituted")
+    runner.assertFalse(body.contains("{working_hand}"), "no raw placeholder")
+}
+
 runner.run("MascotEngine.generateVoice drops sentences with unpopulated {event}") {
     // `.briefingOnCreate` with no eventDate/venue/seatsLeft still
     // references {event} — the sentence-drop pass must excise the
@@ -2005,7 +2163,10 @@ private func fullyPopulatedContext() -> MascotEngine.RoomContext {
         recentWinnerNames: ["Alice"],
         leaderName: "Alice",
         callerRank: 2,
-        eventCount: 12
+        eventCount: 12,
+        withdrawnAmount: 500,
+        lastWinnerDelta: 120,
+        seasonDaysLeft: 7
     )
 }
 
@@ -2022,7 +2183,11 @@ runner.run("MascotEngine.generateVoice — all 200 cells render without raw plac
                 .roomWelcome,
                 .inPlay,
                 .roomStale,
-                .standings
+                .standings,
+                .tonightEvent,
+                .inPlayWithWithdrawal,
+                .settleRound,
+                .seasonClose
             ] {
                 let body = MascotEngine.generateVoice(
                     mascotName: "Max",
@@ -2059,7 +2224,11 @@ runner.run("MascotEngine.generateVoice — all 200 cells stay <= 200 chars fully
                 .roomWelcome,
                 .inPlay,
                 .roomStale,
-                .standings
+                .standings,
+                .tonightEvent,
+                .inPlayWithWithdrawal,
+                .settleRound,
+                .seasonClose
             ] {
                 let body = MascotEngine.generateVoice(
                     mascotName: "Max",
@@ -2186,7 +2355,11 @@ runner.run("MascotEngine.generateVoice — no '(s)' Mad-Libs pattern in any rend
                 .roomWelcome,
                 .inPlay,
                 .roomStale,
-                .standings
+                .standings,
+                .tonightEvent,
+                .inPlayWithWithdrawal,
+                .settleRound,
+                .seasonClose
             ] {
                 let body = MascotEngine.generateVoice(
                     mascotName: "Max",

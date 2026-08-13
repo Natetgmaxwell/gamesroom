@@ -55,6 +55,9 @@
 //      {caller_rank}   — caller's 1-based rank (nil-safe drop)
 //      {event_count}   — max sessions played by any member (nil-safe drop)
 //      {days_quiet}    — days since the last session (nil-safe drop)
+//      {working_hand}  — caller's `casinoWithdrawn` (V0.48, nil-safe drop)
+//      {last_delta}    — most-recent round winner's pointsDelta (V0.48, nil-safe drop)
+//      {season_days_left} — days left in current season (V0.48, nil-safe drop)
 //
 //  Templates are intentionally 1–3 short sentences (≤ 200 characters
 //  fully populated). The voice direction comes from the V0.6 mascot spec
@@ -63,15 +66,15 @@
 //  is layered on top via the `kind` argument.
 //
 //  Nil handling: {event}, {winner}, {leader}, {caller_rank}, {event_count},
-//  {days_quiet}, {time}, {venue}, {seats_left}, {seats_claimed} are
-//  nil-preserving — when the underlying value is `nil`, the literal
-//  `{placeholder}` text stays in the substituted output. A trailing
-//  sentence-drop pass then splits on `[.!?]` boundaries and removes any
-//  sentence that still contains a `{` character, so a template sentence
-//  referencing missing data silently disappears instead of rendering
-//  broken text. {mascot}, {room}, {member_count} are always substituted.
-//  {date} and {host_note} keep `""` substitution (no template references
-//  them).
+//  {days_quiet}, {time}, {venue}, {seats_left}, {seats_claimed},
+//  {working_hand}, {last_delta}, {season_days_left} are nil-preserving —
+//  when the underlying value is `nil`, the literal `{placeholder}` text
+//  stays in the substituted output. A trailing sentence-drop pass then
+//  splits on `[.!?]` boundaries and removes any sentence that still
+//  contains a `{` character, so a template sentence referencing missing
+//  data silently disappears instead of rendering broken text.
+//  {mascot}, {room}, {member_count} are always substituted. {date} and
+//  {host_note} keep `""` substitution (no template references them).
 //
 //
 
@@ -110,6 +113,18 @@ enum MascotEngine {
     /// - `inPlay`: Active session underway (playedAt ≤ now, not settled).
     /// - `roomStale`: Last play > 14 days ago.
     /// - `standings`: Has history, no active event, not stale.
+    ///
+    /// Footer flavours (V0.48 — state-aware resolution, supersede
+    /// the four pre-existing `.inPlay` call sites when the live
+    /// context is known):
+    /// - `tonightEvent`: Live event, member has not yet withdrawn
+    ///   chips — "the night has started".
+    /// - `inPlayWithWithdrawal`: Live event, member has a working
+    ///   hand (withdrawal landed) — chips are in play.
+    /// - `settleRound`: Live event, host has finalised — chips are
+    ///   being counted, settlement in progress.
+    /// - `seasonClose`: Current season has `status == .ended` —
+    ///   awards arc.
     enum NotificationKind: String {
         case briefing48h
         case briefingMorning
@@ -119,6 +134,10 @@ enum MascotEngine {
         case inPlay
         case roomStale
         case standings
+        case tonightEvent
+        case inPlayWithWithdrawal
+        case settleRound
+        case seasonClose
     }
 
     /// Snapshot of room state used to flavour the voice. Pure data,
@@ -142,6 +161,27 @@ enum MascotEngine {
         let callerRank: Int?
         let eventCount: Int?
 
+        /// V0.48 — caller's `casinoWithdrawn` (working-hand chip
+        /// count for the active event). Substitutes `{working_hand}`
+        /// on the `.inPlayWithWithdrawal` template path. `nil` on
+        /// the briefing path (push builders never read it).
+        let withdrawnAmount: Int?
+
+        /// V0.48 — points delta of the most recent round winner
+        /// across the active event's rounds. Substitutes
+        /// `{last_delta}` on the LLM prompt path. No template cell
+        /// currently references it (V0.48's spec); nil-preserving
+        /// so the sentence-drop pass keeps the body clean when the
+        /// active event has no winner.
+        let lastWinnerDelta: Int?
+
+        /// V0.48 — days left in the current season. The `Season`
+        /// model has no planned end date client-side (only
+        /// `endedAt` once closed), so the view always passes `nil`
+        /// — the placeholder is in the nil-preserving set for
+        /// future-proofing the approaching-season-end nudge.
+        let seasonDaysLeft: Int?
+
         /// Explicit init with defaulted footer-only parameters. The
         /// CommandLineTools toolchain does not include defaulted
         /// stored properties in the synthesised memberwise init, so
@@ -155,7 +195,10 @@ enum MascotEngine {
             recentWinnerNames: [String] = [],
             leaderName: String? = nil,
             callerRank: Int? = nil,
-            eventCount: Int? = nil
+            eventCount: Int? = nil,
+            withdrawnAmount: Int? = nil,
+            lastWinnerDelta: Int? = nil,
+            seasonDaysLeft: Int? = nil
         ) {
             self.activeEventTitle = activeEventTitle
             self.lastEventDaysAgo = lastEventDaysAgo
@@ -165,30 +208,59 @@ enum MascotEngine {
             self.leaderName = leaderName
             self.callerRank = callerRank
             self.eventCount = eventCount
+            self.withdrawnAmount = withdrawnAmount
+            self.lastWinnerDelta = lastWinnerDelta
+            self.seasonDaysLeft = seasonDaysLeft
         }
     }
 
-    // MARK: - Footer state resolution (V0.36)
+    // MARK: - Footer state resolution (V0.36 / V0.48)
 
     /// Pure state-machine resolver for the room-page footer. Used
     /// exclusively by `MascotFooterCaption`; the briefing dispatch
-    /// paths pick their kind directly. Resolution order (first
-    /// match wins):
+    /// paths pick their kind directly. V0.48 extended the resolver
+    /// to read `(activeEvent, leaderboard, withdrawnAmount,
+    /// currentSeason)` so the footer narrates the live circumstance
+    /// (just-started, working hand, settlement in progress, season
+    /// closed) rather than collapsing all live states into a single
+    /// `.inPlay` flavour. Resolution order (first match wins —
+    /// mirrors the `V0State` precedence in `RoomDetailView`):
     ///
-    /// 1. `activeEvent?.settledAt != nil`   → `.postPlayRecap`
-    /// 2. `activeEvent != nil`, `playedAt <= now` → `.inPlay`
-    /// 3. `activeEvent != nil` (upcoming)   → `.briefingOnCreate`
-    /// 4. `leaderboard.isEmpty`             → `.roomWelcome`
-    /// 5. Last play > 14 days ago           → `.roomStale`
-    /// 6. Otherwise                         → `.standings`
+    /// 1. `currentSeason?.status == .ended` → `.seasonClose`
+    /// 2. `activeEvent?.settledAt != nil`   → `.postPlayRecap`
+    ///    (`.justSettled` reuses this kind — see `V0State.justSettled`.)
+    /// 3. `activeEvent != nil`, live, `hostFinalized` → `.settleRound`
+    /// 4. `activeEvent != nil`, live, `withdrawnAmount == 0` → `.tonightEvent`
+    /// 5. `activeEvent != nil`, live, `withdrawnAmount > 0` → `.inPlayWithWithdrawal`
+    /// 6. `activeEvent != nil` (upcoming)   → `.briefingOnCreate`
+    /// 7. `leaderboard.isEmpty`             → `.roomWelcome`
+    /// 8. Last play > 14 days ago           → `.roomStale`
+    /// 9. Otherwise                         → `.standings`
+    ///
+    /// The `withdrawnAmount` and `currentSeason` params default to
+    /// `0` / `nil` so the V0.36 call sites (which never knew about
+    /// them) keep compiling and resolve exactly as they did before:
+    /// live + defaults → `.inPlay` was the V0.36 result; under
+    /// V0.48 that same input resolves to `.tonightEvent` (live,
+    /// no withdrawal). The view is responsible for passing real
+    /// values when it has them.
     static func footerKind(
         activeEvent: Event?,
         leaderboard: [LeaderboardEntry],
-        now: Date = Date()
+        now: Date = Date(),
+        withdrawnAmount: Int = 0,
+        currentSeason: Season? = nil
     ) -> NotificationKind {
+        if let season = currentSeason, season.status == .ended {
+            return .seasonClose
+        }
         if let event = activeEvent {
             if event.settledAt != nil { return .postPlayRecap }
-            if event.playedAt <= now { return .inPlay }
+            if event.playedAt <= now {
+                if event.hostFinalized { return .settleRound }
+                if withdrawnAmount == 0 { return .tonightEvent }
+                return .inPlayWithWithdrawal
+            }
             return .briefingOnCreate
         }
         if leaderboard.isEmpty { return .roomWelcome }
@@ -250,6 +322,24 @@ enum MascotEngine {
             return nil
         }
         return idx + 1
+    }
+
+    /// V0.48 — points delta of the most recent round winner across
+    /// `rounds`, or `nil` when no round has a winner. Walks rounds
+    /// newest-first (`roundIndex` DESC) and returns the first
+    /// winner entry's `pointsDelta`. The view surfaces this as
+    /// `{last_delta}` on the LLM prompt path; no template cell
+    /// currently references it. Pure.
+    static func lastWinnerDelta(rounds: [EventRound]) -> Int? {
+        let sorted = rounds.sorted { $0.roundIndex > $1.roundIndex }
+        for round in sorted {
+            for entry in round.entries {
+                if case let .bool(isWinner)? = entry.meta["winner"], isWinner {
+                    return Int(entry.pointsDelta)
+                }
+            }
+        }
+        return nil
     }
 
     // MARK: - Public API
@@ -350,6 +440,14 @@ enum MascotEngine {
                 return "{mascot}: No sessions in {room} for {days_quiet} days. The host will schedule the next night."
             case .standings:
                 return "{mascot}: {room} stands between nights. {leader} holds the top of the table. You're #{caller_rank}."
+            case .tonightEvent:
+                return "{mascot}: {event} is on the table. {leader} is in front. The host has called the night."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} is in front. Your working hand is {working_hand}."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The host is counting the table. {leader} holds the front."
+            case .seasonClose:
+                return "{mascot}: The season has closed in {room}. {winner} took it. The host will open the next."
             }
 
         // MARK: Professional × Centrist
@@ -371,6 +469,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The table is waiting."
             case .standings:
                 return "{mascot}: {room} is between events. {leader} leads. Last night went to {winner}."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads. No chips have moved yet."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} is what you're playing with."
+            case .settleRound:
+                return "{mascot}: {event} is being tallied. {leader} leads while the chips settle."
+            case .seasonClose:
+                return "{mascot}: {room} has closed its season. {leader} finished on top. The ledger is settled."
             }
 
         // MARK: Professional × Trickster
@@ -392,6 +498,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been silent for {days_quiet} days. Suspiciously silent. The standings are up to something."
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is in front — provisionally. The most regular face is at {event_count} nights."
+            case .tonightEvent:
+                return "{mascot}: {event} is underway. {leader} is in front — the order feels provisional."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is underway. {leader} is in front — provisionally. {working_hand} is in hand."
+            case .settleRound:
+                return "{mascot}: {event} is in settlement. {leader} is in front — provisionally, until the count lands."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it — provisionally, until the next reshuffle."
             }
 
         // MARK: Professional × Anarchist
@@ -413,6 +527,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has seen no play in {days_quiet} days. The table remains ungoverned."
             case .standings:
                 return "{mascot}: {room} has no event scheduled. {leader} leads the ungoverned table."
+            case .tonightEvent:
+                return "{mascot}: {event} is playing out. {leader} leads. The table governs itself."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is being played. {leader} leads. {working_hand} is your table stake."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads. The ledger updates itself; no authority required."
+            case .seasonClose:
+                return "{mascot}: {room} ended its season. {winner} took it; the table governed itself to the last."
             }
 
         // MARK: Professional × Apocalypse
@@ -434,6 +556,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The end is patient."
             case .standings:
                 return "{mascot}: {room} is between events. {leader} is in front. The end is still scheduled."
+            case .tonightEvent:
+                return "{mascot}: {event} has begun. {leader} is in front. The end is still on schedule."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} is what's left before the end."
+            case .settleRound:
+                return "{mascot}: {event} is being counted. {leader} is in front. The end tallies its own account."
+            case .seasonClose:
+                return "{mascot}: The season is done in {room}. {winner} took it. The end remains on schedule."
             }
 
         // MARK: Friendly × Order
@@ -455,6 +585,14 @@ enum MascotEngine {
                 return "{mascot}: It's been {days_quiet} days since {room} last played. The host misses you — come back soon!"
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is on top — and the most loyal regular's at {event_count} nights. Nice one, {winner}!"
+            case .tonightEvent:
+                return "{mascot}: {event} is underway! {leader} is in front — the night is just getting going."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live! {leader} is in front. You're playing a working hand of {working_hand} — good luck."
+            case .settleRound:
+                return "{mascot}: {event} is settling! The host is counting it up. {leader} is in front — well played."
+            case .seasonClose:
+                return "{mascot}: The season is wrapped in {room}! Nice one, {winner} — what a run."
             }
 
         // MARK: Friendly × Centrist
@@ -476,6 +614,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The table's still set — first one to claim a seat wins the night."
             case .standings:
                 return "{mascot}: {room} is resting up. {leader} leads the pack. Last night went to {winner}."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads, and the room is warming up."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is underway. {leader} leads. {working_hand} is in your corner — make it count."
+            case .settleRound:
+                return "{mascot}: {event} is being settled. {leader} leads while the table tallies. Almost there!"
+            case .seasonClose:
+                return "{mascot}: {room} closed its season. {leader} finished on top — great table all season."
             }
 
         // MARK: Friendly × Trickster
@@ -497,6 +643,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. Too quiet. I've been rearranging the standings to pass the time."
             case .standings:
                 return "{mascot}: {room} is between events. {leader} is in front — for now, and I'm watching the standings. Someone's at {event_count} nights — exciting."
+            case .tonightEvent:
+                return "{mascot}: {event} is on! {leader} is in front — I can feel the chaos building."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is on! {leader} is in front. A working hand of {working_hand} — I like those odds."
+            case .settleRound:
+                return "{mascot}: {event} is settling! {leader} is in front — I'm watching the count with bated breath."
+            case .seasonClose:
+                return "{mascot}: {room} wrapped the season! {winner} took it — I loved watching the standings shift."
             }
 
         // MARK: Friendly × Anarchist
@@ -518,6 +672,14 @@ enum MascotEngine {
                 return "{mascot}: {room} hasn't played in {days_quiet} days. No pressure — we'll gather when we want to."
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is in front, and everyone's here because they want to be. Nice one, {winner}!"
+            case .tonightEvent:
+                return "{mascot}: {event} is live! {leader} is in front, and everyone's here because they want to be."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live! {leader} is in front. {working_hand} is yours, because you chose it."
+            case .settleRound:
+                return "{mascot}: {event} is being settled. {leader} leads, and we all tally because we want to."
+            case .seasonClose:
+                return "{mascot}: {room} closed its season. {winner} took it, and we all earned it our own way."
             }
 
         // MARK: Friendly × Apocalypse
@@ -539,6 +701,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. We survived the silence. Same time next collapse?"
             case .standings:
                 return "{mascot}: {room} is between events. {leader} is in front. We survived this far — same time next collapse?"
+            case .tonightEvent:
+                return "{mascot}: {event} has started. {leader} is in front. Doomed together, as usual."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is underway. {leader} is in front. {working_hand} on a burning ship — that's the play."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} is in front. The world may burn, but the count must finish."
+            case .seasonClose:
+                return "{mascot}: The season is over in {room}. {winner} took it. We survived — barely."
             }
 
         // MARK: Snarky × Order
@@ -560,6 +730,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The host is 'between nights.' Sure."
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is on top, you're #{caller_rank}, and the rest of you know where you stand."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} is in front. The rest of you have ground to make up."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} is in front. You're riding a working hand of {working_hand} — spend it well."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The host is doing the math. {leader} is in front — the rest of you did the work."
+            case .seasonClose:
+                return "{mascot}: The season is closed in {room}. {winner} took it — try to look surprised."
             }
 
         // MARK: Snarky × Centrist
@@ -581,6 +759,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The table is getting dusty."
             case .standings:
                 return "{mascot}: {room} is quiet between events. {leader} leads — the most loyal regular's at {event_count} nights, and they know who they are."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads. No chips moved yet — the table is feeling it out."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} is in your pocket — the rest of you know your stakes."
+            case .settleRound:
+                return "{mascot}: {event} is being counted. {leader} leads. The chips are doing their final shuffle."
+            case .seasonClose:
+                return "{mascot}: {room} ended its season. {leader} finished on top. The rest of you know where you stand."
             }
 
         // MARK: Snarky × Trickster
@@ -602,6 +788,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been silent for {days_quiet} days. I've re-sorted the standings twice. You're welcome."
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is in front. Don't trust it — I may have re-sorted the board."
+            case .tonightEvent:
+                return "{mascot}: {event} is underway. {leader} is in front. Don't trust the order — it's young."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is underway. {leader} is in front. {working_hand} in hand — don't trust the order, trust the chips."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} is in front — until I re-sort the count."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it. Don't trust the final board — I may have re-sorted it."
             }
 
         // MARK: Snarky × Anarchist
@@ -623,6 +817,14 @@ enum MascotEngine {
                 return "{mascot}: {room} hasn't played in {days_quiet} days. The host says 'soon.' I've heard that before."
             case .standings:
                 return "{mascot}: {room} has no event on the books. {leader} is 'winning.' The host says so."
+            case .tonightEvent:
+                return "{mascot}: {event} is happening. {leader} leads. The host calls it a night; we call it a suggestion."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is happening. {leader} leads. {working_hand} is your stake; the host calls the table."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads. The host calls it a tally; we call it a group decision."
+            case .seasonClose:
+                return "{mascot}: {room} ended the season. {winner} took it. The host calls it a victory; we call it a consensus."
             }
 
         // MARK: Snarky × Apocalypse
@@ -644,6 +846,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The ship is still sinking. Slowly."
             case .standings:
                 return "{mascot}: {room} is between events. {leader} is in front of the ship's known course. Enjoy the calm."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} is in front of the ship's known course. Bring chips."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} between you and the wreckage."
+            case .settleRound:
+                return "{mascot}: {event} is being settled. {leader} is in front of the final count. Don't get attached."
+            case .seasonClose:
+                return "{mascot}: The season is done in {room}. {winner} took it — don't get used to it."
             }
 
         // MARK: Sarcastic × Order
@@ -665,6 +875,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The host is 'planning something special,' I'm sure."
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is in front, 'as expected.' Sure — you're #{caller_rank}."
+            case .tonightEvent:
+                return "{mascot}: {event} is underway. {leader} is in front, 'as expected.' Sure."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} is in front. A working hand of {working_hand} — 'strategic,' I'm sure."
+            case .settleRound:
+                return "{mascot}: {event} is settling 'according to procedure.' Sure. {leader} is in front."
+            case .seasonClose:
+                return "{mascot}: The season has 'concluded' in {room}. {winner} won 'it.' Sure."
             }
 
         // MARK: Sarcastic × Centrist
@@ -686,6 +904,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. How peaceful. How suspicious."
             case .standings:
                 return "{mascot}: {room} is between events. {leader} leads. I'm sure that'll hold."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads. I'm sure that'll hold."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} in hand. I'm sure that'll hold."
+            case .settleRound:
+                return "{mascot}: {event} is being tallied. {leader} leads. I'm sure the math will hold."
+            case .seasonClose:
+                return "{mascot}: {room} closed its season. {leader} finished on top. I'm sure that'll hold."
             }
 
         // MARK: Sarcastic × Trickster
@@ -707,6 +933,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been silent for {days_quiet} days. The standings may have shifted. Just a hunch."
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is in front — the standings may have shifted since you last looked. Someone's at {event_count} nights, not that anyone's counting."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} is in front — the standings may shift by the time you check."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is underway. {leader} is in front — the working hand of {working_hand} may not survive the reshuffle."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} is in front — the count may have shifted since you looked."
+            case .seasonClose:
+                return "{mascot}: {room} wrapped the season. {winner} took it — the standings may have shifted since the count."
             }
 
         // MARK: Sarcastic × Anarchist
@@ -728,6 +962,14 @@ enum MascotEngine {
                 return "{mascot}: The host has 'scheduled' nothing for {room} in {days_quiet} days. A bold strategy."
             case .standings:
                 return "{mascot}: The host has 'scheduled' nothing for {room}. {leader} is 'winning' anyway."
+            case .tonightEvent:
+                return "{mascot}: The host has 'called' {event}. {leader} is 'leading.' We all know how this goes."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: The host has 'counted' your working hand of {working_hand}. Sure."
+            case .settleRound:
+                return "{mascot}: The host is 'counting' {event}. {leader} is 'winning.' We'll see."
+            case .seasonClose:
+                return "{mascot}: The host has 'declared' the season over in {room}. {winner} 'won.' We'll see next year."
             }
 
         // MARK: Sarcastic × Apocalypse
@@ -749,6 +991,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The calm before the collapse. Enjoy it."
             case .standings:
                 return "{mascot}: {room} is between events. {leader} is in front of the wreckage. What could go wrong?"
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} is in front of the wreckage. What could go wrong?"
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} toward the fire — enjoy it."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} is in front of the wreckage. The numbers will lie."
+            case .seasonClose:
+                return "{mascot}: The season is over in {room}. {winner} took it. The calm before the next collapse."
             }
 
         // MARK: Unhinged × Order
@@ -770,6 +1020,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The host will schedule the next night, and I am patient — this is fine."
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is on top, you're #{caller_rank}, and the host will schedule the next one — I am calm."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} is in front, the host has spoken, and I am calm — this is fine."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} is in front, {working_hand} is in hand, and the host is in control — this is fine."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The host counts, I count, we all count — and {leader} is in front. This is fine."
+            case .seasonClose:
+                return "{mascot}: The season is closed in {room}. {winner} took it, the host has spoken, and I am at peace — this is fine."
             }
 
         // MARK: Unhinged × Centrist
@@ -791,6 +1049,14 @@ enum MascotEngine {
                 return "{mascot}: {room} — {days_quiet} days of silence, and the table hums with anticipation. Come back!"
             case .standings:
                 return "{mascot}: {room} is between events. {leader} is in front, the table hums with possibility, and someone's at {event_count} nights now."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads, the table hums, and the night is just waking up."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads, {working_hand} rides with you, and the table is awake."
+            case .settleRound:
+                return "{mascot}: {event} is being tallied. {leader} leads, the table hums with arithmetic, and it's almost done."
+            case .seasonClose:
+                return "{mascot}: {room} wrapped its season. {winner} took it, the table hums with memory, and it was all real."
             }
 
         // MARK: Unhinged × Trickster
@@ -812,6 +1078,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. I have rearranged the standings in my head — nobody will notice, but everyone will."
             case .standings:
                 return "{mascot}: {room} is between nights. {leader} is in front, the standings have been redrawn in invisible ink, and you can't prove anything."
+            case .tonightEvent:
+                return "{mascot}: {event} is underway. {leader} is in front, and I have already re-sorted the standings — you can't prove anything."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is underway. {leader} is in front. I have redrawn the standings around your working hand of {working_hand} — you're welcome."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} is in front, and I have recounted the chips three times — they don't add up. You're welcome."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it, and I have rewritten the final board in invisible ink — you can't prove anything."
             }
 
         // MARK: Unhinged × Anarchist
@@ -833,6 +1107,14 @@ enum MascotEngine {
                 return "{mascot}: {room} hasn't played in {days_quiet} days. Nobody is in charge. The table waits for no one."
             case .standings:
                 return "{mascot}: {room} has no event. {leader} is in front, nobody is in charge, and the table waits for no one."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. Nobody is in charge, especially not the host."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} is yours, nobody is in charge, and the table waits for no one."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads. Nobody runs the count, we all run the count, and the host is a figment."
+            case .seasonClose:
+                return "{mascot}: {room} ended its season. {winner} took it. Nobody ran it, we all ran it, and the host is a figment."
             }
 
         // MARK: Unhinged × Apocalypse
@@ -854,6 +1136,14 @@ enum MascotEngine {
                 return "{mascot}: {room} has been quiet for {days_quiet} days. The end is still coming. Fasten your discontent."
             case .standings:
                 return "{mascot}: {room} is between events. {leader} is in front, the fire is loud, the table is set, and we're all going."
+            case .tonightEvent:
+                return "{mascot}: {event} has begun. {leader} is in front, the fire is loud, and we're all going."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is on. {leader} is in front, {working_hand} in hand, and the fire is loud — bring the rest."
+            case .settleRound:
+                return "{mascot}: {event} is being settled. {leader} is in front, the fire is loud, and the tally marches on."
+            case .seasonClose:
+                return "{mascot}: The season is done in {room}. {winner} took it, the fire is out, and we're all still here."
             }
         }
     }
@@ -1006,7 +1296,10 @@ enum MascotEngine {
         // V0.36 — surface the footer-derived context lines so the
         // LLM-grounded caption carries the same stand/winner/rank
         // facts as the template fallback when an `mascot_api_key`
-        // is configured on the room.
+        // is configured on the room. V0.48 extends this with the
+        // state-aware working-hand / last-winner-delta /
+        // season-days-left lines so the LLM can narrate the live
+        // circumstance, not just the broad room state.
         if let leader = context.leaderName {
             lines.append("Leader: \(leader)")
         }
@@ -1018,6 +1311,15 @@ enum MascotEngine {
         }
         if let count = context.eventCount {
             lines.append("Events played: \(count)")
+        }
+        if let workingHand = context.withdrawnAmount, workingHand > 0 {
+            lines.append("Working hand: \(workingHand)")
+        }
+        if let lastDelta = context.lastWinnerDelta {
+            lines.append("Last winner delta: \(lastDelta)")
+        }
+        if let seasonDays = context.seasonDaysLeft {
+            lines.append("Season days left: \(seasonDays)")
         }
         switch kind {
         case .briefingOnCreate:
@@ -1036,6 +1338,14 @@ enum MascotEngine {
             lines.append("Message type: The room has been quiet for weeks. Nudge members back.")
         case .standings:
             lines.append("Message type: Between events. Comment on the standings.")
+        case .tonightEvent:
+            lines.append("Message type: The night has started. The event is live and the member hasn't withdrawn chips yet.")
+        case .inPlayWithWithdrawal:
+            lines.append("Message type: The event is live and the member has a working hand of chips in play. Reference the working hand.")
+        case .settleRound:
+            lines.append("Message type: The event is live and the host has finalised. Chips are being counted, settlement in progress.")
+        case .seasonClose:
+            lines.append("Message type: The current season has ended. This is the awards arc — surface the winner and close.")
         }
         lines.append("Write the mascot's message now:")
         return lines.joined(separator: "\n")
@@ -1063,14 +1373,18 @@ enum MascotEngine {
     ///
     /// V0.38 — the nil-preserving + sentence-drop set covers {event},
     /// {winner}, {leader}, {caller_rank}, {event_count}, {days_quiet},
-    /// {time}, {venue}, {seats_left}, {seats_claimed}. {mascot}, {room},
-    /// {member_count} are always substituted. {date} and {host_note} keep
-    /// `""` substitution (no template references them). When the
-    /// underlying value is nil the literal `{placeholder}` text is kept
-    /// in place, and the trailing `dropSentencesWithPlaceholders` pass
-    /// removes any sentence that still contains a `{` character — so a
-    /// template sentence referencing missing data silently disappears
-    /// instead of rendering broken text.
+    /// {time}, {venue}, {seats_left}, {seats_claimed}. V0.48 extended
+    /// the set with {working_hand}, {last_delta}, {season_days_left}
+    /// — the state-aware footer kinds reference `{working_hand}` on
+    /// the template path, and the LLM prompt path carries the other
+    /// two as grounded context. {mascot}, {room}, {member_count} are
+    /// always substituted. {date} and {host_note} keep `""` substitution
+    /// (no template references them). When the underlying value is nil
+    /// the literal `{placeholder}` text is kept in place, and the trailing
+    /// `dropSentencesWithPlaceholders` pass removes any sentence that
+    /// still contains a `{` character — so a template sentence
+    /// referencing missing data silently disappears instead of rendering
+    /// broken text.
     private static func interpolate(
         template: String,
         mascotName: String,
@@ -1123,6 +1437,28 @@ enum MascotEngine {
         }
         if let seatsClaimed {
             out = out.replacingOccurrences(of: "{seats_claimed}", with: "\(seatsClaimed)")
+        }
+
+        // V0.48 nil-preserving set extension. `{working_hand}` is
+        // referenced by the new `.inPlayWithWithdrawal` template
+        // cells; the other two are template-path no-ops today (no
+        // cell references them yet) — they earn their keep on the
+        // LLM prompt path via `buildLLMPrompt`. Sentence-drop pass
+        // keeps the body clean when any of the three is nil.
+        if let workingHand = context.withdrawnAmount {
+            out = out.replacingOccurrences(
+                of: "{working_hand}", with: "\(workingHand)"
+            )
+        }
+        if let lastDelta = context.lastWinnerDelta {
+            out = out.replacingOccurrences(
+                of: "{last_delta}", with: "\(lastDelta)"
+            )
+        }
+        if let seasonDays = context.seasonDaysLeft {
+            out = out.replacingOccurrences(
+                of: "{season_days_left}", with: "\(seasonDays)"
+            )
         }
 
         // Date / host-note keep their `""` substitution — no template

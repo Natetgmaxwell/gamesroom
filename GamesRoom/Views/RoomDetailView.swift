@@ -442,7 +442,9 @@ struct RoomDetailView: View {
                     room: liveRoom,
                     activeEvent: activeEvent,
                     leaderboard: leaderboard,
-                    currentUserId: currentUserId
+                    currentUserId: currentUserId,
+                    withdrawnAmount: casinoWithdrawn,
+                    currentSeason: currentSeason
                 )
             }
             .padding(.horizontal, Theme.Layout.edgePadding)
@@ -2619,13 +2621,20 @@ private struct MascotFooterCaption: View {
     let activeEvent: Event?
     let leaderboard: [LeaderboardEntry]
     let currentUserId: UUID?
+    /// V0.48 — the member's withdrawn casino chips (working hand).
+    /// Drives the `.inPlayWithWithdrawal` footer kind + `{working_hand}`.
+    let withdrawnAmount: Int
+    /// V0.48 — the room's current season. When `.ended`, the footer
+    /// resolves `.seasonClose` (awards arc).
+    let currentSeason: Season?
     @EnvironmentObject private var roomService: RoomService
     /// Room-state-aware caption (V0.36). `footerKind` resolves one of
-    /// the eight `NotificationKind` flavours from the room's active
-    /// event + leaderboard; `RoomContext` carries recent winners,
-    /// leader name, caller rank, event count, and days quiet. The
-    /// 25-voice matrix still flavours the body, so the mascot's
-    /// personality × ideology stays in charge. Tap opens the
+    /// the twelve `NotificationKind` flavours from the room's active
+    /// event + leaderboard + working hand + season; `RoomContext`
+    /// carries recent winners, leader name, caller rank, event count,
+    /// days quiet, working hand, last-winner delta, and season days
+    /// left. The 25-voice matrix still flavours the body, so the
+    /// mascot's personality × ideology stays in charge. Tap opens the
     /// deep-dive bubble. See `MascotEngine.generateVoice(...)` for
     /// the placeholder contract — nil optional placeholders are
     /// silently dropped at the sentence boundary.
@@ -2658,7 +2667,9 @@ private struct MascotFooterCaption: View {
             ideology: room.mascotPoliticalIdeology,
             kind: MascotEngine.footerKind(
                 activeEvent: activeEvent,
-                leaderboard: leaderboard
+                leaderboard: leaderboard,
+                withdrawnAmount: withdrawnAmount,
+                currentSeason: currentSeason
             ),
             context: .init(
                 activeEventTitle: activeEvent?.name,
@@ -2679,7 +2690,14 @@ private struct MascotFooterCaption: View {
                 eventCount: leaderboard
                     .map(\.sessionsPlayed)
                     .max()
-                    .map { Int($0) }
+                    .map { Int($0) },
+                withdrawnAmount: withdrawnAmount > 0 ? withdrawnAmount : nil,
+                lastWinnerDelta: MascotEngine.lastWinnerDelta(
+                    rounds: roomService.cachedEventRounds(
+                        eventId: activeEvent?.id ?? UUID()
+                    )
+                ),
+                seasonDaysLeft: nil
             )
         )
     }
