@@ -298,6 +298,7 @@ struct HostScoreEntrySheet: View {
                 packSlug: packSlug,
                 input: input
             )
+            Haptics.success()
             dismiss()
         } catch {
             errorMessage = (error as NSError).localizedDescription

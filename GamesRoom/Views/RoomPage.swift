@@ -116,6 +116,7 @@ struct RoomPage: View {
         .refreshable {
             await roomService.refresh()
             await roomService.loadRoomsSocialProof()
+            Haptics.light()
         }
     }
 

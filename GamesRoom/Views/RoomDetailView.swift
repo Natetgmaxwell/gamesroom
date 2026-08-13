@@ -319,6 +319,7 @@ struct RoomDetailView: View {
         }
         .refreshable {
             await refresh(force: true)
+            Haptics.light()
         }
         .alert("Seat action failed", isPresented: $showSeatActionError) {
             Button("OK", role: .cancel) {}
@@ -472,152 +473,159 @@ struct RoomDetailView: View {
 
     @ViewBuilder
     private var activeSlot: some View {
-        switch state {
-        case .loading:
-            VStack { ProgressView().tint(Theme.Palette.accent) }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Layout.sectionSpacing * 2)
+        Group {
+            switch state {
+            case .loading:
+                VStack { ProgressView().tint(Theme.Palette.accent) }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.Layout.sectionSpacing * 2)
 
-        case .upcoming(let event):
-            BriefingSlot(
-                event: event,
-                briefing: briefing,
-                myRSVP: myRSVP,
-                onClaim: { Task { await claimSeat(eventId: event.id) } },
-                onDecline: { Task { await declineSeat(eventId: event.id) } },
-                onReAccept: { Task { await claimSeat(eventId: event.id) } },
-                onReDecline: { Task { await declineSeat(eventId: event.id) } },
-                rsvps: roomService.cachedEventRSVPs(eventId: event.id),
-                currentUserId: currentUserId,
-                isHero: true,
-                onEdit: { editEvent = event }
-            )
-        case .claimed(let event):
-            BriefingSlot(
-                event: event,
-                briefing: briefing,
-                myRSVP: .claimed,
-                onClaim: {},
-                onDecline: {},
-                onRelease: { Task { await releaseSeat(eventId: event.id) } },
-                rsvps: roomService.cachedEventRSVPs(eventId: event.id),
-                currentUserId: currentUserId,
-                isHero: true,
-                onEdit: { editEvent = event }
-            )
-        case .declined(let event):
-            // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
-            // member who previously declined can change their mind.
-            // The pills route through the same claimSeat /
-            // declineSeat handlers as the first-time flow.
-            BriefingSlot(
-                event: event,
-                briefing: briefing,
-                myRSVP: .declined,
-                onClaim: {},
-                onDecline: {},
-                onReAccept: { Task { await claimSeat(eventId: event.id) } },
-                onReDecline: { Task { await declineSeat(eventId: event.id) } },
-                rsvps: roomService.cachedEventRSVPs(eventId: event.id),
-                currentUserId: currentUserId,
-                isHero: true,
-                onEdit: { editEvent = event }
-            )
+            case .upcoming(let event):
+                BriefingSlot(
+                    event: event,
+                    briefing: briefing,
+                    myRSVP: myRSVP,
+                    onClaim: { Task { await claimSeat(eventId: event.id) } },
+                    onDecline: { Task { await declineSeat(eventId: event.id) } },
+                    onReAccept: { Task { await claimSeat(eventId: event.id) } },
+                    onReDecline: { Task { await declineSeat(eventId: event.id) } },
+                    rsvps: roomService.cachedEventRSVPs(eventId: event.id),
+                    currentUserId: currentUserId,
+                    isHost: isHost,
+                    isHero: true,
+                    onEdit: { editEvent = event }
+                )
+            case .claimed(let event):
+                BriefingSlot(
+                    event: event,
+                    briefing: briefing,
+                    myRSVP: .claimed,
+                    onClaim: {},
+                    onDecline: {},
+                    onRelease: { Task { await releaseSeat(eventId: event.id) } },
+                    rsvps: roomService.cachedEventRSVPs(eventId: event.id),
+                    currentUserId: currentUserId,
+                    isHost: isHost,
+                    isHero: true,
+                    onEdit: { editEvent = event }
+                )
+            case .declined(let event):
+                // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
+                // member who previously declined can change their mind.
+                // The pills route through the same claimSeat /
+                // declineSeat handlers as the first-time flow.
+                BriefingSlot(
+                    event: event,
+                    briefing: briefing,
+                    myRSVP: .declined,
+                    onClaim: {},
+                    onDecline: {},
+                    onReAccept: { Task { await claimSeat(eventId: event.id) } },
+                    onReDecline: { Task { await declineSeat(eventId: event.id) } },
+                    rsvps: roomService.cachedEventRSVPs(eventId: event.id),
+                    currentUserId: currentUserId,
+                    isHost: isHost,
+                    isHero: true,
+                    onEdit: { editEvent = event }
+                )
 
-        case .inPlay(let event):
-            let isCAH = event.packSlug == "cards_against_humanity"
-            WitnessSlot(
-                event: event,
-                attestations: openAttestations,
-                // V0.34 — count-based packs (CAH) flip the
-                // member CTA from withdraw to scan: there's no
-                // chip bracket to move, the member scans their
-                // stack of won black cards instead.
-                cta: isCAH ? .scan : .withdraw,
-                onWithdraw: { Task { await openWithdraw(event: event) } },
-                onScan: { Task { await openScan(event: event) } },
-                onScore: isHost
-                    ? { Task { await openHostScore(event: event) } }
-                    : nil,
-                isHero: true,
-                headerMode: .inPlay,
-                scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
-            )
+            case .inPlay(let event):
+                let isCAH = event.packSlug == "cards_against_humanity"
+                WitnessSlot(
+                    event: event,
+                    attestations: openAttestations,
+                    // V0.34 — count-based packs (CAH) flip the
+                    // member CTA from withdraw to scan: there's no
+                    // chip bracket to move, the member scans their
+                    // stack of won black cards instead.
+                    cta: isCAH ? .scan : .withdraw,
+                    onWithdraw: { Task { await openWithdraw(event: event) } },
+                    onScan: { Task { await openScan(event: event) } },
+                    onScore: isHost
+                        ? { Task { await openHostScore(event: event) } }
+                        : nil,
+                    isHero: true,
+                    headerMode: .inPlay,
+                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
+                )
 
-        // M1.1 — `.tonightEvent` renders the witness hero with
-        // the play-just-started copy + the full-width "Withdraw
-        // chips" CTA. Same `WitnessSlot` component as `.inPlay`;
-        // the started-time caption is what differentiates this
-        // state from the post-withdrawal one.
-        case .tonightEvent(let event):
-            let isCAH = event.packSlug == "cards_against_humanity"
-            WitnessSlot(
-                event: event,
-                attestations: openAttestations,
-                cta: isCAH ? .scan : .withdraw,
-                onWithdraw: { Task { await openWithdraw(event: event) } },
-                onScan: { Task { await openScan(event: event) } },
-                onScore: isHost
-                    ? { Task { await openHostScore(event: event) } }
-                    : nil,
-                isHero: true,
-                headerMode: .tonightEvent,
-                scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
-            )
+            // M1.1 — `.tonightEvent` renders the witness hero with
+            // the play-just-started copy + the full-width "Withdraw
+            // chips" CTA. Same `WitnessSlot` component as `.inPlay`;
+            // the started-time caption is what differentiates this
+            // state from the post-withdrawal one.
+            case .tonightEvent(let event):
+                let isCAH = event.packSlug == "cards_against_humanity"
+                WitnessSlot(
+                    event: event,
+                    attestations: openAttestations,
+                    cta: isCAH ? .scan : .withdraw,
+                    onWithdraw: { Task { await openWithdraw(event: event) } },
+                    onScan: { Task { await openScan(event: event) } },
+                    onScore: isHost
+                        ? { Task { await openHostScore(event: event) } }
+                        : nil,
+                    isHero: true,
+                    headerMode: .tonightEvent,
+                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
+                )
 
-        // M1.1 — `.seasonClose` renders the awards card with the
-        // privacy-filtered awards for the current user. The
-        // drowning row stays visible only to the recipient / host /
-        // opted-in members; the AwardsCard renders the drowning row
-        // through DrowningBadge when it appears.
-        case .seasonClose(let season, let awards):
-            AwardsCard(
-                season: season,
-                awards: awards,
-                currentUserId: authService.currentUser?.id,
-                isHost: room.userRole == .host,
-                currentUserOptedIn: room.memberDrowningOptIn,
-                onToggleDrowningOptIn: { newValue in
-                    Task { await setDrowningOptIn(newValue) }
+            // M1.1 — `.seasonClose` renders the awards card with the
+            // privacy-filtered awards for the current user. The
+            // drowning row stays visible only to the recipient / host /
+            // opted-in members; the AwardsCard renders the drowning row
+            // through DrowningBadge when it appears.
+            case .seasonClose(let season, let awards):
+                AwardsCard(
+                    season: season,
+                    awards: awards,
+                    currentUserId: authService.currentUser?.id,
+                    isHost: room.userRole == .host,
+                    currentUserOptedIn: room.memberDrowningOptIn,
+                    onToggleDrowningOptIn: { newValue in
+                        Task { await setDrowningOptIn(newValue) }
+                    }
+                )
+            case .settleRound(let event):
+                let isCAH = event.packSlug == "cards_against_humanity"
+                WitnessSlot(
+                    event: event,
+                    attestations: openAttestations,
+                    // V0.34 — settleRound always shows the scan CTA
+                    // (no CAH override here per spec — host has
+                    // already finalised, the member is tallying).
+                    cta: .scan,
+                    onWithdraw: { Task { await openWithdraw(event: event) } },
+                    onScan: { Task { await openScan(event: event) } },
+                    onScore: isHost
+                        ? { Task { await openHostScore(event: event) } }
+                        : nil,
+                    isHero: true,
+                    headerMode: .settleRound,
+                    scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
+                )
+
+            case .justSettled(let event):
+                CeremonialCard(
+                    event: event,
+                    chapterLine: roomService.cachedEventChapterLine(eventId: event.id)
+                )
+
+            case .readStandings:
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Standings")
+                        .font(Theme.Typography.title)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Text("The ledger fills in after your first night.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
-            )
-        case .settleRound(let event):
-            let isCAH = event.packSlug == "cards_against_humanity"
-            WitnessSlot(
-                event: event,
-                attestations: openAttestations,
-                // V0.34 — settleRound always shows the scan CTA
-                // (no CAH override here per spec — host has
-                // already finalised, the member is tallying).
-                cta: .scan,
-                onWithdraw: { Task { await openWithdraw(event: event) } },
-                onScan: { Task { await openScan(event: event) } },
-                onScore: isHost
-                    ? { Task { await openHostScore(event: event) } }
-                    : nil,
-                isHero: true,
-                headerMode: .settleRound,
-                scanTitle: isCAH ? "Scan your cards" : "Scan your chips"
-            )
-
-        case .justSettled(let event):
-            CeremonialCard(
-                event: event,
-                chapterLine: roomService.cachedEventChapterLine(eventId: event.id)
-            )
-
-        case .readStandings:
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Standings")
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Text("The ledger fills in after your first night.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .sectionCard(.hero)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .sectionCard(.hero)
         }
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.25), value: state)
     }
 
     // MARK: - Data operations
@@ -780,6 +788,7 @@ struct RoomDetailView: View {
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .claimed)
             seatActionError = nil
+            Haptics.success()
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
@@ -794,6 +803,7 @@ struct RoomDetailView: View {
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .declined)
             seatActionError = nil
+            Haptics.light()
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
@@ -810,6 +820,7 @@ struct RoomDetailView: View {
         do {
             _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .unclaimed)
             seatActionError = nil
+            Haptics.light()
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
@@ -886,7 +897,7 @@ struct RoomDetailView: View {
 
 // MARK: - States
 
-private enum V0State {
+private enum V0State: Equatable {
     case loading
     case justSettled(Event)
     /// M1.1 — the play-just-started moment: the event is live
@@ -931,6 +942,8 @@ private struct BriefingSlot: View {
     let rsvps: [EventRSVP]
     /// The current user's id, so the grid can mark their seat.
     let currentUserId: UUID?
+    /// Decline visibility (V0.9): only the host sees who declined.
+    let isHost: Bool
     let isHero: Bool
     /// W2.4 — member-side event edit. Wired up only when the
     /// parent passes a non-nil callback.
@@ -947,6 +960,7 @@ private struct BriefingSlot: View {
         onRelease: (() -> Void)? = nil,
         rsvps: [EventRSVP] = [],
         currentUserId: UUID? = nil,
+        isHost: Bool,
         isHero: Bool,
         onEdit: (() -> Void)? = nil
     ) {
@@ -960,6 +974,7 @@ private struct BriefingSlot: View {
         self.onRelease = onRelease
         self.rsvps = rsvps
         self.currentUserId = currentUserId
+        self.isHost = isHost
         self.isHero = isHero
         self.onEdit = onEdit
     }
@@ -988,7 +1003,7 @@ private struct BriefingSlot: View {
             }
 
             if let briefing {
-                BriefingSeatCount(summary: briefing)
+                BriefingSeatCount(summary: briefing, isHost: isHost)
             }
 
             // W2.4 — member-side event edit. Any member can adjust
@@ -1042,6 +1057,7 @@ private struct BriefingSlot: View {
                             .background(Theme.Palette.accent)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
+                    .pressScale()
                     Button(action: onDecline) {
                         Text("Can't make it")
                             .font(Theme.Typography.body)
@@ -1050,6 +1066,7 @@ private struct BriefingSlot: View {
                             .padding(.vertical, 12)
                             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
                     }
+                    .pressScale()
                 }
                 .padding(.top, 8)
 
@@ -1094,6 +1111,7 @@ private struct BriefingSlot: View {
                 .fill(isHero ? Theme.Palette.accent.opacity(0.10) : Theme.Palette.surface)
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
         )
+        .appearTransition()
     }
 }
 
@@ -1144,6 +1162,11 @@ private struct V0StateReEntryPills: View {
 
 private struct BriefingSeatCount: View {
     let summary: BriefingSummary
+    /// Decline visibility (V0.9): only the host sees who declined.
+    /// Members see claimed + total only — a declined seat reads as
+    /// simply open. Server enforces this too (migration 064); this
+    /// gate covers the optimistic-update flash before the RPC lands.
+    let isHost: Bool
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1156,7 +1179,7 @@ private struct BriefingSeatCount: View {
             Text("\(summary.seatsClaimed) claimed")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            if summary.seatsDeclined > 0 {
+            if isHost, summary.seatsDeclined > 0 {
                 Text("·")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
@@ -1183,6 +1206,11 @@ private struct SeatGridRow: View {
     let rsvps: [EventRSVP]
     let currentUserId: UUID?
 
+    /// V0.42 — fires only for the current user's claim, not every
+    /// grid render. Reset to false after ~500ms so the burst is a
+    /// single one-shot celebration.
+    @State private var justClaimed: Bool = false
+
     private var columns: [GridItem] {
         let count = SeatGrid.columnCount(for: maxSeats)
         return Array(
@@ -1195,6 +1223,14 @@ private struct SeatGridRow: View {
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(SeatGrid.cells(maxSeats: maxSeats, rsvps: rsvps)) { cell in
                 seatCell(cell)
+            }
+        }
+        .onChange(of: rsvps) { _, newValue in
+            guard let me = currentUserId else { return }
+            let nowClaimed = newValue.contains { $0.memberId == me && $0.state == .claimed }
+            if nowClaimed {
+                justClaimed = true
+                Task { try? await Task.sleep(for: .milliseconds(500)); justClaimed = false }
             }
         }
     }
@@ -1222,6 +1258,12 @@ private struct SeatGridRow: View {
                     .stroke(isYours ? Theme.Palette.accent : Theme.Palette.hairline,
                             lineWidth: isYours ? 1.0 : 0.5)
             )
+            .overlay {
+                if isYours && justClaimed {
+                    ConfettiBurst()
+                }
+            }
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isYours)
             .accessibilityElement()
             .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
         } else {
@@ -1363,6 +1405,7 @@ private struct WitnessSlot: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
                 }
                 .buttonStyle(.plain)
+                .pressScale()
                 .padding(.top, 4)
                 .accessibilityLabel(Text("Score a round (host)"))
             }
@@ -1374,6 +1417,7 @@ private struct WitnessSlot: View {
                 .fill(isHero ? Theme.Palette.accent.opacity(0.10) : Theme.Palette.surface)
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
         )
+        .appearTransition()
     }
 
     /// M1.1 — copy variant for the witness header. Each variant
@@ -2150,6 +2194,7 @@ private struct PackPayoutSheet: View {
                             isSaving = true
                             do {
                                 try await onSave(points)
+                                Haptics.success()
                                 dismiss()
                             } catch {
                                 errorMessage = (error as NSError).localizedDescription
@@ -2231,6 +2276,7 @@ private struct CAHConfigSheet: View {
                             isSaving = true
                             do {
                                 try await onSave(points)
+                                Haptics.success()
                                 dismiss()
                             } catch {
                                 errorMessage = (error as NSError).localizedDescription
@@ -2554,5 +2600,61 @@ private struct RoomSwitcherMenu: View {
             }
             .accessibilityLabel(Text("Switch room — currently \(currentRoom.name)"))
         }
+    }
+}
+
+// MARK: - Micro-interaction modifiers (V0.42)
+//
+// Three small `ViewModifier` helpers shared across the room detail
+// page. Kept private and file-scoped because the room detail page is
+// the only consumer — `Theme.swift` owns view-agnostic styling; these
+// are page-specific motion helpers.
+
+// MARK: Appear transition
+
+private struct AppearModifier: ViewModifier {
+    @State private var appeared = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .scaleEffect(appeared ? 1 : 0.97)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    appeared = true
+                }
+            }
+    }
+}
+
+extension View {
+    /// Fade + slight scale on first appear. Fast and subtle — the
+    /// card settles into place rather than popping.
+    func appearTransition() -> some View {
+        modifier(AppearModifier())
+    }
+}
+
+// MARK: Press scale
+
+private struct PressScaleModifier: ViewModifier {
+    @State private var isPressed = false
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isPressed)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in isPressed = true }
+                    .onEnded { _ in isPressed = false }
+            )
+    }
+}
+
+extension View {
+    /// Scales the button down slightly while pressed, back up on
+    /// release. Gives tactile press feedback without a custom
+    /// button style.
+    func pressScale() -> some View {
+        modifier(PressScaleModifier())
     }
 }

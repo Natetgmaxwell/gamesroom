@@ -101,6 +101,8 @@
 		AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */; };
 		AAAAAAAA0000000000000482 /* SessionRoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */; };
 		AAAAAAAA0000000000000483 /* CAHCardScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */; };
+		AAAAAAAA0000000000000485 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000486 /* Haptics.swift */; };
+		AAAAAAAA0000000000000487 /* ConfettiBurst.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000488 /* ConfettiBurst.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -241,6 +243,8 @@
 		AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoringDashboard.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRoundTimeline.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CAHCardScanSheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000486 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000488 /* ConfettiBurst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfettiBurst.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -419,6 +423,8 @@
 				AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */,
 				AAAAAAAA0000000000000448 /* DrowningBadge.swift */,
 				AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */,
+				AAAAAAAA0000000000000486 /* Haptics.swift */,
+				AAAAAAAA0000000000000488 /* ConfettiBurst.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -697,6 +703,8 @@
 				AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */,
 				AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */,
 				AAAAAAAA0000000000000483 /* CAHCardScanSheet.swift in Sources */,
+				AAAAAAAA0000000000000485 /* Haptics.swift in Sources */,
+				AAAAAAAA0000000000000487 /* ConfettiBurst.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
