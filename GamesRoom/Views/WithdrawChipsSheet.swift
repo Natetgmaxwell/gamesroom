@@ -92,6 +92,9 @@ struct WithdrawChipsSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(Theme.Palette.background)
+            .refreshable {
+                await loadBalance()
+            }
             .navigationTitle("Withdraw chips")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

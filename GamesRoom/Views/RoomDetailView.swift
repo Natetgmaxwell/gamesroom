@@ -71,6 +71,11 @@ struct RoomDetailView: View {
     // tally is recorded as the authoritative count for the night.
     @State private var cahScanEvent: Event?
     @State private var casinoWithdrawn: Int = 0
+    // V0.47 — host-only pending-withdrawal list. Loaded in
+    // `refresh`; the host dispenses physical chips and taps
+    // Dispensed to acknowledge (local state, ledger unchanged).
+    @State private var hostWithdrawals: [EventTransaction] = []
+    @State private var dispensedWithdrawalIds: Set<UUID> = []
     // V0.46 — member's "Settle manually" path. Always presents
     // `SettleCasinoSheet`; the scan CTA stays on the vision flow.
     // Kept distinct from `settleSheetEvent` (host settle +
@@ -172,6 +177,14 @@ struct RoomDetailView: View {
     /// Cached leaderboard for this room. Possibly empty.
     private var leaderboard: [LeaderboardEntry] {
         roomService.cachedLeaderboard(roomId: room.id)
+    }
+
+    /// V0.47 — withdrawals still awaiting physical chip dispensing.
+    /// Filters the host-side withdrawal list by the
+    /// `dispensedWithdrawalIds` set so tapping "Dispensed" removes
+    /// the row without mutating the ledger.
+    private var pendingWithdrawals: [EventTransaction] {
+        hostWithdrawals.filter { !dispensedWithdrawalIds.contains($0.id) }
     }
 
     /// Unread system events for this room (pack installed/removed,
@@ -366,6 +379,22 @@ struct RoomDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
                 activeSlot
                     .frame(maxWidth: .infinity)
+                // V0.47 — host-only "Chips to dispense" surface.
+                // Sits immediately under the active slot so the
+                // host sees pending withdrawals before the rest
+                // of the page; hidden entirely when there are
+                // none (matches the conditional-section pattern
+                // of StandingsSection).
+                if isHost,
+                   let event = activeEvent,
+                   event.packSlug == "casino",
+                   !pendingWithdrawals.isEmpty {
+                    HostWithdrawalsSection(
+                        withdrawals: pendingWithdrawals,
+                        onDispense: { id in dispensedWithdrawalIds.insert(id) }
+                    )
+                    .sectionCard(.standard)
+                }
                 if !systemEvents.isEmpty {
                     SystemBanner(
                         events: systemEvents,
@@ -685,7 +714,8 @@ struct RoomDetailView: View {
         async let packsLoad: [String] = roomService.loadRoomPacks(roomId: room.id, force: force)
         async let roundsLoad: () = loadRoundsIfNeeded(force: force)
         async let chapterLoad: () = loadChapterLineIfNeeded(force: force)
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad)
+        async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad)
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
         // rule in `ScoreSnapshot.shouldPersist` keeps a rooms-list
@@ -806,6 +836,29 @@ struct RoomDetailView: View {
         }
         let row = await casinoService.loadMyOpenWithdrawal(eventId: event.id)
         casinoWithdrawn = Int(row?.pointsWithdrawn ?? 0)
+    }
+
+    /// V0.47 — loads the host-only pending-withdrawal list.
+    /// Guards on host role and the active event being casino;
+    /// ensures the active event is cached first so ordering
+    /// within the parallel `refresh` doesn't matter. Filters
+    /// `casino_withdrawal` rows so the host only sees
+    /// withdrawals (the RPC also returns `casino_return` and
+    /// other kinds).
+    private func loadHostWithdrawalsIfNeeded() async {
+        guard isHost else {
+            hostWithdrawals = []
+            return
+        }
+        if roomService.cachedActiveEvent(roomId: room.id) == nil {
+            await roomService.loadActiveEvent(roomId: room.id, force: false)
+        }
+        guard let event = activeEvent, event.packSlug == "casino" else {
+            hostWithdrawals = []
+            return
+        }
+        let all = await casinoService.getEventTransactions(eventId: event.id)
+        hostWithdrawals = all.filter { $0.kind == "casino_withdrawal" }
     }
 
     // MARK: - Action handlers (wired to the service layer)
@@ -1789,6 +1842,63 @@ private struct SystemBanner: View {
         case .seasonClosed:
             return "The season has been closed by the host."
         }
+    }
+}
+
+// MARK: - Host withdrawals section (V0.47)
+
+/// Host-only list of pending chip withdrawals to physically
+/// dispense. One row per `casino_withdrawal` transaction
+/// (member name + absolute amount, since the RPC returns the
+/// amount as a negative ledger entry) with a tap-to-dismiss
+/// "Dispensed" acknowledgement. Local state only — the ledger
+/// is never mutated by this surface.
+private struct HostWithdrawalsSection: View {
+    let withdrawals: [EventTransaction]
+    let onDispense: (UUID) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            HStack(spacing: 8) {
+                Image(systemName: Theme.Icon.circleHexagongridFill)
+                    .foregroundStyle(Theme.Palette.accent)
+                Text("Chips to dispense")
+                    .font(Theme.Typography.title)
+                    .foregroundStyle(Theme.Palette.primaryText)
+            }
+            ForEach(withdrawals) { txn in
+                HStack(spacing: Theme.Layout.cardInset) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(txn.memberDisplayName)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                        Text("Withdrew chips")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                    Spacer()
+                    Text("\(abs(txn.amountPoints)) pts")
+                        .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Theme.Palette.accent)
+                    Button {
+                        onDispense(txn.id)
+                    } label: {
+                        Text("Dispensed")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.background)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Theme.Palette.accent)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Dispensed \(txn.memberDisplayName)'s \(abs(txn.amountPoints)) points"))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
