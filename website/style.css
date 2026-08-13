@@ -278,6 +278,58 @@ p { margin-bottom: 0.9rem; }
 }
 .packs li:hover::before { transform: scale(1.5); }
 
+/* personas (three-up) */
+.section-head { margin-bottom: 1.2rem; }
+.personas {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.2rem;
+}
+.person-tag {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.6rem;
+}
+
+/* season timeline */
+.timeline {
+  display: grid;
+  gap: 1.1rem;
+  margin: 0.4rem 0 1.2rem;
+}
+.beat {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 0.7rem;
+}
+.week-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  align-self: center;
+}
+.week {
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.beat p { margin-bottom: 0; }
+.arc-close {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--text);
+  margin: 0.4rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+}
+
 /* general list */
 ul, ol { margin: 0 0 1rem 1.3rem; }
 li { margin-bottom: 0.45rem; }
@@ -432,6 +484,7 @@ a:hover { border-bottom-color: var(--accent); color: var(--accent); }
   .features { grid-template-columns: repeat(2, 1fr); }
   .features .col-full { grid-column: 1 / -1; }
   .packs { grid-template-columns: repeat(4, 1fr); }
+  .personas { grid-template-columns: repeat(3, 1fr); }
 }
 
 /* Desktop ≥1024px — larger type, wider hero, spacious cards */
