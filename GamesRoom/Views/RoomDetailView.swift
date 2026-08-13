@@ -3060,9 +3060,8 @@ private struct MemberRosterReadOnly: View {
             .filter { $0.inviteTier == 2 }
         if !tierTwo.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                Text("PENDING INVITES")
+                Text("Pending invites")
                     .font(Theme.Typography.footnote)
-                    .tracking(1.2)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 ForEach(tierTwo) { member in
                     HStack {
