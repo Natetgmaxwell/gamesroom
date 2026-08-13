@@ -368,11 +368,15 @@ struct RoomDetailView: View {
                     )
                     .sectionCard(.standard)
                 }
-                PackShelfReadOnly(room: room)
-                    .environmentObject(casinoService)
-                    .sectionCard(.standard)
-                MemberRosterReadOnly(room: room)
-                    .sectionCard(.standard)
+                CollapsibleSection(title: "Packs", caption: "Games-night rules your room is set up for.") {
+                    PackShelfReadOnly(room: room)
+                        .environmentObject(casinoService)
+                }
+                .sectionCard(.standard)
+                CollapsibleSection(title: "Members", caption: "Everyone with a seat at the table.") {
+                    MemberRosterReadOnly(room: room)
+                }
+                .sectionCard(.standard)
                 MascotFooterCaption(
                     room: room,
                     activeEvent: activeEvent,
@@ -1949,14 +1953,6 @@ private struct PackShelfReadOnly: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            Text("Packs")
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
-
-            Text("Games-night rules your room is set up for.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-
             VStack(spacing: 0) {
                 ForEach(Array(packs.enumerated()), id: \.offset) { idx, pack in
                     packRow(pack)
@@ -2266,23 +2262,12 @@ private struct MemberRosterReadOnly: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            Text("Members")
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
-            Text("Everyone with a seat at the table.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-
             let members = roomService.cachedMembers(roomId: room.id)
             if members.isEmpty {
-                HStack {
-                    ProgressView()
-                        .tint(Theme.Palette.accent)
-                    Text("Loading members…")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                }
-                .padding(.vertical, Theme.Layout.cardInset)
+                Text("No members yet — share your join code to get the table set.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .padding(.vertical, Theme.Layout.cardInset)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(members.enumerated()), id: \.element.id) { idx, member in
@@ -2337,6 +2322,47 @@ private struct MemberRosterReadOnly: View {
     private func initials(for name: String) -> String {
         let parts = name.split(separator: " ").prefix(2)
         return parts.compactMap { $0.first.map(String.init) }.joined().uppercased()
+    }
+}
+
+// MARK: - Collapsible section (V0.40)
+
+private struct CollapsibleSection<Content: View>: View {
+    let title: String
+    let caption: String
+    @State private var isExpanded: Bool = false
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(Theme.Typography.title)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                        Text(caption)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                    Spacer()
+                    Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
+                        .font(Theme.Typography.footnote)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(title))
+            .accessibilityHint(Text(isExpanded ? "Tap to collapse." : "Tap to expand."))
+
+            if isExpanded {
+                content
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
