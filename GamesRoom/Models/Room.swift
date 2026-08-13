@@ -109,6 +109,14 @@ struct Room: Identifiable, Codable, Hashable {
     /// When true, other opted-in members + the host can read this
     /// member's Drowning row (RLS-gated by migration 045). Default false.
     let memberDrowningOptIn: Bool
+    /// V0.54 — per-room opt-in for receiving pre-play logistics pushes
+    /// (on-create / T-48h / morning-of). Default false (quiet-by-default).
+    /// The current user's own membership opt-in, surfaced through
+    /// `get_my_rooms` (migration 066) and drives the BriefingSlot
+    /// toggle in `RoomDetailView`. Renaming the decoder key to
+    /// `notifications_enabled` is safe: get_my_rooms still returns
+    /// `member_drowning_opt_in` for back-compat.
+    let notificationsEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -134,6 +142,7 @@ struct Room: Identifiable, Codable, Hashable {
         case installedPackSlugs = "installed_pack_slugs"
         case seatDepositAmount = "seat_deposit_amount"
     case memberDrowningOptIn = "member_drowning_opt_in"
+    case notificationsEnabled = "notifications_enabled"
     }
 
     init(
@@ -159,7 +168,8 @@ struct Room: Identifiable, Codable, Hashable {
         hostJournal: String? = nil,
         installedPackSlugs: [String]? = nil,
         seatDepositAmount: Int = 0,
-        memberDrowningOptIn: Bool = false
+        memberDrowningOptIn: Bool = false,
+        notificationsEnabled: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -184,6 +194,7 @@ struct Room: Identifiable, Codable, Hashable {
         self.installedPackSlugs = installedPackSlugs
         self.seatDepositAmount = seatDepositAmount
         self.memberDrowningOptIn = memberDrowningOptIn
+        self.notificationsEnabled = notificationsEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -211,5 +222,6 @@ struct Room: Identifiable, Codable, Hashable {
         installedPackSlugs = try c.decodeIfPresent([String].self, forKey: .installedPackSlugs)
         seatDepositAmount = try c.decodeIfPresent(Int.self, forKey: .seatDepositAmount) ?? 0
         memberDrowningOptIn = try c.decodeIfPresent(Bool.self, forKey: .memberDrowningOptIn) ?? false
+        notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
     }
 }

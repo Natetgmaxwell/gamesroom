@@ -252,6 +252,25 @@ protocol RoomStore: Sendable {
     /// the new value.
     func setDrowningOptIn(roomId: UUID, optIn: Bool) async throws
 
+    // MARK: Quiet-by-default notifications (V0.54)
+
+    /// Flips `room_memberships.notifications_enabled` for the
+    /// calling member's own row in this room. Mirrors the
+    /// `set_drowning_opt_in` pattern (migration 045): SQL RLS keeps
+    /// the update scoped to the caller's own row; the dedicated
+    /// `set_notifications_enabled` RPC keeps the contract explicit.
+    /// The service-layer caller mirrors the update into the
+    /// `rooms` cache so the toggle re-renders immediately.
+    func setNotificationsEnabled(roomId: UUID, enabled: Bool) async throws
+
+    /// Flips `event_rsvps.notifications_muted` for the calling
+    /// member's own row on this event. Mirrors the upsert shape of
+    /// the migration-066 `set_event_notifications_muted` RPC —
+    /// inserts the caller's row with `state='unclaimed'` and the
+    /// given muted flag if absent, else updates in place. Room
+    /// scope derives from the event (F-IDENT-01).
+    func setEventNotificationsMuted(eventId: UUID, muted: Bool) async throws
+
     // MARK: Seat-grid RSVP read (2026-08-10 feedback round)
 
     /// One row per room member with their RSVP state for the

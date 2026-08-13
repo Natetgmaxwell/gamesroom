@@ -60,7 +60,7 @@ enum SeatGrid {
 
 /// One member's RSVP row for one event, joined with the member's
 /// display name. Returned by the `get_event_rsvps` RPC (migration
-/// 047) so the briefing slot can render the seat grid — which
+/// 047 / 066) so the briefing slot can render the seat grid — which
 /// chairs are claimed, by whom, and which are still open.
 struct EventRSVP: Identifiable, Codable, Hashable {
     /// Composite `eventId:memberId` exposed to UI lists. Stable.
@@ -69,25 +69,34 @@ struct EventRSVP: Identifiable, Codable, Hashable {
     let memberId: UUID
     let displayName: String
     let state: MemberRSVPState
+    /// V0.54 — per-event mute flag for the member on this event.
+    /// `true` ⇒ the dispatcher skips this member for every push on
+    /// this event (on-create / T-48h / morning-of). Does not touch
+    /// the room-level `notifications_enabled`. Surface via
+    /// `get_event_rsvps` (migration 066).
+    let notificationsMuted: Bool
 
     enum CodingKeys: String, CodingKey {
         case eventId = "event_id"
         case memberId = "member_id"
         case displayName = "display_name"
         case state
+        case notificationsMuted = "notifications_muted"
     }
 
     init(
         eventId: UUID,
         memberId: UUID,
         displayName: String,
-        state: MemberRSVPState
+        state: MemberRSVPState,
+        notificationsMuted: Bool = false
     ) {
         self.id = "\(eventId.uuidString):\(memberId.uuidString)"
         self.eventId = eventId
         self.memberId = memberId
         self.displayName = displayName
         self.state = state
+        self.notificationsMuted = notificationsMuted
     }
 
     init(from decoder: Decoder) throws {
@@ -96,6 +105,7 @@ struct EventRSVP: Identifiable, Codable, Hashable {
         memberId = try c.decode(UUID.self, forKey: .memberId)
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? "Member"
         state = try c.decodeIfPresent(MemberRSVPState.self, forKey: .state) ?? .unclaimed
+        notificationsMuted = try c.decodeIfPresent(Bool.self, forKey: .notificationsMuted) ?? false
         id = "\(eventId.uuidString):\(memberId.uuidString)"
     }
 }

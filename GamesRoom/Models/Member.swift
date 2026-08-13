@@ -48,6 +48,11 @@ struct Member: Identifiable, Codable, Hashable {
     /// Host-assigned team label for the season (F-MVP-05 V2-full,
     /// migration 049). `nil` = unassigned.
     let team: String?
+    /// V0.54 — per-member opt-in for pre-play logistics pushes for
+    /// THIS room. Surface via `get_room_members` (migration 066);
+    /// drives the roster filter the cadence fan-out applies before
+    /// scheduling on-create / T-48h / morning-of pushes. Default false.
+    let notificationsEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -59,6 +64,7 @@ struct Member: Identifiable, Codable, Hashable {
         case displayName = "display_name"
         case socialPreference = "social_preference"
         case team
+        case notificationsEnabled = "notifications_enabled"
     }
 
     init(
@@ -70,7 +76,8 @@ struct Member: Identifiable, Codable, Hashable {
         lastSeenAt: Date? = nil,
         displayName: String,
         socialPreference: SocialPreference = .empty,
-        team: String? = nil
+        team: String? = nil,
+        notificationsEnabled: Bool = false
     ) {
         self.id = id
         self.roomId = roomId
@@ -81,6 +88,7 @@ struct Member: Identifiable, Codable, Hashable {
         self.displayName = displayName
         self.socialPreference = socialPreference
         self.team = team
+        self.notificationsEnabled = notificationsEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -99,5 +107,6 @@ struct Member: Identifiable, Codable, Hashable {
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? "Member"
         socialPreference = try c.decodeIfPresent(SocialPreference.self, forKey: .socialPreference) ?? .empty
         team = try c.decodeIfPresent(String.self, forKey: .team)
+        notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
     }
 }

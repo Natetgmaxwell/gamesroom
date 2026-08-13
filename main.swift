@@ -741,6 +741,58 @@ runner.run("Room defaults member_drowning_opt_in to false when column missing") 
     runner.assertEqual(room.memberDrowningOptIn, false)
 }
 
+runner.run("Room decodes notifications_enabled true from server shape (V0.54)") {
+    // Migration 066: the current user's per-room opt-in for the
+    // quiet-by-default pre-play logistics pushes. Default is false;
+    // a member who flips the BriefingSlot toggle sends `true` here.
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Opted-in Room",
+      "mascot_name": "Felty",
+      "mascot_personality": "professional",
+      "mascot_political_ideology": "order",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "join_starting_bonus": 200,
+      "user_role": "member",
+      "member_drowning_opt_in": false,
+      "notifications_enabled": true
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.notificationsEnabled, true)
+}
+
+runner.run("Room defaults notifications_enabled to false when column missing (V0.54)") {
+    // Pre-migration-066 server shape (or a brand-new member who
+    // has never set the toggle). Defaults to false — the
+    // quiet-by-default default.
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Pre-migration Room",
+      "mascot_name": "Borat",
+      "mascot_personality": "snarky",
+      "mascot_political_ideology": "centrist",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "join_starting_bonus": 200,
+      "user_role": "member"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.notificationsEnabled, false)
+}
+
 runner.run("PackHowToCatalog returns bundled content for casino") {
     let howTo = PackHowToCatalog.howTo(forSlug: "casino")
     runner.assertNotNil(howTo)
@@ -811,6 +863,41 @@ runner.run("EventRSVP decodes server shape with display_name") {
     runner.assertEqual(decoded.memberId, UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
     runner.assertEqual(decoded.displayName, "Alex")
     runner.assertEqual(decoded.state, .claimed)
+}
+
+runner.run("EventRSVP decodes notifications_muted true from server shape (V0.54)") {
+    // Migration 066 widens `get_event_rsvps` to include the
+    // per-event mute flag. The BriefingSlot derives the muted
+    // member ids straight from the cached `eventRSVPsByEvent`
+    // without a separate round trip.
+    let json = """
+    {
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "member_id": "44444444-4444-4444-4444-444444444444",
+      "display_name": "Alex",
+      "state": "claimed",
+      "notifications_muted": true
+    }
+    """
+    let decoded = try JSONDecoder().decode(EventRSVP.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.notificationsMuted, true)
+    runner.assertEqual(decoded.state, .claimed)
+}
+
+runner.run("EventRSVP defaults notifications_muted to false when column missing (V0.54)") {
+    // Backward-compat for legacy `get_event_rsvps` callers that
+    // pre-date migration 066 — defaults to false (unmuted) rather
+    // than throws.
+    let json = """
+    {
+      "event_id": "22222222-2222-2222-2222-222222222222",
+      "member_id": "44444444-4444-4444-4444-444444444444",
+      "display_name": "Sam",
+      "state": "claimed"
+    }
+    """
+    let decoded = try JSONDecoder().decode(EventRSVP.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.notificationsMuted, false)
 }
 
 runner.run("EventRSVP defaults missing state to unclaimed") {
@@ -1156,6 +1243,74 @@ runner.run("Member decodes enriched get_room_members shape (migration 059)") {
     runner.assertTrue(member.socialPreference.defaultSet)
     runner.assertNil(member.team)
     runner.assertEqual(member.userId, userId)
+}
+
+runner.run("Member decodes notifications_enabled when present in RPC shape (V0.54)") {
+    // Migration 066 widens `get_room_members` to include the
+    // per-member notifications opt-in (encoded as the room-level
+    // `notifications_enabled` column from the membership row).
+    // The roster filter reads this field to gate the briefing
+    // cadenced fan-out.
+    let roomId = UUID()
+    let optedUserId = UUID()
+    let quietUserId = UUID()
+    let iso = ISO8601DateFormatter()
+    let json = """
+    [
+      {
+        "user_id": "\(optedUserId.uuidString)",
+        "room_id": "\(roomId.uuidString)",
+        "display_name": "Alex",
+        "role": "member",
+        "points_balance": 250,
+        "season_score": 250,
+        "joined_at": "\(iso.string(from: Date(timeIntervalSince1970: 1_700_000_000)))",
+        "last_seen_at": null,
+        "notifications_enabled": true
+      },
+      {
+        "user_id": "\(quietUserId.uuidString)",
+        "room_id": "\(roomId.uuidString)",
+        "display_name": "Sam",
+        "role": "member",
+        "points_balance": 100,
+        "season_score": 100,
+        "joined_at": "\(iso.string(from: Date(timeIntervalSince1970: 1_700_086_400)))",
+        "last_seen_at": null,
+        "notifications_enabled": false
+      }
+    ]
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let members = try decoder.decode([Member].self, from: json.data(using: .utf8)!)
+    runner.assertEqual(members.count, 2)
+    runner.assertEqual(members[0].notificationsEnabled, true)
+    runner.assertEqual(members[0].userId, optedUserId)
+    runner.assertEqual(members[1].notificationsEnabled, false)
+    runner.assertEqual(members[1].userId, quietUserId)
+}
+
+runner.run("Member defaults notifications_enabled to false when RPC omits the column (V0.54)") {
+    // Backward-compat for legacy `get_room_members` callers that
+    // pre-date migration 066 — the field should default to false
+    // (quiet-by-default) rather than throw.
+    let json = """
+    [
+      {
+        "user_id": "11111111-1111-1111-1111-111111111111",
+        "room_id": "22222222-2222-2222-2222-222222222222",
+        "display_name": "Pre-migration Sam",
+        "role": "member",
+        "joined_at": "2026-01-01T00:00:00Z"
+      }
+    ]
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let members = try decoder.decode([Member].self, from: json.data(using: .utf8)!)
+    runner.assertEqual(members.count, 1)
+    runner.assertEqual(members[0].notificationsEnabled, false)
 }
 
 // MARK: - CatchUpMessage (W2.7 — joined-late catch-up)

@@ -94,6 +94,17 @@ actor InMemoryRoomStore: RoomStore {
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
 
+    /// V0.54 — per-event mute flags. `[eventId: [memberId: muted]]`.
+    /// Mirrors the `event_rsvps.notifications_muted` server-side
+    /// column so `fetchEventRSVPs` can layer it onto the read.
+    private var eventMutes: [UUID: [UUID: Bool]]
+
+    /// V0.54 — per-room opt-in flags for the synthetic current
+    /// member (the in-memory store has no real auth context).
+    /// Mirrors `room_memberships.notifications_enabled` so the
+    /// `rooms` cache reflects the toggle without a re-fetch.
+    private var notificationsEnabledByRoom: [UUID: Bool]
+
     /// Map of `roomId → payout overrides`. Empty when a room has
     /// no overrides — callers fall back to the pack's static
     /// `winPoints` default per the 2026-08-10 feedback round.
@@ -248,6 +259,8 @@ actor InMemoryRoomStore: RoomStore {
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
         self.rsvps = [:]
+        self.eventMutes = [:]
+        self.notificationsEnabledByRoom = [:]
         self.packConfigs = [:]
         self.joinCodes = [:]
         self.seasonHistoryByRoom = [:]
@@ -530,6 +543,12 @@ actor InMemoryRoomStore: RoomStore {
         guard let room = rooms.first(where: { $0.id == roomId }) else {
             return []
         }
+        // V0.54 — the synthetic current member's per-room opt-in is
+        // stored off-band (the in-memory store has no real auth
+        // context). Pre-populate every synthetic roster member with
+        // `notificationsEnabled = false` so the opt-in filter
+        // reflects quiet-by-default out of the gate; the test only
+        // checks the field is decodable.
         return [
             Member(
                 id: "\(room.id.uuidString):\(room.createdBy.uuidString)",
@@ -537,7 +556,8 @@ actor InMemoryRoomStore: RoomStore {
                 userId: room.createdBy,
                 role: .host,
                 joinedAt: room.createdAt,
-                displayName: "Host"
+                displayName: "Host",
+                notificationsEnabled: false
             ),
             Member(
                 id: "\(room.id.uuidString):synthetic-member-2",
@@ -545,7 +565,8 @@ actor InMemoryRoomStore: RoomStore {
                 userId: UUID(),
                 role: .member,
                 joinedAt: room.createdAt.addingTimeInterval(86_400 * 7),
-                displayName: "Alex"
+                displayName: "Alex",
+                notificationsEnabled: false
             ),
             Member(
                 id: "\(room.id.uuidString):synthetic-member-3",
@@ -553,7 +574,8 @@ actor InMemoryRoomStore: RoomStore {
                 userId: UUID(),
                 role: .member,
                 joinedAt: room.createdAt.addingTimeInterval(86_400 * 14),
-                displayName: "Sam"
+                displayName: "Sam",
+                notificationsEnabled: false
             )
         ]
     }
@@ -732,22 +754,51 @@ actor InMemoryRoomStore: RoomStore {
         _ = (roomId, optIn)
     }
 
+    // MARK: Quiet-by-default notifications (V0.54)
+
+    /// In-memory mirror of `set_notifications_enabled(p_room_id,
+    /// p_enabled)` (migration 066). The synthetic current member's
+    /// per-room opt-in lives off-band in `notificationsEnabledByRoom`;
+    /// the service-layer caller mirrors the value into the Room
+    /// cache so the toggle reflects in the UI without a re-fetch.
+    func setNotificationsEnabled(roomId: UUID, enabled: Bool) async throws {
+        notificationsEnabledByRoom[roomId] = enabled
+    }
+
+    /// In-memory mirror of `set_event_notifications_muted(p_event_id,
+    /// p_muted)` (migration 066). Upserts the caller's entry on the
+    /// per-event mute map so the next `fetchEventRSVPs` reads the
+    /// fresh flag (mirrors the service-layer live upsert
+    /// semantics). The synthetic current member is the host of the
+    /// first seeded room, matching the existing `upsertEventRSVP`
+    /// pattern.
+    func setEventNotificationsMuted(eventId: UUID, muted: Bool) async throws {
+        var perEvent = eventMutes[eventId] ?? [:]
+        perEvent[currentSyntheticMemberId()] = muted
+        eventMutes[eventId] = perEvent
+    }
+
     // MARK: Seat-grid RSVP read (2026-08-10 feedback round)
 
     /// Synthesises one `EventRSVP` row per seeded member for the
     /// event's room, layered over the in-memory `rsvps` map so a
     /// claim/decline in the same process reflects immediately.
-    /// Members without an RSVP row read as `.unclaimed`.
+    /// Members without an RSVP row read as `.unclaimed`. V0.54 —
+    /// layers the per-event mute flag from `eventMutes` onto each
+    /// row so the dispatcher's `mutedMemberIds` set can derive
+    /// straight from the existing `eventRSVPsByEvent` cache.
     func fetchEventRSVPs(eventId: UUID) async throws -> [EventRSVP] {
         guard let event = events[eventId] else { return [] }
         let members = try await fetchRoomMembers(roomId: event.roomId)
         let states = rsvps[eventId] ?? [:]
+        let mutes = eventMutes[eventId] ?? [:]
         return members.map { member in
             EventRSVP(
                 eventId: eventId,
                 memberId: member.userId,
                 displayName: member.displayName,
-                state: states[member.userId] ?? .unclaimed
+                state: states[member.userId] ?? .unclaimed,
+                notificationsMuted: mutes[member.userId] ?? false
             )
         }
     }

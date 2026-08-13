@@ -308,7 +308,9 @@ struct RoomPage: View {
 
     private func socialProofCaption(for room: Room) -> String? {
         guard let event = roomService.cachedActiveEvent(roomId: room.id),
-              event.startedAt == nil else { return nil }
+              event.startedAt == nil,
+              Calendar.current.isDateInToday(event.playedAt)
+                || Calendar.current.isDateInTomorrow(event.playedAt) else { return nil }
         return SocialProof.claimedSeatsCaption(
             claimedNames: roomService.cachedEventRSVPs(eventId: event.id)
                 .filter { $0.state == .claimed }

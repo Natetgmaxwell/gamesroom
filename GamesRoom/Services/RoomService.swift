@@ -262,8 +262,12 @@ final class RoomService: ObservableObject {
 
     /// W2.7 — builds and schedules the joined-late catch-up push.
     /// The identifier is stable per event, so a re-join overwrites
-    /// instead of stacking — no duplicate pushes.
+    /// instead of stacking — no duplicate pushes. V0.54 — gated
+    /// on the room-level `notifications_enabled` opt-in; a joiner
+    /// who hasn't opted in to this room's nights receives no
+    /// push. They can still see the briefing slot in-app.
     private func scheduleCatchUpIfNeeded(room: Room) async {
+        guard room.notificationsEnabled else { return }
         guard let event = await loadActiveEvent(roomId: room.id) else { return }
         let board = await loadLeaderboard(roomId: room.id)
         let summary = board.prefix(3)
@@ -532,7 +536,10 @@ final class RoomService: ObservableObject {
         // P1.3 — re-schedule with the new cadence. Reads the
         // matching event from the cache to surface the name +
         // playedAt; falls back to the row's roomId for the
-        // roster lookup.
+        // roster lookup. V0.54 — filters the fan-out by
+        // `optedInMemberIds` (room-level per-member opt-in) and
+        // `mutedMemberIds` (per-event mute) so quiet members are
+        // never reached.
         if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
             let room = rooms.first(where: { $0.id == event.roomId })
             let roster = membersByRoom[event.roomId] ?? []
@@ -543,6 +550,14 @@ final class RoomService: ObservableObject {
             // caller's own cadence so the dispatcher fires for
             // them, not against the stale `.unclaimed` default.
             cadence[row.memberId] = row.state
+            let optedInMemberIds = Set(
+                roster.filter { $0.notificationsEnabled }.map(\.userId)
+            )
+            let mutedMemberIds = Set(
+                cachedEventRSVPs(eventId: event.id)
+                    .filter { $0.notificationsMuted }
+                    .map(\.memberId)
+            )
             await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
             await NotificationDispatcher.shared.scheduleBriefingTrio(
                 eventId: event.id,
@@ -550,6 +565,8 @@ final class RoomService: ObservableObject {
                 playedAt: event.playedAt,
                 mascotName: room?.mascotName ?? "Your mascot",
                 perMemberCadence: cadence,
+                optedInMemberIds: optedInMemberIds,
+                mutedMemberIds: mutedMemberIds,
                 hostNote: event.hostNote,
                 mascotApiKey: room?.mascotApiKey,
                 mascotPersonality: room?.mascotPersonality ?? .friendly,
@@ -602,18 +619,25 @@ final class RoomService: ObservableObject {
         // non-throwing; failures collapse to a logged warning
         // inside the dispatcher. Per-event fan-out reads the
         // post-create room membership (host + invited members)
-        // from the room's roster cache.
+        // from the room's roster cache. V0.54 — a brand-new event
+        // has no mutes yet, so `mutedMemberIds` is the empty
+        // default; the fan-out gates on the room-level per-member
+        // opt-in via `optedInMemberIds`.
         let room = rooms.first(where: { $0.id == roomId })
         let roster = membersByRoom[roomId] ?? []
         let cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
             acc[member.userId] = .unclaimed
         }
+        let optedInMemberIds = Set(
+            roster.filter { $0.notificationsEnabled }.map(\.userId)
+        )
         await NotificationDispatcher.shared.scheduleBriefingTrio(
             eventId: newId,
             eventName: name,
             playedAt: playedAt,
             mascotName: room?.mascotName ?? "Your mascot",
             perMemberCadence: cadence,
+            optedInMemberIds: optedInMemberIds,
             memberNames: roster.map(\.displayName),
             mascotApiKey: room?.mascotApiKey,
             mascotPersonality: room?.mascotPersonality ?? .friendly,
@@ -1074,10 +1098,108 @@ final class RoomService: ObservableObject {
                 hostJournal: old.hostJournal,
                 installedPackSlugs: old.installedPackSlugs,
                 seatDepositAmount: old.seatDepositAmount,
-                memberDrowningOptIn: optIn
+                memberDrowningOptIn: optIn,
+                notificationsEnabled: old.notificationsEnabled
             )
         }
         self.lastError = nil
+    }
+
+    // MARK: - Quiet-by-default notifications (V0.54)
+
+    /// V0.54 — flips the calling member's per-room notifications
+    /// opt-in flag. Wraps the `set_notifications_enabled` RPC
+    /// (migration 066) and refreshes the cached `Room` so the
+    /// BriefingSlot toggle re-renders immediately. Mirrors the
+    /// `setDrowningOptIn` cache-update pattern (same column-on-
+    /// membership shape) so the existing UI gates read the fresh
+    /// `room.notificationsEnabled` value without a re-fetch.
+    func setNotificationsEnabled(roomId: UUID, enabled: Bool) async throws {
+        try await store.setNotificationsEnabled(roomId: roomId, enabled: enabled)
+        if let idx = self.rooms.firstIndex(where: { $0.id == roomId }) {
+            let old = self.rooms[idx]
+            self.rooms[idx] = Room(
+                id: old.id,
+                name: old.name,
+                mascotName: old.mascotName,
+                mascotPersonality: old.mascotPersonality,
+                mascotPoliticalIdeology: old.mascotPoliticalIdeology,
+                createdBy: old.createdBy,
+                createdAt: old.createdAt,
+                updatedAt: old.updatedAt,
+                isLive: old.isLive,
+                nextEventDescription: old.nextEventDescription,
+                joinStartingBonus: old.joinStartingBonus,
+                mascotApiKey: old.mascotApiKey,
+                userRole: old.userRole,
+                briefing48hEnabled: old.briefing48hEnabled,
+                calendarAutoAddHost: old.calendarAutoAddHost,
+                socialPreferencesEnabled: old.socialPreferencesEnabled,
+                socialNarrationEnabled: old.socialNarrationEnabled,
+                maxSeats: old.maxSeats,
+                memberInviteQuota: old.memberInviteQuota,
+                hostJournal: old.hostJournal,
+                installedPackSlugs: old.installedPackSlugs,
+                seatDepositAmount: old.seatDepositAmount,
+                memberDrowningOptIn: old.memberDrowningOptIn,
+                notificationsEnabled: enabled
+            )
+        }
+        self.lastError = nil
+        // V0.54 — mirror the opt-in change into the spec's
+        // "per-event fan-out" cache. The toggle's ripple onto
+        // future briefings is handled by the next addEvent /
+        // upsertEventRSVP cycle; cancel + reschedule any in-flight
+        // trio for the room so the previously-scheduled pushes
+        // reflect the new opt-in immediately.
+        cancelRoomCadence(roomId: roomId)
+    }
+
+    /// V0.54 — flips the calling member's per-event mute flag.
+    /// Wraps the `set_event_notifications_muted` RPC (migration
+    /// 066) and mirrors the new value into the cached
+    /// `eventRSVPsByEvent` row for the caller so the BriefingSlot
+    /// mute toggle re-renders immediately. The dispatcher's
+    /// `mutedMemberIds` set is recomputed on the next
+    /// `scheduleBriefingTrio` call, so we cancel + reschedule the
+    /// event's trio so the new mute reflects in any pending
+    /// notification. `currentUserId` is passed in by the view
+    /// layer (same shape as `applyOptimisticRSVP`'s parameter)
+    /// because `RoomService` itself doesn't hold an auth reference.
+    func setEventNotificationsMuted(eventId: UUID, muted: Bool, currentUserId: UUID?) async throws {
+        try await store.setEventNotificationsMuted(eventId: eventId, muted: muted)
+        if let uid = currentUserId, var rows = eventRSVPsByEvent[eventId],
+           let idx = rows.firstIndex(where: { $0.memberId == uid }) {
+            rows[idx] = EventRSVP(
+                eventId: eventId,
+                memberId: rows[idx].memberId,
+                displayName: rows[idx].displayName,
+                state: rows[idx].state,
+                notificationsMuted: muted
+            )
+            eventRSVPsByEvent[eventId] = rows
+        }
+        self.lastError = nil
+        cancelEventCadence(eventId: eventId)
+    }
+
+    /// V0.54 — cancels every pending briefing-trio push for every
+    /// event in this room. Used after a per-room opt-in toggle so
+    /// a member who just opted out no longer receives the
+    /// previously-scheduled T-48h / morning-of pushes. Idempotent;
+    /// a no-op for rooms with no active event.
+    private func cancelRoomCadence(roomId: UUID) async {
+        for (eventId, event) in activeEventByRoom where event.roomId == roomId {
+            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
+        }
+    }
+
+    /// V0.54 — cancels every pending briefing-trio push for one
+    /// event. Used after a per-event mute toggle so a member who
+    /// just muted the event no longer receives previously-
+    /// scheduled pushes for it.
+    private func cancelEventCadence(eventId: UUID) async {
+        await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
     }
 
     // MARK: - Host journal (P1.5)

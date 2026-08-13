@@ -120,6 +120,17 @@ final class NotificationDispatcher {
         mascotName: String,
         perMemberCadence: [UUID: MemberRSVPState],
         memberNames: [String] = [],
+        /// V0.54 — members whose per-room `notifications_enabled` is
+        /// true. The fan-out reaches ONLY this set (plus the
+        /// declined-state exception per the audit's item 2 hard
+        /// requirement). Default `nil` lets pre-V0.54 callers opt in
+        /// to the legacy behaviour (every member reaches on-create).
+        optedInMemberIds: Set<UUID>? = nil,
+        /// V0.54 — members who have tapped the per-event mute toggle.
+        /// The fan-out skips every member in this set regardless of
+        /// their room-level opt-in or RSVP state. Default `[]` = no
+        /// mutes (a brand-new event has none).
+        mutedMemberIds: Set<UUID> = [],
         hostNote: String? = nil,
         mascotApiKey: String? = nil,
         mascotPersonality: MascotPersonality = .friendly,
@@ -169,8 +180,31 @@ final class NotificationDispatcher {
 
         for (memberId, state) in perMemberCadence {
 
-            // On-create push — fires for EVERY member regardless of
-            // RSVP state, per the V0.8 brief. When the room has a
+            // V0.54 — quiet-by-default fan-out gates. A member is
+            // skipped entirely when:
+            //   1. The service passed an explicit `optedInMemberIds`
+            //      set and the member isn't in it (room-level
+            //      per-member opt-in not flipped on).
+            //   2. The member is in `mutedMemberIds` (tapped the
+            //      per-event mute toggle; overrides the room-level
+            //      opt-in for THIS event).
+            //   3. Per the audit's hard item 2 + V0.54 D3: the
+            //      on-create push reaches only opted-in, non-
+            //      declined members. The `.declined` exception the
+            //      pre-V0.54 brief carried is gone — declined
+            //      members who haven't opted in receive nothing.
+            if let optedIn = optedInMemberIds, !optedIn.contains(memberId) {
+                continue
+            }
+            if mutedMemberIds.contains(memberId) {
+                continue
+            }
+            if state == .declined {
+                continue
+            }
+
+            // On-create push — fires for every opted-in,
+            // non-muted, non-declined member. When the room has a
             // mascot API key, the body is LLM-generated; otherwise
             // falls back to the template.
             var onCreateBodyText = onCreateBody(

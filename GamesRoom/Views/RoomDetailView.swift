@@ -584,7 +584,19 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event }
+                    onEdit: { editEvent = event },
+                    notificationsEnabled: liveRoom.notificationsEnabled,
+                    onToggleNotificationsEnabled: { newValue in
+                        Task { await setNotificationsEnabled(newValue) }
+                    },
+                    onToggleEventNotificationsMuted: { newValue in
+                        Task {
+                            await setEventNotificationsMuted(
+                                eventId: event.id,
+                                muted: newValue
+                            )
+                        }
+                    }
                 )
             case .claimed(let event):
                 BriefingSlot(
@@ -598,7 +610,19 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event }
+                    onEdit: { editEvent = event },
+                    notificationsEnabled: liveRoom.notificationsEnabled,
+                    onToggleNotificationsEnabled: { newValue in
+                        Task { await setNotificationsEnabled(newValue) }
+                    },
+                    onToggleEventNotificationsMuted: { newValue in
+                        Task {
+                            await setEventNotificationsMuted(
+                                eventId: event.id,
+                                muted: newValue
+                            )
+                        }
+                    }
                 )
             case .declined(let event):
                 // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
@@ -617,7 +641,19 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event }
+                    onEdit: { editEvent = event },
+                    notificationsEnabled: liveRoom.notificationsEnabled,
+                    onToggleNotificationsEnabled: { newValue in
+                        Task { await setNotificationsEnabled(newValue) }
+                    },
+                    onToggleEventNotificationsMuted: { newValue in
+                        Task {
+                            await setEventNotificationsMuted(
+                                eventId: event.id,
+                                muted: newValue
+                            )
+                        }
+                    }
                 )
 
             case .inPlay(let event):
@@ -984,6 +1020,42 @@ struct RoomDetailView: View {
         }
     }
 
+    /// V0.54 — fires the `set_notifications_enabled` RPC (migration
+    /// 066) when the BriefingSlot's "Remind me about this room's
+    /// nights" toggle flips. The service mirrors the new value
+    /// into the cached Room and cancels the room's pending
+    /// briefing-trio pushes so a member who just opted out stops
+    /// receiving the previously-scheduled logistics pushes. Errors
+    /// surface via `lastError` like the other toggles.
+    private func setNotificationsEnabled(_ newValue: Bool) async {
+        do {
+            try await roomService.setNotificationsEnabled(
+                roomId: room.id, enabled: newValue
+            )
+        } catch {
+            _ = error
+        }
+    }
+
+    /// V0.54 — fires the `set_event_notifications_muted` RPC
+    /// (migration 066) when the BriefingSlot's "Mute this event"
+    /// toggle flips. The service mirrors the new value into the
+    /// caller's cached `eventRSVPsByEvent` row and cancels the
+    /// event's pending briefing-trio pushes so the muted member
+    /// doesn't receive the previously-scheduled logistics pushes
+    /// for this event. Errors surface via `lastError` like the
+    /// other toggles.
+    private func setEventNotificationsMuted(eventId: UUID, muted: Bool) async {
+        do {
+            try await roomService.setEventNotificationsMuted(
+                eventId: eventId, muted: muted,
+                currentUserId: currentUserId
+            )
+        } catch {
+            _ = error
+        }
+    }
+
     /// Chip-withdraw CTA on the at-play Witness Slot. P0.5 virtual-
     /// only Casino: flips `withdrawSheetEvent` so the
     /// `WithdrawChipsSheet` renders. The sheet loads the member's
@@ -1131,6 +1203,22 @@ private struct BriefingSlot: View {
     /// W2.4 — member-side event edit. Wired up only when the
     /// parent passes a non-nil callback.
     let onEdit: (() -> Void)?
+    /// V0.54 — the current user's per-room notifications opt-in.
+    /// Mirrors `Room.notificationsEnabled` for the slide-in step
+    /// inside this slot. `nil` ⇒ the toggle row doesn't render.
+    let notificationsEnabled: Bool?
+    /// V0.54 — quiet-by-default opt-in toggle. Wired through
+    /// `RoomService.setNotificationsEnabled` from the parent.
+    /// `nil` ⇒ the toggle is hidden (used for the in-play /
+    /// settle slots where the toggle doesn't belong).
+    let onToggleNotificationsEnabled: ((Bool) -> Void)?
+    /// V0.54 — per-event one-tap mute toggle. Wired through
+    /// `RoomService.setEventNotificationsMuted` from the parent.
+    /// `nil` ⇒ the mute row is hidden. The current muted state is
+    /// read from the caller's `EventRSVP.notificationsMuted`
+    /// (looked up by `currentUserId`), so the toggle mirrors the
+    /// server-side row without a round trip.
+    let onToggleEventNotificationsMuted: ((Bool) -> Void)?
 
     init(
         event: Event,
@@ -1145,7 +1233,10 @@ private struct BriefingSlot: View {
         currentUserId: UUID? = nil,
         isHost: Bool,
         isHero: Bool,
-        onEdit: (() -> Void)? = nil
+        onEdit: (() -> Void)? = nil,
+        notificationsEnabled: Bool? = nil,
+        onToggleNotificationsEnabled: ((Bool) -> Void)? = nil,
+        onToggleEventNotificationsMuted: ((Bool) -> Void)? = nil
     ) {
         self.event = event
         self.briefing = briefing
@@ -1160,6 +1251,9 @@ private struct BriefingSlot: View {
         self.isHost = isHost
         self.isHero = isHero
         self.onEdit = onEdit
+        self.notificationsEnabled = notificationsEnabled
+        self.onToggleNotificationsEnabled = onToggleNotificationsEnabled
+        self.onToggleEventNotificationsMuted = onToggleEventNotificationsMuted
     }
 
     var body: some View {
@@ -1226,6 +1320,29 @@ private struct BriefingSlot: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
+            }
+
+            // V0.54 — quiet-by-default pre-play briefing row:
+            //   1. Per-room opt-in toggle ("Remind me about this
+            //      room's nights") wired to the room-level
+            //      `Room.notificationsEnabled`.
+            //   2. Per-event mute toggle ("Mute this event" /
+            //      "Unmute") wired to the caller's
+            //      `EventRSVP.notificationsMuted` for this event.
+            // Renders only when the parent passes the callbacks
+            // (in-play / settle slots omit them per D9). The
+            // mute state is derived from the cached `rsvps` so the
+            // toggle reflects the persisted value without a
+            // re-fetch.
+            if onToggleNotificationsEnabled != nil
+                || onToggleEventNotificationsMuted != nil {
+                BriefingNotificationRow(
+                    notificationsEnabled: notificationsEnabled ?? false,
+                    isMuted: currentMute(rsvps: rsvps),
+                    onToggleNotificationsEnabled: onToggleNotificationsEnabled,
+                    onToggleEventNotificationsMuted: onToggleEventNotificationsMuted
+                )
+                .padding(.top, 8)
             }
 
             switch myRSVP {
@@ -1295,6 +1412,57 @@ private struct BriefingSlot: View {
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
         )
         .appearTransition()
+    }
+
+    /// V0.54 — derives the caller's mute state for this event from
+    /// the cached `rsvps`. Defaults to `false` (unmuted) when the
+    /// current user has no row yet (the migration-066 RPC will
+    /// upsert on first toggle). The router reads this so the
+    /// toggle mirror reads true state without a re-fetch.
+    private func currentMute(rsvps: [EventRSVP]) -> Bool {
+        guard let uid = currentUserId else { return false }
+        return rsvps.first(where: { $0.memberId == uid })?.notificationsMuted ?? false
+    }
+}
+
+// MARK: - Briefing notification row (V0.54)
+
+// V0.54 — quiet-by-default briefing affordances. Two stacked
+// controls rendered in the pre-play BriefingSlot, mirroring the
+// per-room opt-in (drives ALL of the room's logistics pushes) and
+// the per-event mute (a one-tap override for THIS event only).
+// Either row may be omitted by passing a nil callback.
+private struct BriefingNotificationRow: View {
+    let notificationsEnabled: Bool
+    let isMuted: Bool
+    let onToggleNotificationsEnabled: ((Bool) -> Void)?
+    let onToggleEventNotificationsMuted: ((Bool) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let onToggleNotificationsEnabled {
+                Toggle(isOn: Binding(
+                    get: { notificationsEnabled },
+                    set: { onToggleNotificationsEnabled($0) }
+                )) {
+                    Text("Remind me about this room's nights")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                .tint(Theme.Palette.accent)
+            }
+            if let onToggleEventNotificationsMuted {
+                Toggle(isOn: Binding(
+                    get: { isMuted },
+                    set: { onToggleEventNotificationsMuted($0) }
+                )) {
+                    Text(isMuted ? "Muted for this event" : "Mute this event")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                .tint(Theme.Palette.accent)
+            }
+        }
     }
 }
 

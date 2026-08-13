@@ -77,6 +77,16 @@ struct SetDrowningOptInParams: Encodable, Sendable {
     let p_opt_in: Bool
 }
 
+struct SetNotificationsEnabledParams: Encodable, Sendable {
+    let p_room_id: String
+    let p_enabled: Bool
+}
+
+struct SetEventNotificationsMutedParams: Encodable, Sendable {
+    let p_event_id: String
+    let p_muted: Bool
+}
+
 struct UpsertCasinoConfigParams: Encodable, Sendable {
     let p_room_id: String
     let p_enabled: Bool
@@ -415,6 +425,39 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .rpc("set_drowning_opt_in", params: SetDrowningOptInParams(
                 p_room_id: roomId.uuidString,
                 p_opt_in: optIn
+            ))
+            .execute()
+            .value as Void
+    }
+
+    // MARK: Quiet-by-default notifications (V0.54)
+
+    /// The live RPC is `set_notifications_enabled(p_room_id,
+    /// p_enabled)` (migration 066). Updates the caller's own
+    /// `room_memberships.notifications_enabled` row; security-
+    /// definer + the row-level RLS keep the update scoped to the
+    /// caller. Returns nothing on success.
+    func setNotificationsEnabled(roomId: UUID, enabled: Bool) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_notifications_enabled", params: SetNotificationsEnabledParams(
+                p_room_id: roomId.uuidString,
+                p_enabled: enabled
+            ))
+            .execute()
+            .value as Void
+    }
+
+    /// The live RPC is `set_event_notifications_muted(p_event_id,
+    /// p_muted)` (migration 066). Upserts the caller's
+    /// `event_rsvps` row for the event with the given muted flag
+    /// (insert with `state='unclaimed'` if absent, else update in
+    /// place). Room scope derives from the event server-side
+    /// (F-IDENT-01).
+    func setEventNotificationsMuted(eventId: UUID, muted: Bool) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_event_notifications_muted", params: SetEventNotificationsMutedParams(
+                p_event_id: eventId.uuidString,
+                p_muted: muted
             ))
             .execute()
             .value as Void
