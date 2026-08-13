@@ -1229,9 +1229,6 @@ private struct SeatGridRow: View {
                 Image(systemName: Theme.Icon.chair)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
-                Text("open")
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
             }
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(
