@@ -57,7 +57,7 @@ begin
     end if;
 
     insert into public.event_rsvps (event_id, room_id, member_id, state, responded_at)
-    values (p_event_id, v_room, v_target, p_state, now())
+    values (p_event_id, v_room, v_target, p_state::event_rsvp_state, now())
     on conflict (event_id, member_id) do update set
         state = excluded.state,
         responded_at = excluded.responded_at;
