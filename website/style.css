@@ -133,8 +133,8 @@ main {
   display: grid;
   gap: 1.6rem;
   padding: 1.8rem max(calc((100vw - 1120px) / 2), var(--gutter)) 2.2rem;
-  width: 100%;
-  margin-left: 0;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
   background:
     radial-gradient(120% 90% at 50% 0%, var(--accent-wash), transparent 60%);
   border-bottom: 1px solid var(--hairline);
@@ -235,8 +235,8 @@ h1 em { font-style: italic; color: var(--accent); }
 
 /* ── Full-bleed statements (B1, B2) ───────────────── */
 .statement {
-  width: 100%;
-  margin-left: 0;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
   padding: 3.2rem max(calc((100vw - 1120px) / 2), var(--gutter));
   border-top: 1px solid var(--hairline);
   border-bottom: 1px solid var(--hairline);
@@ -261,8 +261,8 @@ h1 em { font-style: italic; color: var(--accent); }
 
 /* ── Packs slim strip (no card) ───────────────────── */
 .packs-strip {
-  width: 100%;
-  margin-left: 0;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
   padding: 2.2rem max(calc((100vw - 1120px) / 2), var(--gutter));
   border-top: 1px solid var(--hairline);
   border-bottom: 1px solid var(--hairline);
