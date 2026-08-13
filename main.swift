@@ -2993,6 +2993,17 @@ runner.run("SeasonStatCard Codable round-trips") {
     runner.assertEqual(decoded, card)
 }
 
+runner.run("RoomGraphSummary JSON round-trips with snake_case keys") {
+    let summary = RoomGraphSummary(
+        overlapCount: 3,
+        overlapNames: ["Alice", "Bob", "Cara"]
+    )
+    let data = try JSONEncoder().encode(summary)
+    let decoded = try JSONDecoder().decode(RoomGraphSummary.self, from: data)
+    runner.assertEqual(decoded.overlapCount, 3)
+    runner.assertEqual(decoded.overlapNames, ["Alice", "Bob", "Cara"])
+}
+
 runner.run("MascotEngine goodSport cell exists for every personality × ideology") {
     let personalities = MascotPersonality.allCases
     let ideologies = MascotPoliticalIdeology.allCases

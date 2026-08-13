@@ -87,6 +87,21 @@ struct SetEventNotificationsMutedParams: Encodable, Sendable {
     let p_muted: Bool
 }
 
+struct GenerateInviteCodeParams: Encodable, Sendable {
+    let p_room_id: String
+}
+
+struct ScopeJoinCodeParams: Encodable, Sendable {
+    let p_code: String
+    let p_invitee_user_id: String
+}
+
+struct ApproveTierTwoJoinParams: Encodable, Sendable {
+    let p_room_id: String
+    let p_user_id: String
+    let p_remove: Bool
+}
+
 struct UpsertCasinoConfigParams: Encodable, Sendable {
     let p_room_id: String
     let p_enabled: Bool
@@ -180,6 +195,53 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             )
         }
         return code
+    }
+
+    /// V0.55 — mints a join code, then scopes it to the invitee when
+    /// one is given (tier 3). The live RPCs are `generate_join_code`
+    /// (migration 004) + `scope_join_code` (migration 068). When
+    /// `inviteeUserId` is nil the code stays open (tier 1 host or
+    /// tier 2 member, per the caller's role). Throws on non-member
+    /// writes or a scope rejection.
+    func generateInviteCode(roomId: UUID, inviteeUserId: UUID?) async throws -> String {
+        let code: String = try await SupabaseClientProvider.shared
+            .rpc("generate_join_code", params: GenerateInviteCodeParams(
+                p_room_id: roomId.uuidString
+            ))
+            .execute()
+            .value
+        guard !code.isEmpty else {
+            throw NSError(
+                domain: "LiveRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "generate_join_code returned no code"]
+            )
+        }
+        if let inviteeUserId {
+            _ = try await SupabaseClientProvider.shared
+                .rpc("scope_join_code", params: ScopeJoinCodeParams(
+                    p_code: code,
+                    p_invitee_user_id: inviteeUserId.uuidString
+                ))
+                .execute()
+                .value as Void
+        }
+        return code
+    }
+
+    /// V0.55 — host-only. Removes (or restores) a tier-2 join from
+    /// the roster. The live RPC is `approve_tier_two_join` (migration
+    /// 068): `remove: true` deletes the membership row, `false` is a
+    /// no-op that leaves it. Throws on non-host calls.
+    func approveTierTwoJoin(roomId: UUID, userId: UUID, remove: Bool) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("approve_tier_two_join", params: ApproveTierTwoJoinParams(
+                p_room_id: roomId.uuidString,
+                p_user_id: userId.uuidString,
+                p_remove: remove
+            ))
+            .execute()
+            .value as Void
     }
 
     /// The live RPC is `redeem_join_code(p_code)` (migration 004 +

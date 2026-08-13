@@ -54,6 +54,19 @@ struct Member: Identifiable, Codable, Hashable {
     /// scheduling on-create / T-48h / morning-of pushes. Default false.
     let notificationsEnabled: Bool
 
+    /// V0.55 — the tier that admitted this member: 1 host direct,
+    /// 2 member + referral proof, 3 open code by invitee. Surfaced
+    /// via `get_room_members` (migration 068) so the roster can
+    /// show the host's tier-2 approval queue. Defaults to 3 on
+    /// legacy rows.
+    let inviteTier: Int
+
+    /// V0.55 — the member who vouched for this user (the referrer).
+    /// `nil` for the host and for anyone admitted by a host code.
+    /// Surfaced via `get_room_members` (migration 068) so the roster
+    /// can show who vouched for whom.
+    let invitedBy: UUID?
+
     enum CodingKeys: String, CodingKey {
         case id
         case roomId = "room_id"
@@ -65,6 +78,8 @@ struct Member: Identifiable, Codable, Hashable {
         case socialPreference = "social_preference"
         case team
         case notificationsEnabled = "notifications_enabled"
+        case inviteTier = "invite_tier"
+        case invitedBy = "invited_by"
     }
 
     init(
@@ -77,7 +92,9 @@ struct Member: Identifiable, Codable, Hashable {
         displayName: String,
         socialPreference: SocialPreference = .empty,
         team: String? = nil,
-        notificationsEnabled: Bool = false
+        notificationsEnabled: Bool = false,
+        inviteTier: Int = 3,
+        invitedBy: UUID? = nil
     ) {
         self.id = id
         self.roomId = roomId
@@ -89,6 +106,8 @@ struct Member: Identifiable, Codable, Hashable {
         self.socialPreference = socialPreference
         self.team = team
         self.notificationsEnabled = notificationsEnabled
+        self.inviteTier = inviteTier
+        self.invitedBy = invitedBy
     }
 
     init(from decoder: Decoder) throws {
@@ -108,5 +127,7 @@ struct Member: Identifiable, Codable, Hashable {
         socialPreference = try c.decodeIfPresent(SocialPreference.self, forKey: .socialPreference) ?? .empty
         team = try c.decodeIfPresent(String.self, forKey: .team)
         notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
+        inviteTier = try c.decodeIfPresent(Int.self, forKey: .inviteTier) ?? 3
+        invitedBy = try c.decodeIfPresent(UUID.self, forKey: .invitedBy)
     }
 }

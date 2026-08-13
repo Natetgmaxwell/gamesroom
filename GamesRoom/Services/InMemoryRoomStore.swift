@@ -123,6 +123,18 @@ actor InMemoryRoomStore: RoomStore {
     /// create-room + join-code surfaces without Supabase.
     private var joinCodes: [String: UUID]
 
+    /// V0.55 — invitee scope per join code. `[code: inviteeUserId]`.
+    /// Mirrors `join_codes.invitee_user_id` (migration 068): a
+    /// non-nil invitee makes the code tier 3, usable only by that
+    /// user.
+    private var joinCodeInvitees: [String: UUID]
+
+    /// V0.55 — tier-2 joins awaiting host approval. `[roomId: [userId]]`.
+    /// Mirrors `room_memberships.invite_tier = 2` (migration 068).
+    /// Tier-2 joins are live immediately; the host's one-tap remove
+    /// deletes the membership row.
+    private var tierTwoJoinsByRoom: [UUID: [UUID]]
+
     init() {
         let carwoola = Room(
             id: UUID(),
@@ -263,6 +275,8 @@ actor InMemoryRoomStore: RoomStore {
         self.notificationsEnabledByRoom = [:]
         self.packConfigs = [:]
         self.joinCodes = [:]
+        self.joinCodeInvitees = [:]
+        self.tierTwoJoinsByRoom = [:]
         self.seasonHistoryByRoom = [:]
         // W-06 — seed every room with a default casino config so
         // the host's settings sheet reads a non-nil initial state.
@@ -508,6 +522,36 @@ actor InMemoryRoomStore: RoomStore {
         return code
     }
 
+    /// V0.55 — mints a join code, then scopes it to the invitee when
+    /// one is given (tier 3). Mirrors `generate_join_code` +
+    /// `scope_join_code` (migration 068). When `inviteeUserId` is nil
+    /// the code stays open (tier 1 host or tier 2 member).
+    func generateInviteCode(roomId: UUID, inviteeUserId: UUID?) async throws -> String {
+        let code = try await generateJoinCode(roomId: roomId)
+        if let inviteeUserId {
+            joinCodeInvitees[code] = inviteeUserId
+        }
+        return code
+    }
+
+    /// V0.55 — host-only. Removes (or restores) a tier-2 join from
+    /// the roster. Mirrors `approve_tier_two_join` (migration 068):
+    /// `remove: true` deletes the membership row, `false` is a no-op.
+    func approveTierTwoJoin(roomId: UUID, userId: UUID, remove: Bool) async throws {
+        guard rooms.contains(where: { $0.id == roomId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "room \\(roomId) not found"]
+            )
+        }
+        if remove {
+            var joins = tierTwoJoinsByRoom[roomId] ?? []
+            joins.removeAll { $0 == userId }
+            tierTwoJoinsByRoom[roomId] = joins
+        }
+    }
+
     /// Synthesises a redeem flow: looks up the in-memory code,
     /// synthesises a membership row, returns a `RedeemedRoom`. The
     /// re-redeem case (already a member) returns the room without
@@ -528,10 +572,23 @@ actor InMemoryRoomStore: RoomStore {
                 userInfo: [NSLocalizedDescriptionKey: "Room not found"]
             )
         }
+        // V0.55 — tier-3 invitee scope: a code scoped to one invitee
+        // is rejected for anyone else (same P0002 as a typo). The
+        // in-memory store's synthetic current member is the host of
+        // the first seeded room; a scoped code is only redeemable by
+        // its invitee.
+        if let invitee = joinCodeInvitees[normalised], invitee != currentSyntheticMemberId() {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Code not found or already redeemed"]
+            )
+        }
         // Mark the code consumed so a second tap reports the
         // "already redeemed" path. Mirrors the live redeem_join_code
         // row update.
         joinCodes.removeValue(forKey: normalised)
+        joinCodeInvitees.removeValue(forKey: normalised)
         return RedeemedRoom(roomId: room.id, roomName: room.name)
     }
 

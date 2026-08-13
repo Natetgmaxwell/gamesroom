@@ -42,6 +42,24 @@ protocol RoomStore: Sendable {
     /// 004 + 006 host check). Throws on non-host writes.
     func generateJoinCode(roomId: UUID) async throws -> String
 
+    /// V0.55 — mints a join code for a room, optionally scoped to a
+    /// specific invitee. Mirrors `generate_join_code(p_room_id)`
+    /// (migration 004) + the migration-068 invitee scope. When
+    /// `inviteeUserId` is non-nil the code is tier 3 (usable only by
+    /// that user); when nil it is a host (tier 1) or member (tier 2)
+    /// code depending on the caller's role. Throws on non-member
+    /// writes.
+    func generateInviteCode(roomId: UUID, inviteeUserId: UUID?) async throws -> String
+
+    /// V0.55 — host-only. Removes (or restores) a tier-2 join from
+    /// the roster. Because tier-2 joins are live immediately (low
+    /// friction, substrate 1.3), the "approval" is a host one-tap
+    /// remove: `remove: true` deletes the membership row, `false`
+    /// leaves it. Mirrors the host-remove path on
+    /// `room_memberships` (migration 004 host-can-remove policy).
+    /// Throws on non-host calls.
+    func approveTierTwoJoin(roomId: UUID, userId: UUID, remove: Bool) async throws
+
     /// Redeems a join code on behalf of the calling user. Mirrors
     /// `redeem_join_code(p_code)` (migration 004 + V0.18 bonus
     /// extension). Idempotent: re-redeeming for an existing member

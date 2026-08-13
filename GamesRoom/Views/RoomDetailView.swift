@@ -2923,9 +2923,26 @@ private struct MemberRosterReadOnly: View {
     /// when the cache is empty — `RoomDetailView.refresh()` is
     /// responsible for populating the cache on first appear.
     @EnvironmentObject private var roomService: RoomService
+    @EnvironmentObject private var authService: AuthService
+
+    /// V0.55 — the freshly-minted invite code, shown for the host /
+    /// member to share. `nil` until "Invite a friend" is tapped.
+    @State private var inviteCode: String?
+    /// V0.55 — the invitee picked for a tier-3 scoped code. `nil`
+    /// until the member picks a co-member from their other rooms.
+    @State private var inviteeUserId: UUID?
+    /// V0.55 — transient error surface for the invite actions.
+    @State private var inviteError: String?
+    @State private var showInviteError: Bool = false
+
+    private var isHost: Bool {
+        guard let uid = authService.currentUser?.id else { return false }
+        return room.userRole == .host || room.createdBy == uid
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            inviteSection
             let members = roomService.cachedMembers(roomId: room.id)
             if members.isEmpty {
                 Text("No members yet — share your join code to get the table set.")
@@ -2952,6 +2969,251 @@ private struct MemberRosterReadOnly: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .alert("Invite failed", isPresented: $showInviteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(inviteError ?? "")
+        }
+    }
+
+    /// V0.55 — the invite affordance on the roster. Host sees
+    /// "Invite a friend" (tier 1 host code) + the tier-2 approval
+    /// queue (one-tap remove). Member sees "Invite a friend" (tier 2,
+    /// quota-limited) + a tier-3 invitee-scoped code field.
+    @ViewBuilder
+    private var inviteSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            if let code = inviteCode {
+                HStack(spacing: Theme.Layout.gutter) {
+                    Text(code)
+                        .font(Theme.Typography.body.monospaced().weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                    Spacer()
+                    Button {
+                        UIPasteboard.general.string = code
+                    } label: {
+                        Image(systemName: Theme.Icon.plusCircle)
+                            .foregroundStyle(Theme.Palette.accent)
+                    }
+                    .accessibilityLabel(Text("Copy invite code"))
+                }
+                .padding(.vertical, Theme.Layout.cardInset)
+                .padding(.horizontal, Theme.Layout.edgePadding)
+                .background(Theme.Palette.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            if isHost {
+                hostInviteRow
+                tierTwoApprovalQueue
+            } else {
+                memberInviteRow
+                tierThreeInviteField
+            }
+        }
+    }
+
+    /// V0.55 — host "Invite a friend" row. Generates a tier-1 host
+    /// code.
+    private var hostInviteRow: some View {
+        Button {
+            Task {
+                do {
+                    inviteCode = try await roomService.generateInviteCode(roomId: room.id, inviteeUserId: nil)
+                } catch {
+                    inviteError = error.localizedDescription
+                    showInviteError = true
+                }
+            }
+        } label: {
+            HStack {
+                Image(systemName: Theme.Icon.person2Fill)
+                    .foregroundStyle(Theme.Palette.accent)
+                Text("Invite a friend")
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Spacer()
+            }
+            .padding(.vertical, Theme.Layout.cardInset)
+            .padding(.horizontal, Theme.Layout.edgePadding)
+            .background(Theme.Palette.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// V0.55 — host tier-2 approval queue. Lists recent tier-2
+    /// joins (from the roster where `inviteTier == 2`), each with a
+    /// one-tap remove. Tier-2 joins are live immediately; this is the
+    /// host's gate.
+    @ViewBuilder
+    private var tierTwoApprovalQueue: some View {
+        let tierTwo = roomService.cachedMembers(roomId: room.id)
+            .filter { $0.inviteTier == 2 }
+        if !tierTwo.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("PENDING INVITES")
+                    .font(Theme.Typography.footnote)
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                ForEach(tierTwo) { member in
+                    HStack {
+                        Text(member.displayName)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                        Spacer()
+                        Button {
+                            Task {
+                                do {
+                                    try await roomService.approveTierTwoJoin(roomId: room.id, userId: member.userId, remove: true)
+                                } catch {
+                                    inviteError = error.localizedDescription
+                                    showInviteError = true
+                                }
+                            }
+                        } label: {
+                            Text("Remove")
+                                .font(Theme.Typography.caption.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+            .padding(.vertical, Theme.Layout.cardInset)
+            .padding(.horizontal, Theme.Layout.edgePadding)
+            .background(Theme.Palette.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    /// V0.55 — member "Invite a friend" row. Generates a tier-2
+    /// member code (quota-limited per migration 007).
+    private var memberInviteRow: some View {
+        Button {
+            Task {
+                do {
+                    inviteCode = try await roomService.generateInviteCode(roomId: room.id, inviteeUserId: nil)
+                } catch {
+                    inviteError = error.localizedDescription
+                    showInviteError = true
+                }
+            }
+        } label: {
+            HStack {
+                Image(systemName: Theme.Icon.person2Fill)
+                    .foregroundStyle(Theme.Palette.accent)
+                Text("Invite a friend")
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Spacer()
+            }
+            .padding(.vertical, Theme.Layout.cardInset)
+            .padding(.horizontal, Theme.Layout.edgePadding)
+            .background(Theme.Palette.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// V0.55 — member tier-3 invitee-scoped code field. Picks a
+    /// co-member from the caller's other rooms and scopes the code to
+    /// that invitee. The invitee must be a member of one of the
+    /// caller's other rooms (the invite-chain bridge).
+    @ViewBuilder
+    private var tierThreeInviteField: some View {
+        let candidates = otherRoomMembers()
+        if !candidates.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+                Text("Send a code to someone in your other rooms")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                Menu {
+                    ForEach(candidates) { member in
+                        Button(member.displayName) {
+                            inviteeUserId = member.userId
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text(inviteeName ?? "Choose a friend")
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(inviteeUserId == nil ? Theme.Palette.primaryText.opacity(0.55) : Theme.Palette.primaryText)
+                        Spacer()
+                        Image(systemName: Theme.Icon.chevronDown)
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    }
+                    .padding(.vertical, Theme.Layout.cardInset)
+                    .padding(.horizontal, Theme.Layout.edgePadding)
+                    .background(Theme.Palette.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                if let inviteeUserId {
+                    Button {
+                        Task {
+                            do {
+                                inviteCode = try await roomService.generateInviteCode(roomId: room.id, inviteeUserId: inviteeUserId)
+                            } catch {
+                                inviteError = error.localizedDescription
+                                showInviteError = true
+                            }
+                        }
+                    } label: {
+                        Text("Generate scoped code")
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.background)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Theme.Palette.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// V0.55 — co-members of the caller's OTHER rooms (the invite-chain
+    /// bridge). Deduped by user id; excludes the caller and members
+    /// already in this room.
+    private func otherRoomMembers() -> [Member] {
+        guard let me = authService.currentUser?.id else { return [] }
+        var seen = Set<UUID>()
+        var result: [Member] = []
+        for otherRoom in roomService.rooms where otherRoom.id != room.id {
+            for member in roomService.cachedMembers(roomId: otherRoom.id) {
+                guard member.userId != me, seen.insert(member.userId).inserted else { continue }
+                result.append(member)
+            }
+        }
+        return result
+    }
+
+    private var inviteeName: String? {
+        guard let inviteeUserId else { return nil }
+        return otherRoomMembers().first(where: { $0.userId == inviteeUserId })?.displayName
     }
 
     private func memberRow(_ member: Member) -> some View {

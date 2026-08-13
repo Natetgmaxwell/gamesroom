@@ -241,6 +241,29 @@ final class RoomService: ObservableObject {
         return code
     }
 
+    /// V0.55 — mints a join code, optionally scoped to a specific
+    /// invitee (tier 3). When `inviteeUserId` is nil the code stays
+    /// open (tier 1 host or tier 2 member). Throws on non-member
+    /// writes or a scope rejection.
+    func generateInviteCode(roomId: UUID, inviteeUserId: UUID?) async throws -> String {
+        let code = try await store.generateInviteCode(roomId: roomId, inviteeUserId: inviteeUserId)
+        self.lastError = nil
+        return code
+    }
+
+    /// V0.55 — host-only. Removes (or restores) a tier-2 join from
+    /// the roster. Mirrors the roster cache so the approval queue
+    /// re-renders immediately. Throws on non-host calls.
+    func approveTierTwoJoin(roomId: UUID, userId: UUID, remove: Bool) async throws {
+        try await store.approveTierTwoJoin(roomId: roomId, userId: userId, remove: remove)
+        self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "roomMembers:\\(roomId.uuidString)")
+        if remove, var roster = membersByRoom[roomId] {
+            roster.removeAll { $0.userId == userId }
+            membersByRoom[roomId] = roster
+        }
+    }
+
     /// Redeems a six-character join code on behalf of the calling
     /// user. Idempotent server-side — re-redeeming for an existing
     /// member returns the room row without mutating points. Throws
@@ -443,7 +466,10 @@ final class RoomService: ObservableObject {
                 lastSeenAt: roster[idx].lastSeenAt,
                 displayName: roster[idx].displayName,
                 socialPreference: roster[idx].socialPreference,
-                team: team
+                team: team,
+                notificationsEnabled: roster[idx].notificationsEnabled,
+                inviteTier: roster[idx].inviteTier,
+                invitedBy: roster[idx].invitedBy
             )
             membersByRoom[roomId] = roster
         }

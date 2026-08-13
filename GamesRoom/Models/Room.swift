@@ -118,6 +118,14 @@ struct Room: Identifiable, Codable, Hashable {
     /// `member_drowning_opt_in` for back-compat.
     let notificationsEnabled: Bool
 
+    /// V0.55 — cross-room overlap signal (substrate 1.2). How many
+    /// co-members of this room the caller also sits with in at least
+    /// one other room, plus up to 5 of their display names. Computed
+    /// fresh by `get_my_rooms` (migration 068); drives the room-row
+    /// overlap badge. Defaults to 0 / empty on legacy rows.
+    let overlapCount: Int
+    let overlapNames: [String]
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -143,6 +151,8 @@ struct Room: Identifiable, Codable, Hashable {
         case seatDepositAmount = "seat_deposit_amount"
     case memberDrowningOptIn = "member_drowning_opt_in"
     case notificationsEnabled = "notifications_enabled"
+    case overlapCount = "overlap_count"
+    case overlapNames = "overlap_names"
     }
 
     init(
@@ -169,7 +179,9 @@ struct Room: Identifiable, Codable, Hashable {
         installedPackSlugs: [String]? = nil,
         seatDepositAmount: Int = 0,
         memberDrowningOptIn: Bool = false,
-        notificationsEnabled: Bool = false
+        notificationsEnabled: Bool = false,
+        overlapCount: Int = 0,
+        overlapNames: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -195,6 +207,8 @@ struct Room: Identifiable, Codable, Hashable {
         self.seatDepositAmount = seatDepositAmount
         self.memberDrowningOptIn = memberDrowningOptIn
         self.notificationsEnabled = notificationsEnabled
+        self.overlapCount = overlapCount
+        self.overlapNames = overlapNames
     }
 
     init(from decoder: Decoder) throws {
@@ -223,5 +237,7 @@ struct Room: Identifiable, Codable, Hashable {
         seatDepositAmount = try c.decodeIfPresent(Int.self, forKey: .seatDepositAmount) ?? 0
         memberDrowningOptIn = try c.decodeIfPresent(Bool.self, forKey: .memberDrowningOptIn) ?? false
         notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
+        overlapCount = try c.decodeIfPresent(Int.self, forKey: .overlapCount) ?? 0
+        overlapNames = try c.decodeIfPresent([String].self, forKey: .overlapNames) ?? []
     }
 }

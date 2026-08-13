@@ -106,6 +106,7 @@
 		AAAAAAAA00000000000000C5 /* WorkingHand.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000489 /* WorkingHand.swift */; };
 		AAAAAAAA00000000000000EB /* SeasonStatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048A /* SeasonStatCard.swift */; };
 		AAAAAAAA00000000000000EC /* SeasonStatCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048B /* SeasonStatCardView.swift */; };
+		AAAAAAAA00000000000000ED /* RoomGraphSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048C /* RoomGraphSummary.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -251,6 +252,7 @@
 		AAAAAAAA0000000000000489 /* WorkingHand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkingHand.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048A /* SeasonStatCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStatCard.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048B /* SeasonStatCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStatCardView.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000048C /* RoomGraphSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomGraphSummary.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -372,6 +374,7 @@
 				BBBBBBBB0000000000000450 /* SeatDeposit.swift */,
 				AAAAAAAA0000000000000489 /* WorkingHand.swift */,
 				AAAAAAAA000000000000048A /* SeasonStatCard.swift */,
+				AAAAAAAA000000000000048C /* RoomGraphSummary.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -717,6 +720,7 @@
 				AAAAAAAA00000000000000C5 /* WorkingHand.swift in Sources */,
 				AAAAAAAA00000000000000EC /* SeasonStatCardView.swift in Sources */,
 				AAAAAAAA00000000000000EB /* SeasonStatCard.swift in Sources */,
+				AAAAAAAA00000000000000ED /* RoomGraphSummary.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

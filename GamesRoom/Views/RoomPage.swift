@@ -268,6 +268,18 @@ struct RoomPage: View {
                                     Text(socialProofCaption(for: room) ?? "Tap to open")
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                    // V0.55 — overlap badge + season-arc
+                                    // preview. Two lines max, no new chrome.
+                                    if let overlap = overlapLine(for: room) {
+                                        Text(overlap)
+                                            .font(Theme.Typography.caption)
+                                            .foregroundStyle(Theme.Palette.accent)
+                                    }
+                                    if let arc = seasonArcLine(for: room) {
+                                        Text(arc)
+                                            .font(Theme.Typography.caption)
+                                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                    }
                                 }
                                 Spacer()
                             }
@@ -316,6 +328,39 @@ struct RoomPage: View {
                 .filter { $0.state == .claimed }
                 .map { $0.displayName }
         )
+    }
+
+    /// V0.55 — the overlap badge line for a room row. Hidden when the
+    /// room has no cross-room overlap. Shows the count, or the names
+    /// when exactly one overlapping co-member. Never a directory —
+    /// count + names only, capped at 5 by the server.
+    private func overlapLine(for room: Room) -> String? {
+        guard room.overlapCount > 0 else { return nil }
+        if room.overlapCount == 1, let name = room.overlapNames.first {
+            return "Shared with \\(name) in another room"
+        }
+        return "\\(room.overlapCount) shared with your other rooms"
+    }
+
+    /// V0.55 — the season-arc preview line for a room row. Reuses the
+    /// cached season + most recent settled event; no new fetch. Shows
+    /// "Season N" plus, when a settled event exists, "last played X
+    /// ago". Hidden when the room has no current season.
+    private func seasonArcLine(for room: Room) -> String? {
+        guard let season = roomService.cachedCurrentSeason(roomId: room.id) else { return nil }
+        var line = "Season \(season.ordinal)"
+        if let last = roomService.cachedActiveEvent(roomId: room.id),
+           let settled = last.settledAt {
+            let days = max(0, Int(Date().timeIntervalSince(settled) / 86_400))
+            let ago: String
+            if days == 0 {
+                ago = "tonight"
+            } else {
+                ago = "\(days) night\(days == 1 ? "" : "s") ago"
+            }
+            line += " · last played \(ago)"
+        }
+        return line
     }
 
     // MARK: - Last-viewed hero
