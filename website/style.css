@@ -42,6 +42,7 @@
   --maxw: 680px;          /* base (mobile-first) */
   --maxw-desktop: 1120px; /* grows on tablet/desktop */
   --gutter: 1.5rem;
+  --content-inner: calc(var(--maxw-desktop) - 2 * var(--gutter)); /* 1072px */
   --radius: 12px;
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Rounded",
@@ -132,7 +133,7 @@ main {
 .hero {
   display: grid;
   gap: 1.6rem;
-  padding: 1.8rem max(calc((100vw - 1120px) / 2), var(--gutter)) 2.2rem;
+  padding: 1.8rem max(calc((100vw - var(--content-inner)) / 2), var(--gutter)) 2.2rem;
   width: 100vw;
   margin-left: calc(50% - 50vw);
   background:
@@ -237,7 +238,7 @@ h1 em { font-style: italic; color: var(--accent); }
 .statement {
   width: 100vw;
   margin-left: calc(50% - 50vw);
-  padding: 3.2rem max(calc((100vw - 1120px) / 2), var(--gutter));
+  padding: 3.2rem max(calc((100vw - var(--content-inner)) / 2), var(--gutter));
   border-top: 1px solid var(--hairline);
   border-bottom: 1px solid var(--hairline);
   text-align: left;
@@ -263,7 +264,7 @@ h1 em { font-style: italic; color: var(--accent); }
 .packs-strip {
   width: 100vw;
   margin-left: calc(50% - 50vw);
-  padding: 2.2rem max(calc((100vw - 1120px) / 2), var(--gutter));
+  padding: 2.2rem max(calc((100vw - var(--content-inner)) / 2), var(--gutter));
   border-top: 1px solid var(--hairline);
   border-bottom: 1px solid var(--hairline);
 }
