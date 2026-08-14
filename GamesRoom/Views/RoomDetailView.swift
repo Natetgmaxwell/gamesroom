@@ -153,6 +153,17 @@ struct RoomDetailView: View {
         authService.currentUser?.id
     }
 
+    /// V0.62 — single source of truth for the caller's working hand,
+    /// derived from `workingHands` (loaded via `get_event_working_hands`,
+    /// migration 065). Replaces the old `casinoWithdrawn` derivation
+    /// from `get_my_open_withdrawal`, which returned empty on the live
+    /// DB and stranded the state machine at `.tonightEvent`. `workingHands`
+    /// is keyed by `WorkingHand.memberId: UUID`; `currentUserId` is
+    /// `UUID?`; Swift allows `UUID? == UUID` for the lookup.
+    private var myWorkingHand: Int {
+        workingHands.first(where: { $0.memberId == currentUserId })?.workingHand ?? 0
+    }
+
     /// V0.45 — freshest cached copy of this room. The value passed
     /// in at navigation goes stale after a settings save, so display
     /// surfaces read through the service cache; `room` remains the
@@ -513,7 +524,7 @@ struct RoomDetailView: View {
             // in isolation. The collapse-into-`.inPlay` that the
             // audit flags (V0State used to mix these) is undone
             // here — the brief's 10-state machine wins.
-            if isLive && casinoWithdrawn == 0 {
+            if isLive && myWorkingHand == 0 {
                 return .tonightEvent(event)
             }
             if isLive {
@@ -821,7 +832,6 @@ struct RoomDetailView: View {
         async let rsvpLoad: () = loadRSVPIfNeeded(force: force)
         async let membersLoad: () = loadMembersIfNeeded(force: force)
         async let seasonLoad: () = loadSeasonIfNeeded(force: force)
-        async let withdrawalLoad: () = loadMyOpenWithdrawalIfNeeded()
         async let eventsLoad: [RoomSystemEvent] = roomService.loadSystemEvents(roomId: room.id, force: force)
         async let rsvpGridLoad: () = loadRSVPGridIfNeeded(force: force)
         async let packConfigLoad: () = loadPackConfigsIfNeeded(force: force)
@@ -830,7 +840,7 @@ struct RoomDetailView: View {
         async let chapterLoad: () = loadChapterLineIfNeeded(force: force)
         async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded()
         async let workingHandsLoad: () = loadWorkingHandsIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, withdrawalLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad)
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad)
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
         // rule in `ScoreSnapshot.shouldPersist` keeps a rooms-list
@@ -939,20 +949,6 @@ struct RoomDetailView: View {
         self.openAttestations = rows
     }
 
-    /// M3.1 — loads the calling member's open withdrawal for the
-    /// active event and assigns it to `casinoWithdrawn`. Powers
-    /// the SettleCasinoSheet stepper default so the member sees
-    /// the actual bracket they moved, not 0. Lazy on refresh so
-    /// a fresh withdrawal surfaces on the next pull-to-refresh.
-    private func loadMyOpenWithdrawalIfNeeded() async {
-        guard let event = activeEvent else {
-            casinoWithdrawn = 0
-            return
-        }
-        let row = await casinoService.loadMyOpenWithdrawal(eventId: event.id)
-        casinoWithdrawn = Int(row?.pointsWithdrawn ?? 0)
-    }
-
     /// V0.47 — loads the host-only pending-withdrawal list.
     /// Guards on host role and the active event being casino;
     /// ensures the active event is cached first so ordering
@@ -987,6 +983,10 @@ struct RoomDetailView: View {
             return
         }
         workingHands = await casinoService.loadWorkingHands(eventId: event.id)
+        // V0.62 — mirror the caller's working hand into `casinoWithdrawn`
+        // so every existing `casinoWithdrawn` reader (sheets, mascot,
+        // witness-slot badge) stays correct without touching call sites.
+        casinoWithdrawn = myWorkingHand
     }
 
     // MARK: - Action handlers (wired to the service layer)
