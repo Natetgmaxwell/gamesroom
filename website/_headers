@@ -1,0 +1,17 @@
+# Games Room website cache policy (V0.63)
+# HTML is served no-cache so every deploy shows immediately at the edge.
+# Static assets keep CDN speed: CSS 1h (bumped via ?v= on each deploy),
+# fonts immutable (never change), icons 1 day.
+/
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/style.css
+  Cache-Control: public, max-age=3600
+
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/icon-120.png
+/favicon.png
+/icon.png
+  Cache-Control: public, max-age=86400
