@@ -422,15 +422,11 @@ struct RoomDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
                 activeSlot
                     .frame(maxWidth: .infinity)
-                // V0.51 — per-member working hands + host to-dispense
-                // zone, rendered during active casino play when
-                // there's anything to show.
-                if isCasinoPlayActive,
-                   workingHands.contains { $0.workingHand > 0 } || !pendingWithdrawals.isEmpty {
-                    ChipsOnTableSection(
-                        hands: workingHands,
-                        isHost: isHost,
-                        pendingWithdrawals: pendingWithdrawals,
+                // V0.66 — host-only "Chips to dispense" cards during active
+                // casino play when withdrawals await dispensing.
+                if isCasinoPlayActive, isHost, !pendingWithdrawals.isEmpty {
+                    HostWithdrawalsSection(
+                        withdrawals: pendingWithdrawals,
                         onDispense: { id in dispensedWithdrawalIds.insert(id) }
                     )
                     .sectionCard(.standard)
@@ -2217,59 +2213,6 @@ private struct SystemBanner: View {
         case .seasonClosed:
             return "The season has been closed by the host."
         }
-    }
-}
-
-// MARK: - Chips withdrawn (V0.52)
-
-/// Per-member working-hand readout for active casino play. Host
-/// gets a "To dispense" zone (reusing the V0.47 dispense rows)
-/// above the member rows; every role sees the per-member working
-/// hand only — no bank balances rendered (the `points_balance`
-/// stays in the model and the RPC, untouched).
-private struct ChipsOnTableSection: View {
-    let hands: [WorkingHand]
-    let isHost: Bool
-    let pendingWithdrawals: [EventTransaction]
-    let onDispense: (UUID) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            HStack(spacing: 8) {
-                Image(systemName: Theme.Icon.circleHexagongridFill)
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Chips withdrawn")
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.primaryText)
-            }
-            Text("Chips moved from the bank for tonight")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            if isHost, !pendingWithdrawals.isEmpty {
-                HostWithdrawalsSection(
-                    withdrawals: pendingWithdrawals,
-                    onDispense: onDispense
-                )
-                .padding(.top, 4)
-            }
-            ForEach(hands) { hand in
-                HStack(spacing: Theme.Layout.cardInset) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(hand.displayName)
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        Text("Working hand")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    }
-                    Spacer()
-                    Text("\(hand.workingHand) pts")
-                        .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(Theme.Palette.accent)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
