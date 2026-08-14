@@ -655,6 +655,7 @@
 				AAAAAAAA0000000000000014 /* MascotEngine.swift in Sources */,
 				AAAAAAAA0000000000000015 /* NotificationDispatcher.swift in Sources */,
 				AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */,
+				AAAAAAAA0000000000000801 /* Perf.swift in Sources */,
 				AAAAAAAA0000000000000016 /* RoomStore.swift in Sources */,
 				AAAAAAAA0000000000000017 /* RoomPage.swift in Sources */,
 				AAAAAAAA0000000000000018 /* RoomDetailView.swift in Sources */,
