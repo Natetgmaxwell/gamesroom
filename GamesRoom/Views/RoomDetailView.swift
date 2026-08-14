@@ -675,9 +675,21 @@ struct RoomDetailView: View {
                     cta: .scan,
                     onWithdraw: { Task { await openWithdraw(event: event) } },
                     onScan: { Task { await openScan(event: event) } },
-                    onScore: isHost
+                    // V0.68 — "Score a round" is gated to single-winner
+                    // packs only. For casino/CAH the primary settle CTA
+                    // already opens the same sheet, so the host-only
+                    // button is redundant there.
+                    onScore: isHost && isSingleWinnerPack(event)
                         ? { Task { await openHostScore(event: event) } }
                         : nil,
+                    // V0.68 — "Withdraw more" secondary. The member has
+                    // already withdrawn into their working hand but can
+                    // still top up. Casino only (CAH has no chip
+                    // withdrawal concept); member AND host (host-can-play
+                    // lock 2026-07-09).
+                    onWithdrawMore: isCAH
+                        ? nil
+                        : { Task { await openWithdraw(event: event) } },
                     isHero: true,
                     headerMode: .inPlay,
                     scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
@@ -704,7 +716,10 @@ struct RoomDetailView: View {
                     cta: isCAH ? .scan : .withdraw,
                     onWithdraw: { Task { await openWithdraw(event: event) } },
                     onScan: { Task { await openScan(event: event) } },
-                    onScore: isHost
+                    // V0.68 — "Score a round" gated to single-winner
+                    // packs only (see `.inPlay`). No "Withdraw more"
+                    // here — withdraw is already the primary CTA.
+                    onScore: isHost && isSingleWinnerPack(event)
                         ? { Task { await openHostScore(event: event) } }
                         : nil,
                     isHero: true,
@@ -747,7 +762,10 @@ struct RoomDetailView: View {
                     cta: .scan,
                     onWithdraw: { Task { await openWithdraw(event: event) } },
                     onScan: { Task { await openScan(event: event) } },
-                    onScore: isHost
+                    // V0.68 — "Score a round" gated to single-winner
+                    // packs only (see `.inPlay`). No "Withdraw more" —
+                    // host has finalised, settlement in progress.
+                    onScore: isHost && isSingleWinnerPack(event)
                         ? { Task { await openHostScore(event: event) } }
                         : nil,
                     isHero: true,
@@ -1075,6 +1093,15 @@ struct RoomDetailView: View {
     /// Casino path.
     private func openWithdraw(event: Event) async {
         withdrawSheetEvent = event
+    }
+
+    /// V0.68 — "Score a round" is only meaningful for single-winner
+    /// packs (Monopoly Deal, Pluto Chess) whose scoring surface is
+    /// `HostScoreEntrySheet`/dashboard. For `.withdrawReturn` (casino)
+    /// and `.countBased` (CAH) the primary settle CTA already opens
+    /// the same sheet, so the host-only button is gated off there.
+    private func isSingleWinnerPack(_ event: Event) -> Bool {
+        PackRegistry.shared.definition(for: event.packSlug)?.scoringType == .singleWinner
     }
 
     /// Chip-scan CTA. Flips `settleSheetEvent` so the
@@ -1672,6 +1699,12 @@ private struct WitnessSlot: View {
     /// cards. nil = don't render. Styled as an outline button, one
     /// tap behind the primary CTA — never a second filled primary.
     var onCAHSettle: (() -> Void)? = nil
+    /// V0.68 — secondary "Withdraw more" CTA. Renders for casino
+    /// events in `.inPlay` (member AND host) so a member who has
+    /// already withdrawn into their working hand can still top up.
+    /// nil = don't render. Styled as an outline button, one tap
+    /// behind the primary CTA.
+    var onWithdrawMore: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
@@ -1747,6 +1780,25 @@ private struct WitnessSlot: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.top, 8)
+            }
+
+            // V0.68 — secondary "Withdraw more" CTA. Renders for casino
+            // events in `.inPlay` so a member who has already withdrawn
+            // into their working hand can still top up. One tap behind
+            // the primary CTA, styled as an outline button.
+            if let onWithdrawMore {
+                Button(action: onWithdrawMore) {
+                    Text("Withdraw more")
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
+                }
+                .buttonStyle(.plain)
+                .pressScale()
+                .padding(.top, 8)
+                .accessibilityLabel(Text("Withdraw more"))
             }
 
             // V0.66 — secondary "Count your CAH cards" CTA. Renders for
