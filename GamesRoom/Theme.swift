@@ -101,6 +101,21 @@ enum Theme {
         var hairline: Color { Palette.hairline }
     }
 
+    // MARK: Motion (V0.70)
+    //
+    // Centralises the animation timings already in use across the
+    // codebase so new surfaces stop inventing one-offs. Existing
+    // call sites stay on their literals (no refactor); new code in
+    // the V0.70 microinteractions pass uses these tokens.
+    enum Motion {
+        /// Press feedback — matches PressScaleModifier.
+        static let pressSpring = Animation.spring(response: 0.2, dampingFraction: 0.8)
+        /// Element insertion/removal (badge in, row out, CTA in).
+        static let popIn = Animation.spring(response: 0.3, dampingFraction: 0.7)
+        /// Content cross-fades (CTA label flip, caption change, slot state).
+        static let fade = Animation.easeInOut(duration: 0.25)
+    }
+
     // MARK: Icons (M2.5)
     //
     // SF Symbol names that recur across the app — the seat-grid,

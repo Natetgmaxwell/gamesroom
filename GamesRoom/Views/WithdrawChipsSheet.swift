@@ -145,6 +145,7 @@ struct WithdrawChipsSheet: View {
                 roomId: roomId,
                 amount: amount
             )
+            Haptics.success()
             dismiss()
             onDone?()
         } catch {

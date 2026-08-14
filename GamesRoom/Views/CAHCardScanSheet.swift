@@ -227,6 +227,7 @@ struct CAHCardScanSheet: View {
     private func processFrame(pixelBuffer: CVPixelBuffer) async {
         guard !isScanning else { return }
         isScanning = true
+        Haptics.light()
         defer { isScanning = false }
 
         guard let cg = cgImage(from: pixelBuffer) else {
@@ -259,6 +260,7 @@ struct CAHCardScanSheet: View {
         photoHash = hash
         if ScanConfidenceGate.shouldPromptRescan(confidenceAvg: confidenceAvg) {
             lowConfidencePrompt = true
+            Haptics.warning()
             return
         }
         showConfirm = true
@@ -289,6 +291,7 @@ struct CAHCardScanSheet: View {
                 cardCount: Int64(totalCards),
                 visionSnapshot: snapshot
             )
+            Haptics.success()
             onDone()
             dismiss()
         } catch {

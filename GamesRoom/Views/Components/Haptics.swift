@@ -27,4 +27,11 @@ enum Haptics {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         #endif
     }
+
+    /// A warning — low-confidence scan result asking for a re-scan.
+    static func warning() {
+        #if !os(macOS)
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        #endif
+    }
 }

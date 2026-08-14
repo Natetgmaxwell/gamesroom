@@ -292,6 +292,7 @@ struct ChipScanSheet: View {
     private func processFrame(pixelBuffer: CVPixelBuffer) async {
         guard !isScanning else { return }
         isScanning = true
+        Haptics.light()
         defer { isScanning = false }
 
         guard let cg = cgImage(from: pixelBuffer) else {
@@ -319,6 +320,7 @@ struct ChipScanSheet: View {
         recomputeTotals()
         if ScanConfidenceGate.shouldPromptRescan(confidenceAvg: confidenceAvg) {
             lowConfidencePrompt = true
+            Haptics.warning()
             return
         }
         showConfirm = true
@@ -351,6 +353,7 @@ struct ChipScanSheet: View {
             if keepScanPhotos, let jpeg = lastJpeg {
                 persistScanPhoto(jpeg)
             }
+            Haptics.success()
             onDone()
             dismiss()
         } catch {

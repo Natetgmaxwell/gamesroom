@@ -1738,7 +1738,10 @@ private struct WitnessSlot: View {
 
             // V0.46 — working-hand badge. Renders only when the
             // member has chips withdrawn (casino, post-withdraw);
-            // CAH and not-yet-withdrawn states pass nil.
+            // CAH and not-yet-withdrawn states pass nil. V0.70
+            // pops the badge in via the parent's popIn animation
+            // when `workingHand` flips from nil/0 to a positive
+            // value (the withdraw lands, state moves to .inPlay).
             if let workingHand, workingHand > 0 {
                 HStack(spacing: 6) {
                     Image(systemName: Theme.Icon.handPointUpFill)
@@ -1752,6 +1755,7 @@ private struct WitnessSlot: View {
                 .clipShape(Capsule())
                 .accessibilityLabel(Text("Working hand: \(workingHand) pts"))
                 .padding(.top, 4)
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
             }
 
             if !attestations.isEmpty {
@@ -1769,36 +1773,31 @@ private struct WitnessSlot: View {
                 }
             }
 
-            switch cta {
-            case .withdraw:
-                Button(action: onWithdraw) {
-                    Text("Withdraw to play")
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .padding(.top, 8)
-
-            case .scan:
-                Button(action: onScan) {
-                    Text(scanTitle)
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .padding(.top, 8)
+            // V0.70 — single Button whose identity persists across
+            // the `cta` flip. Two separate Buttons would snap the
+            // label on `.withdraw` ↔ `.scan`; one Button with a
+            // computed title + cross-fading text keeps the surface
+            // stable. `CTA` has no associated values, so it is
+            // Equatable without declaration.
+            Button(action: ctaAction) {
+                Text(ctaTitle)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.background)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Theme.Palette.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .contentTransition(.opacity)
+                    .animation(Theme.Motion.fade, value: cta)
             }
+            .padding(.top, 8)
 
             // V0.68 — secondary "Withdraw more" CTA. Renders for casino
             // events in `.inPlay` so a member who has already withdrawn
             // into their working hand can still top up. One tap behind
-            // the primary CTA, styled as an outline button.
+            // the primary CTA, styled as an outline button. V0.70
+            // animates the secondary CTAs in via the outer VStack's
+            // fade animation when the optionals flip.
             if let onWithdrawMore {
                 Button(action: onWithdrawMore) {
                     Text("Withdraw more")
@@ -1811,6 +1810,7 @@ private struct WitnessSlot: View {
                 .buttonStyle(.plain)
                 .pressScale()
                 .padding(.top, 8)
+                .transition(.opacity.combined(with: .move(edge: .top)))
                 .accessibilityLabel(Text("Withdraw more"))
             }
 
@@ -1830,6 +1830,7 @@ private struct WitnessSlot: View {
                 .buttonStyle(.plain)
                 .pressScale()
                 .padding(.top, 8)
+                .transition(.opacity.combined(with: .move(edge: .top)))
                 .accessibilityLabel(Text("Count your CAH cards"))
             }
 
@@ -1864,6 +1865,34 @@ private struct WitnessSlot: View {
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
         )
         .appearTransition()
+        // V0.70 — drive the working-hand badge pop-in and the
+        // secondary CTAs' fade-in from one place. Closures aren't
+        // Equatable, so the secondary CTAs track the Bool of the
+        // optional, not the closure itself.
+        .animation(Theme.Motion.popIn, value: workingHand)
+        .animation(Theme.Motion.fade, value: onWithdrawMore != nil)
+        .animation(Theme.Motion.fade, value: onCAHSettle != nil)
+    }
+
+    /// V0.70 — title for the primary CTA. `.withdraw` reads
+    /// "Withdraw to play"; `.scan` reads from the `scanTitle` the
+    /// caller passed (pack-named: "Settle casino chips" or
+    /// "Count your CAH cards").
+    private var ctaTitle: String {
+        switch cta {
+        case .withdraw: return "Withdraw to play"
+        case .scan:     return scanTitle
+        }
+    }
+
+    /// V0.70 — action for the primary CTA. Routes to the
+    /// member's withdraw or scan handler depending on the
+    /// current state.
+    private var ctaAction: () -> Void {
+        switch cta {
+        case .withdraw: return onWithdraw
+        case .scan:     return onScan
+        }
     }
 
     /// M1.1 — copy variant for the witness header. Each variant
@@ -1993,6 +2022,15 @@ private struct AwardsCard: View {
     /// so this is a manual-pass surface on an Xcode host.
     @State private var shareImage: UIImage?
 
+    /// V0.70 — per-row appear state. The set holds the indices of
+    /// rows that have already staggered in; each row reads its own
+    /// membership to drive opacity/offset. Each row's `onAppear`
+    /// sleeps `idx * 50ms` then inserts its own index inside a
+    /// `withAnimation(Theme.Motion.fade)` (no `.delay` — the sleep
+    /// already staggers), so rows cascade in independently and a
+    /// late-appearing row doesn't short-circuit the cascade.
+    @State private var appearedIndices: Set<Int> = []
+
     /// Stable display order: phoenix, veteran, whale, drowning,
     /// ironMann, comebackKid, goodSport. `AwardType.CaseIterable`
     /// defines the order; we sort by it.
@@ -2025,7 +2063,7 @@ private struct AwardsCard: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
-                        awardView(for: award)
+                        awardView(for: award, at: idx)
                         if idx != sortedAwards.count - 1 {
                             Divider()
                                 .overlay(Theme.Palette.hairline)
@@ -2080,16 +2118,44 @@ private struct AwardsCard: View {
     }
 
     @ViewBuilder
-    private func awardView(for award: SeasonAward) -> some View {
-        if award.awardType == .drowning {
-            DrowningBadge(
-                award: award,
-                isRecipient: award.recipientUserId == currentUserId,
-                isOptedIn: currentUserOptedIn,
-                onToggleOptIn: onToggleDrowningOptIn
-            )
-        } else {
-            AwardRow(award: award)
+    private func awardView(for award: SeasonAward, at idx: Int) -> some View {
+        Group {
+            if award.awardType == .drowning {
+                DrowningBadge(
+                    award: award,
+                    isRecipient: award.recipientUserId == currentUserId,
+                    isOptedIn: currentUserOptedIn,
+                    onToggleOptIn: onToggleDrowningOptIn
+                )
+            } else {
+                AwardRow(award: award)
+            }
+        }
+        // V0.70 — staggered fade-in. Subtle (opacity + 6pt offset,
+        // no scale, no spring) per the V0.8 "table distance" rule.
+        // Per-row state: each row reads its own membership in
+        // `appearedIndices`, so the rows cascade independently and
+        // row 0's onAppear can't flip a shared Bool that every row
+        // reads.
+        .opacity(appearedIndices.contains(idx) ? 1 : 0)
+        .offset(y: appearedIndices.contains(idx) ? 0 : 6)
+        .onAppear { staggerAppear(idx: idx) }
+    }
+
+    /// V0.70 — dispatches a staggered state flip for one row.
+    /// Sleeps for `idx * 50ms`, then inserts `idx` into
+    /// `appearedIndices` inside a `withAnimation(Theme.Motion.fade)`
+    /// — no `.delay`, because the sleep already staggers the flip
+    /// and stacking another delay would double-stagger. The
+    /// `Task.isCancelled` guard short-circuits on view teardown.
+    private func staggerAppear(idx: Int) {
+        Task {
+            try? await Task.sleep(for: .milliseconds(idx * 50))
+            if !Task.isCancelled {
+                withAnimation(Theme.Motion.fade) {
+                    _ = appearedIndices.insert(idx)
+                }
+            }
         }
     }
 }
@@ -2225,39 +2291,48 @@ private struct HostWithdrawalsSection: View {
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText)
             }
-            ForEach(withdrawals) { txn in
-                HStack(spacing: Theme.Layout.cardInset) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(txn.memberDisplayName)
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        Text("Withdrew chips")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    }
-                    Spacer()
-                    Text("\(abs(txn.amountPoints)) pts")
-                        .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(Theme.Palette.accent)
-                    Button {
-                        onDispense(txn.id)
-                    } label: {
-                        Text("Dispensed")
-                            .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.background)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Theme.Palette.accent)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Dispensed \(txn.memberDisplayName)'s \(abs(txn.amountPoints)) points"))
+            VStack(spacing: 0) {
+                ForEach(withdrawals) { txn in
+                    row(txn: txn)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
+            .animation(Theme.Motion.fade, value: withdrawals.map(\.id))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func row(txn: EventTransaction) -> some View {
+        HStack(spacing: Theme.Layout.cardInset) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(txn.memberDisplayName)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Text("Withdrew chips")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+            Spacer()
+            Text("\(abs(txn.amountPoints)) pts")
+                .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
+                .foregroundStyle(Theme.Palette.accent)
+            Button {
+                Haptics.light()
+                onDispense(txn.id)
+            } label: {
+                Text("Dispensed")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.background)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Theme.Palette.accent)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Dispensed \(txn.memberDisplayName)'s \(abs(txn.amountPoints)) points"))
+        }
     }
 }
 
@@ -3329,6 +3404,13 @@ private struct MascotFooterCaption: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Theme.Layout.sectionSpacing)
+            // V0.70 — the mascot "speaks" when its caption changes.
+            // `.id(caption)` forces SwiftUI to treat each new line
+            // as a different view so the transition fires; the
+            // attached fade animation drives the cross-fade.
+            .id(caption)
+            .transition(.opacity.combined(with: .offset(y: 4)))
+            .animation(Theme.Motion.fade, value: caption)
     }
 }
 
