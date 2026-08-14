@@ -965,7 +965,18 @@ struct RoomDetailView: View {
     /// service call is non-throwing and collapses to `[]` on
     /// failure, so an empty read renders the section in its
     /// hidden state rather than an error path.
+    ///
+    /// V0.62.1 — guards on the active-event cache the same way
+    /// `loadHostWithdrawalsIfNeeded` does. Without this, a
+    /// `refresh` tick where `loadWorkingHandsIfNeeded` runs
+    /// before `loadActiveIfNeeded` sees `activeEvent == nil`,
+    /// blanks `workingHands`, and pins the casino state machine
+    /// at `.tonightEvent` even though the DB shows a non-zero
+    /// `working_hand` for the current user.
     private func loadWorkingHandsIfNeeded() async {
+        if roomService.cachedActiveEvent(roomId: room.id) == nil {
+            await roomService.loadActiveEvent(roomId: room.id, force: false)
+        }
         guard let event = activeEvent, event.packSlug == "casino" else {
             workingHands = []
             return
