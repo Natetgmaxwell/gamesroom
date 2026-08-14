@@ -8,22 +8,14 @@
 //
 
 import Foundation
-import os
 
 enum Perf {
-    static let signposter = OSSignposter(subsystem: "com.gamesroom.app", category: "perf")
-
-    /// Time a named async block. Logs begin/end signpost + DEBUG print.
+    /// Time a named async block. DEBUG print for log-stream capture.
     @discardableResult
     static func span<T: Sendable>(_ name: StaticString, _ body: () async throws -> T) async rethrows -> T {
-        let id = signposter.makeSignpostID()
-        let state = signposter.beginInterval("span", id: id)
         #if DEBUG
         let start = CFAbsoluteTimeGetCurrent()
         #endif
-        defer {
-            signposter.endInterval("span", id, state)
-        }
         let result = try await body()
         #if DEBUG
         let ms = (CFAbsoluteTimeGetCurrent() - start) * 1000
