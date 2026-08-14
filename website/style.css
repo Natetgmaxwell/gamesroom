@@ -12,7 +12,12 @@
    Fluid, adaptive layout. Breakpoints: 480 mobile, 768 tablet, 1024 desktop,
    1440+ wide. Max content width grows to 1120px on desktop — comfortable,
    not edge-to-edge. Single column preserved on mobile. No tracking; the only
-   JS is animation. */
+   JS is animation.
+
+   Alignment invariant: every full-bleed section (.hero, .statement,
+   .packs-strip) uses width:100vw + margin-left:calc(50% - 50vw) +
+   padding: max(calc((100vw - var(--content-inner)) / 2), var(--gutter)).
+   Media queries may scale vertical padding only — never horizontal. */
 
 /* ── Self-hosted display type: Fraunces (Google Fonts, woff2) ── */
 @font-face {
@@ -608,7 +613,7 @@ a:hover { border-bottom-color: var(--accent); color: var(--accent); }
   body { font-size: 18px; }
   h1 { font-size: 3rem; }
   .lead { font-size: 1.25rem; }
-  .hero { padding: 3rem 2.2rem 2.6rem; margin-bottom: 3.2rem; }
+  .hero { padding-top: 3rem; padding-bottom: 2.6rem; }
   .hero-icon { width: 132px; height: 132px; border-radius: 30px; }
   .card { padding: 1.7rem 1.6rem; }
   h2 { font-size: 24px; }
