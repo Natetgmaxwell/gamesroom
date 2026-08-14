@@ -226,13 +226,15 @@ final class CasinoService: ObservableObject {
     /// `Int` — a balance > 2^31 is out of scope for the casino pack
     /// (V0.27 spec: max bet is 1,000 points).
     func loadWithdrawalBalance(eventId: UUID, userId: UUID) async -> Int {
-        let result: Int64 = (try? await SupabaseClientProvider.shared
-            .rpc("get_withdrawal_balance", params: [
-                "p_event_id": eventId.uuidString,
-                "p_user_id": userId.uuidString
-            ])
-            .execute()
-            .value as Int64) ?? 0
+        let result: Int64 = await Perf.span("rpc get_withdrawal_balance") {
+            (try? await SupabaseClientProvider.shared
+                .rpc("get_withdrawal_balance", params: [
+                    "p_event_id": eventId.uuidString,
+                    "p_user_id": userId.uuidString
+                ])
+                .execute()
+                .value as Int64) ?? 0
+        }
         return Int(result)
     }
 
@@ -417,15 +419,19 @@ final class CasinoService: ObservableObject {
         // Lazy 24h finalize — closes rows that aged past the
         // attestation window so they don't surface as "open" on the
         // next read. Mirrors the V0.7.1 archived behavior.
-        _ = try? await SupabaseClientProvider.shared
-            .rpc("close_stale_attestations")
-            .execute()
-            .value
+        _ = await Perf.span("rpc close_stale_attestations") {
+            try? await SupabaseClientProvider.shared
+                .rpc("close_stale_attestations")
+                .execute()
+                .value
+        }
 
-        let result: [OpenAttestationSummary] = (try? await SupabaseClientProvider.shared
-            .rpc("get_my_open_attestations")
-            .execute()
-            .value) ?? []
+        let result: [OpenAttestationSummary] = await Perf.span("rpc get_my_open_attestations") {
+            (try? await SupabaseClientProvider.shared
+                .rpc("get_my_open_attestations")
+                .execute()
+                .value) ?? []
+        }
         self.lastError = nil
         return result
     }
@@ -441,12 +447,14 @@ final class CasinoService: ObservableObject {
     /// or empty result is a valid state (no transactions yet), and
     /// the UI can render the empty surface without a thrown error.
     func getEventTransactions(eventId: UUID) async -> [EventTransaction] {
-        let result: [EventTransaction] = (try? await SupabaseClientProvider.shared
-            .rpc("get_event_transactions", params: [
-                "p_event_id": eventId.uuidString
-            ])
-            .execute()
-            .value) ?? []
+        let result: [EventTransaction] = await Perf.span("rpc get_event_transactions") {
+            (try? await SupabaseClientProvider.shared
+                .rpc("get_event_transactions", params: [
+                    "p_event_id": eventId.uuidString
+                ])
+                .execute()
+                .value) ?? []
+        }
         self.lastError = nil
         return result
     }
@@ -469,12 +477,14 @@ final class CasinoService: ObservableObject {
     /// Server-side: `get_my_open_withdrawal(p_event_id)` RPC,
     /// migration 040.
     func loadMyOpenWithdrawal(eventId: UUID) async -> CasinoWithdrawal? {
-        let rows: [CasinoWithdrawal] = (try? await SupabaseClientProvider.shared
-            .rpc("get_my_open_withdrawal", params: [
-                "p_event_id": eventId.uuidString
-            ])
-            .execute()
-            .value) ?? []
+        let rows: [CasinoWithdrawal] = await Perf.span("rpc get_my_open_withdrawal") {
+            (try? await SupabaseClientProvider.shared
+                .rpc("get_my_open_withdrawal", params: [
+                    "p_event_id": eventId.uuidString
+                ])
+                .execute()
+                .value) ?? []
+        }
         self.lastError = nil
         return rows.first
     }
@@ -515,12 +525,14 @@ final class CasinoService: ObservableObject {
     /// open `casino_withdrawals` sum as `working_hand` and their
     /// current `room_memberships.points_balance` as `points_balance`.
     func loadWorkingHands(eventId: UUID) async -> [WorkingHand] {
-        let result: [WorkingHand] = (try? await SupabaseClientProvider.shared
-            .rpc("get_event_working_hands", params: [
-                "p_event_id": eventId.uuidString
-            ])
-            .execute()
-            .value) ?? []
+        let result: [WorkingHand] = await Perf.span("rpc get_event_working_hands") {
+            (try? await SupabaseClientProvider.shared
+                .rpc("get_event_working_hands", params: [
+                    "p_event_id": eventId.uuidString
+                ])
+                .execute()
+                .value) ?? []
+        }
         self.lastError = nil
         return result
     }

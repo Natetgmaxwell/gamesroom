@@ -96,6 +96,7 @@
 		AAAAAAAA000000000000044B /* PackHowTo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000044C /* PackHowTo.swift */; };
 		AAAAAAAA0000000000000459 /* PackStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000458 /* PackStoreView.swift */; };
 		AAAAAAAA000000000000045D /* EditEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045C /* EditEventSheet.swift */; };
+		AAAAAAAA0000000000000801 /* Perf.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000802 /* Perf.swift */; };
 		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 		AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */; };
 		AAAAAAAA0000000000000482 /* SessionRoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */; };
@@ -255,6 +256,7 @@
 		AAAAAAAA000000000000048C /* RoomGraphSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomGraphSummary.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Regular.ttf; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Italic.ttf; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000802 /* Perf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Perf.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -290,6 +292,7 @@
 				AAAAAAAA0000000000000444 /* Packs */,
 				AAAAAAAA00000000000000FA /* Services */,
 				AAAAAAAA00000000000000FB /* Views */,
+				AAAAAAAA0000000000000803 /* Support */,
 				AAAAAAAA0000000000000436 /* Assets.xcassets */,
 				AAAAAAAA0000000000000434 /* Info.plist */,
 				AAAAAAAA0000000000000435 /* Config.xcconfig */,
@@ -402,6 +405,14 @@
 				AAAAAAAA000000000000047B /* InMemoryRoomStore.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		AAAAAAAA0000000000000803 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				AAAAAAAA0000000000000802 /* Perf.swift */,
+			);
+			path = Support;
 			sourceTree = "<group>";
 		};
 		AAAAAAAA00000000000000FB /* Views */ = {

@@ -813,6 +813,7 @@ struct RoomDetailView: View {
     /// season + awards (for the M1.1 `.seasonClose` slot).
     /// Called from `.task` and `.refreshable`.
     private func refresh(force: Bool = false) async {
+        Perf.event("refresh start force=\(force)")
         async let active: () = loadActiveIfNeeded(force: force)
         async let board: () = loadLeaderboardIfNeeded(force: force)
         async let attestations: () = loadAttestations()
@@ -829,6 +830,7 @@ struct RoomDetailView: View {
         async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded()
         async let workingHandsLoad: () = loadWorkingHandsIfNeeded()
         _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad)
+        Perf.event("refresh end")
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
         // rule in `ScoreSnapshot.shouldPersist` keeps a rooms-list
@@ -933,7 +935,7 @@ struct RoomDetailView: View {
         // CasinoService.getMyOpenAttestations is non-throwing and
         // collapses failures to an empty array. We re-fetch on
         // every refresh so the banner reflects newly-opened rows.
-        let rows = await casinoService.getMyOpenAttestations()
+        let rows = await Perf.span("loadAttestations") { await casinoService.getMyOpenAttestations() }
         self.openAttestations = rows
     }
 
@@ -956,7 +958,7 @@ struct RoomDetailView: View {
             hostWithdrawals = []
             return
         }
-        let all = await casinoService.getEventTransactions(eventId: event.id)
+        let all = await Perf.span("loadHostWithdrawals") { await casinoService.getEventTransactions(eventId: event.id) }
         hostWithdrawals = all.filter { $0.kind == "casino_withdrawal" }
     }
 
@@ -981,7 +983,7 @@ struct RoomDetailView: View {
             workingHands = []
             return
         }
-        workingHands = await casinoService.loadWorkingHands(eventId: event.id)
+        workingHands = await Perf.span("loadWorkingHands") { await casinoService.loadWorkingHands(eventId: event.id) }
         // V0.62 — mirror the caller's working hand into `casinoWithdrawn`
         // so every existing `casinoWithdrawn` reader (sheets, mascot,
         // witness-slot badge) stays correct without touching call sites.

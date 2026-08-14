@@ -316,7 +316,9 @@ final class RoomService: ObservableObject {
         let key = "activeEvent:\(roomId.uuidString)"
         if !force, isFresh(key) { return activeEventByRoom[roomId] }
         do {
-            let event = try await store.fetchActiveEvent(roomId: roomId)
+            let event = try await Perf.span("rpc get_active_event") {
+                try await store.fetchActiveEvent(roomId: roomId)
+            }
             self.activeEventByRoom[roomId] = event
             self.cacheTimestamps[key] = Date()
             self.lastError = nil
@@ -335,7 +337,9 @@ final class RoomService: ObservableObject {
         let key = "briefing:\(eventId.uuidString)"
         if !force, isFresh(key) { return briefingByEvent[eventId] }
         do {
-            let briefing = try await store.fetchBriefing(eventId: eventId)
+            let briefing = try await Perf.span("rpc get_briefing_summary") {
+                try await store.fetchBriefing(eventId: eventId)
+            }
             self.briefingByEvent[eventId] = briefing
             self.cacheTimestamps[key] = Date()
             self.lastError = nil
@@ -357,7 +361,9 @@ final class RoomService: ObservableObject {
         let key = "currentSeason:\(roomId.uuidString)"
         if !force, isFresh(key) { return currentSeasonByRoom[roomId] }
         do {
-            let season = try await store.fetchCurrentSeason(roomId: roomId)
+            let season = try await Perf.span("rpc get_current_season") {
+                try await store.fetchCurrentSeason(roomId: roomId)
+            }
             self.currentSeasonByRoom[roomId] = season
             self.cacheTimestamps[key] = Date()
             self.lastError = nil
@@ -417,7 +423,9 @@ final class RoomService: ObservableObject {
         let key = "leaderboard:\(roomId.uuidString)"
         if !force, isFresh(key) { return leaderboardByRoom[roomId] ?? [] }
         do {
-            let rows = try await store.fetchLeaderboard(roomId: roomId)
+            let rows = try await Perf.span("rpc get_room_leaderboard") {
+                try await store.fetchLeaderboard(roomId: roomId)
+            }
             self.leaderboardByRoom[roomId] = rows
             self.cacheTimestamps[key] = Date()
             self.lastError = nil
@@ -923,7 +931,9 @@ final class RoomService: ObservableObject {
         let key = "seasonHistory:\(roomId.uuidString)"
         if !force, isFresh(key) { return seasonHistoryByRoom[roomId] ?? [] }
         do {
-            let rows = try await store.fetchSeasonHistory(roomId: roomId)
+            let rows = try await Perf.span("rpc get_season_history") {
+                try await store.fetchSeasonHistory(roomId: roomId)
+            }
             self.seasonHistoryByRoom[roomId] = rows
             self.cacheTimestamps[key] = Date()
             self.lastError = nil
@@ -989,7 +999,9 @@ final class RoomService: ObservableObject {
         let key = "systemEvents:\(roomId.uuidString)"
         if !force, isFresh(key) { return systemEventsByRoom[roomId] ?? [] }
         do {
-            let events = try await store.fetchRoomSystemEvents(roomId: roomId)
+            let events = try await Perf.span("rpc get_room_system_events") {
+                try await store.fetchRoomSystemEvents(roomId: roomId)
+            }
             let unread = events.filter { $0.acknowledgedAt == nil }
             self.systemEventsByRoom[roomId] = unread
             self.cacheTimestamps[key] = Date()

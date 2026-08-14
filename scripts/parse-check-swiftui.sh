@@ -45,7 +45,7 @@ fi
 SWIFT_FILES=""
 while IFS= read -r f; do
     SWIFT_FILES="$SWIFT_FILES $f"
-done < <( { find GamesRoom/Views GamesRoom/Services GamesRoomWidgets GamesRoomWatch -type f -name '*.swift' | sort; find GamesRoom -maxdepth 1 -type f -name '*.swift' | sort; } )
+done < <( { find GamesRoom/Views GamesRoom/Services GamesRoom/Support GamesRoomWidgets GamesRoomWatch -type f -name '*.swift' | sort; find GamesRoom -maxdepth 1 -type f -name '*.swift' | sort; } )
 
 # shellcheck disable=SC2086
 set -- $SWIFT_FILES
