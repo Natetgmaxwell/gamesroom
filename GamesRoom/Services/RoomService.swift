@@ -332,23 +332,28 @@ final class RoomService: ObservableObject {
         if let existing = activeEventInFlight[roomId] {
             return (try? await existing.value) ?? activeEventByRoom[roomId]
         }
-        let task = Task<Event?, Error> {
-            try await Perf.span("rpc get_active_event") {
-                try await store.fetchActiveEvent(roomId: roomId)
+        // The cache write happens INSIDE the task so joiners that
+        // await `existing.value` observe the populated cache when
+        // they resume (the V0.62.1 guards in the dependent loaders
+        // read `cachedActiveEvent` right after this returns).
+        let task = Task<Event?, Error> { [weak self] () -> Event? in
+            guard let self else { return nil }
+            do {
+                let event = try await Perf.span("rpc get_active_event") {
+                    try await self.store.fetchActiveEvent(roomId: roomId)
+                }
+                self.activeEventByRoom[roomId] = event
+                self.cacheTimestamps[key] = Date()
+                self.lastError = nil
+                return event
+            } catch {
+                self.lastError = error.localizedDescription
+                return self.activeEventByRoom[roomId]
             }
         }
         activeEventInFlight[roomId] = task
         defer { activeEventInFlight.removeValue(forKey: roomId) }
-        do {
-            let event = try await task.value
-            self.activeEventByRoom[roomId] = event
-            self.cacheTimestamps[key] = Date()
-            self.lastError = nil
-            return event
-        } catch {
-            self.lastError = error.localizedDescription
-            return activeEventByRoom[roomId]
-        }
+        return (try? await task.value) ?? activeEventByRoom[roomId]
     }
 
     /// Loads the briefing summary for one event into the cache.
