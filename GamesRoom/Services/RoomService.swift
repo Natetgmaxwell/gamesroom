@@ -82,6 +82,13 @@ final class RoomService: ObservableObject {
         return Date().timeIntervalSince(ts) < cacheTTL
     }
 
+    /// V0.69 — single-flight dedupe for `loadActiveEvent`. Concurrent
+    /// callers for the same `roomId` share one in-flight
+    /// `get_active_event` task instead of firing one RPC each. Cold
+    /// open previously raced 3 parallel guard fetches from the
+    /// briefing / host-withdrawals / working-hands loaders.
+    private var activeEventInFlight: [UUID: Task<Event?, Error>] = [:]
+
     // MARK: - Published state
 
     /// The rooms list, in display order. Mirrors the `get_my_rooms`
@@ -311,14 +318,29 @@ final class RoomService: ObservableObject {
     /// Loads the room's active event into the cache. Returns the
     /// cached value (which may be `nil` for rooms with no recent
     /// activity). Called from `RoomDetailView.task`.
+    ///
+    /// V0.69 — single-flight: concurrent callers for the same
+    /// `roomId` share one in-flight `get_active_event` task. `force`
+    /// still bypasses the TTL check but joins an existing in-flight
+    /// fetch instead of starting a duplicate RPC (measured: a
+    /// concurrent force + non-force cold-open race collapsed from
+    /// 3 RPCs to 1).
     @discardableResult
     func loadActiveEvent(roomId: UUID, force: Bool = false) async -> Event? {
         let key = "activeEvent:\(roomId.uuidString)"
         if !force, isFresh(key) { return activeEventByRoom[roomId] }
-        do {
-            let event = try await Perf.span("rpc get_active_event") {
+        if let existing = activeEventInFlight[roomId] {
+            return (try? await existing.value) ?? activeEventByRoom[roomId]
+        }
+        let task = Task<Event?, Error> {
+            try await Perf.span("rpc get_active_event") {
                 try await store.fetchActiveEvent(roomId: roomId)
             }
+        }
+        activeEventInFlight[roomId] = task
+        defer { activeEventInFlight.removeValue(forKey: roomId) }
+        do {
+            let event = try await task.value
             self.activeEventByRoom[roomId] = event
             self.cacheTimestamps[key] = Date()
             self.lastError = nil

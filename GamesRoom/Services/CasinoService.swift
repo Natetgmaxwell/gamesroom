@@ -204,6 +204,46 @@ final class CasinoService: ObservableObject {
     /// that gate spinners on the service get free reactivity.
     @Published private(set) var isLoading: Bool = false
 
+    /// V0.69 — throttle the lazy `close_stale_attestations` write to
+    /// at most once per 60s. The write was firing on every
+    /// `getMyOpenAttestations` call (every refresh); measured: a
+    /// 396-440ms refresh dropped to one write per minute on
+    /// steady-state pull-to-refreshes.
+    private var lastStaleCloseAt: Date?
+
+    /// V0.69 — 30s TTL cache for the open-attestations read. Pull-
+    /// to-refresh freshness comes from the TTL window; mutations
+    /// invalidate via `invalidateEventCaches` (event-scoped caches
+    /// only — this one is member-scoped, so it survives an event
+    /// mutation and only the 30s window forces a re-fetch).
+    private var attestationCache: (rows: [OpenAttestationSummary], at: Date)?
+
+    /// V0.69 — 30s TTL cache for `get_event_working_hands(p_event_id)`
+    /// keyed by eventId. Invalidated by mutation methods (withdraw,
+    /// submit scan, settle/dispense) via `invalidateEventCaches`.
+    private var workingHandsCache: [UUID: (hands: [WorkingHand], at: Date)] = [:]
+
+    /// V0.69 — 30s TTL cache for `get_event_transactions(p_event_id)`
+    /// keyed by eventId. Invalidated alongside workingHands on
+    /// mutations via `invalidateEventCaches`.
+    private var eventTransactionsCache: [UUID: (rows: [EventTransaction], at: Date)] = [:]
+
+    /// V0.69 — 30s TTL window shared by the casino read caches.
+    private let casinoCacheTTL: TimeInterval = 30
+
+    /// V0.69 — 60s throttle window for the lazy
+    /// `close_stale_attestations` write.
+    private let staleCloseTTL: TimeInterval = 60
+
+    /// V0.69 — drop event-scoped read caches (working hands +
+    /// event transactions) so the next read re-fetches. Called
+    /// from mutation success paths (`withdraw`, `submitMemberScan`,
+    /// any future settle/dispense). No-op if absent.
+    func invalidateEventCaches(eventId: UUID) {
+        workingHandsCache.removeValue(forKey: eventId)
+        eventTransactionsCache.removeValue(forKey: eventId)
+    }
+
     /// Most-recent error message. Cleared on every successful RPC.
     /// Surfaced to the UI as a transient banner per the V0.8 "no
     /// public-shame framing" rule (Track A §2).
@@ -287,6 +327,11 @@ final class CasinoService: ObservableObject {
             .execute()
             .value
         self.lastError = nil
+        // V0.69 — mutations invalidate the event-scoped read caches
+        // so the next pull-to-refresh re-fetches (working hands +
+        // event transactions). The attestation cache is
+        // member-scoped and only TTL-invalidates.
+        invalidateEventCaches(eventId: eventId)
         guard let row = rows.first else {
             throw NSError(
                 domain: "CasinoService",
@@ -359,6 +404,10 @@ final class CasinoService: ObservableObject {
             .execute()
             .value
         self.lastError = nil
+        // V0.69 — mutations invalidate the event-scoped read caches
+        // so the next pull-to-refresh re-fetches (working hands +
+        // event transactions).
+        invalidateEventCaches(eventId: eventId)
         // Server returns boolean; resolve attestation via a follow-up read.
         let rows: [SettlementAttestation] = (try? await SupabaseClientProvider.shared
             .from("settlement_attestations")
@@ -415,15 +464,30 @@ final class CasinoService: ObservableObject {
     /// state without an error path. The `OpenAttestationSummary`
     /// model's `init(from:)` falls back to `hasDispute = false` on
     /// older RPC responses that pre-date the dispute column.
+    ///
+    /// V0.69 — the lazy 24h finalize (`close_stale_attestations`)
+    /// is throttled to once per 60s; the read is TTL-cached for 30s.
+    /// Pull-to-refresh freshness comes from the 30s window — there
+    /// is no force parameter.
     func getMyOpenAttestations() async -> [OpenAttestationSummary] {
-        // Lazy 24h finalize — closes rows that aged past the
-        // attestation window so they don't surface as "open" on the
-        // next read. Mirrors the V0.7.1 archived behavior.
-        _ = await Perf.span("rpc close_stale_attestations") {
-            try? await SupabaseClientProvider.shared
-                .rpc("close_stale_attestations")
-                .execute()
-                .value
+        // Lazy 24h finalize — throttled to once per 60s. Mirrors the
+        // V0.7.1 archived behavior; the throttle prevents the write
+        // from firing on every refresh.
+        let now = Date()
+        if lastStaleCloseAt == nil || now.timeIntervalSince(lastStaleCloseAt!) > staleCloseTTL {
+            _ = await Perf.span("rpc close_stale_attestations") {
+                try? await SupabaseClientProvider.shared
+                    .rpc("close_stale_attestations")
+                    .execute()
+                    .value
+            }
+            lastStaleCloseAt = now
+        }
+
+        if let cached = attestationCache,
+           now.timeIntervalSince(cached.at) < casinoCacheTTL {
+            Perf.event("rpc get_my_open_attestations cache-hit")
+            return cached.rows
         }
 
         let result: [OpenAttestationSummary] = await Perf.span("rpc get_my_open_attestations") {
@@ -433,6 +497,7 @@ final class CasinoService: ObservableObject {
                 .value) ?? []
         }
         self.lastError = nil
+        attestationCache = (rows: result, at: now)
         return result
     }
 
@@ -446,7 +511,17 @@ final class CasinoService: ObservableObject {
     /// (migration 024). Non-throwing by design: a missing event id
     /// or empty result is a valid state (no transactions yet), and
     /// the UI can render the empty surface without a thrown error.
+    ///
+    /// V0.69 — 30s TTL cache keyed by eventId; invalidated by
+    /// mutation methods (`withdraw`, `submitMemberScan`) via
+    /// `invalidateEventCaches`.
     func getEventTransactions(eventId: UUID) async -> [EventTransaction] {
+        let now = Date()
+        if let cached = eventTransactionsCache[eventId],
+           now.timeIntervalSince(cached.at) < casinoCacheTTL {
+            Perf.event("rpc get_event_transactions cache-hit")
+            return cached.rows
+        }
         let result: [EventTransaction] = await Perf.span("rpc get_event_transactions") {
             (try? await SupabaseClientProvider.shared
                 .rpc("get_event_transactions", params: [
@@ -456,6 +531,7 @@ final class CasinoService: ObservableObject {
                 .value) ?? []
         }
         self.lastError = nil
+        eventTransactionsCache[eventId] = (rows: result, at: now)
         return result
     }
 
@@ -524,7 +600,16 @@ final class CasinoService: ObservableObject {
     /// 065). The RPC returns one row per room member with their
     /// open `casino_withdrawals` sum as `working_hand` and their
     /// current `room_memberships.points_balance` as `points_balance`.
+    ///
+    /// V0.69 — 30s TTL cache keyed by eventId; invalidated by
+    /// mutation methods via `invalidateEventCaches`.
     func loadWorkingHands(eventId: UUID) async -> [WorkingHand] {
+        let now = Date()
+        if let cached = workingHandsCache[eventId],
+           now.timeIntervalSince(cached.at) < casinoCacheTTL {
+            Perf.event("rpc get_event_working_hands cache-hit")
+            return cached.hands
+        }
         let result: [WorkingHand] = await Perf.span("rpc get_event_working_hands") {
             (try? await SupabaseClientProvider.shared
                 .rpc("get_event_working_hands", params: [
@@ -534,6 +619,7 @@ final class CasinoService: ObservableObject {
                 .value) ?? []
         }
         self.lastError = nil
+        workingHandsCache[eventId] = (hands: result, at: now)
         return result
     }
 

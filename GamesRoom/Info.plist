@@ -31,7 +31,7 @@
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>SUPABASE_URL</key>
-	<string>$(SUPABASE_URL)</string>
+	<string>https://$(SUPABASE_HOST)</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>MINIMAX_API_KEY</key>

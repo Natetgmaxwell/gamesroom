@@ -26,12 +26,13 @@
 //  warning — a config problem degrades to a failed sign-in, not a
 //  fatalError crash.
 //
-//  ponytail: custom URLSession with HTTP/1.1 forced and short
-//  timeouts. The iOS 26 simulator's default URLSession hangs on
-//  Supabase PostgREST responses ("Operation timed out" from
-//  nw_read_request_report). Forcing HTTP/1.1 via configuration avoids
-//  the HTTP/3 keep-alive issue. Short timeouts surface failures
-//  instead of silently hanging.
+// ponytail: custom URLSession with short timeouts. The iOS 26
+// simulator's default URLSession hangs on Supabase PostgREST
+// responses ("Operation timed out" from
+// nw_read_request_report); short timeouts surface failures instead
+// of silently hanging. V0.69 — `Connection: close` removed so
+// HTTP/2 keep-alive multiplexes all RPCs over a single connection
+// instead of paying a TCP+TLS handshake on every call.
 //
 
 import Foundation
@@ -71,14 +72,20 @@ enum SupabaseClientProvider {
 
         // A malformed plist value (e.g. quotes leaked from the xcconfig)
         // fails URL(string:) — degrade to the compiled default instead
-        // of trapping. The fatalError below is unreachable unless the
-        // compiled constant itself is broken.
+        // of trapping. Also bail when the host is missing or empty
+        // (e.g. an un-substituted SUPABASE_HOST variable) so we
+        // never construct a hostless URL. The fatalError below is
+        // unreachable unless the compiled constant itself is broken.
         let url: URL
-        if let parsed = URL(string: urlString) {
+        if let parsed = URL(string: urlString),
+           let host = parsed.host,
+           !host.isEmpty {
             url = parsed
         } else {
             print("[GamesRoom] WARNING: SUPABASE_URL in Info.plist is not a valid URL ('\(urlString)'); using compiled fallback.")
-            guard let fallbackURL = URL(string: fallbackURLString) else {
+            guard let fallbackURL = URL(string: fallbackURLString),
+                  let fallbackHost = fallbackURL.host,
+                  !fallbackHost.isEmpty else {
                 fatalError("SupabaseClientProvider: compiled fallback URL is invalid: \(fallbackURLString)")
             }
             url = fallbackURL
@@ -87,7 +94,6 @@ enum SupabaseClientProvider {
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
         config.httpMaximumConnectionsPerHost = 6
-        config.httpAdditionalHeaders = ["Connection": "close"]
         let session = URLSession(configuration: config)
         return SupabaseClient(
             supabaseURL: url,
