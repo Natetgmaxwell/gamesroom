@@ -682,14 +682,6 @@ struct RoomDetailView: View {
                     onScore: isHost && isSingleWinnerPack(event)
                         ? { Task { await openHostScore(event: event) } }
                         : nil,
-                    // V0.68 — "Withdraw more" secondary. The member has
-                    // already withdrawn into their working hand but can
-                    // still top up. Casino only (CAH has no chip
-                    // withdrawal concept); member AND host (host-can-play
-                    // lock 2026-07-09).
-                    onWithdrawMore: isCAH
-                        ? nil
-                        : { Task { await openWithdraw(event: event) } },
                     isHero: true,
                     headerMode: .inPlay,
                     scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
@@ -700,7 +692,15 @@ struct RoomDetailView: View {
                     // settle CAH cards.
                     onCAHSettle: roomHasCAHPack
                         ? { cahScanEvent = event }
-                        : nil
+                        : nil,
+                    // V0.68 — "Withdraw more" secondary. The member has
+                    // already withdrawn into their working hand but can
+                    // still top up. Casino only (CAH has no chip
+                    // withdrawal concept); member AND host (host-can-play
+                    // lock 2026-07-09).
+                    onWithdrawMore: isCAH
+                        ? nil
+                        : { Task { await openWithdraw(event: event) } }
                 )
 
             // M1.1 — `.tonightEvent` renders the witness hero with
