@@ -37,7 +37,7 @@
 //  `record_round_score` (migration 035) loops over every entry
 //  with no single-winner validation.
 //
-//  The Casino path uses `SettleCasinoSheet` (P0.5) instead; this
+//  The Casino path uses `ChipScanSheet` (vision) instead; this
 //  sheet is only presented for `single_winner` and `count_based`
 //  packs.
 //

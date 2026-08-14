@@ -24,7 +24,7 @@
 //
 //  Gate is owned by the parent (`RoomDetailView`); this view
 //  only renders when the gate holds. The Casino pack's
-//  member-driven `SettleCasinoSheet` flow is unchanged.
+//  member-driven vision scan flow (`ChipScanSheet`) is unchanged.
 //
 //  V0.34b: round-logging wired in. `rounds` mirrors the per-event
 //  log; the next round index is reseeded from `rounds.nextRoundIndex`

@@ -456,7 +456,7 @@ final class CasinoService: ObservableObject {
     /// Returns the calling member's latest open (un-settled)
     /// `casino_withdrawals` row for one event, or `nil` if none.
     ///
-    /// Powers the `SettleCasinoSheet` stepper default. The pre-M3
+    /// Powers the `ChipScanSheet` stepper default. The pre-M3
     /// placeholder was `withdrawn: 0` — the member saw an
     /// empty slider even after a withdrawal. After this wiring,
     /// the sheet renders with the actual chip bracket the

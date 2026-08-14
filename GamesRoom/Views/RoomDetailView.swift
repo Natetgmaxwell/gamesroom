@@ -79,23 +79,9 @@ struct RoomDetailView: View {
     // V0.51 — per-member working hands for the active casino event.
     // Host sees working hand + bank balance; members see working hand only.
     @State private var workingHands: [WorkingHand] = []
-    // V0.46 — member's "Settle manually" path. Always presents
-    // `SettleCasinoSheet`; the scan CTA stays on the vision flow.
-    // Kept distinct from `settleSheetEvent` (host settle +
-    // vision-chip scan) so the manual link doesn't disturb the
-    // host scan path.
-    @State private var manualSettleSheetEvent: Event?
-    // V0.50 — casino host's "Settle manually" aggregate path.
-    // Host's one-tap-behind link on the at-play Witness Slot.
-    // Kept distinct from `settleSheetEvent` (vision scan, host
-    // AND member) so the aggregate flow doesn't disturb the
-    // vision surface.
-    @State private var hostManualSettleSheetEvent: Event?
-
     // P0.4 — host-only single-winner scoring sheet binding. Hosts
     // tap "Score a round" on the at-play Witness Slot; the sheet
-    // opens for any pack (Casino host scoring routes through
-    // `SettleCasinoSheet` instead).
+    // opens for any pack (Casino hosts scan via `ChipScanSheet`).
     @State private var hostScoreEvent: Event?
 
     // B1.3 — host-only "+ Add an event" CTA in the in-room
@@ -137,7 +123,7 @@ struct RoomDetailView: View {
     /// fires on iPad regular width, host-side, during a live
     /// `single_winner` event (playedAt <= now && settledAt == nil).
     /// Settled events (settledAt within 24h, no new event) render the
-    /// normal scroll body on iPad — casino keeps `SettleCasinoSheet`.
+    /// normal scroll body on iPad — casino hosts scan via `ChipScanSheet`.
     private var showScoringDashboard: Bool {
         guard scoringDashboardVisible else { return false }
         guard hSize == .regular else { return false }
@@ -332,8 +318,7 @@ struct RoomDetailView: View {
             // host gets the same vision surface as the member. The
             // host's `record_member_scan` is keyed off the caller's
             // own withdrawal row, so a host who withdrew can scan
-            // their own chips cleanly. The aggregate/manual settle
-            // path is a separate binding (`hostManualSettleSheetEvent`).
+            // their own chips cleanly.
             ChipScanSheet(
                 eventId: event.id,
                 roomId: room.id,
@@ -357,38 +342,6 @@ struct RoomDetailView: View {
                 onDone: { Task { await refresh(force: true) } }
             )
             .environmentObject(scoringService)
-            .environmentObject(authService)
-        }
-        // V0.46 — casino-member "Settle manually" path. Always
-        // presents `SettleCasinoSheet`; the scan CTA above stays
-        // on the vision flow. Kept distinct from `settleSheetEvent`
-        // so the manual link doesn't disturb the host scan path.
-        .sheet(item: $manualSettleSheetEvent) { event in
-            SettleCasinoSheet(
-                eventId: event.id,
-                roomId: room.id,
-                withdrawn: casinoWithdrawn,
-                isHost: false
-            )
-            .environmentObject(scoringService)
-            .environmentObject(casinoService)
-            .environmentObject(authService)
-        }
-        // V0.50 — casino-host "Settle manually" aggregate path.
-        // Hosts get the same `SettleCasinoSheet(isHost:true)`
-        // surface as the member's manual link, just one tap
-        // behind the vision scan CTA on the at-play Witness Slot.
-        // Kept distinct from `settleSheetEvent` so the aggregate
-        // flow doesn't disturb the vision surface.
-        .sheet(item: $hostManualSettleSheetEvent) { event in
-            SettleCasinoSheet(
-                eventId: event.id,
-                roomId: room.id,
-                withdrawn: casinoWithdrawn,
-                isHost: true
-            )
-            .environmentObject(scoringService)
-            .environmentObject(casinoService)
             .environmentObject(authService)
         }
         .sheet(item: $hostScoreEvent) { event in
@@ -729,11 +682,6 @@ struct RoomDetailView: View {
                     headerMode: .inPlay,
                     scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
                     workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
-                    onManualSettle: manualSettleAction(for: event),
-                    // V0.50 — host gets a one-tap-behind manual
-                    // settle link below "Score a round" so the
-                    // vision CTA stays primary.
-                    onHostManualSettle: hostManualSettleAction(for: event),
                     // V0.66 — secondary "Count your CAH cards" CTA
                     // renders for every active event when the room
                     // has CAH installed, so a casino night can still
@@ -806,11 +754,6 @@ struct RoomDetailView: View {
                     headerMode: .settleRound,
                     scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
                     workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
-                    onManualSettle: manualSettleAction(for: event),
-                    // V0.50 — host gets a one-tap-behind manual
-                    // settle link below "Score a round" so the
-                    // vision CTA stays primary.
-                    onHostManualSettle: hostManualSettleAction(for: event),
                     // V0.66 — secondary "Count your CAH cards" CTA
                     // renders for every active event when the room
                     // has CAH installed, so a casino night can still
@@ -1134,13 +1077,12 @@ struct RoomDetailView: View {
         withdrawSheetEvent = event
     }
 
-    /// Chip-scan CTA. P0.5 virtual-only Casino: flips
-    /// `settleSheetEvent` so the `SettleCasinoSheet` renders. The
-    /// sheet takes the member's net returned chips and routes
-    /// through `ScoringService.recordRoundInput(...)`. The
-    /// `record_member_scan` RPC + camera/Vision pipeline remain in
-    /// the codebase for the eventual physical-chip flip but are
-    /// not exercised by the V0.8 surface.
+    /// Chip-scan CTA. Flips `settleSheetEvent` so the
+    /// `ChipScanSheet` (vision) renders. The sheet takes the
+    /// member's net returned chips and routes through
+    /// `ScoringService.recordRoundInput(...)`. The
+    /// `record_member_scan` RPC + camera/Vision pipeline are the
+    /// settle path.
     ///
     /// V0.34 — count-based scoring (CAH). When the event's pack is
     /// `cards_against_humanity`, the scan CTA opens the
@@ -1153,15 +1095,6 @@ struct RoomDetailView: View {
         } else {
             settleSheetEvent = event
         }
-    }
-
-    /// V0.46 — casino-member "Settle manually" callback for the
-    /// WitnessSlot. Returns nil for hosts (they already have a
-    /// settle surface via `Score a round` / scan) and for CAH
-    /// (count-based scoring has no manual settle path).
-    private func manualSettleAction(for event: Event) -> (() -> Void)? {
-        guard !isHost, event.packSlug != "cards_against_humanity" else { return nil }
-        return { manualSettleSheetEvent = event }
     }
 
     /// P0.4 — host-only "Score a round" CTA on the at-play Witness
@@ -1197,22 +1130,6 @@ struct RoomDetailView: View {
                 hostScoreEvent = event
             }
         }
-    }
-
-    /// V0.50 — host-only "Settle manually" callback for the
-    /// WitnessSlot. Casino host → flips `hostManualSettleSheetEvent`
-    /// (`SettleCasinoSheet(isHost:true)`, aggregate settle).
-    /// CAH host → flips `hostScoreEvent` (`HostScoreEntrySheet`,
-    /// manual entry). Members get nil (they use `manualSettleAction`).
-    private func hostManualSettleAction(for event: Event) -> (() -> Void)? {
-        guard isHost else { return nil }
-        if event.packSlug == "cards_against_humanity" {
-            return { hostScoreEvent = event }
-        }
-        if event.packSlug == "casino" {
-            return { hostManualSettleSheetEvent = event }
-        }
-        return nil
     }
 }
 
@@ -1749,16 +1666,6 @@ private struct WitnessSlot: View {
     /// V0.46 — working hand (withdrawn chips) surfaced in the
     /// hero badge. nil = don't render (CAH / not-yet-withdrawn).
     var workingHand: Int? = nil
-    /// V0.46 — casino-member "Settle manually" callback. nil =
-    /// don't render the manual link (hosts use Score-a-round;
-    /// CAH has no manual path).
-    var onManualSettle: (() -> Void)? = nil
-    /// V0.50 — host-only "Settle manually" callback. nil = don't
-    /// render the host manual link. Renders as a secondary link
-    /// below "Score a round" — never a second filled full-width
-    /// primary. Casino host → `SettleCasinoSheet(isHost:true)`;
-    /// CAH host → `HostScoreEntrySheet`.
-    var onHostManualSettle: (() -> Void)? = nil
     /// V0.66 — secondary "Count your CAH cards" CTA. Renders for
     /// EVERY active event when the room has the CAH pack installed,
     /// so a member/host on a casino night can still settle their CAH
@@ -1840,25 +1747,6 @@ private struct WitnessSlot: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.top, 8)
-
-                // V0.46 — secondary "Settle manually" link for
-                // casino members. Sits one tap behind the primary
-                // scan CTA so the vision flow stays the easy path
-                // while the manual settle remains reachable.
-                if let onManualSettle {
-                    Button(action: onManualSettle) {
-                        Text("Settle manually")
-                            .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                    }
-                    .buttonStyle(.plain)
-                    .pressScale()
-                    .padding(.top, 8)
-                    .accessibilityLabel(Text("Settle manually instead of scanning"))
-                }
             }
 
             // V0.66 — secondary "Count your CAH cards" CTA. Renders for
@@ -1901,27 +1789,6 @@ private struct WitnessSlot: View {
                 .pressScale()
                 .padding(.top, 4)
                 .accessibilityLabel(Text("Score a round (host)"))
-
-                // V0.50 — host manual settle link, one tap behind
-                // the vision scan CTA. Renders as a secondary link
-                // below "Score a round" — never a second filled
-                // full-width primary. Casino host lands on
-                // `SettleCasinoSheet(isHost:true)` (aggregate
-                // settle); CAH host lands on `HostScoreEntrySheet`
-                // (manual entry).
-                if let onHostManualSettle {
-                    Button(action: onHostManualSettle) {
-                        Text("Settle manually")
-                            .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                    }
-                    .buttonStyle(.plain)
-                    .pressScale()
-                    .padding(.top, 4)
-                    .accessibilityLabel(Text("Settle manually instead of scanning (host)"))
-                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -88,7 +88,6 @@
 		AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043E /* CreateRoomSheet.swift */; };
 		AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */; };
 		AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000440 /* JoinRoomSheet.swift */; };
-		AAAAAAAA00000000000000E9 /* SettleCasinoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */; };
 		AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */; };
 		AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000436 /* Assets.xcassets */; };
 		AAAAAAAA00000000000000F2 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AAAAAAAA00000000000000F3 /* Supabase */; };
@@ -220,7 +219,6 @@
 		AAAAAAAA000000000000043E /* CreateRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateRoomSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostScoreEntrySheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000440 /* JoinRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinRoomSheet.swift; sourceTree = "<group>"; };
-		AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettleCasinoSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WithdrawChipsSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000443 /* GamesRoom.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GamesRoom.entitlements; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000445 /* StorageKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageKeys.swift; sourceTree = "<group>"; };
@@ -421,7 +419,6 @@
 				AAAAAAAA000000000000043E /* CreateRoomSheet.swift */,
 				AAAAAAAA000000000000043F /* HostScoreEntrySheet.swift */,
 				AAAAAAAA0000000000000440 /* JoinRoomSheet.swift */,
-				AAAAAAAA0000000000000441 /* SettleCasinoSheet.swift */,
 				AAAAAAAA0000000000000442 /* WithdrawChipsSheet.swift */,
 				AAAAAAAA0000000000000457 /* ChipScanSheet.swift */,
 				AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */,
@@ -718,7 +715,6 @@
 				AAAAAAAA00000000000000E6 /* CreateRoomSheet.swift in Sources */,
 				AAAAAAAA00000000000000E7 /* HostScoreEntrySheet.swift in Sources */,
 				AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */,
-				AAAAAAAA00000000000000E9 /* SettleCasinoSheet.swift in Sources */,
 				AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */,
 				AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */,
 				AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */,
