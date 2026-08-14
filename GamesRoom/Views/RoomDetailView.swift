@@ -172,6 +172,16 @@ struct RoomDetailView: View {
         roomService.room(withId: room.id) ?? room
     }
 
+    /// V0.66 — whether the room has the CAH pack installed. Empty
+    /// cache means no explicit overrides → all packs installed
+    /// (matches the Operations sub-sheet convention). Drives the
+    /// secondary "Count your CAH cards" CTA on every active event.
+    private var roomHasCAHPack: Bool {
+        let enabled = roomService.cachedRoomPacks(roomId: room.id)
+        if enabled.isEmpty { return true }
+        return enabled.contains(CardsAgainstHumanityPack.slug)
+    }
+
     // MARK: Service-backed state
 
     /// Cached active event for this room. Driven by
@@ -723,7 +733,14 @@ struct RoomDetailView: View {
                     // V0.50 — host gets a one-tap-behind manual
                     // settle link below "Score a round" so the
                     // vision CTA stays primary.
-                    onHostManualSettle: hostManualSettleAction(for: event)
+                    onHostManualSettle: hostManualSettleAction(for: event),
+                    // V0.66 — secondary "Count your CAH cards" CTA
+                    // renders for every active event when the room
+                    // has CAH installed, so a casino night can still
+                    // settle CAH cards.
+                    onCAHSettle: roomHasCAHPack
+                        ? { cahScanEvent = event }
+                        : nil
                 )
 
             // M1.1 — `.tonightEvent` renders the witness hero with
@@ -744,7 +761,14 @@ struct RoomDetailView: View {
                         : nil,
                     isHero: true,
                     headerMode: .tonightEvent,
-                    scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips"
+                    scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
+                    // V0.66 — secondary "Count your CAH cards" CTA
+                    // renders for every active event when the room
+                    // has CAH installed, so a casino night can still
+                    // settle CAH cards.
+                    onCAHSettle: roomHasCAHPack
+                        ? { cahScanEvent = event }
+                        : nil
                 )
 
             // M1.1 — `.seasonClose` renders the awards card with the
@@ -786,7 +810,14 @@ struct RoomDetailView: View {
                     // V0.50 — host gets a one-tap-behind manual
                     // settle link below "Score a round" so the
                     // vision CTA stays primary.
-                    onHostManualSettle: hostManualSettleAction(for: event)
+                    onHostManualSettle: hostManualSettleAction(for: event),
+                    // V0.66 — secondary "Count your CAH cards" CTA
+                    // renders for every active event when the room
+                    // has CAH installed, so a casino night can still
+                    // settle CAH cards.
+                    onCAHSettle: roomHasCAHPack
+                        ? { cahScanEvent = event }
+                        : nil
                 )
 
             case .justSettled(let event):
@@ -1728,6 +1759,12 @@ private struct WitnessSlot: View {
     /// primary. Casino host → `SettleCasinoSheet(isHost:true)`;
     /// CAH host → `HostScoreEntrySheet`.
     var onHostManualSettle: (() -> Void)? = nil
+    /// V0.66 — secondary "Count your CAH cards" CTA. Renders for
+    /// EVERY active event when the room has the CAH pack installed,
+    /// so a member/host on a casino night can still settle their CAH
+    /// cards. nil = don't render. Styled as an outline button, one
+    /// tap behind the primary CTA — never a second filled primary.
+    var onCAHSettle: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
@@ -1822,6 +1859,25 @@ private struct WitnessSlot: View {
                     .padding(.top, 8)
                     .accessibilityLabel(Text("Settle manually instead of scanning"))
                 }
+            }
+
+            // V0.66 — secondary "Count your CAH cards" CTA. Renders for
+            // every active event when the room has the CAH pack installed,
+            // so a casino night can still settle CAH cards. One tap behind
+            // the primary CTA, styled as an outline button.
+            if let onCAHSettle {
+                Button(action: onCAHSettle) {
+                    Text("Count your CAH cards")
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
+                }
+                .buttonStyle(.plain)
+                .pressScale()
+                .padding(.top, 8)
+                .accessibilityLabel(Text("Count your CAH cards"))
             }
 
             // P0.4 — host-only "Score a round" affordance. Renders
