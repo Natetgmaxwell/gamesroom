@@ -77,9 +77,9 @@ struct RoomDetailView: View {
     @State private var casinoWithdrawn: Int = 0
     // V0.47 — host-only pending-withdrawal list. Loaded in
     // `refresh`; the host dispenses physical chips and taps
-    // Dispensed to acknowledge (local state, ledger unchanged).
+    // Dispensed to acknowledge (server-persisted meta stamp since
+    // V0.73; ledger unchanged).
     @State private var hostWithdrawals: [EventTransaction] = []
-    @State private var dispensedWithdrawalIds: Set<UUID> = []
     // V0.51 — per-member working hands for the active casino event.
     // Host sees working hand + bank balance; members see working hand only.
     @State private var workingHands: [WorkingHand] = []
@@ -200,11 +200,12 @@ struct RoomDetailView: View {
     }
 
     /// V0.47 — withdrawals still awaiting physical chip dispensing.
-    /// Filters the host-side withdrawal list by the
-    /// `dispensedWithdrawalIds` set so tapping "Dispensed" removes
-    /// the row without mutating the ledger.
+    /// V0.73 — the dispensed filter is now server-persisted
+    /// (`meta.dispensed`, stamped by `mark_withdrawal_dispensed`,
+    /// migration 073) instead of a local `@State` set that forgot
+    /// every acknowledgement on relaunch.
     private var pendingWithdrawals: [EventTransaction] {
-        hostWithdrawals.filter { !dispensedWithdrawalIds.contains($0.id) }
+        hostWithdrawals.filter { !$0.isDispensed }
     }
 
     /// V0.51 — active casino play (`.inPlay` or `.settleRound`): the
@@ -419,7 +420,12 @@ struct RoomDetailView: View {
                 if isCasinoPlayActive, isHost, !pendingWithdrawals.isEmpty {
                     HostWithdrawalsSection(
                         withdrawals: pendingWithdrawals,
-                        onDispense: { id in dispensedWithdrawalIds.insert(id) }
+                        onDispense: { id in
+                            Task {
+                                _ = await casinoService.markWithdrawalDispensed(transactionId: id)
+                                await loadHostWithdrawalsIfNeeded()
+                            }
+                        }
                     )
                     .sectionCard(.standard)
                 }
@@ -701,7 +707,21 @@ struct RoomDetailView: View {
                     // V0.43 — `.inPlay` means the member has already
                     // withdrawn, so the CTA flips to scan regardless
                     // of pack. `isCAH` is still used for `scanTitle`.
-                    cta: .scan,
+                    // V0.73 — but only while there's something to
+                    // settle. Already scanned → passive "counted"
+                    // capsule; empty hand (shouldn't co-occur with
+                    // `.inPlay`, but the data can) → passive
+                    // "nothing to settle" capsule.
+                    cta: {
+                        if isCAH { return .scan }
+                        if myScanState.hasScanned {
+                            return .done("All counted — enjoy the night")
+                        }
+                        if myWorkingHand == 0 {
+                            return .done("Nothing to settle — withdraw to play")
+                        }
+                        return .scan
+                    }(),
                     onWithdraw: { Task { await openWithdraw(event: event) } },
                     onScan: { Task { await openScan(event: event) } },
                     // V0.68 — "Score a round" is gated to single-winner
@@ -800,7 +820,20 @@ struct RoomDetailView: View {
                     // V0.34 — settleRound always shows the scan CTA
                     // (no CAH override here per spec — host has
                     // already finalised, the member is tallying).
-                    cta: .scan,
+                    // V0.73 — same honest-CTA gating as `.inPlay`:
+                    // scanned or empty-hand members get a passive
+                    // capsule instead of a settle button they can't
+                    // act on truthfully.
+                    cta: {
+                        if isCAH { return .scan }
+                        if myScanState.hasScanned {
+                            return .done("All counted — awaiting results")
+                        }
+                        if myWorkingHand == 0 {
+                            return .done("No chips to settle")
+                        }
+                        return .scan
+                    }(),
                     onWithdraw: { Task { await openWithdraw(event: event) } },
                     onScan: { Task { await openScan(event: event) } },
                     // V0.68 — "Score a round" gated to single-winner
@@ -1729,7 +1762,15 @@ private struct SeatGridRow: View {
 // MARK: - Witness slot (at-play)
 
 private struct WitnessSlot: View {
-    enum CTA { case withdraw, scan }
+    enum CTA: Equatable {
+        case withdraw
+        case scan
+        /// V0.73 — passive "nothing more to do" state. Renders as a
+        /// non-interactive capsule (not a button) so a member who has
+        /// already scanned, or holds no chips to settle, isn't
+        /// offered an action that lies about their state.
+        case done(String)
+    }
 
     /// M1.1 — header copy differentiates `.tonightEvent`
     /// (play-just-started, "started N min ago") from `.inPlay`
@@ -1765,6 +1806,21 @@ private struct WitnessSlot: View {
     var hasScanned: Bool = false
     /// V0.72 (072) — the member's latest scanned value, when known.
     var scannedValue: Int? = nil
+
+    /// V0.73 — net result label for the counted badge: scanned minus
+    /// the original withdrawal. The score change is already applied
+    /// server-side the moment the scan lands, so naming the net (not
+    /// "awaiting host") tells the member what actually happened to
+    /// their balance. "awaiting host" described the host-finalize
+    /// ledger step, which is invisible to the member and read as
+    /// "still waiting for something to happen".
+    private var netDeltaLabel: String {
+        guard let scannedValue, let workingHand else { return "settled" }
+        let net = scannedValue - workingHand
+        if net > 0 { return "+\(net)" }
+        if net < 0 { return "−\(abs(net))" }
+        return "even"
+    }
     /// V0.66 — secondary "Count your CAH cards" CTA. Renders for
     /// EVERY active event when the room has the CAH pack installed,
     /// so a member/host on a casino night can still settle their CAH
@@ -1815,8 +1871,8 @@ private struct WitnessSlot: View {
                 if hasScanned {
                     HStack(spacing: 6) {
                         Image(systemName: Theme.Icon.checkmarkCircleFill)
-                        Text(scannedValue.map { "Counted: \($0) pts · awaiting host" }
-                             ?? "Counted · awaiting host")
+                        Text(scannedValue.map { "Counted: \($0) pts · net \(netDeltaLabel)" }
+                             ?? "Counted · net settled")
                     }
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent)
@@ -1825,8 +1881,8 @@ private struct WitnessSlot: View {
                     .background(Theme.Palette.accent.opacity(0.12))
                     .clipShape(Capsule())
                     .accessibilityLabel(Text(
-                        scannedValue.map { "Chips counted: \($0) pts — awaiting host finalize" }
-                            ?? "Chips counted — awaiting host finalize"
+                        scannedValue.map { "Chips counted: \($0) pts — net \(netDeltaLabel)" }
+                            ?? "Chips counted — net settled"
                     ))
                     .padding(.top, 4)
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
@@ -1868,6 +1924,22 @@ private struct WitnessSlot: View {
             // computed title + cross-fading text keeps the surface
             // stable. `CTA` has no associated values, so it is
             // Equatable without declaration.
+            // V0.73 — `.done` isn't a button. A member who has
+            // already scanned (or holds no chips) gets a passive
+            // capsule, not an action that lies about their state.
+            if case .done = cta {
+                Text(ctaTitle)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Theme.Palette.accent.opacity(0.12))
+                    .clipShape(Capsule())
+                    .contentTransition(.opacity)
+                    .animation(Theme.Motion.fade, value: cta)
+                    .padding(.top, 8)
+                    .accessibilityLabel(Text(ctaTitle))
+            } else {
             Button(action: ctaAction) {
                 Text(ctaTitle)
                     .font(Theme.Typography.body.weight(.semibold))
@@ -1880,6 +1952,7 @@ private struct WitnessSlot: View {
                     .animation(Theme.Motion.fade, value: cta)
             }
             .padding(.top, 8)
+            }
 
             // V0.68 — secondary "Withdraw more" CTA. Renders for casino
             // events in `.inPlay` so a member who has already withdrawn
@@ -1991,18 +2064,21 @@ private struct WitnessSlot: View {
     /// "Count your CAH cards").
     private var ctaTitle: String {
         switch cta {
-        case .withdraw: return "Withdraw to play"
-        case .scan:     return scanTitle
+        case .withdraw:    return "Withdraw to play"
+        case .scan:        return scanTitle
+        case .done(let t): return t
         }
     }
 
     /// V0.70 — action for the primary CTA. Routes to the
     /// member's withdraw or scan handler depending on the
-    /// current state.
+    /// current state. `.done` has no action — the surface renders
+    /// as a passive capsule, so this closure is never called.
     private var ctaAction: () -> Void {
         switch cta {
         case .withdraw: return onWithdraw
         case .scan:     return onScan
+        case .done:     return {}
         }
     }
 

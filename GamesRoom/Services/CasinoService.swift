@@ -86,115 +86,6 @@ import Foundation
 import Supabase
 import SwiftUI
 
-// MARK: - EventTransaction
-
-/// One row from `public.transactions`, scoped to a single event.
-///
-/// Mirrors the `get_event_transactions(p_event_id)` RPC's return shape
-/// (migration 024). Used by the host's live transactions board
-/// (V0.30/V0.8) and the past-event recap. Lives next to the
-/// service that wraps it because no other view needs it today —
-/// promoting it to `Models/EventTransaction.swift` is a one-line
-/// move when a second caller appears.
-struct EventTransaction: Decodable, Identifiable, Hashable {
-    let id: UUID
-    let memberId: UUID
-    let memberDisplayName: String
-    let kind: String
-    let amountPoints: Int64
-    let meta: AnyJSON?
-    let createdAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case memberId = "member_id"
-        case memberDisplayName = "member_display_name"
-        case kind
-        case amountPoints = "amount_points"
-        case meta
-        case createdAt = "created_at"
-    }
-
-    init(
-        id: UUID,
-        memberId: UUID,
-        memberDisplayName: String,
-        kind: String,
-        amountPoints: Int64,
-        meta: AnyJSON? = nil,
-        createdAt: Date
-    ) {
-        self.id = id
-        self.memberId = memberId
-        self.memberDisplayName = memberDisplayName
-        self.kind = kind
-        self.amountPoints = amountPoints
-        self.meta = meta
-        self.createdAt = createdAt
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        memberId = try c.decode(UUID.self, forKey: .memberId)
-        memberDisplayName = try c.decodeIfPresent(String.self, forKey: .memberDisplayName) ?? "Member"
-        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? ""
-        amountPoints = try c.decodeIfPresent(Int64.self, forKey: .amountPoints) ?? 0
-        meta = try c.decodeIfPresent(AnyJSON.self, forKey: .meta)
-        createdAt = try c.decode(Date.self, forKey: .createdAt)
-    }
-}
-
-// MARK: - AnyJSON
-
-/// A round-trippable wrapper for arbitrary JSON values. Carries the
-/// `meta` payload from `public.transactions` through the wire without
-/// forcing the iOS layer to declare a per-kind schema. Same shape as
-/// the V0.7.1 archived version (`RoomService.swift`).
-struct AnyJSON: Codable, Hashable {
-    let value: Any
-
-    init(_ value: Any) { self.value = value }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if let v = try? c.decode(Bool.self) { value = v; return }
-        if let v = try? c.decode(Int.self) { value = v; return }
-        if let v = try? c.decode(Int64.self) { value = v; return }
-        if let v = try? c.decode(Double.self) { value = v; return }
-        if let v = try? c.decode(String.self) { value = v; return }
-        if let v = try? c.decode([AnyJSON].self) { value = v.map(\.value); return }
-        if let v = try? c.decode([String: AnyJSON].self) {
-            value = v.mapValues(\.value); return
-        }
-        if c.decodeNil() { value = NSNull(); return }
-        value = NSNull()
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
-        switch value {
-        case let v as Bool: try c.encode(v)
-        case let v as Int: try c.encode(v)
-        case let v as Int64: try c.encode(v)
-        case let v as Double: try c.encode(v)
-        case let v as String: try c.encode(v)
-        case is NSNull: try c.encodeNil()
-        case let v as [Any]: try c.encode(v.map(AnyJSON.init))
-        case let v as [String: Any]: try c.encode(v.mapValues(AnyJSON.init))
-        default: try c.encodeNil()
-        }
-    }
-
-    static func == (lhs: AnyJSON, rhs: AnyJSON) -> Bool {
-        String(describing: lhs.value) == String(describing: rhs.value)
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(String(describing: value))
-    }
-}
-
 // MARK: - CasinoService
 
 @MainActor
@@ -545,6 +436,26 @@ final class CasinoService: ObservableObject {
         self.lastError = nil
         eventTransactionsCache[eventId] = (rows: result, at: now)
         return result
+    }
+
+    /// V0.73 — host acknowledgement that chips were physically
+    /// dispensed. Stamps the withdrawal's `meta` server-side via
+    /// `mark_withdrawal_dispensed` (migration 073), then drops the
+    /// transactions cache so the next read reflects the stamp.
+    /// Persistent across relaunches, unlike the old local set.
+    func markWithdrawalDispensed(transactionId: UUID) async -> Bool {
+        do {
+            _ = try await SupabaseClientProvider.shared
+                .rpc("mark_withdrawal_dispensed", params: [
+                    "p_transaction_id": transactionId.uuidString
+                ])
+                .execute()
+            eventTransactionsCache.removeAll()
+            return true
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return false
+        }
     }
 
     // MARK: Open-withdrawal lookup (M3.1)

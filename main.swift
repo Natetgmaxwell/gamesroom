@@ -3211,6 +3211,54 @@ runner.run("WorkingHand tolerates missing scan-state columns (pre-072 RPC)") {
     runner.assertEqual(wh.scannedValue, nil)
 }
 
+// MARK: - V0.73 EventTransaction dispensed meta stamp
+
+runner.run("EventTransaction reads dispensed flag from meta (073)") {
+    let json = """
+    {
+        "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "member_id": "11111111-2222-3333-4444-555555555555",
+        "member_display_name": "Nathan",
+        "kind": "casino_withdrawal",
+        "amount_points": -100,
+        "meta": {"dispensed": true, "dispensed_at": "2026-08-15T22:00:00Z"},
+        "created_at": 773136000
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let txn = try JSONDecoder().decode(EventTransaction.self, from: data)
+    runner.assertEqual(txn.isDispensed, true)
+}
+
+runner.run("EventTransaction without meta or without flag is not dispensed") {
+    let noMeta = """
+    {
+        "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "member_id": "11111111-2222-3333-4444-555555555555",
+        "member_display_name": "Nathan",
+        "kind": "casino_withdrawal",
+        "amount_points": -100,
+        "created_at": 773136000
+    }
+    """
+    let noMetaTxn = try JSONDecoder().decode(EventTransaction.self, from: noMeta.data(using: .utf8)!)
+    runner.assertEqual(noMetaTxn.isDispensed, false)
+
+    let noFlag = """
+    {
+        "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "member_id": "11111111-2222-3333-4444-555555555555",
+        "member_display_name": "Nathan",
+        "kind": "casino_withdrawal",
+        "amount_points": -100,
+        "meta": {"other": "data"},
+        "created_at": 773136000
+    }
+    """
+    let noFlagTxn = try JSONDecoder().decode(EventTransaction.self, from: noFlag.data(using: .utf8)!)
+    runner.assertEqual(noFlagTxn.isDispensed, false)
+}
+
 // MARK: - Summary
 
 print("")
