@@ -16,8 +16,8 @@ writing the next migration.
    abandoned. Leave them alone.
 
 3. **Next number.** Take the highest existing number and increment.
-    Current high-water mark: **070** (070_host_manual_settle_carveout.sql) → next
-    is **071**. A migration file name is `<NNN>_<kebab-slug>.sql`.
+    Current high-water mark: **071** (071_break_rls_policy_recursion.sql) → next
+    is **072**. A migration file name is `<NNN>_<kebab-slug>.sql`.
 
 4. **Suffix pattern for same-version fixes.** When a migration needed a
    same-version correction, the fix landed as a suffixed sibling
@@ -43,3 +43,14 @@ writing the next migration.
 7. **Apply via the CLI.** Each migration's header carries its own apply
    command (`psql ... -v ON_ERROR_STOP=1 -f <file>`). New files get the
    same block.
+
+8. **Regression notes.**
+    - 071: under `authenticated`, direct SELECT on `events` /
+      `scan_attempts` failed with `42P17: infinite recursion detected
+      in policy for relation "room_memberships"`. The rooms "member
+      sees room" policy (004/005) checks `room_memberships`; the
+      `room_memberships` "host sees room members" policy (004/005)
+      checks `rooms`; both tables have RLS so each side re-enters the
+      other and recurses. 071 breaks the cycle via the
+      `is_room_member()` SECURITY DEFINER helper on the rooms side;
+      the `room_memberships` policy is unchanged.
