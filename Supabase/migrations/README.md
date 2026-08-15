@@ -16,8 +16,8 @@ writing the next migration.
    abandoned. Leave them alone.
 
 3. **Next number.** Take the highest existing number and increment.
-   Current high-water mark: **053** (053_season_history.sql) → next is
-   **054**. A migration file name is `<NNN>_<kebab-slug>.sql`.
+   Current high-water mark: **069** (069_hosted_scan_authority.sql) → next
+   is **070**. A migration file name is `<NNN>_<kebab-slug>.sql`.
 
 4. **Suffix pattern for same-version fixes.** When a migration needed a
    same-version correction, the fix landed as a suffixed sibling
