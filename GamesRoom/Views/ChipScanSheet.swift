@@ -364,6 +364,10 @@ struct ChipScanSheet: View {
         do {
             let result = try await scanSettle.submitChips(eventId: eventId, jpeg: jpeg)
             self.result = result
+            // V0.72 (072) — the scan landed server-side; drop the
+            // working-hands cache so the post-dismiss refresh reads
+            // has_scanned=true instead of a ≤30s-stale badge.
+            casinoService.invalidateEventCaches(eventId: eventId)
             // V0.72 microinteraction — the result view pops in (scale +
             // fade) rather than snapping, so the count reveal reads as a
             // resolution beat. The count itself rolls via numericText.

@@ -28,24 +28,36 @@ struct WorkingHand: Codable, Identifiable, Hashable {
     let displayName: String
     let workingHand: Int
     let pointsBalance: Int
+    /// V0.72 (072) — true when the member has a casino_scans row for
+    /// this session (any recorded_at). Drives the badge flip from
+    /// "Working hand: N" to "Counted: X · awaiting host".
+    let hasScanned: Bool
+    /// V0.72 (072) — the member's latest scanned value, if any.
+    let scannedValue: Int?
 
     enum CodingKeys: String, CodingKey {
         case memberId = "member_id"
         case displayName = "display_name"
         case workingHand = "working_hand"
         case pointsBalance = "points_balance"
+        case hasScanned = "has_scanned"
+        case scannedValue = "scanned_value"
     }
 
     init(
         memberId: UUID,
         displayName: String,
         workingHand: Int,
-        pointsBalance: Int
+        pointsBalance: Int,
+        hasScanned: Bool = false,
+        scannedValue: Int? = nil
     ) {
         self.memberId = memberId
         self.displayName = displayName
         self.workingHand = workingHand
         self.pointsBalance = pointsBalance
+        self.hasScanned = hasScanned
+        self.scannedValue = scannedValue
     }
 
     init(from decoder: Decoder) throws {
@@ -54,6 +66,8 @@ struct WorkingHand: Codable, Identifiable, Hashable {
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? "Member"
         workingHand = try c.decodeIfPresent(Int.self, forKey: .workingHand) ?? 0
         pointsBalance = try c.decodeIfPresent(Int.self, forKey: .pointsBalance) ?? 0
+        hasScanned = try c.decodeIfPresent(Bool.self, forKey: .hasScanned) ?? false
+        scannedValue = try c.decodeIfPresent(Int.self, forKey: .scannedValue)
     }
 
     var id: UUID { memberId }

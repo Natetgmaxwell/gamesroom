@@ -274,6 +274,10 @@ struct CAHCardScanSheet: View {
             let result = try await scanSettle.submitCards(eventId: eventId, jpeg: jpeg)
             self.result = result
             // V0.72 microinteraction — result pops in + count rolls.
+            // (No cache invalidation needed here: the CAH tally feeds
+            // the leaderboard, which the post-dismiss refresh already
+            // re-fetches with force=true. The working-hands badge is
+            // casino-only.)
             withAnimation(Theme.Motion.popIn) {
                 self.showResult = true
                 self.displayedCount = result.count

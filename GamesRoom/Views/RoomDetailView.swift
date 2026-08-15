@@ -218,6 +218,14 @@ struct RoomDetailView: View {
             && event.settledAt == nil
     }
 
+    /// V0.72 (072) — the current member's scan state for the active
+    /// event, from the working-hands read (get_event_working_hands
+    /// now returns has_scanned + scanned_value per member).
+    private var myScanState: (hasScanned: Bool, scannedValue: Int?) {
+        let mine = workingHands.first(where: { $0.memberId == currentUserId })
+        return (mine?.hasScanned ?? false, mine?.scannedValue)
+    }
+
     /// Unread system events for this room (pack installed/removed,
     /// season closed). Drives the System banner above the standings.
     private var systemEvents: [RoomSystemEvent] {
@@ -707,6 +715,8 @@ struct RoomDetailView: View {
                     headerMode: .inPlay,
                     scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
                     workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
+                    hasScanned: !isCAH && myScanState.hasScanned,
+                    scannedValue: myScanState.scannedValue,
                     // V0.66 — secondary "Count your CAH cards" CTA
                     // renders for every active event when the room
                     // has CAH installed, so a casino night can still
@@ -803,6 +813,8 @@ struct RoomDetailView: View {
                     headerMode: .settleRound,
                     scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
                     workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
+                    hasScanned: !isCAH && myScanState.hasScanned,
+                    scannedValue: myScanState.scannedValue,
                     // V0.66 — secondary "Count your CAH cards" CTA
                     // renders for every active event when the room
                     // has CAH installed, so a casino night can still
@@ -1747,6 +1759,12 @@ private struct WitnessSlot: View {
     /// V0.46 — working hand (withdrawn chips) surfaced in the
     /// hero badge. nil = don't render (CAH / not-yet-withdrawn).
     var workingHand: Int? = nil
+    /// V0.72 (072) — the current member has already scanned their
+    /// chips this session. Flips the badge from "Working hand: N"
+    /// to the counted state (the chips are with the host now).
+    var hasScanned: Bool = false
+    /// V0.72 (072) — the member's latest scanned value, when known.
+    var scannedValue: Int? = nil
     /// V0.66 — secondary "Count your CAH cards" CTA. Renders for
     /// EVERY active event when the room has the CAH pack installed,
     /// so a member/host on a casino night can still settle their CAH
@@ -1788,20 +1806,45 @@ private struct WitnessSlot: View {
             // pops the badge in via the parent's popIn animation
             // when `workingHand` flips from nil/0 to a positive
             // value (the withdraw lands, state moves to .inPlay).
+            // V0.72 (072) — once the member has scanned, the badge
+            // flips to the counted state: the chips are already in
+            // the host's possession, so "Working hand: 100" would
+            // lie about chips the member no longer holds. The host
+            // hasn't finalized yet, so the caption names that.
             if let workingHand, workingHand > 0 {
-                HStack(spacing: 6) {
-                    Image(systemName: Theme.Icon.handPointUpFill)
-                    Text("Working hand: \(workingHand) pts")
+                if hasScanned {
+                    HStack(spacing: 6) {
+                        Image(systemName: Theme.Icon.checkmarkCircleFill)
+                        Text(scannedValue.map { "Counted: \($0) pts · awaiting host" }
+                             ?? "Counted · awaiting host")
+                    }
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Theme.Palette.accent.opacity(0.12))
+                    .clipShape(Capsule())
+                    .accessibilityLabel(Text(
+                        scannedValue.map { "Chips counted: \($0) pts — awaiting host finalize" }
+                            ?? "Chips counted — awaiting host finalize"
+                    ))
+                    .padding(.top, 4)
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+                } else {
+                    HStack(spacing: 6) {
+                        Image(systemName: Theme.Icon.handPointUpFill)
+                        Text("Working hand: \(workingHand) pts")
+                    }
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Theme.Palette.accent.opacity(0.12))
+                    .clipShape(Capsule())
+                    .accessibilityLabel(Text("Working hand: \(workingHand) pts"))
+                    .padding(.top, 4)
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
                 }
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Palette.accent)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Theme.Palette.accent.opacity(0.12))
-                .clipShape(Capsule())
-                .accessibilityLabel(Text("Working hand: \(workingHand) pts"))
-                .padding(.top, 4)
-                .transition(.scale(scale: 0.85).combined(with: .opacity))
             }
 
             if !attestations.isEmpty {

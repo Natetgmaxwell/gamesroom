@@ -3176,6 +3176,41 @@ runner.run("ScanSettleService.CardsResult decodes snake_case wire keys") {
     runner.assertEqual(result.attemptsRemaining, 3)
 }
 
+// MARK: - V0.72 (072) WorkingHand scan-state columns
+
+runner.run("WorkingHand decodes has_scanned + scanned_value wire keys") {
+    let json = """
+    {
+        "member_id": "11111111-2222-3333-4444-555555555555",
+        "display_name": "Nathan",
+        "working_hand": 100,
+        "points_balance": 195,
+        "has_scanned": true,
+        "scanned_value": 95
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let wh = try JSONDecoder().decode(WorkingHand.self, from: data)
+    runner.assertEqual(wh.hasScanned, true)
+    runner.assertEqual(wh.scannedValue, 95)
+    runner.assertEqual(wh.workingHand, 100)
+}
+
+runner.run("WorkingHand tolerates missing scan-state columns (pre-072 RPC)") {
+    let json = """
+    {
+        "member_id": "11111111-2222-3333-4444-555555555555",
+        "display_name": "Nathan",
+        "working_hand": 100,
+        "points_balance": 200
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let wh = try JSONDecoder().decode(WorkingHand.self, from: data)
+    runner.assertEqual(wh.hasScanned, false)
+    runner.assertEqual(wh.scannedValue, nil)
+}
+
 // MARK: - Summary
 
 print("")
