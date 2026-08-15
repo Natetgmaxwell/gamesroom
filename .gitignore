@@ -26,3 +26,6 @@ GamesRoom/* 2.xcassets/
 
 # Wrangler / Cloudflare Pages local cache
 .wrangler/
+
+# Supabase CLI transient state
+Supabase/supabase/.temp/
