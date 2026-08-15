@@ -3,34 +3,26 @@
 //  GamesRoom
 //
 //  V0.34 — member-facing card-counting surface for Cards Against
-//  Humanity. Models the chip-scan flow from `ChipScanSheet.swift`
-//  but simpler: the camera + detector count black cards the member
-//  has won, the member confirms / adjusts the total, and the
-//  tally is recorded via `ScoringService.recordCAHTally(...)`.
+//  Humanity. V0.72 slice 3 rework: the hosted vision model is the
+//  authoritative counter for `minimax_vision` rooms. The member
+//  captures a JPEG, the `scan-settle` edge function (slice 2) hashes
+//  the bytes, sends them to the MiniMax vision model, and records
+//  the count server-side via service role (migration 069 RPCs).
+//  The member client never posts a count. The result screen is
+//  read-only: count, photo hash tail, attempt position, and the
+//  privacy line.
 //
-//  Trust model
-//  -----------
-//  The CAH pack is `count_based`: the score is the COUNT of black
-//  cards the member holds at session end. The vision detector is
-//  reused from the casino surface (`ChipSegmentationDetector` with
-//  `pxPerUnit: 2` — cards are thinner than chips). The detector's
-//  count is a rough estimate (MAE on chips is ~6 — cards will be
-//  similar); the editable total stepper is the user-attestation
-//  fallback, identical to the casino scan flow. The vision scan
-//  is assistant, not authority.
+//  Re-scan: latest-wins, capped at 5 per event (server-enforced).
+//  429 → "Scan limit reached — ask your host to enter the count by
+//  hand" (HostManualSettleSheet, migration 070).
 //
-//  Privacy posture
-//  ---------------
-//  CAH scan is discard-only: the JPEG is hashed (SHA-256) and
-//  the bytes are dropped. No opt-in photo retention (T1.2's
+//  Privacy reversal: V0.72 sends the JPEG to the MiniMax vision
+//  API. The bytes never persist server-side (edge function hashes
+//  + discards); the hash rides in the response so a disputed count
+//  can be matched to its capture frame. The photo is discard-only
+//  on our side — no opt-in photo retention (T1.2's
 //  `keepScanPhotos` toggle is intentionally not exposed for CAH).
-//  The hash + a `VisionSnapshot` summary travel to the server so
-//  a disputed tally can be matched to its capture frame.
 //
-//  V0.71 — captures are explicit (shutter tap) via ScanCameraView;
-//  this sheet inherited the V0.50 auto-capture deadlock (frozen
-//  "Counting cards…", zero detector work). See ScanCameraView.swift
-//  for the post-mortem.
 //
 
 import SwiftUI
@@ -47,33 +39,34 @@ struct CAHCardScanSheet: View {
     @EnvironmentObject private var scoringService: ScoringService
     @EnvironmentObject private var authService: AuthService
 
-    @State private var totalCards: Int = 0
-    @State private var confidenceAvg: Double = 0
-    @State private var photoHash: String?
-    @State private var isScanning: Bool = false
-    @State private var isSubmitting: Bool = false
-    @State private var errorMessage: String?
-    @State private var showConfirm: Bool = false
-    @State private var lowConfidencePrompt: Bool = false
+    // V0.72 — scan-settle circuit. See ChipScanSheet for the same
+    // pattern (request timeout 75s; shared SupabaseClientProvider
+    // would abort at 15s while the edge fn's 55s call still
+    // records).
+    @StateObject private var scanSettle = ScanSettleService()
 
-    // V0.71 — owns the AVCaptureSession across the camera ↔ confirm
-    // swap (see ScanCameraView.swift). @StateObject, not @State: the
-    // shutter is disabled until `state == .running`, and @State never
-    // re-renders on the controller's @Published changes.
+    // V0.71 — owns the AVCaptureSession across the camera ↔ result
+    // swap (see ScanCameraView.swift). @StateObject, not @State.
     @StateObject private var camera = ScanCameraController()
+
+    @State private var isUploading: Bool = false
+    @State private var result: ScanSettleCardsResult?
+    @State private var showResult: Bool = false
+    @State private var errorMessage: String?
+    @State private var scanError: ScanSettleService.ScanSettleError?
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Theme.Palette.background.ignoresSafeArea()
 
-                if showConfirm {
-                    confirmView
+                if showResult, let result {
+                    resultView(result: result)
                 } else {
                     cameraView
                 }
             }
-            .navigationTitle(showConfirm ? "Your cards" : "Scan your cards")
+            .navigationTitle(showResult ? "Your cards" : "Scan your cards")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -99,6 +92,19 @@ struct CAHCardScanSheet: View {
                 default:
                     EmptyView()
                 }
+                if isUploading {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.4)
+                        Text("Counting cards…")
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, Theme.Layout.gutter)
@@ -121,27 +127,7 @@ struct CAHCardScanSheet: View {
                         .foregroundStyle(.red.opacity(0.85))
                 }
 
-                if isScanning {
-                    ProgressView()
-                        .tint(Theme.Palette.accent)
-                    Text("Counting cards…")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                } else if lowConfidencePrompt {
-                    Text("Low confidence — move closer, improve lighting, and try again.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    Button {
-                        lowConfidencePrompt = false
-                        showConfirm = true
-                    } label: {
-                        Text("Review result anyway")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                    }
-                } else {
+                if !isUploading {
                     Button {
                         capture()
                     } label: {
@@ -185,26 +171,15 @@ struct CAHCardScanSheet: View {
         .background(Theme.Palette.background)
     }
 
-    // MARK: - Confirm
+    // MARK: - Result
 
-    private var confirmView: some View {
+    private func resultView(result: ScanSettleCardsResult) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Your cards: \(totalCards)")
+                Text("Your cards: \(result.count)")
                     .font(Theme.Typography.display)
                     .foregroundStyle(Theme.Palette.primaryText)
-                HStack(spacing: 8) {
-                    Text("Confidence: \(Int(confidenceAvg * 100))%")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    Text("·")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    Text("On-device")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                }
-                Text("Adjust the count if it doesn't look right. The tally replaces any per-round entries for this event.")
+                Text("Counted by the table's vision service · counts are final")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
@@ -217,35 +192,26 @@ struct CAHCardScanSheet: View {
                 .background(Theme.Palette.hairline)
                 .padding(.horizontal, Theme.Layout.gutter)
 
-            VStack(spacing: 12) {
-                Stepper(value: $totalCards, in: 1...100) {
-                    HStack {
-                        Text("Total cards")
-                            .font(Theme.Typography.body.weight(.medium))
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        Spacer()
-                        Text("\(totalCards)")
-                            .font(Theme.Typography.title.monospacedDigit())
-                            .foregroundStyle(Theme.Palette.accent)
-                    }
-                }
-                .padding(.horizontal, Theme.Layout.gutter)
-                .padding(.vertical, 16)
-            }
-
-            Divider()
-                .background(Theme.Palette.hairline)
-                .padding(.horizontal, Theme.Layout.gutter)
+            Spacer()
 
             VStack(spacing: 8) {
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(.red.opacity(0.85))
+                HStack(spacing: 6) {
+                    Text("Attempt \(result.attempt) of \(ScanSettleService.maxAttempts)")
+                    if result.attemptsRemaining == 0 {
+                        Text("· last scan")
+                    }
                 }
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                Text("Photo \(String(result.photoHash.prefix(8)))…")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                Text("Your photo is analysed by a cloud vision model and never stored.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 
-                Button(action: { Task { await confirm() } }) {
-                    Text(isSubmitting ? "Recording…" : "Looks right — record \(totalCards) cards")
+                Button(action: { Task { await done() } }) {
+                    Text("Done")
                         .font(Theme.Typography.body.weight(.medium))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -253,21 +219,19 @@ struct CAHCardScanSheet: View {
                         .background(Theme.Palette.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                .disabled(isSubmitting)
 
-                Button {
-                    totalCards = 0
-                    confidenceAvg = 0
-                    photoHash = nil
-                    showConfirm = false
-                    errorMessage = nil
-                    lowConfidencePrompt = false
-                } label: {
-                    Text("Re-scan")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                if result.attemptsRemaining > 0 {
+                    Button {
+                        resetForRescan()
+                    } label: {
+                        Text("Re-scan")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, Theme.Layout.gutter)
@@ -277,89 +241,57 @@ struct CAHCardScanSheet: View {
 
     // MARK: - Async
 
-    /// V0.71 — explicit capture. One shutter tap → one frame → one
-    /// detect pass (see ScanCameraView.swift for the V0.50
-    /// post-mortem this replaces).
     private func capture() {
-        guard !isScanning else { return }
-        isScanning = true
+        guard !isUploading else { return }
+        isUploading = true
         errorMessage = nil
+        scanError = nil
         Task { await processFrame() }
     }
 
     private func processFrame() async {
-        defer { isScanning = false }
+        defer { isUploading = false }
 
         guard let cg = await camera.capture() else {
             errorMessage = "Couldn't grab a camera frame. Try again."
-            return
-        }
-
-        // Discard-only: hash the JPEG and drop the bytes. No
-        // opt-in photo retention for CAH (per privacy posture).
-        let jpeg = jpegData(from: cg)
-        let hash = jpeg.map { PhotoHash.sha256($0) }
-
-        // Cards are thinner than chips — `pxPerUnit: 2` so the
-        // height-based count estimate lands in the right range.
-        // The detector's known-weak count metric is the editable
-        // stepper's value below; this is the user-attestation
-        // fallback.
-        let stacks = ChipSegmentationDetector(pxPerUnit: 2).detect(cg: cg)
-        let total = stacks.reduce(0) { $0 + $1.count }
-        let avg = stacks.isEmpty
-            ? 0
-            : stacks.map(\.confidence).reduce(0, +) / Double(stacks.count)
-        guard !stacks.isEmpty else {
-            errorMessage = "No card stacks found. Move closer, improve lighting, and try again."
-            return
-        }
-
-        totalCards = total
-        confidenceAvg = avg
-        photoHash = hash
-        if ScanConfidenceGate.shouldPromptRescan(confidenceAvg: confidenceAvg) {
-            lowConfidencePrompt = true
             Haptics.warning()
             return
         }
-        showConfirm = true
-    }
 
-    private func confirm() async {
-        guard !isSubmitting else { return }
-        isSubmitting = true
-        errorMessage = nil
-        defer { isSubmitting = false }
-
-        // No chip-color / points math here — the total IS the
-        // card count. The `VisionSnapshot` is shipped with
-        // `discarded: false` and the SHA-256 hash so the
-        // server-side ledger can match a disputed tally back to
-        // its capture frame.
-        let snapshot = VisionSnapshot(
-            stacks: [],
-            totalValue: totalCards,
-            confidenceAvg: confidenceAvg,
-            discarded: false,
-            photoHash: photoHash
-        )
+        guard let jpeg = jpegData(from: cg) else {
+            errorMessage = "Couldn't encode the photo. Try again."
+            Haptics.warning()
+            return
+        }
 
         do {
-            _ = try await scoringService.recordCAHTally(
-                eventId: eventId,
-                cardCount: Int64(totalCards),
-                visionSnapshot: snapshot
-            )
+            let result = try await scanSettle.submitCards(eventId: eventId, jpeg: jpeg)
+            self.result = result
+            self.showResult = true
+            self.errorMessage = nil
+            self.scanError = nil
             Haptics.success()
-            onDone()
-            dismiss()
+        } catch let error as ScanSettleService.ScanSettleError {
+            self.scanError = error
+            self.errorMessage = error.errorDescription
+            Haptics.warning()
         } catch {
-            errorMessage = "Failed to record tally: \((error as NSError).localizedDescription)"
+            self.errorMessage = (error as NSError).localizedDescription
+            Haptics.warning()
         }
     }
 
-    // MARK: - Pixel conversion
+    private func resetForRescan() {
+        result = nil
+        showResult = false
+        errorMessage = nil
+        scanError = nil
+    }
+
+    private func done() {
+        onDone()
+        dismiss()
+    }
 
     /// precond: main actor. The CGImage is already a private copy.
     private func jpegData(from cg: CGImage) -> Data? {

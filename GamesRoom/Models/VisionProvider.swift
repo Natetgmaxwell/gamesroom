@@ -13,18 +13,22 @@ import Foundation
 
 /// Vision provider choice for a room's casino pack.
 ///
-/// Two providers in V0.8. `.onDevice` is the default; `.hosted`
-/// requires the per-room `visionApiKey` on `CasinoConfig`. The model
-/// layer only carries the discriminator — provider behaviour lives in
-/// the vision service.
+/// Two providers. `.onDevice` is the legacy local rectangle detection
+/// + hue heuristic. `.hosted` is the V0.72 authoritative hosted
+/// vision model — runs server-side via the `scan-settle` edge
+/// function (slice 2); no client key, no per-room `visionApiKey`.
+/// The model layer only carries the discriminator — provider
+/// behaviour lives in the vision service.
 enum VisionProvider: String, Codable, CaseIterable, Identifiable, Hashable {
     /// Local rectangle detection + hue heuristic. No network, no
     /// key. Lower accuracy.
     case onDevice = "on_device"
 
-    /// Hosted vision API. Higher accuracy, ~2–5s latency, requires
-    /// the per-room `visionApiKey`.
-    case hosted = "hosted"
+    /// Hosted vision model. The DB value is the canonical
+    /// `casino_room_config.vision_provider = 'minimax_vision'`
+    /// string (migration 027 + 069). The count is authoritative —
+    /// members see the result, never adjust it.
+    case hosted = "minimax_vision"
 
     /// Identifiable conformance for SwiftUI pickers (UI layer).
     /// No Foundation/UI dependencies live inside this property.
@@ -35,7 +39,7 @@ enum VisionProvider: String, Codable, CaseIterable, Identifiable, Hashable {
     var displayName: String {
         switch self {
         case .onDevice: return "On-device (default)"
-        case .hosted:   return "Hosted vision API"
+        case .hosted:   return "Hosted vision (MiniMax)"
         }
     }
 }

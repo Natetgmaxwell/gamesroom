@@ -338,19 +338,28 @@ final class ScoringService: ObservableObject {
     /// REPLACES the member's per-round `round_score` entries for
     /// the event (the scan is the authoritative count at session
     /// end). Mirrors `CasinoService.submitMemberScan`'s envelope
-    /// pattern: the `source: "on_device"` + `confidence_avg` are
-    /// folded into the snapshot JSON before sending so the server
-    /// can persist them as part of the tally row.
+    /// pattern: the `source` + `confidence_avg` are folded into the
+    /// snapshot JSON before sending so the server can persist them
+    /// as part of the tally row.
     ///
     /// Calls the `record_cah_tally` RPC (migration 055) directly
     /// via `SupabaseClientProvider` — not through the `ScoringStore`
     /// protocol because the tally is a member-side write, not a
     /// host-side round write.
+    ///
+    /// V0.72 slice 3 — host manual fallback (migration 070 carve-
+    /// out): the room host records on behalf of a member when the
+    /// member can't scan (no camera, model down, rate-limited).
+    /// `onBehalfOf` carries the target member id; `source: "manual"`
+    /// admits the host past the `minimax_vision` provider gate.
+    /// Default `source: "on_device"` preserves legacy caller behavior.
     @discardableResult
     func recordCAHTally(
         eventId: UUID,
         cardCount: Int64,
-        visionSnapshot: VisionSnapshot
+        visionSnapshot: VisionSnapshot,
+        onBehalfOf: UUID? = nil,
+        source: String = "on_device"
     ) async throws -> Bool {
         // F-CAS-03-style envelope: fold source + confidence_avg
         // into the snapshot before sending so the server can pick
@@ -361,7 +370,7 @@ final class ScoringService: ObservableObject {
             with: snapshotData, options: []
         ) as? [String: Any] ?? [:]
         var envelope = snapshotDict
-        envelope["source"] = "on_device"
+        envelope["source"] = source
         if visionSnapshot.confidenceAvg > 0 {
             envelope["confidence_avg"] = visionSnapshot.confidenceAvg
         }
@@ -370,12 +379,17 @@ final class ScoringService: ObservableObject {
         )
         let envelopeJSON = String(data: envelopeData, encoding: .utf8) ?? "{}"
 
+        var params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_card_count": String(cardCount),
+            "p_vision_snapshot": envelopeJSON
+        ]
+        if let onBehalfOf {
+            params["p_member_id"] = onBehalfOf.uuidString
+        }
+
         let result: Bool = try await SupabaseClientProvider.shared
-            .rpc("record_cah_tally", params: [
-                "p_event_id": eventId.uuidString,
-                "p_card_count": String(cardCount),
-                "p_vision_snapshot": envelopeJSON
-            ])
+            .rpc("record_cah_tally", params: params)
             .execute()
             .value
         self.lastError = nil

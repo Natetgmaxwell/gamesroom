@@ -3056,6 +3056,126 @@ runner.run("MascotEngine tonightStar cell exists for every personality × ideolo
     }
 }
 
+// MARK: - V0.72 slice 3 — hosted vision provider + manual carve-out
+
+runner.run("VisionProvider.hosted rawValue is DB-canonical 'minimax_vision'") {
+    // V0.72 — the DB column is `casino_room_config.vision_provider`
+    // (migration 027 + 069). The pre-V0.72 Swift rawValue "hosted"
+    // was an app-only label and is now obsolete; rows persisted with
+    // the old value decode to `.onDevice` via the fallback in
+    // `CasinoConfig.init(from:)`.
+    runner.assertEqual(VisionProvider.hosted.rawValue, "minimax_vision")
+    runner.assertEqual(VisionProvider.onDevice.rawValue, "on_device")
+}
+
+runner.run("VisionProvider round-trips through Codable (string-keyed)") {
+    let encoder = JSONEncoder()
+    let decoder = JSONDecoder()
+    for expected in VisionProvider.allCases {
+        let data = try encoder.encode(expected)
+        let decoded = try decoder.decode(VisionProvider.self, from: data)
+        runner.assertEqual(decoded, expected)
+    }
+    // Direct rawValue round-trip.
+    let hostedData = "\"minimax_vision\"".data(using: .utf8)!
+    let hosted = try JSONDecoder().decode(VisionProvider.self, from: hostedData)
+    runner.assertEqual(hosted, .hosted)
+}
+
+runner.run("VisionProvider.displayName advertises MiniMax as the hosted model") {
+    // V0.72 — the display name now mentions MiniMax so the host
+    // picker reads "Hosted vision (MiniMax)" instead of the old
+    // generic "Hosted vision API".
+    runner.assertEqual(VisionProvider.hosted.displayName, "Hosted vision (MiniMax)")
+    runner.assertEqual(VisionProvider.onDevice.displayName, "On-device (default)")
+}
+
+runner.run("CasinoConfig decodes vision_provider 'minimax_vision' as .hosted") {
+    // V0.72 — the canonical DB string resolves to the .hosted enum
+    // case. The CasinoConfig.init(from:) fallback tolerates older
+    // rows that persisted a non-canonical value.
+    let roomId = UUID()
+    let json = """
+    {
+        "room_id": "\(roomId.uuidString)",
+        "enabled": true,
+        "chip_color_map": {"red": 5, "black": 100},
+        "standard_presets": true,
+        "vision_provider": "minimax_vision",
+        "vision_model": null,
+        "vision_api_key": null
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let config = try JSONDecoder().decode(CasinoConfig.self, from: data)
+    runner.assertEqual(config.visionProvider, .hosted)
+    runner.assertEqual(config.roomId, roomId)
+    runner.assertTrue(config.enabled)
+    runner.assertTrue(config.standardPresets)
+    runner.assertEqual(config.chipColorMap[.red], 5)
+    runner.assertEqual(config.chipColorMap[.black], 100)
+}
+
+runner.run("DetectionSource.hosted rawValue is 'hosted' (app-only label)") {
+    // V0.72 — the on-disk rows the app writes still persist
+    // 'hosted' (the app-only label, not the DB-canonical
+    // 'minimax_vision' that lives on casino_room_config). The
+    // edge function + 069 RPCs extract `->>'source'` from the
+    // snapshot envelope and the app-written value is 'hosted'.
+    runner.assertEqual(DetectionSource.hosted.rawValue, "hosted")
+    runner.assertEqual(DetectionSource.manual.rawValue, "manual")
+    runner.assertEqual(DetectionSource.onDevice.rawValue, "on_device")
+}
+
+runner.run("ScanSettleService.ChipsResult decodes snake_case wire keys") {
+    // V0.72 — the edge function returns snake_case JSON; the
+    // CodingKeys map translates to camelCase properties.
+    let json = """
+    {
+        "count": 43,
+        "total_points": 215,
+        "stacks": [
+            {"color": "red", "count": 12},
+            {"color": "black", "count": 2}
+        ],
+        "photo_hash": "abc123",
+        "attempt": 1,
+        "attempts_remaining": 4
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let result = try JSONDecoder().decode(ScanSettleChipsResult.self, from: data)
+    runner.assertEqual(result.count, 43)
+    runner.assertEqual(result.totalPoints, 215)
+    runner.assertEqual(result.stacks.count, 2)
+    runner.assertEqual(result.stacks[0].color, "red")
+    runner.assertEqual(result.stacks[0].count, 12)
+    runner.assertEqual(result.stacks[1].color, "black")
+    runner.assertEqual(result.stacks[1].count, 2)
+    runner.assertEqual(result.photoHash, "abc123")
+    runner.assertEqual(result.attempt, 1)
+    runner.assertEqual(result.attemptsRemaining, 4)
+}
+
+runner.run("ScanSettleService.CardsResult decodes snake_case wire keys") {
+    // V0.72 — the cards result is count-only (no per-stack
+    // breakdown). Same snake_case → camelCase CodingKeys.
+    let json = """
+    {
+        "count": 7,
+        "photo_hash": "def456",
+        "attempt": 2,
+        "attempts_remaining": 3
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let result = try JSONDecoder().decode(ScanSettleCardsResult.self, from: data)
+    runner.assertEqual(result.count, 7)
+    runner.assertEqual(result.photoHash, "def456")
+    runner.assertEqual(result.attempt, 2)
+    runner.assertEqual(result.attemptsRemaining, 3)
+}
+
 // MARK: - Summary
 
 print("")

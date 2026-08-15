@@ -2,26 +2,28 @@
 //  ChipScanSheet.swift
 //  GamesRoom
 //
-//  Track F-CAS-02 — member-facing chip scan surface.
+//  Track F-CAS-02 — member-facing chip scan surface (V0.72 slice 3).
 //
-//  The member points their phone at their own chip stack, the
-//  on-device segmentation detector (LOCKED, stress recall 0.975 /
-//  precision 1.000 / color 0.974) counts the stacks, and the member
-//  confirms or adjusts before the scan is recorded. The photo bytes
-//  are hashed (SHA-256) and discarded immediately — F-CAS-03: photos
-//  stay on-device, only the hash + vision snapshot travel.
+//  V0.72 rework: the hosted vision model is the authoritative counter
+//  for chip stacks on `minimax_vision` rooms. The member captures a
+//  JPEG, the `scan-settle` edge function (slice 2) hashes the bytes,
+//  sends them to the MiniMax vision model, and records the count
+//  server-side via service role (migration 069 RPCs). The member
+//  client never posts a count. The result screen is read-only:
+//  total points, per-color rows, withdrawn + net, photo hash tail,
+//  attempt position, and the privacy line.
 //
-//  The count estimate is the detector's known-weak metric (MAE ~6
-//  chips on low-contrast stacks), so every stack row is editable
-//  before confirm — the user-attestation fallback from the probe
-//  decision matrix.
+//  Re-scan: latest-wins, capped at 5 per event (server-enforced).
+//  429 → "Scan limit reached — ask your host to enter the count
+//  by hand" (HostManualSettleSheet, migration 070).
 //
-//  V0.71 — captures are explicit (shutter tap) via ScanCameraView.
-//  The V0.50 auto-capture preview deadlocked: it flipped `isScanning`
-//  before the frame callback while `processFrame` guarded on the same
-//  flag, so the first frame was always dropped and the flag never
-//  cleared — the sheet hung on "Counting chips…" with zero detector
-//  work run. See ScanCameraView.swift for the full post-mortem.
+//  Privacy reversal: V0.72 sends the JPEG to the MiniMax vision
+//  API. The bytes never persist server-side (edge function hashes
+//  + discards); the hash rides in the response so a disputed count
+//  can be matched to its capture frame. T1.2's `keepScanPhotos`
+//  toggle still writes the JPEG to the device sandbox for the
+//  member's own record.
+//
 //
 
 import SwiftUI
@@ -39,46 +41,58 @@ struct ChipScanSheet: View {
     @EnvironmentObject private var casinoService: CasinoService
     @EnvironmentObject private var authService: AuthService
 
-    @State private var detectedStacks: [DetectedStack] = []
-    @State private var totalValue: Int = 0
-    @State private var confidenceAvg: Double = 0
-    @State private var photoHash: String?
-    @State private var isScanning = false
-    @State private var isSubmitting = false
-    @State private var errorMessage: String?
-    @State private var showConfirm = false
-    @State private var lowConfidencePrompt = false
+    // V0.72 — scan-settle circuit. The service holds the URLSession
+    // and response DTOs; this view drives the capture-and-display
+    // loop on top of it.
+    @StateObject private var scanSettle = ScanSettleService()
 
-    // V0.71 — owns the AVCaptureSession across the camera ↔ confirm
-    // swap so a re-scan reuses the live session instead of rebuilding
-    // it (V0.50 tore the session down with every view swap).
-    // @StateObject, not @State: the shutter is disabled until
-    // `state == .running`, and @State never re-renders on the
-    // controller's @Published changes — the button stayed disabled
-    // forever with the live preview behind it.
+    // V0.71 — owns the AVCaptureSession across the camera ↔ result
+    // swap so a re-scan reuses the live session instead of
+    // rebuilding it (V0.50 tore the session down with every view
+    // swap). @StateObject, not @State: the shutter is disabled
+    // until `state == .running`, and @State never re-renders on
+    // the controller's @Published changes.
     @StateObject private var camera = ScanCameraController()
 
-    // T1.2 — opt-in photo retention. Default off: the F-CAS-03
-    // discard path stays identical. When on, the confirmed scan's
-    // JPEG lands in Documents/ScanPhotos/ and never leaves the
-    // device.
+    // T1.2 — opt-in photo retention. The F-CAS-03 discard path
+    // stays the default; when on, the confirmed scan's JPEG lands
+    // in Documents/ScanPhotos/ and never leaves the device.
     @AppStorage(StorageKeys.keepScanPhotos) private var keepScanPhotos = false
     @State private var lastJpeg: Data?
 
-    private var netDelta: Int { totalValue - withdrawn }
+    // Upload-in-flight flag. The shutter is disabled (no second
+    // capture can fire while the edge function is in transit) and
+    // the camera shows a progress overlay.
+    @State private var isUploading: Bool = false
+
+    // Result screen surface. nil ⇒ render the camera view; non-nil
+    // ⇒ render the read-only result screen. Re-scan clears this.
+    @State private var result: ScanSettleChipsResult?
+    @State private var showResult: Bool = false
+
+    // Inline error surface (camera view). The error's localized
+    // description drives the copy; the type drives the icon (none
+    // here — caption style only).
+    @State private var errorMessage: String?
+    @State private var scanError: ScanSettleService.ScanSettleError?
+
+    private var netDelta: Int {
+        if let result { return result.totalPoints - withdrawn }
+        return 0
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Theme.Palette.background.ignoresSafeArea()
 
-                if showConfirm {
-                    confirmView
+                if showResult, let result {
+                    resultView(result: result)
                 } else {
                     cameraView
                 }
             }
-            .navigationTitle(showConfirm ? "Your chips" : "Scan your chips")
+            .navigationTitle(showResult ? "Your chips" : "Scan your chips")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -104,6 +118,19 @@ struct ChipScanSheet: View {
                 default:
                     EmptyView()
                 }
+                if isUploading {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(1.4)
+                        Text("Counting chips…")
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, Theme.Layout.gutter)
@@ -126,27 +153,7 @@ struct ChipScanSheet: View {
                         .foregroundStyle(.red.opacity(0.85))
                 }
 
-                if isScanning {
-                    ProgressView()
-                        .tint(Theme.Palette.accent)
-                    Text("Counting chips…")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                } else if lowConfidencePrompt {
-                    Text("Low confidence — move closer, improve lighting, and try again.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    Button {
-                        lowConfidencePrompt = false
-                        showConfirm = true
-                    } label: {
-                        Text("Review result anyway")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                    }
-                } else {
+                if !isUploading {
                     Button {
                         capture()
                     } label: {
@@ -165,8 +172,7 @@ struct ChipScanSheet: View {
         }
     }
 
-    /// V0.71 — permission-refused / no-camera surface (the V0.50
-    /// preview silently rendered a black rectangle).
+    /// V0.71 — permission-refused / no-camera surface.
     @ViewBuilder
     private var cameraFallbackView: some View {
         VStack(spacing: 12) {
@@ -191,28 +197,25 @@ struct ChipScanSheet: View {
         .background(Theme.Palette.background)
     }
 
-    // MARK: - Confirm
+    // MARK: - Result
 
-    private var confirmView: some View {
+    private func resultView(result: ScanSettleChipsResult) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Your chips: \(totalValue) pts")
+                Text("Your chips: \(result.totalPoints) pts")
                     .font(Theme.Typography.display)
                     .foregroundStyle(Theme.Palette.primaryText)
                 HStack(spacing: 8) {
-                    Text("Confidence: \(Int(confidenceAvg * 100))%")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    Text("·")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    Text("On-device")
+                    Text("Counted by the table's vision service · counts are final")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
                 Text("Withdrew: \(withdrawn) pts")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                Text("Net: \(netDelta >= 0 ? "+" : "")\(netDelta) pts")
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(netDelta >= 0 ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Theme.Layout.gutter)
@@ -225,12 +228,8 @@ struct ChipScanSheet: View {
 
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    // Row identity is the index, not the stack's id:
-                    // DetectedStack.id embeds `count`, which changes
-                    // when the member edits the stepper — using it
-                    // would rebuild the row mid-interaction.
-                    ForEach(Array(detectedStacks.enumerated()), id: \.offset) { index, stack in
-                        stackRow(stack: stack, index: index)
+                    ForEach(Array(result.stacks.enumerated()), id: \.offset) { _, stack in
+                        stackRow(stack: stack)
                     }
                 }
             }
@@ -240,14 +239,23 @@ struct ChipScanSheet: View {
                 .padding(.horizontal, Theme.Layout.gutter)
 
             VStack(spacing: 8) {
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(.red.opacity(0.85))
+                HStack(spacing: 6) {
+                    Text("Attempt \(result.attempt) of \(ScanSettleService.maxAttempts)")
+                    if result.attemptsRemaining == 0 {
+                        Text("· last scan")
+                    }
                 }
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                Text("Photo \(String(result.photoHash.prefix(8)))…")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                Text("Your photo is analysed by a cloud vision model and never stored.")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 
-                Button(action: { Task { await confirm() } }) {
-                    Text(isSubmitting ? "Recording…" : "Looks right — record \(netDelta >= 0 ? "+" : "")\(netDelta) pts")
+                Button(action: { Task { await done() } }) {
+                    Text("Done")
                         .font(Theme.Typography.body.weight(.medium))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -255,23 +263,19 @@ struct ChipScanSheet: View {
                         .background(Theme.Palette.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                .disabled(isSubmitting)
 
-                Button {
-                    detectedStacks = []
-                    totalValue = 0
-                    confidenceAvg = 0
-                    photoHash = nil
-                    lastJpeg = nil
-                    showConfirm = false
-                    errorMessage = nil
-                    lowConfidencePrompt = false
-                } label: {
-                    Text("Re-scan")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                if result.attemptsRemaining > 0 {
+                    Button {
+                        resetForRescan()
+                    } label: {
+                        Text("Re-scan")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.accent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, Theme.Layout.gutter)
@@ -279,53 +283,38 @@ struct ChipScanSheet: View {
         }
     }
 
-    private func stackRow(stack: DetectedStack, index: Int) -> some View {
-        HStack(spacing: 12) {
+    private func stackRow(stack: ScanSettleChipStack) -> some View {
+        let chipColor = ChipColor(rawValue: stack.color.lowercased())
+        let displayName = chipColor?.displayName ?? stack.color.capitalized
+        let value = chipColor?.defaultValue ?? 0
+        return HStack(spacing: 12) {
             Circle()
-                .fill(chipColor(stack.chipColor))
+                .fill(swiftUIColor(for: chipColor))
                 .frame(width: 24, height: 24)
                 .overlay(
                     Text("\(stack.count)")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(stack.chipColor == .white ? .black : .white)
+                        .foregroundStyle(chipColor == .white ? .black : .white)
                 )
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(stack.chipColor.displayName) stack")
+                Text("\(displayName) stack")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText)
-                Text("\(stack.count) chips × \(chipValue(stack.chipColor)) pts")
+                Text("\(stack.count) × \(value) pts")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
 
             Spacer()
-
-            // The count estimate is the detector's weak metric —
-            // the member adjusts before confirming.
-            Stepper("", value: Binding(
-                get: { stack.count },
-                set: { newCount in
-                    detectedStacks[index] = DetectedStack(
-                        seatIndex: stack.seatIndex,
-                        chipColor: stack.chipColor,
-                        count: max(1, newCount),
-                        confidence: stack.confidence,
-                        boundingBox: stack.boundingBox
-                    )
-                    recomputeTotals()
-                }
-            ), in: 1...200)
-            .labelsHidden()
         }
         .padding(.horizontal, Theme.Layout.gutter)
         .padding(.vertical, 12)
     }
 
-    // MARK: - Helpers
-
-    private func chipColor(_ color: ChipColor) -> Color {
-        switch color {
+    private func swiftUIColor(for chipColor: ChipColor?) -> Color {
+        guard let chipColor else { return Theme.Palette.accent }
+        switch chipColor {
         case .red: return .red
         case .blue: return .blue
         case .green: return .green
@@ -335,102 +324,74 @@ struct ChipScanSheet: View {
         }
     }
 
-    private func chipValue(_ color: ChipColor) -> Int {
-        color.defaultValue
-    }
-
-    private func recomputeTotals() {
-        totalValue = detectedStacks.reduce(0) { $0 + $1.count * chipValue($1.chipColor) }
-        confidenceAvg = detectedStacks.isEmpty
-            ? 0
-            : detectedStacks.map(\.confidence).reduce(0, +) / Double(detectedStacks.count)
-    }
-
     // MARK: - Async
 
-    /// V0.71 — explicit capture. One shutter tap → one frame → one
-    /// detect pass. No auto-grab of the cold first frame, no shared
-    /// re-entry flag between the camera and the processing task
-    /// (the V0.50 deadlock — see file header).
     private func capture() {
-        guard !isScanning else { return }
-        isScanning = true
+        guard !isUploading else { return }
+        isUploading = true
         errorMessage = nil
+        scanError = nil
         Task { await processFrame() }
     }
 
     private func processFrame() async {
-        defer { isScanning = false }
+        defer { isUploading = false }
 
         guard let cg = await camera.capture() else {
             errorMessage = "Couldn't grab a camera frame. Try again."
-            return
-        }
-
-        // F-CAS-03: hash the photo bytes, then discard them. Only
-        // the hash + vision snapshot travel. T1.2: when the opt-in
-        // is on, the JPEG is kept for the confirm step instead.
-        let jpeg = jpegData(from: cg)
-        let hash = jpeg.map { PhotoHash.sha256($0) }
-        if keepScanPhotos {
-            lastJpeg = jpeg
-        }
-
-        let stacks = ChipSegmentationDetector().detect(cg: cg)
-        guard !stacks.isEmpty else {
-            errorMessage = "No chip stacks found. Move closer, improve lighting, and try again."
-            return
-        }
-
-        detectedStacks = stacks
-        photoHash = hash
-        recomputeTotals()
-        if ScanConfidenceGate.shouldPromptRescan(confidenceAvg: confidenceAvg) {
-            lowConfidencePrompt = true
             Haptics.warning()
             return
         }
-        showConfirm = true
-    }
 
-    private func confirm() async {
-        guard !isSubmitting else { return }
-        isSubmitting = true
-        errorMessage = nil
-        defer { isSubmitting = false }
+        let jpeg = jpegData(from: cg)
+        if keepScanPhotos, let jpeg {
+            lastJpeg = jpeg
+        }
 
-        let snapshot = VisionSnapshot(
-            stacks: detectedStacks,
-            totalValue: totalValue,
-            confidenceAvg: confidenceAvg,
-            discarded: false,
-            photoHash: photoHash
-        )
+        guard let jpeg else {
+            errorMessage = "Couldn't encode the photo. Try again."
+            Haptics.warning()
+            return
+        }
 
         do {
-            _ = try await casinoService.submitMemberScan(
-                eventId: eventId,
-                visionAmount: Int64(totalValue),
-                visionSnapshot: snapshot,
-                confidence: confidenceAvg,
-                source: .onDevice
-            )
+            let result = try await scanSettle.submitChips(eventId: eventId, jpeg: jpeg)
+            self.result = result
+            self.showResult = true
+            self.errorMessage = nil
+            self.scanError = nil
             // T1.2 — best-effort local write. A failed photo save
-            // never fails the scan; the hash is already recorded.
-            if keepScanPhotos, let jpeg = lastJpeg {
-                persistScanPhoto(jpeg)
+            // never fails the scan; the count is already recorded.
+            if keepScanPhotos, let lastJpeg {
+                persistScanPhoto(lastJpeg)
             }
             Haptics.success()
-            onDone()
-            dismiss()
+        } catch let error as ScanSettleService.ScanSettleError {
+            self.scanError = error
+            self.errorMessage = error.errorDescription
+            Haptics.warning()
         } catch {
-            errorMessage = "Failed to record scan: \((error as NSError).localizedDescription)"
+            self.errorMessage = (error as NSError).localizedDescription
+            Haptics.warning()
         }
+    }
+
+    private func resetForRescan() {
+        result = nil
+        showResult = false
+        errorMessage = nil
+        scanError = nil
+        lastJpeg = nil
+    }
+
+    private func done() {
+        onDone()
+        dismiss()
     }
 
     /// T1.2 — writes the confirmed scan's JPEG to the app sandbox
     /// (`Documents/ScanPhotos/<eventId>-<memberId>-<timestamp>.jpg`).
-    /// Local-only by design; the photo is never uploaded.
+    /// Local-only by design; the photo is never uploaded by the app.
     private func persistScanPhoto(_ jpeg: Data) {
         guard let memberId = authService.currentUserId else { return }
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

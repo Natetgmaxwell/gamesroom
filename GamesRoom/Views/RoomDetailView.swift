@@ -70,6 +70,10 @@ struct RoomDetailView: View {
     // their own stack of won black cards on their own phone; the
     // tally is recorded as the authoritative count for the night.
     @State private var cahScanEvent: Event?
+    // V0.72 slice 3 — host manual settle fallback. The host enters
+    // the count by hand when the member can't scan (no camera,
+    // model down, rate-limited). Migration 070 carve-out.
+    @State private var hostManualEvent: Event?
     @State private var casinoWithdrawn: Int = 0
     // V0.47 — host-only pending-withdrawal list. Loaded in
     // `refresh`; the host dispenses physical chips and taps
@@ -354,6 +358,23 @@ struct RoomDetailView: View {
                 defaultCardCount: roomService.effectiveWinPoints(roomId: room.id, packSlug: event.packSlug)
             )
             .environmentObject(roomService)
+            .environmentObject(scoringService)
+        }
+        // V0.72 slice 3 — host manual settle fallback. The host
+        // enters the final count by hand on behalf of a member when
+        // the member can't scan. Migration 070 admits the host past
+        // the `minimax_vision` provider gate with snapshot source
+        // 'manual'. Presented from the tertiary "Enter count by hand"
+        // CTA on the WitnessSlot.
+        .sheet(item: $hostManualEvent) { event in
+            HostManualSettleSheet(
+                eventId: event.id,
+                roomId: room.id,
+                isCAH: event.packSlug == "cards_against_humanity",
+                onDone: { Task { await refresh(force: true) } }
+            )
+            .environmentObject(roomService)
+            .environmentObject(casinoService)
             .environmentObject(scoringService)
         }
         // V0.9 Wave 2 Slice 2.2 - inline "+" create-room sheet. Same
@@ -700,7 +721,12 @@ struct RoomDetailView: View {
                     // lock 2026-07-09).
                     onWithdrawMore: isCAH
                         ? nil
-                        : { Task { await openWithdraw(event: event) } }
+                        : { Task { await openWithdraw(event: event) } },
+                    // V0.72 — host manual settle fallback. Migration
+                    // 070 carve-out for the degenerate case.
+                    onManualSettle: isHost
+                        ? { hostManualEvent = event }
+                        : nil
                 )
 
             // M1.1 — `.tonightEvent` renders the witness hero with
@@ -731,6 +757,11 @@ struct RoomDetailView: View {
                     // settle CAH cards.
                     onCAHSettle: roomHasCAHPack
                         ? { cahScanEvent = event }
+                        : nil,
+                    // V0.72 — host manual settle fallback. Migration
+                    // 070 carve-out for the degenerate case.
+                    onManualSettle: isHost
+                        ? { hostManualEvent = event }
                         : nil
                 )
 
@@ -778,6 +809,11 @@ struct RoomDetailView: View {
                     // settle CAH cards.
                     onCAHSettle: roomHasCAHPack
                         ? { cahScanEvent = event }
+                        : nil,
+                    // V0.72 — host manual settle fallback. Migration
+                    // 070 carve-out for the degenerate case.
+                    onManualSettle: isHost
+                        ? { hostManualEvent = event }
                         : nil
                 )
 
@@ -1718,6 +1754,11 @@ private struct WitnessSlot: View {
     /// nil = don't render. Styled as an outline button, one tap
     /// behind the primary CTA.
     var onWithdrawMore: (() -> Void)? = nil
+    /// V0.72 host-only "Enter count by hand" tertiary. Migration
+    /// 070 carve-out — the degenerate fallback when a member can't
+    /// scan (no camera, model down, rate-limited). nil = don't
+    /// render. Same outline styling as the other secondary CTAs.
+    var onManualSettle: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
@@ -1834,6 +1875,27 @@ private struct WitnessSlot: View {
                 .accessibilityLabel(Text("Count your CAH cards"))
             }
 
+            // V0.72 — host-only "Enter count by hand" tertiary.
+            // Migration 070 carve-out (degenerate-case fallback when
+            // a member can't scan). Same outline styling as the
+            // other secondary CTAs; renders after the CAH /
+            // withdraw-more buttons.
+            if let onManualSettle {
+                Button(action: onManualSettle) {
+                    Text("Enter count by hand")
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
+                }
+                .buttonStyle(.plain)
+                .pressScale()
+                .padding(.top, 8)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .accessibilityLabel(Text("Enter count by hand (host)"))
+            }
+
             // P0.4 — host-only "Score a round" affordance. Renders
             // below the member-facing CTA so the host's at-play
             // surface carries both the chip-withdraw entry point
@@ -1872,6 +1934,7 @@ private struct WitnessSlot: View {
         .animation(Theme.Motion.popIn, value: workingHand)
         .animation(Theme.Motion.fade, value: onWithdrawMore != nil)
         .animation(Theme.Motion.fade, value: onCAHSettle != nil)
+        .animation(Theme.Motion.fade, value: onManualSettle != nil)
     }
 
     /// V0.70 — title for the primary CTA. `.withdraw` reads

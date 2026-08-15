@@ -370,7 +370,8 @@ final class CasinoService: ObservableObject {
         visionAmount: Int64,
         visionSnapshot: VisionSnapshot,
         confidence: Double?,
-        source: DetectionSource
+        source: DetectionSource,
+        memberId: UUID? = nil
     ) async throws -> SettlementAttestation {
         // Migration 030 ships record_member_scan as a 3-param RPC
         // (uuid, bigint, jsonb) — server extracts detection_source
@@ -380,6 +381,12 @@ final class CasinoService: ObservableObject {
         // that signature never made it into the migration set,
         // so callers were 400-ing. Fold both into the snapshot
         // envelope before sending.
+        //
+        // V0.72 slice 3 — `memberId` carries the host manual
+        // fallback (migration 070 carve-out): the room host records
+        // on behalf of a member when the member can't scan (no
+        // camera, model down, rate-limited). nil = record as the
+        // caller (member scan, legacy on_device path).
         let encoder = JSONEncoder()
         let snapshotData = try encoder.encode(visionSnapshot)
         let snapshotDict = try JSONSerialization.jsonObject(
@@ -395,12 +402,17 @@ final class CasinoService: ObservableObject {
         )
         let envelopeJSON = String(data: envelopeData, encoding: .utf8) ?? "{}"
 
+        var params: [String: String] = [
+            "p_session_id": eventId.uuidString,
+            "p_vision_amount_points": String(visionAmount),
+            "p_vision_snapshot": envelopeJSON
+        ]
+        if let memberId {
+            params["p_member_id"] = memberId.uuidString
+        }
+
         let result: Bool = try await SupabaseClientProvider.shared
-            .rpc("record_member_scan", params: [
-                "p_session_id": eventId.uuidString,
-                "p_vision_amount_points": String(visionAmount),
-                "p_vision_snapshot": envelopeJSON
-            ])
+            .rpc("record_member_scan", params: params)
             .execute()
             .value
         self.lastError = nil
