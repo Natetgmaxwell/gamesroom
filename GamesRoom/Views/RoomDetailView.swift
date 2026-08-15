@@ -948,7 +948,12 @@ struct RoomDetailView: View {
     }
 
     private func loadLeaderboardIfNeeded(force: Bool = false) async {
-        if roomService.cachedLeaderboard(roomId: room.id).isEmpty {
+        // Honor `force`: a post-scan `refresh(force: true)` must re-fetch
+        // even when the cache is already populated, or the standings
+        // card keeps showing the pre-scan balance. (V0.72 settle writes
+        // points_balance/season_score server-side; the cache was never
+        // invalidated on the client.)
+        if force || roomService.cachedLeaderboard(roomId: room.id).isEmpty {
             await roomService.loadLeaderboard(roomId: room.id, force: force)
         }
     }

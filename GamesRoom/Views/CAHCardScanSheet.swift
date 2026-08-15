@@ -52,6 +52,9 @@ struct CAHCardScanSheet: View {
     @State private var isUploading: Bool = false
     @State private var result: ScanSettleCardsResult?
     @State private var showResult: Bool = false
+    // V0.72 microinteraction — the card count rolls from 0 to the
+    // final tally on reveal (numericText + popIn spring).
+    @State private var displayedCount: Int = 0
     @State private var errorMessage: String?
     @State private var scanError: ScanSettleService.ScanSettleError?
 
@@ -62,6 +65,7 @@ struct CAHCardScanSheet: View {
 
                 if showResult, let result {
                     resultView(result: result)
+                        .transition(.scale(scale: 0.92).combined(with: .opacity))
                 } else {
                     cameraView
                 }
@@ -176,9 +180,11 @@ struct CAHCardScanSheet: View {
     private func resultView(result: ScanSettleCardsResult) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Your cards: \(result.count)")
+                Text("Your cards: \(displayedCount)")
                     .font(Theme.Typography.display)
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .contentTransition(.numericText())
+                    .animation(Theme.Motion.popIn, value: displayedCount)
                 Text("Counted by the table's vision service · counts are final")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
@@ -267,7 +273,11 @@ struct CAHCardScanSheet: View {
         do {
             let result = try await scanSettle.submitCards(eventId: eventId, jpeg: jpeg)
             self.result = result
-            self.showResult = true
+            // V0.72 microinteraction — result pops in + count rolls.
+            withAnimation(Theme.Motion.popIn) {
+                self.showResult = true
+                self.displayedCount = result.count
+            }
             self.errorMessage = nil
             self.scanError = nil
             Haptics.success()
@@ -284,6 +294,7 @@ struct CAHCardScanSheet: View {
     private func resetForRescan() {
         result = nil
         showResult = false
+        displayedCount = 0
         errorMessage = nil
         scanError = nil
     }

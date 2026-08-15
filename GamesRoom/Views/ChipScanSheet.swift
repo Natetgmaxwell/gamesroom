@@ -69,6 +69,10 @@ struct ChipScanSheet: View {
     // ⇒ render the read-only result screen. Re-scan clears this.
     @State private var result: ScanSettleChipsResult?
     @State private var showResult: Bool = false
+    // V0.72 microinteraction — the count rolls from 0 to the final
+    // total on reveal (numericText + chipSettle-style spring), so the
+    // value reads as landing rather than appearing.
+    @State private var displayedTotal: Int = 0
 
     // Inline error surface (camera view). The error's localized
     // description drives the copy; the type drives the icon (none
@@ -88,6 +92,7 @@ struct ChipScanSheet: View {
 
                 if showResult, let result {
                     resultView(result: result)
+                        .transition(.scale(scale: 0.92).combined(with: .opacity))
                 } else {
                     cameraView
                 }
@@ -202,9 +207,11 @@ struct ChipScanSheet: View {
     private func resultView(result: ScanSettleChipsResult) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Your chips: \(result.totalPoints) pts")
+                Text("Your chips: \(displayedTotal) pts")
                     .font(Theme.Typography.display)
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .contentTransition(.numericText())
+                    .animation(Theme.Motion.popIn, value: displayedTotal)
                 HStack(spacing: 8) {
                     Text("Counted by the table's vision service · counts are final")
                         .font(Theme.Typography.caption)
@@ -357,7 +364,16 @@ struct ChipScanSheet: View {
         do {
             let result = try await scanSettle.submitChips(eventId: eventId, jpeg: jpeg)
             self.result = result
-            self.showResult = true
+            // V0.72 microinteraction — the result view pops in (scale +
+            // fade) rather than snapping, so the count reveal reads as a
+            // resolution beat. The count itself rolls via numericText.
+            withAnimation(Theme.Motion.popIn) {
+                self.showResult = true
+            }
+            // Roll the count up from 0 to the final total.
+            withAnimation(Theme.Motion.popIn) {
+                self.displayedTotal = result.totalPoints
+            }
             self.errorMessage = nil
             self.scanError = nil
             // T1.2 — best-effort local write. A failed photo save
@@ -379,6 +395,7 @@ struct ChipScanSheet: View {
     private func resetForRescan() {
         result = nil
         showResult = false
+        displayedTotal = 0
         errorMessage = nil
         scanError = nil
         lastJpeg = nil
