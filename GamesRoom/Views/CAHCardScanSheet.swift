@@ -27,6 +27,11 @@
 //  The hash + a `VisionSnapshot` summary travel to the server so
 //  a disputed tally can be matched to its capture frame.
 //
+//  V0.71 — captures are explicit (shutter tap) via ScanCameraView;
+//  this sheet inherited the V0.50 auto-capture deadlock (frozen
+//  "Counting cards…", zero detector work). See ScanCameraView.swift
+//  for the post-mortem.
+//
 
 import SwiftUI
 import AVFoundation
@@ -51,6 +56,12 @@ struct CAHCardScanSheet: View {
     @State private var showConfirm: Bool = false
     @State private var lowConfidencePrompt: Bool = false
 
+    // V0.71 — owns the AVCaptureSession across the camera ↔ confirm
+    // swap (see ScanCameraView.swift). @StateObject, not @State: the
+    // shutter is disabled until `state == .running`, and @State never
+    // re-renders on the controller's @Published changes.
+    @StateObject private var camera = ScanCameraController()
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -72,14 +83,22 @@ struct CAHCardScanSheet: View {
             }
         }
         .tint(Theme.Palette.accent)
+        .onAppear { camera.start() }
+        .onDisappear { camera.stop() }
     }
 
     // MARK: - Camera
 
     private var cameraView: some View {
         VStack(spacing: 16) {
-            ScanCameraPreview(isScanning: $isScanning) { pixelBuffer in
-                Task { await processFrame(pixelBuffer: pixelBuffer) }
+            ZStack {
+                ScanCameraView(controller: camera)
+                switch camera.state {
+                case .denied, .unavailable:
+                    cameraFallbackView
+                default:
+                    EmptyView()
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, Theme.Layout.gutter)
@@ -92,9 +111,15 @@ struct CAHCardScanSheet: View {
                 Text("Point at your stack of black cards")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
-                Text("Hold steady. The vision count is a starting point — confirm before recording.")
+                Text("Hold steady, then tap the shutter.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.red.opacity(0.85))
+                }
 
                 if isScanning {
                     ProgressView()
@@ -117,19 +142,47 @@ struct CAHCardScanSheet: View {
                             .padding(.vertical, 12)
                     }
                 } else {
-                    Text("Tap shutter to scan")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                }
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(.red.opacity(0.85))
+                    Button {
+                        capture()
+                    } label: {
+                        Text("Scan cards")
+                            .font(Theme.Typography.body.weight(.medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Theme.Palette.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .disabled(camera.state != .running)
                 }
             }
             .padding(.bottom, 24)
         }
+    }
+
+    /// V0.71 — permission-refused / no-camera surface.
+    @ViewBuilder
+    private var cameraFallbackView: some View {
+        VStack(spacing: 12) {
+            if camera.state == .denied {
+                Text("Camera access is off.")
+                    .font(Theme.Typography.body.weight(.medium))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(Theme.Typography.caption)
+            } else {
+                Text("No camera available on this device.")
+                    .font(Theme.Typography.body.weight(.medium))
+                    .foregroundStyle(Theme.Palette.primaryText)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Palette.background)
     }
 
     // MARK: - Confirm
@@ -224,20 +277,27 @@ struct CAHCardScanSheet: View {
 
     // MARK: - Async
 
-    private func processFrame(pixelBuffer: CVPixelBuffer) async {
+    /// V0.71 — explicit capture. One shutter tap → one frame → one
+    /// detect pass (see ScanCameraView.swift for the V0.50
+    /// post-mortem this replaces).
+    private func capture() {
         guard !isScanning else { return }
         isScanning = true
-        Haptics.light()
+        errorMessage = nil
+        Task { await processFrame() }
+    }
+
+    private func processFrame() async {
         defer { isScanning = false }
 
-        guard let cg = cgImage(from: pixelBuffer) else {
-            errorMessage = "Couldn't read the camera frame. Try again."
+        guard let cg = await camera.capture() else {
+            errorMessage = "Couldn't grab a camera frame. Try again."
             return
         }
 
         // Discard-only: hash the JPEG and drop the bytes. No
         // opt-in photo retention for CAH (per privacy posture).
-        let jpeg = jpegData(from: pixelBuffer)
+        let jpeg = jpegData(from: cg)
         let hash = jpeg.map { PhotoHash.sha256($0) }
 
         // Cards are thinner than chips — `pxPerUnit: 2` so the
@@ -301,14 +361,8 @@ struct CAHCardScanSheet: View {
 
     // MARK: - Pixel conversion
 
-    private func cgImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext(options: [.workingColorSpace: NSNull()])
-        return context.createCGImage(ciImage, from: ciImage.extent)
-    }
-
-    private func jpegData(from pixelBuffer: CVPixelBuffer) -> Data? {
-        guard let cg = cgImage(from: pixelBuffer) else { return nil }
+    /// precond: main actor. The CGImage is already a private copy.
+    private func jpegData(from cg: CGImage) -> Data? {
         let uiImage = UIImage(cgImage: cg)
         return uiImage.jpegData(compressionQuality: 0.8)
     }

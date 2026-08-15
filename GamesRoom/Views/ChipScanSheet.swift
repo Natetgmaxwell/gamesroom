@@ -16,6 +16,13 @@
 //  before confirm — the user-attestation fallback from the probe
 //  decision matrix.
 //
+//  V0.71 — captures are explicit (shutter tap) via ScanCameraView.
+//  The V0.50 auto-capture preview deadlocked: it flipped `isScanning`
+//  before the frame callback while `processFrame` guarded on the same
+//  flag, so the first frame was always dropped and the flag never
+//  cleared — the sheet hung on "Counting chips…" with zero detector
+//  work run. See ScanCameraView.swift for the full post-mortem.
+//
 
 import SwiftUI
 import AVFoundation
@@ -41,6 +48,15 @@ struct ChipScanSheet: View {
     @State private var errorMessage: String?
     @State private var showConfirm = false
     @State private var lowConfidencePrompt = false
+
+    // V0.71 — owns the AVCaptureSession across the camera ↔ confirm
+    // swap so a re-scan reuses the live session instead of rebuilding
+    // it (V0.50 tore the session down with every view swap).
+    // @StateObject, not @State: the shutter is disabled until
+    // `state == .running`, and @State never re-renders on the
+    // controller's @Published changes — the button stayed disabled
+    // forever with the live preview behind it.
+    @StateObject private var camera = ScanCameraController()
 
     // T1.2 — opt-in photo retention. Default off: the F-CAS-03
     // discard path stays identical. When on, the confirmed scan's
@@ -72,14 +88,22 @@ struct ChipScanSheet: View {
             }
         }
         .tint(Theme.Palette.accent)
+        .onAppear { camera.start() }
+        .onDisappear { camera.stop() }
     }
 
     // MARK: - Camera
 
     private var cameraView: some View {
         VStack(spacing: 16) {
-            ScanCameraPreview(isScanning: $isScanning) { pixelBuffer in
-                Task { await processFrame(pixelBuffer: pixelBuffer) }
+            ZStack {
+                ScanCameraView(controller: camera)
+                switch camera.state {
+                case .denied, .unavailable:
+                    cameraFallbackView
+                default:
+                    EmptyView()
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, Theme.Layout.gutter)
@@ -92,9 +116,15 @@ struct ChipScanSheet: View {
                 Text("Point at your chip stack")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
-                Text("Hold steady. The host doesn't scan for you anymore.")
+                Text("Hold steady, then tap the shutter.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.red.opacity(0.85))
+                }
 
                 if isScanning {
                     ProgressView()
@@ -117,19 +147,48 @@ struct ChipScanSheet: View {
                             .padding(.vertical, 12)
                     }
                 } else {
-                    Text("Tap shutter to scan")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                }
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(.red.opacity(0.85))
+                    Button {
+                        capture()
+                    } label: {
+                        Text("Scan chips")
+                            .font(Theme.Typography.body.weight(.medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Theme.Palette.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .disabled(camera.state != .running)
                 }
             }
             .padding(.bottom, 24)
         }
+    }
+
+    /// V0.71 — permission-refused / no-camera surface (the V0.50
+    /// preview silently rendered a black rectangle).
+    @ViewBuilder
+    private var cameraFallbackView: some View {
+        VStack(spacing: 12) {
+            if camera.state == .denied {
+                Text("Camera access is off.")
+                    .font(Theme.Typography.body.weight(.medium))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(Theme.Typography.caption)
+            } else {
+                Text("No camera available on this device.")
+                    .font(Theme.Typography.body.weight(.medium))
+                    .foregroundStyle(Theme.Palette.primaryText)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Palette.background)
     }
 
     // MARK: - Confirm
@@ -289,21 +348,29 @@ struct ChipScanSheet: View {
 
     // MARK: - Async
 
-    private func processFrame(pixelBuffer: CVPixelBuffer) async {
+    /// V0.71 — explicit capture. One shutter tap → one frame → one
+    /// detect pass. No auto-grab of the cold first frame, no shared
+    /// re-entry flag between the camera and the processing task
+    /// (the V0.50 deadlock — see file header).
+    private func capture() {
         guard !isScanning else { return }
         isScanning = true
-        Haptics.light()
+        errorMessage = nil
+        Task { await processFrame() }
+    }
+
+    private func processFrame() async {
         defer { isScanning = false }
 
-        guard let cg = cgImage(from: pixelBuffer) else {
-            errorMessage = "Couldn't read the camera frame. Try again."
+        guard let cg = await camera.capture() else {
+            errorMessage = "Couldn't grab a camera frame. Try again."
             return
         }
 
         // F-CAS-03: hash the photo bytes, then discard them. Only
         // the hash + vision snapshot travel. T1.2: when the opt-in
         // is on, the JPEG is kept for the confirm step instead.
-        let jpeg = jpegData(from: pixelBuffer)
+        let jpeg = jpegData(from: cg)
         let hash = jpeg.map { PhotoHash.sha256($0) }
         if keepScanPhotos {
             lastJpeg = jpeg
@@ -374,106 +441,11 @@ struct ChipScanSheet: View {
         try? jpeg.write(to: url)
     }
 
-    // MARK: - Pixel conversion
-
-    private func cgImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext(options: [.workingColorSpace: NSNull()])
-        return context.createCGImage(ciImage, from: ciImage.extent)
-    }
-
-    private func jpegData(from pixelBuffer: CVPixelBuffer) -> Data? {
-        guard let cg = cgImage(from: pixelBuffer) else { return nil }
+    /// precond: main actor (called from `processFrame`, which runs in
+    /// a Task from the view). The CGImage is already a private copy —
+    /// safe to encode here.
+    private func jpegData(from cg: CGImage) -> Data? {
         let uiImage = UIImage(cgImage: cg)
         return uiImage.jpegData(compressionQuality: 0.8)
-    }
-}
-
-// MARK: - Camera preview
-
-struct ScanCameraPreview: UIViewControllerRepresentable {
-    @Binding var isScanning: Bool
-    let onFrameCaptured: (CVPixelBuffer) -> Void
-
-    func makeUIViewController(context: Context) -> ScanCameraViewController {
-        let vc = ScanCameraViewController()
-        vc.onFrameCaptured = onFrameCaptured
-        vc.isScanningBinding = $isScanning
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: ScanCameraViewController, context: Context) {}
-}
-
-class ScanCameraViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate {
-    var onFrameCaptured: ((CVPixelBuffer) -> Void)?
-    var isScanningBinding: Binding<Bool>
-
-    init() {
-        self.isScanningBinding = .constant(false)
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-    private var captureSession: AVCaptureSession?
-    private var previewLayer: AVCaptureVideoPreviewLayer?
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .black
-        setupCamera()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        previewLayer?.frame = view.bounds
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        captureSession?.stopRunning()
-    }
-
-    private func setupCamera() {
-        let session = AVCaptureSession()
-        session.sessionPreset = .high
-
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-              let input = try? AVCaptureDeviceInput(device: device) else { return }
-
-        if session.canAddInput(input) {
-            session.addInput(input)
-        }
-
-        let output = AVCaptureVideoDataOutput()
-        output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera"))
-        output.alwaysDiscardsLateVideoFrames = true
-        if session.canAddOutput(output) {
-            session.addOutput(output)
-        }
-
-        let preview = AVCaptureVideoPreviewLayer(session: session)
-        preview.videoGravity = .resizeAspectFill
-        preview.frame = view.bounds
-        view.layer.addSublayer(preview)
-
-        self.captureSession = session
-        self.previewLayer = preview
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            session.startRunning()
-        }
-    }
-
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        guard !isScanningBinding.wrappedValue else { return }
-
-        DispatchQueue.main.async {
-            self.isScanningBinding.wrappedValue = true
-            self.onFrameCaptured?(pixelBuffer)
-        }
     }
 }

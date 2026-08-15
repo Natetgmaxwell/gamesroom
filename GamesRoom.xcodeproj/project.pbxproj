@@ -38,6 +38,7 @@
 		AAAAAAAA000000000000046D /* ScoreSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000046C /* ScoreSnapshotStore.swift */; };
 		AAAAAAAA0000000000000474 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000475 /* CalendarService.swift */; };
 		AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000457 /* ChipScanSheet.swift */; };
+		AAAAAAAA0000000000000492 /* ScanCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000491 /* ScanCameraView.swift */; };
 		AAAAAAAA0000000000000477 /* ChipSegmentationDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000455 /* ChipSegmentationDetector.swift */; };
 		AAAAAAAA0000000000000478 /* PhotoHash.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000456 /* PhotoHash.swift */; };
 		AAAAAAAA000000000000047A /* RoomStoreProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000479 /* RoomStoreProtocol.swift */; };
@@ -180,6 +181,7 @@
 		AAAAAAAA0000000000000455 /* ChipSegmentationDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipSegmentationDetector.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000456 /* PhotoHash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoHash.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000457 /* ChipScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipScanSheet.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000491 /* ScanCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanCameraView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041B /* MascotPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPersonality.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041C /* MascotPoliticalIdeology.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPoliticalIdeology.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000041D /* Event.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Event.swift; sourceTree = "<group>"; };
@@ -434,6 +436,7 @@
 				AAAAAAAA0000000000000457 /* ChipScanSheet.swift */,
 				AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */,
 				AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */,
+				AAAAAAAA0000000000000491 /* ScanCameraView.swift */,
 				AAAAAAAA000000000000048B /* SeasonStatCardView.swift */,
 				AAAAAAAA00000000000000FC /* Components */,
 			);
@@ -729,6 +732,7 @@
 				AAAAAAAA00000000000000E8 /* JoinRoomSheet.swift in Sources */,
 				AAAAAAAA00000000000000EA /* WithdrawChipsSheet.swift in Sources */,
 				AAAAAAAA0000000000000476 /* ChipScanSheet.swift in Sources */,
+				AAAAAAAA0000000000000492 /* ScanCameraView.swift in Sources */,
 				AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */,
 				AAAAAAAA0000000000000483 /* CAHCardScanSheet.swift in Sources */,
 				AAAAAAAA0000000000000485 /* Haptics.swift in Sources */,
