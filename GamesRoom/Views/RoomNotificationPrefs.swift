@@ -93,6 +93,14 @@ struct RoomNotifSettingsSection: View {
     @EnvironmentObject private var auth: AuthService
     let room: Room
 
+    /// Live room from the service cache — the opt-in RPC mirrors into
+    /// it, so the toggle reflects server truth instead of the frozen
+    /// snapshot captured when the sheet opened. Same source of truth
+    /// the room page reads.
+    private var liveRoom: Room {
+        roomService.rooms.first(where: { $0.id == room.id }) ?? room
+    }
+
     private var activeEvent: Event? {
         roomService.cachedActiveEvent(roomId: room.id)
     }
@@ -100,7 +108,7 @@ struct RoomNotifSettingsSection: View {
     var body: some View {
         Section {
             Toggle(isOn: Binding(
-                get: { room.notificationsEnabled },
+                get: { liveRoom.notificationsEnabled },
                 set: { newValue in
                     Task {
                         try? await roomService.setNotificationsEnabled(
@@ -123,15 +131,15 @@ struct RoomNotifSettingsSection: View {
 
             // Per-event mute: only meaningful while pushes are on,
             // and only for the room's active (unsettled) event.
-            if room.notificationsEnabled, let event = activeEvent {
+            if liveRoom.notificationsEnabled, let event = activeEvent {
                 EventMuteRow(event: event, currentUserId: auth.currentUser?.id)
             }
         } header: {
             Text("My notifications")
         } footer: {
-            Text(room.notificationsEnabled
+            Text(liveRoom.notificationsEnabled
                  ? "Mute a single night below. Declining a seat also mutes that night."
-                 : "Turn on to get a nudge when \(room.name) schedules a night.")
+                 : "Turn on to get a nudge when \(liveRoom.name) schedules a night.")
         }
     }
 }
