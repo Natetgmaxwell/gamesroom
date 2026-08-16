@@ -592,6 +592,13 @@ actor InMemoryRoomStore: RoomStore {
         return RedeemedRoom(roomId: room.id, roomName: room.name)
     }
 
+    /// V0.76 — the caller's invite rewards in a room. The in-memory
+    /// store has no reward ledger, so it returns zeroed values (the
+    /// live store is the source of truth for rewards).
+    func fetchMyInviteRewards(roomId: UUID) async throws -> InviteRewards {
+        return InviteRewards(friendsJoined: 0, totalReward: 0)
+    }
+
     /// Returns one synthetic `Member` row per seeded room so the
     /// roster surface renders without Supabase. The host is always
     /// row 0 (matches the live `get_room_members` ordering: host

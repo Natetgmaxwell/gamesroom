@@ -68,6 +68,12 @@ protocol RoomStore: Sendable {
     /// maps these to user-facing error strings).
     func redeemJoinCode(code: String) async throws -> RedeemedRoom
 
+    /// V0.76 — the caller's invite rewards in a room: how many
+    /// friends joined via their codes and the total points earned.
+    /// Mirrors `get_my_invite_rewards(p_room_id)` (migration 076).
+    /// Returns zeroed values when the caller has no rewards yet.
+    func fetchMyInviteRewards(roomId: UUID) async throws -> InviteRewards
+
     /// Lists the members of a room, host-first then alphabetical.
     /// Mirrors `get_room_members(p_room_id)` (migration 008). The
     /// Swift mirror is the `Member` model — name, role, joined-at.

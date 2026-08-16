@@ -265,6 +265,19 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         return row
     }
 
+    /// V0.76 — the caller's invite rewards in a room. Mirrors
+    /// `get_my_invite_rewards(p_room_id)` (migration 076). Returns
+    /// zeroed values when the caller has no rewards yet.
+    func fetchMyInviteRewards(roomId: UUID) async throws -> InviteRewards {
+        let rows: [InviteRewards] = try await SupabaseClientProvider.shared
+            .rpc("get_my_invite_rewards", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows.first ?? InviteRewards(friendsJoined: 0, totalReward: 0)
+    }
+
     /// The live RPC is `get_room_members(p_room_id)` (migration
     /// 008). Returns one row per room member, host-first then
     /// alphabetical by display name.

@@ -81,6 +81,7 @@
 		AAAAAAAA00000000000000DC /* DetectedStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000432 /* DetectedStack.swift */; };
 		AAAAAAAA00000000000000DE /* DetectionSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000433 /* DetectionSource.swift */; };
 		AAAAAAAA00000000000000E0 /* RedeemedRoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000438 /* RedeemedRoom.swift */; };
+		AAAAAAAA00000000000000EE /* InviteRewards.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA00000000000004AD /* InviteRewards.swift */; };
 		AAAAAAAA00000000000000E1 /* PackDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000439 /* PackDefinition.swift */; };
 		AAAAAAAA00000000000000E2 /* PackRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043A /* PackRegistry.swift */; };
 		AAAAAAAA00000000000000E3 /* PackScoring.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000043B /* PackScoring.swift */; };
@@ -217,6 +218,7 @@
 		AAAAAAAA0000000000000436 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000437 /* GamesRoom.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GamesRoom.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAAAAAAA0000000000000438 /* RedeemedRoom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedeemedRoom.swift; sourceTree = "<group>"; };
+		AAAAAAAA00000000000004AD /* InviteRewards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteRewards.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000439 /* PackDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackDefinition.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043A /* PackRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackRegistry.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000043B /* PackScoring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackScoring.swift; sourceTree = "<group>"; };
@@ -351,6 +353,7 @@
 				AAAAAAAA0000000000000416 /* RoomRole.swift */,
 				AAAAAAAA0000000000000417 /* Member.swift */,
 				AAAAAAAA0000000000000438 /* RedeemedRoom.swift */,
+				AAAAAAAA00000000000004AD /* InviteRewards.swift */,
 				AAAAAAAA0000000000000418 /* SocialPreference.swift */,
 				AAAAAAAA0000000000000419 /* MemberRSVPState.swift */,
 				AAAAAAAA000000000000041A /* MemberRSVP.swift */,
@@ -726,6 +729,7 @@
 				AAAAAAAA00000000000000DC /* DetectedStack.swift in Sources */,
 				AAAAAAAA00000000000000DE /* DetectionSource.swift in Sources */,
 				AAAAAAAA00000000000000E0 /* RedeemedRoom.swift in Sources */,
+				AAAAAAAA00000000000000EE /* InviteRewards.swift in Sources */,
 				AAAAAAAA00000000000000E1 /* PackDefinition.swift in Sources */,
 				AAAAAAAA00000000000000E2 /* PackRegistry.swift in Sources */,
 				AAAAAAAA00000000000000E3 /* PackScoring.swift in Sources */,

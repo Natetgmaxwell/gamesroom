@@ -290,6 +290,15 @@ final class RoomService: ObservableObject {
         return row
     }
 
+    /// V0.76 — the caller's invite rewards in a room. Mirrors
+    /// `get_my_invite_rewards(p_room_id)` (migration 076). Returns
+    /// zeroed values when the caller has no rewards yet.
+    func fetchMyInviteRewards(roomId: UUID) async throws -> InviteRewards {
+        let rewards = try await store.fetchMyInviteRewards(roomId: roomId)
+        self.lastError = nil
+        return rewards
+    }
+
     /// W2.7 — builds and schedules the joined-late catch-up push.
     /// The identifier is stable per event, so a re-join overwrites
     /// instead of stacking — no duplicate pushes. V0.54 — gated

@@ -3058,6 +3058,12 @@ private struct MemberRosterReadOnly: View {
     /// V0.55 — transient error surface for the invite actions.
     @State private var inviteError: String?
     @State private var showInviteError: Bool = false
+    /// V0.76 — the caller's invite rewards (friends joined + points
+    /// earned). Loaded on appear; drives the reward banner.
+    @State private var inviteRewards: InviteRewards?
+    /// V0.76 — true once the reward banner has fired its success
+    /// haptic, so the "paid off" moment lands exactly once.
+    @State private var rewardHapticFired = false
 
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
@@ -3098,6 +3104,14 @@ private struct MemberRosterReadOnly: View {
         } message: {
             Text(inviteError ?? "")
         }
+        .task {
+            // V0.76 — load the caller's invite rewards so the banner
+            // can show when a friend's join has paid off. Best-effort;
+            // a failure just leaves the banner hidden.
+            if let rewards = try? await roomService.fetchMyInviteRewards(roomId: room.id) {
+                inviteRewards = rewards
+            }
+        }
     }
 
     /// V0.55 — the invite affordance on the roster. Host sees
@@ -3107,14 +3121,39 @@ private struct MemberRosterReadOnly: View {
     @ViewBuilder
     private var inviteSection: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+            // V0.76 — reward banner. Shows when a friend has joined
+            // via the caller's code and the +50 has landed. The
+            // success haptic fires once (rewardHapticFired) so the
+            // "paid off" moment is felt, not just seen.
+            if let rewards = inviteRewards, rewards.friendsJoined > 0 {
+                rewardBanner(rewards)
+                    .onAppear {
+                        if !rewardHapticFired {
+                            Haptics.success()
+                            rewardHapticFired = true
+                        }
+                    }
+            }
+
             if let code = inviteCode {
                 HStack(spacing: Theme.Layout.gutter) {
                     Text(code)
                         .font(Theme.Typography.body.monospaced().weight(.semibold))
                         .foregroundStyle(Theme.Palette.accent)
                     Spacer()
+                    // V0.76 — native share sheet with a prefilled
+                    // message, so inviting is one tap (not copy-paste).
+                    ShareLink(
+                        item: "Join me in Games Room — use code \(code) to get 200 pts to start!",
+                        preview: SharePreview("Join me in Games Room")
+                    ) {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundStyle(Theme.Palette.accent)
+                    }
+                    .accessibilityLabel(Text("Share invite code"))
                     Button {
                         UIPasteboard.general.string = code
+                        Haptics.light()
                     } label: {
                         Image(systemName: Theme.Icon.plusCircle)
                             .foregroundStyle(Theme.Palette.accent)
@@ -3139,6 +3178,36 @@ private struct MemberRosterReadOnly: View {
                 tierThreeInviteField
             }
         }
+    }
+
+    /// V0.76 — the reward banner. A compact, celebratory card that
+    /// shows how many friends joined via the caller's codes and the
+    /// points earned. Uses the accent palette so it reads as a win,
+    /// not a system notice.
+    private func rewardBanner(_ rewards: InviteRewards) -> some View {
+        HStack(spacing: Theme.Layout.gutter) {
+            Image(systemName: Theme.Icon.person2Fill)
+                .foregroundStyle(Theme.Palette.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Your invite paid off")
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Text(rewards.friendsJoined == 1
+                     ? "1 friend joined — +\(rewards.totalReward) pts"
+                     : "\(rewards.friendsJoined) friends joined — +\(rewards.totalReward) pts")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
+            Spacer()
+        }
+        .padding(.vertical, Theme.Layout.cardInset)
+        .padding(.horizontal, Theme.Layout.edgePadding)
+        .background(Theme.Palette.accent.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.Palette.accent.opacity(0.3), lineWidth: 0.5)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     /// V0.55 — host "Invite a friend" row. Generates a tier-1 host
