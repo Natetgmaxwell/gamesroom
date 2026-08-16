@@ -181,6 +181,10 @@ enum Theme {
         static let trashFill = "trash.fill"
         /// The working-hand badge on the in-play witness slot.
         static let handPointUpFill = "hand.point.up.fill"
+        /// V0.79 — the notification opt-in prompt card + settings row.
+        static let bellFill = "bell.fill"
+        /// V0.79 — the per-event mute row in notification settings.
+        static let bellSlashFill = "bell.slash.fill"
     }
 }
 

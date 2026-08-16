@@ -110,6 +110,12 @@ struct RoomSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                // V0.79 — member-visible notification preferences.
+                // All roles: the host is a member too. The section
+                // owns the durable opt-in + per-event mute controls
+                // that left the briefing card.
+                RoomNotifSettingsSection(room: room)
+
                 Section {
                     NavigationLink {
                         RoomSettingsSocialSheet(
