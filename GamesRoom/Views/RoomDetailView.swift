@@ -1526,7 +1526,13 @@ private struct BriefingNotificationRow: View {
                 }
                 .tint(Theme.Palette.accent)
             }
-            if let onToggleEventNotificationsMuted {
+            // V0.78 — the mute row only renders when the room-level
+            // opt-in is ON. With the opt-in off nothing is coming,
+            // so a per-event mute is dead weight and the two
+            // toggles read as duplicates. Revealing mute on opt-in
+            // makes the hierarchy legible: room opt-in is the gate,
+            // per-event mute is the "except this one" override.
+            if let onToggleEventNotificationsMuted, notificationsEnabled {
                 Toggle(isOn: Binding(
                     get: { isMuted },
                     set: { onToggleEventNotificationsMuted($0) }
