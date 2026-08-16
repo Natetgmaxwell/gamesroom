@@ -134,6 +134,8 @@ enum Theme {
         static let personFill = "person.fill"
         /// The settings gear in the room toolbar.
         static let gearshape = "gearshape"
+        /// The create-room "+" in the Rooms toolbar.
+        static let plus = "plus"
         /// The "switch room" chevron inside the rooms dropdown.
         static let chevronDown = "chevron.down"
         /// The chevron historically used on pack-row taps. The

@@ -504,6 +504,20 @@ struct RoomPage: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        // V0.76 — "Host your own room" create CTA. Always available in
+        // the toolbar once the user has at least one room; the empty
+        // state already offers a large create button. Any signed-in
+        // user can become a host, so this isn't host-gated.
+        if !roomService.rooms.isEmpty {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: openCreateRoom) {
+                    Image(systemName: Theme.Icon.plus)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                .accessibilityLabel(Text("Host your own room"))
+                .accessibilityHint(Text("Create a new room to run a games night"))
+            }
+        }
         if let room = resolvedLastViewedRoom, room.userRole.isHost {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
