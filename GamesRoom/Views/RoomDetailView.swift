@@ -70,10 +70,6 @@ struct RoomDetailView: View {
     // their own stack of won black cards on their own phone; the
     // tally is recorded as the authoritative count for the night.
     @State private var cahScanEvent: Event?
-    // V0.72 slice 3 — host manual settle fallback. The host enters
-    // the count by hand when the member can't scan (no camera,
-    // model down, rate-limited). Migration 070 carve-out.
-    @State private var hostManualEvent: Event?
     @State private var casinoWithdrawn: Int = 0
     // V0.47 — host-only pending-withdrawal list. Loaded in
     // `refresh`; the host dispenses physical chips and taps
@@ -367,23 +363,6 @@ struct RoomDetailView: View {
                 defaultCardCount: roomService.effectiveWinPoints(roomId: room.id, packSlug: event.packSlug)
             )
             .environmentObject(roomService)
-            .environmentObject(scoringService)
-        }
-        // V0.72 slice 3 — host manual settle fallback. The host
-        // enters the final count by hand on behalf of a member when
-        // the member can't scan. Migration 070 admits the host past
-        // the `minimax_vision` provider gate with snapshot source
-        // 'manual'. Presented from the tertiary "Enter count by hand"
-        // CTA on the WitnessSlot.
-        .sheet(item: $hostManualEvent) { event in
-            HostManualSettleSheet(
-                eventId: event.id,
-                roomId: room.id,
-                isCAH: event.packSlug == "cards_against_humanity",
-                onDone: { Task { await refresh(force: true) } }
-            )
-            .environmentObject(roomService)
-            .environmentObject(casinoService)
             .environmentObject(scoringService)
         }
         // V0.9 Wave 2 Slice 2.2 - inline "+" create-room sheet. Same
@@ -714,9 +693,11 @@ struct RoomDetailView: View {
                     // "nothing to settle" capsule.
                     cta: {
                         if isCAH { return .scan }
-                        if myScanState.hasScanned {
-                            return .done("All counted — enjoy the night")
-                        }
+                        // V0.74 — every scan settles the marginal
+                        // delta vs entitlement, so scan stays live
+                        // even after counting (rescan to resettle:
+                        // play on, win/lose, count again). Empty
+                        // hand → nothing to settle.
                         if myWorkingHand == 0 {
                             return .done("Nothing to settle — withdraw to play")
                         }
@@ -751,12 +732,7 @@ struct RoomDetailView: View {
                     // lock 2026-07-09).
                     onWithdrawMore: isCAH
                         ? nil
-                        : { Task { await openWithdraw(event: event) } },
-                    // V0.72 — host manual settle fallback. Migration
-                    // 070 carve-out for the degenerate case.
-                    onManualSettle: isHost
-                        ? { hostManualEvent = event }
-                        : nil
+                        : { Task { await openWithdraw(event: event) } }
                 )
 
             // M1.1 — `.tonightEvent` renders the witness hero with
@@ -787,11 +763,6 @@ struct RoomDetailView: View {
                     // settle CAH cards.
                     onCAHSettle: roomHasCAHPack
                         ? { cahScanEvent = event }
-                        : nil,
-                    // V0.72 — host manual settle fallback. Migration
-                    // 070 carve-out for the degenerate case.
-                    onManualSettle: isHost
-                        ? { hostManualEvent = event }
                         : nil
                 )
 
@@ -826,9 +797,9 @@ struct RoomDetailView: View {
                     // act on truthfully.
                     cta: {
                         if isCAH { return .scan }
-                        if myScanState.hasScanned {
-                            return .done("All counted — awaiting results")
-                        }
+                        // V0.74 — same as `.inPlay`: scan always
+                        // settles the marginal delta, so it stays
+                        // live through the final count.
                         if myWorkingHand == 0 {
                             return .done("No chips to settle")
                         }
@@ -854,11 +825,6 @@ struct RoomDetailView: View {
                     // settle CAH cards.
                     onCAHSettle: roomHasCAHPack
                         ? { cahScanEvent = event }
-                        : nil,
-                    // V0.72 — host manual settle fallback. Migration
-                    // 070 carve-out for the degenerate case.
-                    onManualSettle: isHost
-                        ? { hostManualEvent = event }
                         : nil
                 )
 
@@ -1806,21 +1772,6 @@ private struct WitnessSlot: View {
     var hasScanned: Bool = false
     /// V0.72 (072) — the member's latest scanned value, when known.
     var scannedValue: Int? = nil
-
-    /// V0.73 — net result label for the counted badge: scanned minus
-    /// the original withdrawal. The score change is already applied
-    /// server-side the moment the scan lands, so naming the net (not
-    /// "awaiting host") tells the member what actually happened to
-    /// their balance. "awaiting host" described the host-finalize
-    /// ledger step, which is invisible to the member and read as
-    /// "still waiting for something to happen".
-    private var netDeltaLabel: String {
-        guard let scannedValue, let workingHand else { return "settled" }
-        let net = scannedValue - workingHand
-        if net > 0 { return "+\(net)" }
-        if net < 0 { return "−\(abs(net))" }
-        return "even"
-    }
     /// V0.66 — secondary "Count your CAH cards" CTA. Renders for
     /// EVERY active event when the room has the CAH pack installed,
     /// so a member/host on a casino night can still settle their CAH
@@ -1833,11 +1784,6 @@ private struct WitnessSlot: View {
     /// nil = don't render. Styled as an outline button, one tap
     /// behind the primary CTA.
     var onWithdrawMore: (() -> Void)? = nil
-    /// V0.72 host-only "Enter count by hand" tertiary. Migration
-    /// 070 carve-out — the degenerate fallback when a member can't
-    /// scan (no camera, model down, rate-limited). nil = don't
-    /// render. Same outline styling as the other secondary CTAs.
-    var onManualSettle: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
@@ -1862,17 +1808,17 @@ private struct WitnessSlot: View {
             // pops the badge in via the parent's popIn animation
             // when `workingHand` flips from nil/0 to a positive
             // value (the withdraw lands, state moves to .inPlay).
-            // V0.72 (072) — once the member has scanned, the badge
-            // flips to the counted state: the chips are already in
-            // the host's possession, so "Working hand: 100" would
-            // lie about chips the member no longer holds. The host
-            // hasn't finalized yet, so the caption names that.
+            // V0.74 — the badge state derives from E vs the last
+            // scan: `workingHand` is now the TRUE table stack (last
+            // scan + withdrawals after it), so counted ⟺
+            // scannedValue == workingHand. A fresh withdrawal flips
+            // the badge back to pending — those chips haven't been
+            // counted, and the next scan settles the whole delta.
             if let workingHand, workingHand > 0 {
-                if hasScanned {
+                if hasScanned, let scannedValue, scannedValue == workingHand {
                     HStack(spacing: 6) {
                         Image(systemName: Theme.Icon.checkmarkCircleFill)
-                        Text(scannedValue.map { "Counted: \($0) pts · net \(netDeltaLabel)" }
-                             ?? "Counted · net settled")
+                        Text("Counted: \(scannedValue) pts — settled")
                     }
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent)
@@ -1880,10 +1826,7 @@ private struct WitnessSlot: View {
                     .padding(.vertical, 6)
                     .background(Theme.Palette.accent.opacity(0.12))
                     .clipShape(Capsule())
-                    .accessibilityLabel(Text(
-                        scannedValue.map { "Chips counted: \($0) pts — net \(netDeltaLabel)" }
-                            ?? "Chips counted — net settled"
-                    ))
+                    .accessibilityLabel(Text("Chips counted: \(scannedValue) points — settled"))
                     .padding(.top, 4)
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 } else {
@@ -1996,27 +1939,6 @@ private struct WitnessSlot: View {
                 .accessibilityLabel(Text("Count your CAH cards"))
             }
 
-            // V0.72 — host-only "Enter count by hand" tertiary.
-            // Migration 070 carve-out (degenerate-case fallback when
-            // a member can't scan). Same outline styling as the
-            // other secondary CTAs; renders after the CAH /
-            // withdraw-more buttons.
-            if let onManualSettle {
-                Button(action: onManualSettle) {
-                    Text("Enter count by hand")
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                }
-                .buttonStyle(.plain)
-                .pressScale()
-                .padding(.top, 8)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .accessibilityLabel(Text("Enter count by hand (host)"))
-            }
-
             // P0.4 — host-only "Score a round" affordance. Renders
             // below the member-facing CTA so the host's at-play
             // surface carries both the chip-withdraw entry point
@@ -2055,7 +1977,6 @@ private struct WitnessSlot: View {
         .animation(Theme.Motion.popIn, value: workingHand)
         .animation(Theme.Motion.fade, value: onWithdrawMore != nil)
         .animation(Theme.Motion.fade, value: onCAHSettle != nil)
-        .animation(Theme.Motion.fade, value: onManualSettle != nil)
     }
 
     /// V0.70 — title for the primary CTA. `.withdraw` reads

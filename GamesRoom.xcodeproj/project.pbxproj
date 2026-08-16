@@ -113,7 +113,6 @@
 		AAAAAAAA000000000000048F /* Fraunces-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */; };
 		AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */; };
 		AAAAAAAA0000000000000494 /* ScanSettleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000493 /* ScanSettleService.swift */; };
-		AAAAAAAA0000000000000496 /* HostManualSettleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000495 /* HostManualSettleSheet.swift */; };
 		AAAAAAAA0000000000000498 /* ScanSettleResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000497 /* ScanSettleResult.swift */; };
 /* End PBXBuildFile section */
 
@@ -267,7 +266,6 @@
 		AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Italic.ttf; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000802 /* Perf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Perf.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000493 /* ScanSettleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleService.swift; sourceTree = "<group>"; };
-		AAAAAAAA0000000000000495 /* HostManualSettleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostManualSettleSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000497 /* ScanSettleResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleResult.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -452,7 +450,6 @@
 				AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */,
 				AAAAAAAA0000000000000491 /* ScanCameraView.swift */,
 				AAAAAAAA000000000000048B /* SeasonStatCardView.swift */,
-				AAAAAAAA0000000000000495 /* HostManualSettleSheet.swift */,
 				AAAAAAAA00000000000000FC /* Components */,
 			);
 		path = Views;
@@ -759,7 +756,6 @@
 				AAAAAAAA00000000000000EB /* SeasonStatCard.swift in Sources */,
 				AAAAAAAA00000000000000ED /* RoomGraphSummary.swift in Sources */,
 				AAAAAAAA0000000000000494 /* ScanSettleService.swift in Sources */,
-				AAAAAAAA0000000000000496 /* HostManualSettleSheet.swift in Sources */,
 				AAAAAAAA0000000000000498 /* ScanSettleResult.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

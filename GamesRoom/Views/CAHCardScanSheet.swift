@@ -13,8 +13,9 @@
 //  privacy line.
 //
 //  Re-scan: latest-wins, capped at 5 per event (server-enforced).
-//  429 → "Scan limit reached — ask your host to enter the count by
-//  hand" (HostManualSettleSheet, migration 070).
+//  429 → "Scan limit reached — wait for the next night's event"
+//  (the host manual-settle sheet was removed in V0.74; the
+//  migration 070 server-side carve-out remains as a safety net).
 //
 //  Privacy reversal: V0.72 sends the JPEG to the MiniMax vision
 //  API. The bytes never persist server-side (edge function hashes

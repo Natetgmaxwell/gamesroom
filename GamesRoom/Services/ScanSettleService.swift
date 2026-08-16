@@ -48,7 +48,7 @@ final class ScanSettleService: ObservableObject {
             case .offline:
                 return "You're offline — check your connection and try again."
             case .rateLimited(let attemptsUsed):
-                return "Scan limit reached (\(attemptsUsed) per night). Ask your host to enter the count by hand."
+                return "Scan limit reached (\(attemptsUsed) per night). Wait for the next night's event or ask your host to record it server-side."
             case .modelDeclined, .unreadable:
                 return "Couldn't read the table — improve lighting and retake."
             case .serviceDown:
