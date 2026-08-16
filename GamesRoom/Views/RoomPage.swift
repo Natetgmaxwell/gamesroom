@@ -517,6 +517,14 @@ struct RoomPage: View {
                 .accessibilityLabel(Text("Host your own room"))
                 .accessibilityHint(Text("Create a new room to run a games night"))
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: openJoinRoom) {
+                    Image(systemName: Theme.Icon.personCropCircleBadgePlus)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                .accessibilityLabel(Text("Join a room with a code"))
+                .accessibilityHint(Text("Enter a friend's join code to become a member"))
+            }
         }
         if let room = resolvedLastViewedRoom, room.userRole.isHost {
             ToolbarItem(placement: .topBarTrailing) {

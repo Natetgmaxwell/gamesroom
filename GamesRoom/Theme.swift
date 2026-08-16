@@ -185,6 +185,8 @@ enum Theme {
         static let bellFill = "bell.fill"
         /// V0.79 — the per-event mute row in notification settings.
         static let bellSlashFill = "bell.slash.fill"
+        /// V0.80 — the join-room toolbar affordance for existing members.
+        static let personCropCircleBadgePlus = "person.crop.circle.badge.plus"
     }
 }
 
