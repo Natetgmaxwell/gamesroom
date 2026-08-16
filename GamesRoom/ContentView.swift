@@ -47,6 +47,9 @@ struct ContentView: View {
     }
 
     @EnvironmentObject private var auth: AuthService
+    /// V0.77 — injected by `GamesRoomApp`; the realtime lifecycle
+    /// start passes it to `RealtimeEventService` as the rooms cache.
+    @EnvironmentObject private var roomService: RoomService
     @State private var selectedTab: AppTab = .rooms
     @State private var isRestoringSession = true
 
@@ -83,6 +86,28 @@ struct ContentView: View {
         .task {
             await auth.loadCurrentUser()
             isRestoringSession = false
+        }
+        // V0.77 — realtime event subscription lifecycle. Start when
+        // a session exists (cold launch restore or fresh sign-in),
+        // stop on sign-out. `onChange` fires on the publish; the
+        // nil→user transition also covers the post-sign-in path.
+        .onChange(of: auth.currentUser?.id) { _, newUserId in
+            Task {
+                if newUserId != nil {
+                    await RealtimeEventService.shared.start(roomService: roomService)
+                } else {
+                    await RealtimeEventService.shared.stop()
+                }
+            }
+        }
+        // Cold-launch path: a restored session doesn't always trip
+        // onChange (currentUser goes nil→user inside loadCurrentUser,
+        // which does fire, but the sheet-gated state can swallow the
+        // first emit). Belt-and-braces start attempt after restore.
+        .task(id: "realtime-start") {
+            if auth.currentUser != nil {
+                await RealtimeEventService.shared.start(roomService: roomService)
+            }
         }
     }
 
