@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wrong table — Games Room</title>
+  <meta name="description" content="That page doesn't exist.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/icon-120.png">
+  <link rel="stylesheet" href="/style.css?v=69">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <img class="brand-mark" src="/icon-120.png" alt="" aria-hidden="true">
+        <span class="wordmark">Games Room</span>
+        <div class="pips" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/how-it-works">How it works</a>
+        <a href="/features">Features</a>
+        <a href="/notifications">Notifications</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="shell error">
+      <p class="error-code" aria-hidden="true">404</p>
+      <h1>Wrong table.</h1>
+      <p>That page doesn't exist. <a href="/">Pull up a seat</a> where the night actually happens.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p class="footer-mascot">"Pull up a seat. The night keeps itself."</p>
+    <nav aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/how-it-works">How it works</a>
+      <a href="/features">Features</a>
+      <a href="/notifications">Notifications</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy policy</a>
+    </nav>
+  </footer>
+
+  <script>
+    // ── Header pips light in sequence, repeating ──
+    (function () {
+      var pips = document.querySelectorAll(".pips span");
+      var i = 0;
+      setInterval(function () {
+        pips.forEach(function (p) { p.classList.remove("lit"); });
+        pips[i].classList.add("lit");
+        i = (i + 1) % pips.length;
+      }, 550);
+    })();
+  </script>
+</body>
+</html>

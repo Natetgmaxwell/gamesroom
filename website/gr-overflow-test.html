@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<body style="margin:0">
+<div id="out" style="font:monospace 12px"></div>
+<script>
+// Same-origin overflow probe: loads each page in an iframe, reports scrollWidth vs clientWidth.
+const pages = ["index.html", "how-it-works.html", "features.html", "notifications.html", "privacy.html", "support.html", "404.html"];
+const out = document.getElementById("out");
+let i = 0;
+function next() {
+  if (i >= pages.length) return;
+  const p = pages[i++];
+  const f = document.createElement("iframe");
+  f.width = 375; f.height = 800;
+  f.style = "width:375px;height:800px;border:0;display:block";
+  f.src = "/" + p;
+  f.onload = () => {
+    setTimeout(() => {
+      const d = f.contentDocument.documentElement;
+      const b = f.contentDocument.body;
+      const wide = [];
+      // find elements wider than the 375 viewport
+      f.contentDocument.querySelectorAll("*").forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (r.right > 376 || r.left < -1) {
+          if (wide.length < 6) wide.push(el.tagName + "." + (el.className && el.className.split ? el.className.split(" ")[0] : "") + " right=" + Math.round(r.right));
+        }
+      });
+      out.textContent += p + " :: docScroll=" + d.scrollWidth + " client=" + d.clientWidth + (d.scrollWidth > d.clientWidth ? " OVERFLOW " + wide.join(" | ") : " ok") + "\n";
+      f.remove();
+      next();
+    }, 400);
+  };
+  document.body.appendChild(f);
+}
+next();
+</script>
+</body>
+</html>

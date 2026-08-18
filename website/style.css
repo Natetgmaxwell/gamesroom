@@ -14,10 +14,12 @@
    not edge-to-edge. Single column preserved on mobile. No tracking; the only
    JS is animation.
 
-   Alignment invariant: every full-bleed section (.hero, .statement,
-   .packs-strip) uses width:100vw + margin-left:calc(50% - 50vw) +
-   padding: max(calc((100vw - var(--content-inner)) / 2), var(--gutter)).
-   Media queries may scale vertical padding only — never horizontal. */
+   Alignment invariant (contained full-bleed, verified fix 2026-08-14): every
+   full-bleed section (.hero, .statement, .packs-strip, .north-star, .fullbleed)
+   uses width:100% — never 100vw, never negative margins — with inline padding
+   max(calc((100vw - var(--content-inner)) / 2), var(--gutter)). Contained copy
+   lives in .shell blocks; media queries may scale vertical padding only —
+   never horizontal. */
 
 /* ── Self-hosted display type: Fraunces (Google Fonts, woff2) ── */
 @font-face {
@@ -89,16 +91,33 @@ body {
 
 /* ── Header ───────────────────────────────────────── */
 .site-header {
-  padding: 1.5rem var(--gutter) 1.25rem;
+  padding: 1.25rem var(--gutter) 1.1rem;
   border-bottom: 1px solid var(--hairline);
+}
+.header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  max-width: var(--maxw);
+  margin: 0 auto;
 }
 .brand {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  max-width: var(--maxw);
-  margin: 0 auto;
 }
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1.1rem;
+  font-size: 13.5px;
+}
+.site-nav a { color: var(--text-dim); border-bottom: none; }
+.site-nav a:hover { color: var(--accent); }
+.site-nav a[aria-current="page"] { color: var(--accent); }
 .brand-mark {
   width: 36px;
   height: 36px;
@@ -132,16 +151,41 @@ body {
 
 /* ── Hero ─────────────────────────────────────────── */
 main {
+  width: 100%;
+  margin: 0;
+  padding: 2.5rem 0 4rem;
+}
+main.privacy,
+main.support {
   max-width: var(--maxw);
   margin: 0 auto;
-  padding: 2.5rem var(--gutter) 4rem;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+/* Contained full-bleed: width 100%, inline padding from the viewport calc.
+   Never width:100vw, never negative margins. */
+.fullbleed,
+.hero,
+.statement,
+.packs-strip,
+.north-star {
+  width: 100%;
+  padding-left: max(calc((100vw - var(--content-inner)) / 2), var(--gutter));
+  padding-right: max(calc((100vw - var(--content-inner)) / 2), var(--gutter));
+}
+/* Contained copy block (the old main column, now per-section) */
+.shell {
+  max-width: var(--maxw);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
 }
 .hero {
   display: grid;
   gap: 1.5rem;
-  padding: 1.75rem max(calc((100vw - var(--content-inner)) / 2), var(--gutter)) 2.25rem;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
+  padding-top: 1.75rem;
+  padding-bottom: 2.25rem;
   background:
     radial-gradient(120% 90% at 50% 0%, var(--accent-wash), transparent 60%);
   border-bottom: 1px solid var(--hairline);
@@ -251,9 +295,8 @@ h1 em { font-style: italic; color: var(--accent); }
 
 /* ── Full-bleed statements (B1, B2) ───────────────── */
 .statement {
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  padding: 3rem max(calc((100vw - var(--content-inner)) / 2), var(--gutter));
+  padding-top: 3rem;
+  padding-bottom: 3rem;
   border-top: 1px solid var(--hairline);
   border-bottom: 1px solid var(--hairline);
   text-align: left;
@@ -277,9 +320,8 @@ h1 em { font-style: italic; color: var(--accent); }
 
 /* ── Packs slim strip (no card) ───────────────────── */
 .packs-strip {
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  padding: 2.25rem max(calc((100vw - var(--content-inner)) / 2), var(--gutter));
+  padding-top: 2.25rem;
+  padding-bottom: 2.25rem;
   border-top: 1px solid var(--hairline);
   border-bottom: 1px solid var(--hairline);
 }
@@ -366,7 +408,7 @@ h2 {
   margin-bottom: 0.75rem;
 }
 .card h2 { margin-bottom: 0.75rem; }
-h2 .serif { font-family: var(--font-display); font-weight: 400; font-style: italic; }
+h2 .serif, em.serif { font-family: var(--font-display); font-weight: 400; font-style: italic; }
 p { margin-bottom: 1rem; }
 .card p { color: var(--text-dim); margin-bottom: 0.5rem; }
 
@@ -412,6 +454,172 @@ p { margin-bottom: 1rem; }
   margin-bottom: 0.75rem;
 }
 
+/* ── Section kicker / sub-head / mission / north star ── */
+.kicker {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.9rem;
+}
+.sub-head {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.3rem;
+  line-height: 1.35;
+  color: var(--text);
+  margin-bottom: 0.9rem;
+}
+.hero-copy .sub-head { margin-bottom: 1rem; }
+.mission-line {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.55rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin-bottom: 1.1rem;
+}
+.north-star {
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--hairline);
+  text-align: center;
+}
+.north-star p {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.8rem;
+  line-height: 1.3;
+  max-width: 36ch;
+  margin: 0 auto;
+  color: var(--text);
+}
+.north-star em.serif { color: var(--accent); }
+
+/* ── Numbered flows (How it works) ────────────────── */
+.steps {
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: 0.9rem;
+  margin: 0 0 1.25rem;
+}
+.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 0.9rem;
+  align-items: baseline;
+  margin-bottom: 0;
+}
+.steps li::before {
+  content: counter(step);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent);
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+}
+.flow-close {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--text);
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── Notifications page ──────────────────────────── */
+.notif-list {
+  list-style: none;
+  display: grid;
+  gap: 0.9rem;
+  margin: 1.25rem 0 0;
+}
+.notif-list li {
+  margin-bottom: 0;
+  padding-left: 1.4rem;
+  position: relative;
+}
+.notif-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.notif-rules {
+  list-style: none;
+  display: grid;
+  gap: 1.25rem;
+  margin: 0;
+}
+.notif-rules li {
+  margin-bottom: 0;
+  border-top: 1px solid var(--hairline);
+  padding-top: 1rem;
+  color: var(--text-dim);
+}
+.notif-rules strong { color: var(--text); font-weight: 600; }
+
+/* ── Privacy intro (marketing, above the legal body) ── */
+.privacy-intro {
+  padding-bottom: 2rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--hairline);
+}
+.privacy-intro h1 { margin-bottom: 1rem; }
+.privacy-intro > p { max-width: 62ch; }
+.check-list {
+  list-style: none;
+  display: grid;
+  gap: 0.9rem;
+  margin: 1.25rem 0;
+}
+.check-list li {
+  margin-bottom: 0;
+  padding-left: 1.75rem;
+  position: relative;
+  color: var(--text-dim);
+}
+.check-list li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--accent);
+  font-weight: 600;
+}
+.check-list strong { color: var(--text); font-weight: 600; }
+.privacy-close {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+
+/* ── 404 ─────────────────────────────────────────── */
+.error { text-align: center; padding-top: 2.5rem; padding-bottom: 2.5rem; }
+.error-code {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 5rem;
+  line-height: 1;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+
 /* season timeline */
 .timeline {
   display: grid;
@@ -446,6 +654,37 @@ p { margin-bottom: 1rem; }
   margin: 0.5rem 0 0;
   padding-top: 1rem;
   border-top: 1px solid var(--hairline);
+}
+
+/* ── App screenshots ──────────────────────────── */
+.flow-split {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+}
+.screen-figure {
+  margin: 0;
+  text-align: center;
+}
+.screen-figure img {
+  width: 100%;
+  max-width: 300px;
+  display: block;
+  margin: 0 auto;
+  border-radius: 28px;
+  border: 1px solid var(--hairline);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(176, 141, 87, 0.08);
+}
+.screen-caption {
+  margin-top: 0.75rem;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+@media (min-width: 768px) {
+  .flow-split { grid-template-columns: 1fr 300px; }
+  .flow-split .screen-figure { order: 2; }
 }
 
 /* general list */
@@ -554,6 +793,8 @@ a:focus-visible {
   margin: 1rem 0 1.5rem;
   font-size: 0.92rem;
 }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll table { min-width: 560px; }
 .privacy th, .privacy td {
   text-align: left;
   padding: 0.75rem 0.75rem;
@@ -604,8 +845,9 @@ a:focus-visible {
 
 /* Tablet ≥768px — widen the column, two-up descriptive cards */
 @media (min-width: 768px) {
-  main { max-width: var(--maxw-desktop); }
-  .brand { max-width: var(--maxw-desktop); }
+  .header-inner { max-width: var(--maxw-desktop); }
+  main.privacy, main.support { max-width: var(--maxw-desktop); }
+  .shell { max-width: var(--maxw-desktop); }
   .hero { text-align: left; }
   .hero-inner {
     grid-template-columns: auto 1fr;
@@ -624,10 +866,8 @@ a:focus-visible {
   .statement { text-align: left; }
   .statement p { margin-left: 0; margin-right: 0; }
   .statement h2 { margin-left: 0; margin-right: 0; }
-  .statement > * { max-width: var(--maxw-desktop); margin-left: auto; margin-right: auto; }
   .packs-strip h2 { text-align: left; }
   .packs-strip .packs { justify-content: flex-start; }
-  .packs-strip > * { max-width: var(--maxw-desktop); margin-left: auto; margin-right: auto; }
 }
 
 /* Desktop ≥1024px — larger type, wider hero, spacious cards */
@@ -635,6 +875,9 @@ a:focus-visible {
   body { font-size: 18px; }
   h1 { font-size: 3rem; }
   .lead { font-size: 1.25rem; }
+  .sub-head { font-size: 1.45rem; }
+  .mission-line { font-size: 1.85rem; }
+  .north-star p { font-size: 2.2rem; }
   .hero { padding-top: 3rem; padding-bottom: 2.5rem; }
   .hero-icon { width: 132px; height: 132px; border-radius: 30px; }
   .card { padding: 1.75rem 1.5rem; }

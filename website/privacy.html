@@ -3,23 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Privacy Policy — Games Room</title>
-  <meta name="description" content="Games Room privacy policy. A private games-night app for self-hosted tables.">
+  <title>Games Room — Privacy</title>
+  <meta name="description" content="No ads, no analytics, no third-party SDKs. Sign in with Apple; we never see your email. Chip-scan photos stay on your device.">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=69">
 </head>
 <body>
   <header class="site-header">
-    <div class="brand">
-      <img class="brand-mark" src="/icon-120.png" alt="" aria-hidden="true">
-      <span class="wordmark">Games Room</span>
-      <div class="pips" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <div class="header-inner">
+      <div class="brand">
+        <img class="brand-mark" src="/icon-120.png" alt="" aria-hidden="true">
+        <span class="wordmark">Games Room</span>
+        <div class="pips" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/how-it-works">How it works</a>
+        <a href="/features">Features</a>
+        <a href="/notifications">Notifications</a>
+        <a href="/privacy" aria-current="page">Privacy</a>
+      </nav>
     </div>
   </header>
 
   <main class="privacy">
-    <h1>Privacy Policy</h1>
+    <section class="privacy-intro">
+      <h1>Trusted by design</h1>
+      <p>No ads. No analytics. No third-party SDKs. Sign in with Apple; we never see your email.</p>
+      <p>Games Room is invite-only. There is no public signup, no marketplace, no feed, no DMs. Private-by-default is a feature, not a limitation.</p>
+      <ul class="check-list">
+        <li><strong>No ads.</strong> Nothing sells your attention.</li>
+        <li><strong>No analytics.</strong> We don't track you.</li>
+        <li><strong>No third-party SDKs.</strong> No ad networks, no crash-reporting middlemen.</li>
+        <li><strong>Sign in with Apple.</strong> We get your identifier, never your email.</li>
+        <li><strong>Chip-scan photos stay on your device.</strong> The scan photo is discarded by default. Only a hash and a vision snapshot are kept, and only to settle a dispute.</li>
+      </ul>
+      <p class="privacy-close">The app gets people to the table, then gets out of the way. It never watches them.</p>
+    </section>
+
+    <h2>Privacy Policy</h2>
     <p class="meta">Last updated: 2026-08-06</p>
 
     <h2>What Games Room is</h2>
@@ -27,6 +50,7 @@
     <p>We do not run a marketplace, a community, or a public feed. Every room is invite-only. The app's job is to coordinate an in-person night — not to be a social network.</p>
 
     <h2>Data we collect</h2>
+    <div class="table-scroll">
     <table>
       <thead>
         <tr><th>Data</th><th>What it is</th><th>Why we collect it</th><th>Stored where</th></tr>
@@ -70,6 +94,7 @@
         </tr>
       </tbody>
     </table>
+    </div>
 
     <h2>Data we do NOT collect</h2>
     <ul>
@@ -140,12 +165,44 @@
   </main>
 
   <footer class="site-footer">
-    <p class="footer-mascot">"Your data stays at the table."</p>
-    <nav>
+    <p class="footer-mascot">"Pull up a seat. The night keeps itself."</p>
+    <nav aria-label="Footer">
       <a href="/">Home</a>
-      <a href="/support">Support</a>
+      <a href="/how-it-works">How it works</a>
+      <a href="/features">Features</a>
+      <a href="/notifications">Notifications</a>
       <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy policy</a>
     </nav>
   </footer>
+
+  <script>
+    // ── Scroll-triggered reveal ──
+    (function () {
+      var items = document.querySelectorAll(".reveal");
+      if (!("IntersectionObserver" in window)) {
+        items.forEach(function (i) { i.classList.add("is-visible"); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
+        });
+      }, { threshold: 0.12 });
+      items.forEach(function (i) { io.observe(i); });
+    })();
+
+    // ── Header pips light in sequence, repeating ──
+    (function () {
+      var pips = document.querySelectorAll(".pips span");
+      var i = 0;
+      setInterval(function () {
+        pips.forEach(function (p) { p.classList.remove("lit"); });
+        pips[i].classList.add("lit");
+        i = (i + 1) % pips.length;
+      }, 550);
+    })();
+  </script>
 </body>
 </html>

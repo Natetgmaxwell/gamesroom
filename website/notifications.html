@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Support — Games Room</title>
-  <meta name="description" content="Games Room support. Contact the team, get help with rooms, invite codes, scores, seasons, and the mascot.">
+  <title>Games Room — Notifications</title>
+  <meta name="description" content="Three quiet reminders per night, grouped per room, silent during play. The phone stays in the pocket.">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
   <link rel="stylesheet" href="/style.css?v=69">
@@ -21,54 +21,29 @@
         <a href="/">Home</a>
         <a href="/how-it-works">How it works</a>
         <a href="/features">Features</a>
-        <a href="/notifications">Notifications</a>
+        <a href="/notifications" aria-current="page">Notifications</a>
         <a href="/privacy">Privacy</a>
       </nav>
     </div>
   </header>
 
-  <main class="support">
-    <h1>Support</h1>
-    <p class="lead">Games Room is a small app, run by a small team. If something is wrong, we want to know.</p>
-
-    <section class="reveal">
-      <div class="card hero-card">
-        <h2>Contact</h2>
-        <p>Email: <a href="mailto:support@gamesroom.app">support@gamesroom.app</a></p>
-        <p class="muted">We read every message. Please include:</p>
-        <ul>
-          <li>Your room name, if you have one</li>
-          <li>What you were doing when the problem happened</li>
-          <li>What you expected to happen</li>
-        </ul>
-      </div>
+  <main>
+    <section class="statement fullbleed reveal">
+      <h1>Three quiet reminders. Then silence.</h1>
+      <p>Games Room sends three notifications per night, and nothing else.</p>
+      <ul class="notif-list">
+        <li>A push when the night is created. The room is on.</li>
+        <li>A 48-hour briefing. Who's coming, what's played, what to bring.</li>
+        <li>A morning-of reminder. The night is tonight.</li>
+      </ul>
     </section>
 
-    <section class="reveal">
-      <div class="card">
-        <h2>What we can help with</h2>
-        <ul>
-          <li>Joining or leaving a room</li>
-          <li>Invite codes</li>
-          <li>Scores and seasons</li>
-          <li>The mascot</li>
-          <li>Anything else that is not working</li>
-        </ul>
-      </div>
-    </section>
-
-    <section class="reveal">
-      <div class="card">
-        <h2>What we cannot help with</h2>
-        <p>Games Room is invite-only. We cannot add you to a room, and we cannot create one for you. Ask the host of your room for an invite.</p>
-      </div>
-    </section>
-
-    <section class="reveal">
-      <div class="card">
-        <h2>Privacy</h2>
-        <p>Your data stays in your rooms. Read the <a href="/privacy">full privacy policy</a>.</p>
-      </div>
+    <section class="shell reveal">
+      <ul class="notif-rules">
+        <li class="notif-rule"><strong>Grouped per room:</strong> Notifications group by room on the lock screen. The poker room and the CAH room stay separate.</li>
+        <li class="notif-rule"><strong>Quiet during play:</strong> During the night, the app goes quiet. The phone stays in the pocket. No pings, no feed, no livestream of the table.</li>
+        <li class="notif-rule"><strong>One channel:</strong> There is one notification channel. Mute it in iOS settings and the app goes fully quiet. No in-app maze of toggles.</li>
+      </ul>
     </section>
   </main>
 
@@ -99,6 +74,17 @@
         });
       }, { threshold: 0.12 });
       items.forEach(function (i) { io.observe(i); });
+    })();
+
+    // ── Header pips light in sequence, repeating ──
+    (function () {
+      var pips = document.querySelectorAll(".pips span");
+      var i = 0;
+      setInterval(function () {
+        pips.forEach(function (p) { p.classList.remove("lit"); });
+        pips[i].classList.add("lit");
+        i = (i + 1) % pips.length;
+      }, 550);
     })();
   </script>
 </body>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Games Room — Features</title>
+  <meta name="description" content="Rooms, seasons, seat deposits, game packs, and a mascot that narrates the night. Everything Games Room does, in plain language.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/icon-120.png">
+  <link rel="stylesheet" href="/style.css?v=69">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <img class="brand-mark" src="/icon-120.png" alt="" aria-hidden="true">
+        <span class="wordmark">Games Room</span>
+        <div class="pips" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/how-it-works">How it works</a>
+        <a href="/features" aria-current="page">Features</a>
+        <a href="/notifications">Notifications</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="shell shell-top reveal">
+      <h1>Features</h1>
+      <p class="sub-head">Everything Games Room does, in plain language.</p>
+    </section>
+
+    <div class="shell">
+      <div class="features">
+        <section class="reveal col-2">
+          <div class="card">
+            <h2>Invite-only, by design</h2>
+            <p>A host creates a room and shares a six-character join code. Members join, claim seats, and RSVP. Every room is invite-only.</p>
+            <p>One code per friend, each single-use. The host can make more. Delete the room and every outstanding code dies with it.</p>
+            <p>You can be in more than one room. The poker room and the Cards Against Humanity room, the same friend in both. Each room has its own season, its own rhythm, its own mascot.</p>
+          </div>
+        </section>
+
+        <section class="reveal col-2">
+          <div class="card">
+            <h2>Scores carry. The season gives them an <em class="serif">arc</em>.</h2>
+            <p>Scores carry between nights and reset when the season ends. The leaderboard tracks who actually wins across months, not just who won last Tuesday.</p>
+            <p>At season end, the awards land. Phoenix. Veteran. Whale. And Drowning, the loser's trophy, handed over with a laugh.</p>
+          </div>
+        </section>
+
+        <section class="reveal col-2">
+          <div class="card">
+            <h2>The deposit is the promise</h2>
+            <p>The host can require a seat deposit for a night. Show up and it's refunded. No-show and it's forfeited.</p>
+            <p>Forfeited deposits vanish into the metaphorical bank. Nobody is enriched. The point is that showing up becomes the default.</p>
+          </div>
+        </section>
+
+        <section class="reveal col-2">
+          <div class="card">
+            <h2>Four packs ship pre-installed</h2>
+            <ul class="packs">
+              <li>Casino</li>
+              <li>Cards Against Humanity</li>
+              <li>Monopoly Deal</li>
+              <li>Pluto Chess</li>
+            </ul>
+            <p>More on the way. Each room enables its own set of games.</p>
+          </div>
+        </section>
+
+        <section class="reveal col-2">
+          <div class="card">
+            <h2>Every room gets a <em class="serif">mascot</em></h2>
+            <p>Pick its personality and politics at room-create. It sends the reminders, narrates the night, and wraps each session in one line.</p>
+            <p>Quiet, witty, on your side. It takes the social work off the host's plate.</p>
+          </div>
+        </section>
+
+        <section class="reveal col-2">
+          <div class="card">
+            <h2>Who's ahead, and what happened last time</h2>
+            <p>Read the ledger before the game. See who's ahead, what was played, and how the last night went. You walk in already in the story.</p>
+          </div>
+        </section>
+
+        <section class="reveal col-full">
+          <figure class="screen-figure">
+            <img src="/screens/room.png" alt="The room. Standings with scores, packs, members, and the mascot's line." loading="lazy">
+            <figcaption class="screen-caption">The room. Standings, packs, and the mascot's read on the night.</figcaption>
+          </figure>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p class="footer-mascot">"Pull up a seat. The night keeps itself."</p>
+    <nav aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/how-it-works">How it works</a>
+      <a href="/features">Features</a>
+      <a href="/notifications">Notifications</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy policy</a>
+    </nav>
+  </footer>
+
+  <script>
+    // ── Scroll-triggered reveal ──
+    (function () {
+      var items = document.querySelectorAll(".reveal");
+      if (!("IntersectionObserver" in window)) {
+        items.forEach(function (i) { i.classList.add("is-visible"); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
+        });
+      }, { threshold: 0.12 });
+      items.forEach(function (i) { io.observe(i); });
+    })();
+
+    // ── Header pips light in sequence, repeating ──
+    (function () {
+      var pips = document.querySelectorAll(".pips span");
+      var i = 0;
+      setInterval(function () {
+        pips.forEach(function (p) { p.classList.remove("lit"); });
+        pips[i].classList.add("lit");
+        i = (i + 1) % pips.length;
+      }, 550);
+    })();
+  </script>
+</body>
+</html>
