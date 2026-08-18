@@ -100,6 +100,13 @@ protocol RoomStore: Sendable {
     /// recently-settled event.
     func fetchActiveEvent(roomId: UUID) async throws -> Event?
 
+    /// V0.82 — lazy auto-close. Stamps `settled_at` on the room's
+    /// events whose night passed 24h ago and were never settled.
+    /// Idempotent; member-gated. Returns the number of events
+    /// closed. Server side: `auto_close_stale_events(p_room_id)`
+    /// (migration 080).
+    func autoCloseStaleEvents(roomId: UUID) async throws -> Int
+
     /// Briefing summary for one event — the seat counts that drive
     /// the Briefing slot's "{N} seats left" line.
     func fetchBriefing(eventId: UUID) async throws -> BriefingSummary?
@@ -184,7 +191,8 @@ protocol RoomStore: Sendable {
         socialNarrationEnabled: Bool,
         briefing48hEnabled: Bool,
         calendarAutoAddHost: Bool,
-        socialPreferencesEnabled: Bool
+        socialPreferencesEnabled: Bool,
+        autoCloseHours: Int
     ) async throws -> Room
 
     // MARK: Host journal (P1.5)

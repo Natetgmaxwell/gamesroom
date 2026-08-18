@@ -650,6 +650,36 @@ actor InMemoryRoomStore: RoomStore {
         return events[roomId]
     }
 
+    /// V0.82 — in-memory mirror of `auto_close_stale_events`.
+    /// Stamps `settledAt` on the room's event whose night passed
+    /// the room's auto-close window (V0.83: `autoCloseHours`,
+    /// default 8), so previews exercise the same transition the
+    /// live RPC produces.
+    func autoCloseStaleEvents(roomId: UUID) async throws -> Int {
+        let windowHours = rooms.first(where: { $0.id == roomId })?.autoCloseHours ?? 8
+        guard let event = events[roomId],
+              event.settledAt == nil,
+              event.playedAt < Date().addingTimeInterval(-Double(windowHours) * 3600) else {
+            return 0
+        }
+        events[roomId] = Event(
+            id: event.id,
+            roomId: event.roomId,
+            name: event.name,
+            playedAt: event.playedAt,
+            createdAt: event.createdAt,
+            venue: event.venue,
+            hostNote: event.hostNote,
+            maxSeats: event.maxSeats,
+            startedAt: event.startedAt,
+            settledAt: Date(),
+            sessionId: event.sessionId,
+            packSlug: event.packSlug,
+            hostFinalized: event.hostFinalized
+        )
+        return 1
+    }
+
     /// In-memory mirror of `set_member_team` (migration 049).
     /// No-op for the synthetic roster — the seeded members have no
     /// team state to mutate, and previews don't need persistence.
@@ -1160,7 +1190,8 @@ actor InMemoryRoomStore: RoomStore {
         socialNarrationEnabled: Bool,
         briefing48hEnabled: Bool,
         calendarAutoAddHost: Bool,
-        socialPreferencesEnabled: Bool
+        socialPreferencesEnabled: Bool,
+        autoCloseHours: Int
     ) async throws -> Room {
         guard let idx = rooms.firstIndex(where: { $0.id == id }) else {
             throw NSError(
@@ -1189,7 +1220,8 @@ actor InMemoryRoomStore: RoomStore {
             socialPreferencesEnabled: socialPreferencesEnabled,
             socialNarrationEnabled: socialNarrationEnabled,
             maxSeats: maxSeats,
-            memberInviteQuota: memberInviteQuota
+            memberInviteQuota: memberInviteQuota,
+            autoCloseHours: autoCloseHours
         )
         rooms[idx] = updated
         return updated
@@ -1231,7 +1263,8 @@ actor InMemoryRoomStore: RoomStore {
             socialNarrationEnabled: existing.socialNarrationEnabled,
             maxSeats: existing.maxSeats,
             memberInviteQuota: existing.memberInviteQuota,
-            hostJournal: journal
+            hostJournal: journal,
+            autoCloseHours: existing.autoCloseHours
         )
         rooms[idx] = updated
         return updated

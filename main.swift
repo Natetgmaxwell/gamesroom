@@ -1315,7 +1315,7 @@ runner.run("Member defaults notifications_enabled to false when RPC omits the co
 
 // MARK: - CatchUpMessage (W2.7 — joined-late catch-up)
 
-runner.run("CatchUpMessage upcoming event names date and claims seat") {
+runner.run("CatchUpMessage upcoming event voices the claim prompt and appends standings") {
     let body = CatchUpMessage.body(
         eventName: "Friday Night Hold'em",
         playedAt: Date().addingTimeInterval(86_400),
@@ -1326,10 +1326,15 @@ runner.run("CatchUpMessage upcoming event names date and claims seat") {
     runner.assertTrue(body.contains("Friday Night Hold'em"), "event name missing")
     runner.assertTrue(body.contains("Felty"), "mascot name missing")
     runner.assertTrue(body.contains("Alex 120"), "standings missing")
-    runner.assertTrue(body.contains("Claim your seat"), "unclaimed nudge missing")
+    // V0.81 — the body is voiced through the 25-voice matrix; the
+    // claim nudge is the `.briefingOnCreate` template, not the old
+    // literal "Claim your seat." string. Assert the voice contract
+    // instead: the body must be non-empty, carry the mascot name,
+    // and end with the standings line.
+    runner.assertTrue(body.hasSuffix("Standings: Alex 120 · Sam 80."), "standings not appended")
 }
 
-runner.run("CatchUpMessage claimed state says you're in") {
+runner.run("CatchUpMessage claimed state does not nudge") {
     let body = CatchUpMessage.body(
         eventName: "Pluto Chess Sunday",
         playedAt: Date().addingTimeInterval(86_400),
@@ -1337,11 +1342,11 @@ runner.run("CatchUpMessage claimed state says you're in") {
         leaderboardSummary: "",
         rsvpState: .claimed
     )
-    runner.assertTrue(body.contains("You're in"), "claimed confirmation missing")
     runner.assertFalse(body.contains("Claim your seat"), "claimed state should not nudge")
+    runner.assertTrue(body.contains("Felty"), "mascot name missing")
 }
 
-runner.run("CatchUpMessage live event names state of play") {
+runner.run("CatchUpMessage live event voices the in-play line and appends standings") {
     let body = CatchUpMessage.body(
         eventName: "Casino Night",
         playedAt: Date().addingTimeInterval(-3600),
@@ -1349,8 +1354,34 @@ runner.run("CatchUpMessage live event names state of play") {
         leaderboardSummary: "Alex 120 · Sam 80",
         rsvpState: .unclaimed
     )
-    runner.assertTrue(body.contains("is live"), "live marker missing")
+    runner.assertTrue(body.contains("Felty"), "mascot name missing")
     runner.assertTrue(body.contains("Alex 120"), "standings missing")
+    runner.assertTrue(body.hasSuffix("Standings: Alex 120 · Sam 80."), "standings not appended")
+}
+
+runner.run("CatchUpMessage voice changes with personality") {
+    // V0.81 — the same event must produce a DIFFERENT body for a
+    // different personality × ideology pair. This is the voice
+    // contract: the mascot's settings drive the push copy.
+    let friendly = CatchUpMessage.body(
+        eventName: "Casino Night",
+        playedAt: Date().addingTimeInterval(-3600),
+        mascotName: "Felty",
+        leaderboardSummary: "",
+        rsvpState: .unclaimed,
+        personality: .friendly,
+        ideology: .centrist
+    )
+    let unhinged = CatchUpMessage.body(
+        eventName: "Casino Night",
+        playedAt: Date().addingTimeInterval(-3600),
+        mascotName: "Felty",
+        leaderboardSummary: "",
+        rsvpState: .unclaimed,
+        personality: .unhinged,
+        ideology: .anarchist
+    )
+    runner.assertFalse(friendly == unhinged, "voice must differ by personality × ideology")
 }
 
 // MARK: - CasinoWithdrawal (W1.4 — settle-sheet withdrawal wiring)
@@ -1543,6 +1574,69 @@ runner.run("LiveActivityRule no-ops outside play without a line") {
 }
 
 // MARK: - Room deletion (W-04, US-04)
+
+runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents stamps stale events, leaves fresh") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    // The in-memory store holds ONE event per room (addEvent wins
+    // the slot). Case 1: an event 3 days old (past the 8h default
+    // window) gets closed.
+    _ = try await store.addEvent(
+        roomId: hosted.id, name: "Stale Night",
+        playedAt: Date().addingTimeInterval(-3 * 86_400), packSlug: "casino"
+    )
+    let closed = try await store.autoCloseStaleEvents(roomId: hosted.id)
+    runner.assertEqual(closed, 1, file: #file, line: #line)
+    let after = try await store.fetchActiveEvent(roomId: hosted.id)
+    runner.assertEqual(after?.settledAt != nil, true, file: #file, line: #line)
+    // Idempotent: a second call closes nothing.
+    let again = try await store.autoCloseStaleEvents(roomId: hosted.id)
+    runner.assertEqual(again, 0, file: #file, line: #line)
+    // Case 2: an event 2 hours old (inside the 8h window) is left
+    // untouched.
+    _ = try await store.addEvent(
+        roomId: hosted.id, name: "Fresh Night",
+        playedAt: Date().addingTimeInterval(-2 * 3600), packSlug: "casino"
+    )
+    let freshClosed = try await store.autoCloseStaleEvents(roomId: hosted.id)
+    runner.assertEqual(freshClosed, 0, file: #file, line: #line)
+    let fresh = try await store.fetchActiveEvent(roomId: hosted.id)
+    runner.assertEqual(fresh?.name, "Fresh Night", file: #file, line: #line)
+    runner.assertEqual(fresh?.settledAt, nil, file: #file, line: #line)
+}
+
+runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents honors the room's autoCloseHours window") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    // V0.83 — the window is per-room. Narrow it to 1h: an event
+    // 2 hours old is now stale and gets closed.
+    _ = try await store.updateRoom(
+        id: hosted.id,
+        name: hosted.name,
+        mascotName: hosted.mascotName,
+        mascotPersonality: hosted.mascotPersonality,
+        mascotPoliticalIdeology: hosted.mascotPoliticalIdeology,
+        maxSeats: hosted.maxSeats,
+        memberInviteQuota: hosted.memberInviteQuota,
+        joinStartingBonus: hosted.joinStartingBonus,
+        socialNarrationEnabled: hosted.socialNarrationEnabled,
+        briefing48hEnabled: hosted.briefing48hEnabled,
+        calendarAutoAddHost: hosted.calendarAutoAddHost,
+        socialPreferencesEnabled: hosted.socialPreferencesEnabled,
+        autoCloseHours: 1
+    )
+    _ = try await store.addEvent(
+        roomId: hosted.id, name: "Two Hours Old",
+        playedAt: Date().addingTimeInterval(-2 * 3600), packSlug: "casino"
+    )
+    let closed = try await store.autoCloseStaleEvents(roomId: hosted.id)
+    runner.assertEqual(closed, 1, file: #file, line: #line)
+    let after = try await store.fetchActiveEvent(roomId: hosted.id)
+    runner.assertEqual(after?.settledAt != nil, true, file: #file, line: #line)
+    // And the persisted room carries the new window.
+    let updated = try await store.fetchRooms().first { $0.id == hosted.id }
+    runner.assertEqual(updated?.autoCloseHours, 1, file: #file, line: #line)
+}
 
 runner.runAsync("InMemoryRoomStore.deleteRoom expires open join codes and removes the room") {
     let store = InMemoryRoomStore()
@@ -2341,7 +2435,7 @@ private func fullyPopulatedContext() -> MascotEngine.RoomContext {
     )
 }
 
-runner.run("MascotEngine.generateVoice — all 200 cells render without raw placeholders when fully populated") {
+runner.run("MascotEngine.generateVoice — all 770 cells render without raw placeholders when fully populated") {
     let ctx = fullyPopulatedContext()
     let eventDate = Date(timeIntervalSince1970: 1_700_000_000)
     for personality in MascotPersonality.allCases {
@@ -2382,7 +2476,7 @@ runner.run("MascotEngine.generateVoice — all 200 cells render without raw plac
     }
 }
 
-runner.run("MascotEngine.generateVoice — all 200 cells stay <= 200 chars fully populated") {
+runner.run("MascotEngine.generateVoice — all 770 cells stay <= 200 chars fully populated") {
     let ctx = fullyPopulatedContext()
     let eventDate = Date(timeIntervalSince1970: 1_700_000_000)
     for personality in MascotPersonality.allCases {
@@ -2423,8 +2517,8 @@ runner.run("MascotEngine.generateVoice — all 200 cells stay <= 200 chars fully
     }
 }
 
-runner.run("MascotEngine.generateVoice — 25 voices are pairwise distinct per kind") {
-    // For each kind, all 25 personality×ideology outputs must be
+runner.run("MascotEngine.generateVoice — 55 voices are pairwise distinct per kind") {
+    // For each kind, all 55 personality×ideology outputs must be
     // distinct — no word-swapped form letters.
     let ctx = fullyPopulatedContext()
     let eventDate = Date(timeIntervalSince1970: 1_700_000_000)
@@ -2455,7 +2549,7 @@ runner.run("MascotEngine.generateVoice — 25 voices are pairwise distinct per k
                 )
             }
         }
-        runner.assertEqual(seen.count, 25)
+        runner.assertEqual(seen.count, 55)
     }
 }
 
@@ -2580,26 +2674,11 @@ runner.run("MascotEngine.generateVoice — legacy logistics placeholders drop cl
 
 private func uuidString(_ uuid: UUID) -> String { uuid.uuidString }
 
-// MARK: - MascotEngine V0.40 — MiniMax LLM defaults + fallback
+// MARK: - MascotEngine V0.81 — edge-function voice generation
 
-runner.run("MascotEngine default LLM endpoint is MiniMax") {
-    runner.assertEqual(
-        MascotEngine.defaultLLMEndpoint,
-        "https://api.minimax.io/v1"
-    )
-}
-
-runner.run("MascotEngine default LLM model is MiniMax-M3") {
-    runner.assertEqual(
-        MascotEngine.defaultLLMModel,
-        "MiniMax-M3"
-    )
-}
-
-runner.runAsync("MascotEngine.generateVoiceLLM falls back to template on bad endpoint") {
-    // Bogus endpoint that will fail to connect (port 1 is reserved).
-    // The engine must swallow the failure and return the template
-    // output, matching the V0.26 fallback semantics.
+runner.runAsync("MascotEngine.generateVoiceLLM falls back to template without a session") {
+    // No auth token ⇒ template only, zero network cost. The
+    // V0.81 edge-function path must not attempt a call.
     let mascotName = "Max"
     let roomName = "Friday Poker"
     let personality: MascotPersonality = .friendly
@@ -2626,28 +2705,150 @@ runner.runAsync("MascotEngine.generateVoiceLLM falls back to template on bad end
         ideology: ideology,
         kind: kind,
         context: context,
-        apiKey: "dummy",
-        endpoint: "https://127.0.0.1:1"
+        authToken: nil,
+        roomId: UUID()
     )
     runner.assertEqual(llmVoice, templateVoice)
 }
 
-// MARK: - V0.42 — bundled global MiniMax API key fallback
+runner.runAsync("MascotEngine.generateVoiceLLM falls back to template without a room id") {
+    // A token but no room id (push path) ⇒ template only.
+    let mascotName = "Max"
+    let roomName = "Friday Poker"
+    let personality: MascotPersonality = .friendly
+    let ideology: MascotPoliticalIdeology = .centrist
+    let kind: MascotEngine.NotificationKind = .briefingOnCreate
+    let context = MascotEngine.RoomContext(
+        activeEventTitle: "Poker",
+        lastEventDaysAgo: nil,
+        memberCount: 4,
+        memberNames: ["Alice", "Bob"]
+    )
+    let templateVoice = MascotEngine.generateVoice(
+        mascotName: mascotName,
+        roomName: roomName,
+        personality: personality,
+        ideology: ideology,
+        kind: kind,
+        context: context
+    )
+    let llmVoice = await MascotEngine.generateVoiceLLM(
+        mascotName: mascotName,
+        roomName: roomName,
+        personality: personality,
+        ideology: ideology,
+        kind: kind,
+        context: context,
+        authToken: "dummy-token",
+        roomId: nil,
+        eventId: UUID()
+    )
+    runner.assertEqual(llmVoice, templateVoice)
+}
 
-runner.run("MascotEngine.defaultLLMApiKey resolves to the sentinel when the key is absent") {
-    // The test binary's Bundle.main has no MINIMAX_API_KEY, so the
-    // statics initializer must fall back to the loud sentinel rather
-    // than trapping or returning an empty string.
+// MARK: - V0.81 — MascotEngine.chooseLLMCaption (footer caption LLM swap)
+
+runner.run("MascotEngine.chooseLLMCaption swaps in a different LLM body") {
+    // Real LLM call landed and produced a body distinct from the
+    // template — the View should render the LLM line.
+    let template = "Max: Poker is on the books. The host will run it."
+    let llmBody = "  Max here. The table's set — get in.  \n"
     runner.assertEqual(
-        MascotEngine.defaultLLMApiKey,
-        "MISSING_MINIMAX_API_KEY_CONFIG_ERROR"
+        MascotEngine.chooseLLMCaption(
+            llmResult: llmBody, template: template
+        ),
+        "Max here. The table's set — get in."
     )
 }
 
-runner.run("MascotEngine.defaultLLMApiKey is never empty") {
-    runner.assertFalse(
-        MascotEngine.defaultLLMApiKey.isEmpty,
-        "defaultLLMApiKey must fall back to the sentinel, never be empty"
+runner.run("MascotEngine.chooseLLMCaption falls back to template when the engine returned the template verbatim") {
+    // `generateVoiceLLM` returns the template on every failure path
+    // (missing key / bad endpoint / non-200 / decode failure /
+    // empty body). The wiring must NOT swap that in — it must keep
+    // the template visible by returning `nil`.
+    let template = "Max: Welcome to Friday Poker."
+    runner.assertNil(
+        MascotEngine.chooseLLMCaption(
+            llmResult: template, template: template
+        )
+    )
+}
+
+runner.run("MascotEngine.chooseLLMCaption rejects an empty/whitespace body") {
+    // Defensive: if the API returns whitespace only, treat it as a
+    // failure and stay on the template. Avoids the View rendering
+    // a blank italic line at the bottom of the room page.
+    let template = "Max: Welcome to Friday Poker."
+    runner.assertNil(
+        MascotEngine.chooseLLMCaption(
+            llmResult: "   \n\t  ", template: template
+        )
+    )
+}
+
+runner.run("MascotEngine.chooseLLMCaption rejects an LLM body identical to the template after trimming") {
+    // The engine's failure path returns the template VERBATIM (no
+    // surrounding whitespace), so the simple `==` check is the
+    // load-bearing one. The trimmed-equal case is the API echoing
+    // the template — still a no-op swap.
+    let template = "Max: Welcome to Friday Poker."
+    runner.assertNil(
+        MascotEngine.chooseLLMCaption(
+            llmResult: "Max: Welcome to Friday Poker.",
+            template: template
+        )
+    )
+}
+
+// MARK: - V0.81 — stripThinkingBlocks (MiniMax-M3 visible CoT)
+
+runner.run("MascotEngine.stripThinkingBlocks removes a complete thinking block") {
+    let input = "<thinking>The user wants a short message.</thinking>Max: Welcome to Friday Poker!"
+    runner.assertEqual(
+        MascotEngine.stripThinkingBlocks(input),
+        "Max: Welcome to Friday Poker!"
+    )
+}
+
+runner.run("MascotEngine.stripThinkingBlocks removes a block in the middle") {
+    let input = "Max: Welcome!<thinking>Should I mention the leader?</thinking> The table is set."
+    runner.assertEqual(
+        MascotEngine.stripThinkingBlocks(input),
+        "Max: Welcome! The table is set."
+    )
+}
+
+runner.run("MascotEngine.stripThinkingBlocks drops everything after an unclosed block") {
+    // Truncated response — the close tag never arrives. Everything
+    // from the opener to the end is reasoning; drop it all.
+    let input = "<thinking>The user wants a short message. Let me draft something"
+    runner.assertEqual(
+        MascotEngine.stripThinkingBlocks(input),
+        ""
+    )
+}
+
+runner.run("MascotEngine.stripThinkingBlocks is a no-op without a thinking block") {
+    let input = "Max: Welcome to Friday Poker!"
+    runner.assertEqual(
+        MascotEngine.stripThinkingBlocks(input),
+        input
+    )
+}
+
+runner.run("MascotEngine.stripThinkingBlocks handles multiple blocks") {
+    let input = "<thinking>First thought.</thinking>Max: Hi!<thinking>Second thought.</thinking> The table is set."
+    runner.assertEqual(
+        MascotEngine.stripThinkingBlocks(input),
+        "Max: Hi! The table is set."
+    )
+}
+
+runner.run("MascotEngine.stripThinkingBlocks is case-insensitive on the tags") {
+    let input = "<THINKING>Reasoning here.</THINKING>Max: Welcome!"
+    runner.assertEqual(
+        MascotEngine.stripThinkingBlocks(input),
+        "Max: Welcome!"
     )
 }
 

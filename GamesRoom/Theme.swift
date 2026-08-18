@@ -187,6 +187,8 @@ enum Theme {
         static let bellSlashFill = "bell.slash.fill"
         /// V0.80 — the join-room toolbar affordance for existing members.
         static let personCropCircleBadgePlus = "person.crop.circle.badge.plus"
+        /// V0.81 — autosave failure status in room settings.
+        static let exclamationmarkTriangleFill = "exclamationmark.triangle.fill"
     }
 }
 

@@ -145,7 +145,6 @@ final class RealtimeEventService {
             optedInMemberIds: [callerId],
             mutedMemberIds: [],
             hostNote: nil,
-            mascotApiKey: room.mascotApiKey,
             mascotPersonality: room.mascotPersonality,
             mascotIdeology: room.mascotPoliticalIdeology
         )

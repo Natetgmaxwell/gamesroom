@@ -132,7 +132,6 @@ final class NotificationDispatcher {
         /// mutes (a brand-new event has none).
         mutedMemberIds: Set<UUID> = [],
         hostNote: String? = nil,
-        mascotApiKey: String? = nil,
         mascotPersonality: MascotPersonality = .friendly,
         mascotIdeology: MascotPoliticalIdeology = .centrist
     ) async {
@@ -204,14 +203,15 @@ final class NotificationDispatcher {
             }
 
             // On-create push — fires for every opted-in,
-            // non-muted, non-declined member. When the room has a
-            // mascot API key, the body is LLM-generated; otherwise
-            // falls back to the template.
+            // non-muted, non-declined member. When the caller has a
+            // session, the body is LLM-generated via the
+            // `mascot-voice` edge function; otherwise falls back
+            // to the template.
             var onCreateBodyText = onCreateBody(
                 mascotName: mascotName, eventName: eventName
             )
-            let resolvedKey = MascotEngine.defaultLLMApiKey
-            if !resolvedKey.isEmpty && !resolvedKey.hasPrefix("MISSING_") {
+            let authToken = await SupabaseClientProvider.currentSession()?.accessToken
+            if let authToken, !authToken.isEmpty {
                 let context = MascotEngine.RoomContext(
                     activeEventTitle: eventName,
                     lastEventDaysAgo: nil,
@@ -225,7 +225,9 @@ final class NotificationDispatcher {
                     ideology: mascotIdeology,
                     kind: .briefingOnCreate,
                     context: context,
-                    apiKey: resolvedKey,
+                    authToken: authToken,
+                    roomId: nil,
+                    eventId: eventId,
                     eventDate: playedAt,
                     hostNote: hostNote
                 )
@@ -252,7 +254,10 @@ final class NotificationDispatcher {
                     eventName: eventName,
                     playedAt: playedAt,
                     state: state,
-                    hostNote: hostNote
+                    hostNote: hostNote,
+                    personality: mascotPersonality,
+                    ideology: mascotIdeology,
+                    memberCount: perMemberCadence.count
                 )
                 await schedule(
                     center: center,
@@ -273,7 +278,10 @@ final class NotificationDispatcher {
                     mascotName: mascotName,
                     eventName: eventName,
                     playedAt: playedAt,
-                    state: state
+                    state: state,
+                    personality: mascotPersonality,
+                    ideology: mascotIdeology,
+                    memberCount: perMemberCadence.count
                 )
                 await schedule(
                     center: center,
@@ -317,7 +325,9 @@ final class NotificationDispatcher {
         playedAt: Date,
         mascotName: String,
         leaderboardSummary: String,
-        rsvpState: MemberRSVPState
+        rsvpState: MemberRSVPState,
+        personality: MascotPersonality = .friendly,
+        ideology: MascotPoliticalIdeology = .centrist
     ) async {
         guard await requestAuthorizationIfNeeded() else { return }
         let center = UNUserNotificationCenter.current()
@@ -326,7 +336,9 @@ final class NotificationDispatcher {
             playedAt: playedAt,
             mascotName: mascotName,
             leaderboardSummary: leaderboardSummary,
-            rsvpState: rsvpState
+            rsvpState: rsvpState,
+            personality: personality,
+            ideology: ideology
         )
         await schedule(
             center: center,
@@ -349,17 +361,37 @@ final class NotificationDispatcher {
     /// claimed members, "reminder —" prefix for unclaimed. When the
     /// host has written a pre-event note (≤280 chars), the claimed
     /// variant appends it per vision §3.6: "Host's note: [note]".
+    ///
+    /// V0.81 — the body is voiced through the 25-voice matrix
+    /// (personality × ideology × `.briefing48h`), so the push
+    /// reads in the room mascot's voice. The title stays plain
+    /// logistics (the OS renders it in the lock-screen summary).
     private func t48Body(
         mascotName: String,
         eventName: String,
         playedAt: Date,
         state: MemberRSVPState,
-        hostNote: String? = nil
+        hostNote: String? = nil,
+        personality: MascotPersonality = .friendly,
+        ideology: MascotPoliticalIdeology = .centrist,
+        memberCount: Int = 0
     ) -> (title: String, body: String) {
-        let when = humanWhen(playedAt)
         switch state {
         case .claimed:
-            var body = "\(eventName) is in two days — \(when)."
+            var body = MascotEngine.generateVoice(
+                mascotName: mascotName,
+                roomName: "",
+                personality: personality,
+                ideology: ideology,
+                kind: .briefing48h,
+                context: .init(
+                    activeEventTitle: eventName,
+                    lastEventDaysAgo: nil,
+                    memberCount: memberCount,
+                    memberNames: []
+                ),
+                eventDate: playedAt
+            )
             if let note = hostNote, !note.isEmpty {
                 body += " Host's note: \(note)"
             }
@@ -382,18 +414,39 @@ final class NotificationDispatcher {
 
     /// Title + body pair for the morning-of push. Logistics prefix
     /// for claimed members, "reminder —" prefix for unclaimed.
+    ///
+    /// V0.81 — the body is voiced through the 25-voice matrix
+    /// (personality × ideology × `.briefingMorning`), so the push
+    /// reads in the room mascot's voice. The title stays plain
+    /// logistics.
     private func morningBody(
         mascotName: String,
         eventName: String,
         playedAt: Date,
-        state: MemberRSVPState
+        state: MemberRSVPState,
+        personality: MascotPersonality = .friendly,
+        ideology: MascotPoliticalIdeology = .centrist,
+        memberCount: Int = 0
     ) -> (title: String, body: String) {
-        let time = humanTime(playedAt)
         switch state {
         case .claimed:
+            let body = MascotEngine.generateVoice(
+                mascotName: mascotName,
+                roomName: "",
+                personality: personality,
+                ideology: ideology,
+                kind: .briefingMorning,
+                context: .init(
+                    activeEventTitle: eventName,
+                    lastEventDaysAgo: nil,
+                    memberCount: memberCount,
+                    memberNames: []
+                ),
+                eventDate: playedAt
+            )
             return (
                 "\(eventName) today",
-                "\(eventName) today — \(time)."
+                body
             )
         case .unclaimed:
             return (
@@ -473,28 +526,7 @@ final class NotificationDispatcher {
     }
 
     // MARK: - Date formatting
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .short
-        return f
-    }()
-
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        return f
-    }()
-
-    private func humanTime(_ date: Date) -> String {
-        Self.timeFormatter.string(from: date)
-    }
-
-    private func humanWhen(_ date: Date) -> String {
-        let d = Self.dateFormatter.string(from: date)
-        let t = Self.timeFormatter.string(from: date)
-        return "\(d) at \(t)"
-    }
+    // V0.81 — `humanTime` / `humanWhen` were removed with the
+    // plain-logistics push bodies; the voiced bodies carry the
+    // date/time via the template placeholders instead.
 }

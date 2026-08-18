@@ -15,17 +15,20 @@
 //
 //  The hub renders a list of three NavigationLinks; tapping
 //  one pushes the corresponding sub-sheet. Sub-sheets share the
-//  same `@State` as the hub (form state is hoisted) so a Save
-//  button at the root can write once after the user has edited
-//  any sub-sheet.
+//  same `@State` draft as the hub (form state is hoisted) so a
+//  single autosave path can write once the host pauses.
 //
-//  Save fires `RoomService.updateRoom(...)` + the P1.5 journal
-//  write. On success the rooms-list cache in `RoomService` is
-//  refreshed by the service, the sheet dismisses, and the host
-//  sees the new mascot name + operations immediately on the
-//  Rooms page. On failure the inline `errorMessage` replaces
-//  the dismiss path so the host can edit and retry without
-//  losing input.
+//  V0.81 — autosave: every edit to the draft restarts a 600ms
+//  trailing debounce via `.task(id: draft)`; the write fires
+//  `RoomService.updateRoom(...)` + the P1.5 journal write + the
+//  W2.6 season-subtitle RPC. `.onDisappear` flushes a pending
+//  edit so a swipe-dismiss never loses the last keystroke, and a
+//  write that lands while another is in flight is refired after
+//  the in-flight one completes (no edit is silently dropped). On
+//  success the rooms-list cache in `RoomService` is refreshed by
+//  the service and the host sees the new mascot name +
+//  operations immediately on the Rooms page. On failure the
+//  inline status row shows the error and the next edit retries.
 //
 //  The host-only gate is enforced by the caller
 //  (`RoomDetailView`'s settings gear is conditional on
@@ -63,14 +66,41 @@ struct RoomSettingsSheet: View {
     @State private var briefing48hEnabled: Bool
     @State private var calendarAutoAddHost: Bool
     @State private var socialPreferencesEnabled: Bool
+    @State private var autoCloseHours: Int
     @State private var hostJournal: String
 
     // P0.2 — share-code surface state. Generated on demand.
     @State private var shareCode: String?
     @State private var isGeneratingCode: Bool = false
 
-    @State private var isSaving: Bool = false
-    @State private var errorMessage: String?
+    // V0.81 — autosave state. `saveState` drives the status row;
+    // `draft` is bumped on every edit so `.task(id:)` restarts the
+    // debounce; `writeTask` lets `onDisappear` refire a write that
+    // was mid-flight so the newest state is never dropped.
+    enum SaveState: Equatable {
+        case idle
+        case saving
+        case saved
+        case failed(String)
+    }
+    @State private var saveState: SaveState = .idle
+    @State private var draft = 0
+    // V0.81 — true when an edit landed that no write has captured
+    // yet. Cleared when a write starts; set again if an edit lands
+    // while the write is in flight. Drives the dismiss-time retry.
+    @State private var isDirty = false
+    @State private var writeTask: Task<Void, Never>?
+    // V0.81 — write serialization: at most one writeAll runs at a
+    // time. An overlapping call (an edit landed while a write is in
+    // flight and the debounce fired again) queues a refire instead
+    // of running concurrently — concurrent writes could land out of
+    // order and persist stale values.
+    @State private var isWriting = false
+    @State private var refireAfterWrite = false
+    // W2.6 — the server subtitle value seeded on open; the
+    // season-subtitle bumper compares against it so seeding never
+    // triggers a spurious autosave.
+    @State private var seededSeasonSubtitle: String = ""
 
     // W1.5 — host "Declare season end" CTA state.
     @State private var showDeclareConfirm: Bool = false
@@ -103,6 +133,7 @@ struct RoomSettingsSheet: View {
         _briefing48hEnabled = State(initialValue: room.briefing48hEnabled)
         _calendarAutoAddHost = State(initialValue: room.calendarAutoAddHost)
         _socialPreferencesEnabled = State(initialValue: room.socialPreferencesEnabled)
+        _autoCloseHours = State(initialValue: room.autoCloseHours)
         _hostJournal = State(initialValue: room.hostJournal ?? "")
         _seasonSubtitle = State(initialValue: "")
     }
@@ -143,6 +174,7 @@ struct RoomSettingsSheet: View {
                             briefing48hEnabled: $briefing48hEnabled,
                             calendarAutoAddHost: $calendarAutoAddHost,
                             socialPreferencesEnabled: $socialPreferencesEnabled,
+                            autoCloseHours: $autoCloseHours,
                             shareCode: $shareCode,
                             isGeneratingCode: $isGeneratingCode
                         )
@@ -195,11 +227,39 @@ struct RoomSettingsSheet: View {
                     }
                 }
 
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(.red.opacity(0.85))
+                // V0.81 — autosave status. Replaces the manual
+                // Save button: edits write themselves after a
+                // 600ms pause; this row only reports state.
+                Section {
+                    HStack {
+                        switch saveState {
+                        case .idle:
+                            Text("Edits save automatically")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        case .saving:
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(Theme.Palette.accent)
+                            Text("Saving…")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        case .saved:
+                            Image(systemName: Theme.Icon.checkmarkCircleFill)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.accent)
+                            Text("Saved")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        case .failed(let message):
+                            Image(systemName: Theme.Icon.exclamationmarkTriangleFill)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(.red.opacity(0.85))
+                            Text(message)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(.red.opacity(0.85))
+                        }
+                        Spacer()
                     }
                 }
 
@@ -252,24 +312,6 @@ struct RoomSettingsSheet: View {
                     }
                 }
 
-                Section {
-                    Button(action: save) {
-                        HStack {
-                            Spacer()
-                            if isSaving {
-                                ProgressView()
-                                    .tint(Theme.Palette.accent)
-                            } else {
-                                Text("Save")
-                                    .font(Theme.Typography.body.weight(.semibold))
-                                    .foregroundStyle(Theme.Palette.accent)
-                            }
-                            Spacer()
-                        }
-                    }
-                    .disabled(isSaving)
-                }
-
                 // W-04 — host-only destructive action. Sits at the
                 // bottom of the sheet, visually separated from the
                 // settings sections (AC-03 placement; never next to
@@ -312,16 +354,31 @@ struct RoomSettingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    // V0.81 — autosave means there is nothing to
+                    // cancel; Done dismisses after any pending write
+                    // has flushed.
+                    Button("Done") { dismiss() }
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
                 }
             }
-            .task {
-                // W2.6 — seed the subtitle field from the current
-                // season once the environment object is available.
-                if seasonSubtitle.isEmpty {
-                    seasonSubtitle = roomService.cachedCurrentSeason(roomId: room.id)?.subtitle ?? ""
-                }
+            // V0.81 — autosave bumpers. Every persisted field
+            // restarts the debounce. Attached at the hub so edits
+            // made inside the sub-sheets (hoisted bindings) fire
+            // the same path.
+            .onChange(of: mascotName) { _, _ in bumpDraft() }
+            .onChange(of: mascotPersonality) { _, _ in bumpDraft() }
+            .onChange(of: mascotIdeology) { _, _ in bumpDraft() }
+            .onChange(of: socialNarrationEnabled) { _, _ in bumpDraft() }
+            .onChange(of: hostJournal) { _, _ in bumpDraft() }
+            .onChange(of: maxSeats) { _, _ in bumpDraft() }
+            .onChange(of: memberInviteQuota) { _, _ in bumpDraft() }
+            .onChange(of: joinStartingBonus) { _, _ in bumpDraft() }
+            .onChange(of: briefing48hEnabled) { _, _ in bumpDraft() }
+            .onChange(of: calendarAutoAddHost) { _, _ in bumpDraft() }
+            .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
+            .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
+            .onChange(of: seasonSubtitle) { _, newValue in
+                if newValue != seededSeasonSubtitle { bumpDraft() }
             }
             // V0.9 Wave 2 Slice 2.1 - pack how-to body.
             .sheet(item: Binding<AnyPackType?>(
@@ -332,6 +389,45 @@ struct RoomSettingsSheet: View {
                     pack: wrapped.type,
                     onDismiss: { packDetailType = nil }
                 )
+            }
+        }
+        // V0.81 — autosave debounce + flush live on the
+        // NavigationStack, not the Form: pushing into a sub-sheet
+        // disappears the Form (cancelling a `.task` attached
+        // there), but the stack survives the push.
+        .task(id: draft) {
+            guard draft > 0 else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            await writeAll()
+        }
+        .onDisappear {
+            // Flush on dismiss so a swipe-away never loses the
+            // last edit. If a write was mid-flight, await it and
+            // retry when it failed or an edit landed while it was
+            // in flight (that edit wasn't captured).
+            // (Bumping `draft` here would not work: `.task(id:)`
+            // is cancelled as the view disappears.)
+            if let writeTask {
+                let inFlight = writeTask
+                Task {
+                    await inFlight.value
+                    if needsRetry {
+                        await writeAll()
+                    }
+                }
+            } else if draft > 0 {
+                Task { await writeAll() }
+            }
+        }
+        .task {
+            // W2.6 — seed the subtitle field from the current
+            // season once the environment object is available.
+            // Remember what we seeded so the bumper doesn't treat
+            // the seed as an edit (spurious write on open).
+            if seasonSubtitle.isEmpty {
+                seededSeasonSubtitle = roomService.cachedCurrentSeason(roomId: room.id)?.subtitle ?? ""
+                seasonSubtitle = seededSeasonSubtitle
             }
         }
         .tint(Theme.Palette.accent)
@@ -373,11 +469,12 @@ struct RoomSettingsSheet: View {
             let code = try await roomService.generateJoinCode(roomId: room.id)
             shareCode = code
         } catch {
-            errorMessage = (error as NSError).localizedDescription
+            // V0.81 — autosave status row carries the error.
+            saveState = .failed((error as NSError).localizedDescription)
         }
     }
 
-    // MARK: - Save (root-level write)
+    // MARK: - Actions (W1.5 / W-04)
 
     /// W1.5 — host "Declare season end" action. Fires the
     /// `close_season` RPC via `RoomService.closeSeason`, then
@@ -385,13 +482,13 @@ struct RoomSettingsSheet: View {
     private func declareSeasonEnd() async {
         guard !isDeclaring else { return }
         isDeclaring = true
-        errorMessage = nil
         defer { isDeclaring = false }
         do {
             _ = try await roomService.closeSeason(roomId: room.id)
             dismiss()
         } catch {
-            errorMessage = (error as NSError).localizedDescription
+            // V0.81 — autosave status row carries the error.
+            saveState = .failed((error as NSError).localizedDescription)
         }
     }
 
@@ -406,27 +503,60 @@ struct RoomSettingsSheet: View {
     private func deleteRoom() async {
         guard !isDeleting else { return }
         isDeleting = true
-        errorMessage = nil
         defer { isDeleting = false }
         do {
             try await roomService.deleteRoom(roomId: room.id)
             dismiss()
             onRoomDeleted?()
         } catch {
-            errorMessage = (error as NSError).localizedDescription
+            // V0.81 — autosave status row carries the error.
+            saveState = .failed((error as NSError).localizedDescription)
         }
     }
 
+    // MARK: - Autosave (V0.81)
+
+    /// Bumps the draft counter, which restarts the `.task(id:)`
+    /// debounce. Called from every field's `.onChange`.
+    private func bumpDraft() {
+        draft += 1
+        isDirty = true
+    }
+
+    /// True when a dismiss-time retry is warranted: an edit that
+    /// no write captured, or a write that failed.
+    private var needsRetry: Bool {
+        if isDirty { return true }
+        if case .failed = saveState { return true }
+        return false
+    }
+
     /// Fires `RoomService.updateRoom(...)` with every form value
-    /// plus the P1.5 host journal via `RoomService.updateHostJournal(...)`.
-    /// Both writes run sequentially; the journal write is skipped
-    /// if the settings write throws.
-    private func save() {
-        guard !isSaving else { return }
-        isSaving = true
-        errorMessage = nil
-        Task {
-            defer { isSaving = false }
+    /// plus the P1.5 host journal and the W2.6 season subtitle.
+    /// The journal/subtitle writes are skipped if the settings
+    /// write throws.
+    private func writeAll() async {
+        // Serialize: if a write is already in flight, queue a
+        // refire (runs when the current write completes) instead of
+        // running concurrently.
+        guard !isWriting else {
+            refireAfterWrite = true
+            return
+        }
+        isWriting = true
+        defer {
+            isWriting = false
+            if refireAfterWrite {
+                refireAfterWrite = false
+                Task { await writeAll() }
+            }
+        }
+        saveState = .saving
+        let task = Task {
+            // Mark clean at the moment the write captures state;
+            // an edit landing mid-write re-dirties so the
+            // dismiss-time retry can catch it.
+            isDirty = false
             do {
                 _ = try await roomService.updateRoom(
                     id: room.id,
@@ -440,7 +570,8 @@ struct RoomSettingsSheet: View {
                     socialNarrationEnabled: socialNarrationEnabled,
                     briefing48hEnabled: briefing48hEnabled,
                     calendarAutoAddHost: calendarAutoAddHost,
-                    socialPreferencesEnabled: socialPreferencesEnabled
+                    socialPreferencesEnabled: socialPreferencesEnabled,
+                    autoCloseHours: autoCloseHours
                 )
                 let trimmedJournal = hostJournal.trimmingCharacters(in: .whitespacesAndNewlines)
                 _ = try await roomService.updateHostJournal(
@@ -461,15 +592,17 @@ struct RoomSettingsSheet: View {
                 if calendarAutoAddHost {
                     let granted = await CalendarService.shared.requestAccess()
                     guard granted else {
-                        errorMessage = "Calendar access denied — events won't auto-add. You can allow it in Settings."
+                        saveState = .failed("Calendar access denied — events won't auto-add. You can allow it in Settings.")
                         return
                     }
                 }
-                dismiss()
+                saveState = .saved
             } catch {
-                errorMessage = (error as NSError).localizedDescription
+                saveState = .failed((error as NSError).localizedDescription)
             }
         }
+        writeTask = task
+        await task.value
     }
 }
 
@@ -549,6 +682,7 @@ struct RoomSettingsOperationsSheet: View {
     @Binding var briefing48hEnabled: Bool
     @Binding var calendarAutoAddHost: Bool
     @Binding var socialPreferencesEnabled: Bool
+    @Binding var autoCloseHours: Int
     @Binding var shareCode: String?
     @Binding var isGeneratingCode: Bool
 
@@ -570,6 +704,7 @@ struct RoomSettingsOperationsSheet: View {
         briefing48hEnabled: Binding<Bool>,
         calendarAutoAddHost: Binding<Bool>,
         socialPreferencesEnabled: Binding<Bool>,
+        autoCloseHours: Binding<Int>,
         shareCode: Binding<String?>,
         isGeneratingCode: Binding<Bool>
     ) {
@@ -581,6 +716,7 @@ struct RoomSettingsOperationsSheet: View {
         _briefing48hEnabled = briefing48hEnabled
         _calendarAutoAddHost = calendarAutoAddHost
         _socialPreferencesEnabled = socialPreferencesEnabled
+        _autoCloseHours = autoCloseHours
         _shareCode = shareCode
         _isGeneratingCode = isGeneratingCode
     }
@@ -592,6 +728,10 @@ struct RoomSettingsOperationsSheet: View {
                 Stepper("Invite quota: \(memberInviteQuota)", value: $memberInviteQuota, in: 0...20)
                 Stepper("Starting bonus: \(joinStartingBonus) pts", value: $joinStartingBonus, in: 0...1000, step: 50)
                 Stepper("Seat deposit: \(seatDepositAmount) pts", value: $seatDepositAmount, in: 0...500, step: 10)
+                // V0.83 — auto-close window. The lazy close stamps
+                // settled_at on an un-finalized event this many hours
+                // after played_at. Bounded 1...72 server-side.
+                Stepper("Auto-close event after: \(autoCloseHours)h", value: $autoCloseHours, in: 1...72)
             }
 
             Section("Features") {
@@ -740,11 +880,10 @@ struct RoomSettingsOperationsSheet: View {
         // Future: bubble up to RoomSettingsSheet via a closure
         // binding or EnvironmentObject key. For M2.2 the
         // Operations sheet is structurally complete; the
-        // share-code generation still happens via the
-        // pre-existing top-level Save path on the hub (the
-        // hub's `save()` writes the same fields, and the code
-        // surfaces inline). Until the closure is wired, this
-        // button is a no-op placeholder.
+        // share-code generation still happens via the hub's
+        // generateShareCode() path (the code surfaces inline).
+        // Until the closure is wired, this button is a no-op
+        // placeholder.
         _ = isGeneratingCode
     }
 }

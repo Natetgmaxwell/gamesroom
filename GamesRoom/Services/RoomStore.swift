@@ -245,13 +245,14 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     }
 
     /// The live RPC is `redeem_join_code(p_code)` (migration 004 +
-    /// V0.18 bonus extension). Server is idempotent — re-redeeming
+    /// V0.18 bonus extension; param renamed `code` → `p_code` in
+    /// migration 068). Server is idempotent — re-redeeming
     /// for an existing member returns the room row without
     /// mutating points.
     func redeemJoinCode(code: String) async throws -> RedeemedRoom {
         let rows: [RedeemedRoom] = try await SupabaseClientProvider.shared
             .rpc("redeem_join_code", params: [
-                "code": code
+                "p_code": code
             ])
             .execute()
             .value
@@ -331,6 +332,18 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .execute()
             .value
         return rows.first
+    }
+
+    /// V0.82 — lazy auto-close (migration 080). The RPC returns the
+    /// count of events closed; the client only needs success/failure.
+    func autoCloseStaleEvents(roomId: UUID) async throws -> Int {
+        let rows: [Int] = try await SupabaseClientProvider.shared
+            .rpc("auto_close_stale_events", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows.first ?? 0
     }
 
     // MARK: Briefing
@@ -764,8 +777,9 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// p_mascot_name, p_mascot_personality, p_mascot_political_ideology,
     /// p_max_seats, p_member_invite_quota, p_join_starting_bonus,
     /// p_social_narration_enabled, p_briefing_48h_enabled,
-    /// p_calendar_auto_add_host, p_social_preferences_enabled)`
-    /// (migration 020 + V0.8 extensions). The server resolves the
+    /// p_calendar_auto_add_host, p_social_preferences_enabled,
+    /// p_auto_close_hours)` (migration 020 + V0.8 extensions +
+    /// V0.83 auto-close window). The server resolves the
     /// host check via the `is_host_of_room(p_room_id)` helper and
     /// throws on non-host writes.
     func updateRoom(
@@ -780,7 +794,8 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         socialNarrationEnabled: Bool,
         briefing48hEnabled: Bool,
         calendarAutoAddHost: Bool,
-        socialPreferencesEnabled: Bool
+        socialPreferencesEnabled: Bool,
+        autoCloseHours: Int
     ) async throws -> Room {
         let rows: [Room] = try await SupabaseClientProvider.shared
             .rpc("update_room_settings", params: [
@@ -795,7 +810,8 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 "p_social_narration_enabled": String(socialNarrationEnabled),
                 "p_briefing_48h_enabled": String(briefing48hEnabled),
                 "p_calendar_auto_add_host": String(calendarAutoAddHost),
-                "p_social_preferences_enabled": String(socialPreferencesEnabled)
+                "p_social_preferences_enabled": String(socialPreferencesEnabled),
+                "p_auto_close_hours": String(autoCloseHours)
             ])
             .execute()
             .value

@@ -3408,6 +3408,16 @@ private struct MascotFooterCaption: View {
     /// resolves `.seasonClose` (awards arc).
     let currentSeason: Season?
     @EnvironmentObject private var roomService: RoomService
+    /// V0.81 — the LLM-resolved caption (when the bundle key is
+    /// present). Starts `nil` so the synchronous template is shown
+    /// immediately; the LLM result swaps in when the async task
+    /// lands, and any failure keeps the template visible. The
+    /// template is the safe default per V0.26 fallback semantics —
+    /// `MascotEngine.generateVoiceLLM` returns the template string
+    /// verbatim on missing key / bad endpoint / timeout / empty
+    /// body, so this is also what happens if `generateVoiceLLM`
+    /// itself decides to fall back.
+    @State private var llmCaption: String?
     /// Room-state-aware caption (V0.36). `footerKind` resolves one of
     /// the twelve `NotificationKind` flavours from the room's active
     /// event + leaderboard + working hand + season; `RoomContext`
@@ -3439,46 +3449,108 @@ private struct MascotFooterCaption: View {
         }
         return Int(Date().timeIntervalSince(last) / 86_400)
     }
-    private var caption: String {
+    /// The resolved `NotificationKind` for the current state. Pure;
+    /// recomputed when the view re-renders.
+    private var footerKind: MascotEngine.NotificationKind {
+        MascotEngine.footerKind(
+            activeEvent: activeEvent,
+            leaderboard: leaderboard,
+            withdrawnAmount: withdrawnAmount,
+            currentSeason: currentSeason
+        )
+    }
+    /// The fully-populated `RoomContext` for the LLM prompt path
+    /// AND the template path. Pure; recomputed when the view
+    /// re-renders. The footer caption's view-of-the-world.
+    private var roomContext: MascotEngine.RoomContext {
+        .init(
+            activeEventTitle: activeEvent?.name,
+            lastEventDaysAgo: daysSinceLastPlay,
+            memberCount: members.count,
+            memberNames: members.map(\.displayName),
+            recentWinnerNames: MascotEngine.recentWinners(
+                rounds: roomService.cachedEventRounds(
+                    eventId: activeEvent?.id ?? UUID()
+                ),
+                memberNameById: memberNameById
+            ),
+            leaderName: MascotEngine.leaderName(leaderboard: leaderboard),
+            callerRank: MascotEngine.callerRank(
+                leaderboard: leaderboard,
+                currentUserId: currentUserId
+            ),
+            eventCount: leaderboard
+                .map(\.sessionsPlayed)
+                .max()
+                .map { Int($0) },
+            withdrawnAmount: withdrawnAmount > 0 ? withdrawnAmount : nil,
+            lastWinnerDelta: MascotEngine.lastWinnerDelta(
+                rounds: roomService.cachedEventRounds(
+                    eventId: activeEvent?.id ?? UUID()
+                )
+            ),
+            seasonDaysLeft: nil
+        )
+    }
+    /// The synchronous template body — shown instantly on every state
+    /// change so the room page bottom never blanks. The 25-voice
+    /// matrix + RoomContext drive this, identical to the V0.36
+    /// pre-LLM behaviour.
+    private var templateCaption: String {
         MascotEngine.generateVoice(
             mascotName: room.mascotName,
             roomName: room.name,
             personality: room.mascotPersonality,
             ideology: room.mascotPoliticalIdeology,
-            kind: MascotEngine.footerKind(
-                activeEvent: activeEvent,
-                leaderboard: leaderboard,
-                withdrawnAmount: withdrawnAmount,
-                currentSeason: currentSeason
-            ),
-            context: .init(
-                activeEventTitle: activeEvent?.name,
-                lastEventDaysAgo: daysSinceLastPlay,
-                memberCount: members.count,
-                memberNames: members.map(\.displayName),
-                recentWinnerNames: MascotEngine.recentWinners(
-                    rounds: roomService.cachedEventRounds(
-                        eventId: activeEvent?.id ?? UUID()
-                    ),
-                    memberNameById: memberNameById
-                ),
-                leaderName: MascotEngine.leaderName(leaderboard: leaderboard),
-                callerRank: MascotEngine.callerRank(
-                    leaderboard: leaderboard,
-                    currentUserId: currentUserId
-                ),
-                eventCount: leaderboard
-                    .map(\.sessionsPlayed)
-                    .max()
-                    .map { Int($0) },
-                withdrawnAmount: withdrawnAmount > 0 ? withdrawnAmount : nil,
-                lastWinnerDelta: MascotEngine.lastWinnerDelta(
-                    rounds: roomService.cachedEventRounds(
-                        eventId: activeEvent?.id ?? UUID()
-                    )
-                ),
-                seasonDaysLeft: nil
-            )
+            kind: footerKind,
+            context: roomContext
+        )
+    }
+    /// What the View actually renders. LLM wins when present,
+    /// template when the LLM hasn't landed (or fell back). When the
+    /// underlying state changes, `.task(id:)` clears `llmCaption`
+    /// and re-fires — so the cross-fade between two LLM lines also
+    /// shows the template in the gap, never a blank frame.
+    private var caption: String {
+        llmCaption ?? templateCaption
+    }
+    /// V0.81 — fires the edge-function call once per (footer-kind,
+    /// members, leaderboard, withdrawn) snapshot. When the caller
+    /// has no session, the call short-circuits to the template and
+    /// `llmCaption` stays nil — template forever, zero network cost.
+    /// When the call succeeds and the body is different from the
+    /// template, `llmCaption` swaps in; any failure (non-200,
+    /// decode error, timeout) leaves `llmCaption` nil and the
+    /// template stays visible.
+    private func refreshLLMCaption() async {
+        let authToken = await SupabaseClientProvider.currentSession()?.accessToken
+        // No session ⇒ template only, no network call.
+        guard let authToken, !authToken.isEmpty else {
+            llmCaption = nil
+            return
+        }
+        let result = await MascotEngine.generateVoiceLLM(
+            mascotName: room.mascotName,
+            roomName: room.name,
+            personality: room.mascotPersonality,
+            ideology: room.mascotPoliticalIdeology,
+            kind: footerKind,
+            context: roomContext,
+            authToken: authToken,
+            roomId: room.id,
+            eventId: activeEvent?.id
+        )
+        // `generateVoiceLLM` returns the template verbatim on every
+        // failure path — so an unchanged result is either the API
+        // actually echoed the template, or the engine fell back.
+        // Either way the visible body is identical to the template;
+        // skip the swap so we don't pay the cross-fade cost for no
+        // visual change. The template path's sentinel-fallback
+        // (missing key) is handled by the guard above, so this only
+        // elides genuine no-ops, never a real LLM response.
+        llmCaption = MascotEngine.chooseLLMCaption(
+            llmResult: result,
+            template: templateCaption
         )
     }
     var body: some View {
@@ -3498,6 +3570,33 @@ private struct MascotFooterCaption: View {
             .id(caption)
             .transition(.opacity.combined(with: .offset(y: 4)))
             .animation(Theme.Motion.fade, value: caption)
+            // V0.81 — kick the LLM task whenever the snapshot the
+            // caption depends on changes. The id collapses to the
+            // same string for a given (kind, members, leaderboard,
+            // withdrawn) tuple, so SwiftUI only re-fires the task
+            // when something actually shifts — not on every parent
+            // re-render. Resetting `llmCaption` to nil first means
+            // the template re-appears during the in-flight gap, so
+            // the View is never blank between two LLM lines.
+            .task(id: footerTaskKey) {
+                llmCaption = nil
+                await refreshLLMCaption()
+            }
+    }
+    /// Stable id that changes only when the inputs the LLM call
+    /// depends on change. Used to gate `.task(id:)` so SwiftUI
+    /// cancels + restarts the LLM call exactly when the footer
+    /// state genuinely shifts.
+    ///
+    /// V0.81 — personality + ideology are part of the key. The
+    /// mascot's voice IS the caption; when the host changes the
+    /// room's personality/politics in settings and saves, the
+    /// cached `llmCaption` must be discarded and re-generated in
+    /// the new voice. Without them the task id is unchanged after
+    /// a voice edit, `.task(id:)` never re-fires, and the footer
+    /// keeps narrating in the OLD voice.
+    private var footerTaskKey: String {
+        "\(footerKind.rawValue)|\(room.mascotPersonality.rawValue)|\(room.mascotPoliticalIdeology.rawValue)|\(members.count)|\(leaderboard.count)|\(withdrawnAmount)|\(room.id)"
     }
 }
 

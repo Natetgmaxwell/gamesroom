@@ -126,6 +126,12 @@ struct Room: Identifiable, Codable, Hashable {
     let overlapCount: Int
     let overlapNames: [String]
 
+    /// V0.83 — hours after `played_at` before the lazy auto-close
+    /// stamps `settled_at` on an un-finalized event (migration 081).
+    /// Host-adjustable from Room Settings → Operations; bounded
+    /// 1...72 server-side. Defaults to 8 (the V0.83 default).
+    let autoCloseHours: Int
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -153,6 +159,7 @@ struct Room: Identifiable, Codable, Hashable {
     case notificationsEnabled = "notifications_enabled"
     case overlapCount = "overlap_count"
     case overlapNames = "overlap_names"
+    case autoCloseHours = "auto_close_hours"
     }
 
     init(
@@ -181,7 +188,8 @@ struct Room: Identifiable, Codable, Hashable {
         memberDrowningOptIn: Bool = false,
         notificationsEnabled: Bool = false,
         overlapCount: Int = 0,
-        overlapNames: [String] = []
+        overlapNames: [String] = [],
+        autoCloseHours: Int = 8
     ) {
         self.id = id
         self.name = name
@@ -209,6 +217,7 @@ struct Room: Identifiable, Codable, Hashable {
         self.notificationsEnabled = notificationsEnabled
         self.overlapCount = overlapCount
         self.overlapNames = overlapNames
+        self.autoCloseHours = autoCloseHours
     }
 
     init(from decoder: Decoder) throws {
@@ -239,5 +248,6 @@ struct Room: Identifiable, Codable, Hashable {
         notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
         overlapCount = try c.decodeIfPresent(Int.self, forKey: .overlapCount) ?? 0
         overlapNames = try c.decodeIfPresent([String].self, forKey: .overlapNames) ?? []
+        autoCloseHours = try c.decodeIfPresent(Int.self, forKey: .autoCloseHours) ?? 8
     }
 }

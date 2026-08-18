@@ -88,6 +88,10 @@ final class RoomService: ObservableObject {
     /// open previously raced 3 parallel guard fetches from the
     /// briefing / host-withdrawals / working-hands loaders.
     private var activeEventInFlight: [UUID: Task<Event?, Error>] = [:]
+    // V0.82 — per-room throttle for the lazy auto-close RPC
+    // (`auto_close_stale_events`). Mirrors the attestation
+    // stale-close throttle: at most one fire per 60s per room.
+    private var lastAutoCloseAt: [UUID: Date] = [:]
 
     // MARK: - Published state
 
@@ -318,7 +322,9 @@ final class RoomService: ObservableObject {
             playedAt: event.playedAt,
             mascotName: room.mascotName,
             leaderboardSummary: summary,
-            rsvpState: .unclaimed
+            rsvpState: .unclaimed,
+            personality: room.mascotPersonality,
+            ideology: room.mascotPoliticalIdeology
         )
     }
 
@@ -334,12 +340,27 @@ final class RoomService: ObservableObject {
     /// fetch instead of starting a duplicate RPC (measured: a
     /// concurrent force + non-force cold-open race collapsed from
     /// 3 RPCs to 1).
+    ///
+    /// V0.82 — lazy auto-close: before the read, fire
+    /// `auto_close_stale_events` throttled to once per 60s per room
+    /// (mirrors the `close_stale_attestations` pattern). Events
+    /// whose night passed 24h ago get `settled_at` stamped, so the
+    /// room transitions to the post-play ceremonial card without a
+    /// scheduler. The write is idempotent and member-gated.
     @discardableResult
     func loadActiveEvent(roomId: UUID, force: Bool = false) async -> Event? {
         let key = "activeEvent:\(roomId.uuidString)"
         if !force, isFresh(key) { return activeEventByRoom[roomId] }
         if let existing = activeEventInFlight[roomId] {
             return (try? await existing.value) ?? activeEventByRoom[roomId]
+        }
+        // V0.82 — throttled lazy close. Fires at most once per 60s
+        // per room; failures are swallowed (the read still runs).
+        let now = Date()
+        if lastAutoCloseAt[roomId] == nil
+            || now.timeIntervalSince(lastAutoCloseAt[roomId]!) > 60 {
+            lastAutoCloseAt[roomId] = now
+            _ = try? await store.autoCloseStaleEvents(roomId: roomId)
         }
         // The cache write happens INSIDE the task so joiners that
         // await `existing.value` observe the populated cache when
@@ -638,7 +659,6 @@ final class RoomService: ObservableObject {
                 optedInMemberIds: optedInMemberIds,
                 mutedMemberIds: mutedMemberIds,
                 hostNote: event.hostNote,
-                mascotApiKey: room?.mascotApiKey,
                 mascotPersonality: room?.mascotPersonality ?? .friendly,
                 mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist
             )
@@ -709,7 +729,6 @@ final class RoomService: ObservableObject {
             perMemberCadence: cadence,
             memberNames: roster.map(\.displayName),
             optedInMemberIds: optedInMemberIds,
-            mascotApiKey: room?.mascotApiKey,
             mascotPersonality: room?.mascotPersonality ?? .friendly,
             mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist
         )
@@ -763,7 +782,8 @@ final class RoomService: ObservableObject {
     }
 
     /// Updates the room's mascot + operations + feature-toggle
-    /// columns. Called from `RoomSettingsSheet.save()`. Returns the
+    /// columns. Called from `RoomSettingsSheet.writeAll()` (V0.81
+    /// autosave). Returns the
     /// server-canonical `Room` (so the view can mirror any
     /// server-applied defaults) and updates the rooms-list cache so
     /// the Rooms-page row reflects the new name + mascot
@@ -781,7 +801,8 @@ final class RoomService: ObservableObject {
         socialNarrationEnabled: Bool,
         briefing48hEnabled: Bool,
         calendarAutoAddHost: Bool,
-        socialPreferencesEnabled: Bool
+        socialPreferencesEnabled: Bool,
+        autoCloseHours: Int
     ) async throws -> Room {
         let updated = try await store.updateRoom(
             id: id,
@@ -795,7 +816,8 @@ final class RoomService: ObservableObject {
             socialNarrationEnabled: socialNarrationEnabled,
             briefing48hEnabled: briefing48hEnabled,
             calendarAutoAddHost: calendarAutoAddHost,
-            socialPreferencesEnabled: socialPreferencesEnabled
+            socialPreferencesEnabled: socialPreferencesEnabled,
+            autoCloseHours: autoCloseHours
         )
         self.lastError = nil
         if let idx = rooms.firstIndex(where: { $0.id == updated.id }) {
@@ -1173,7 +1195,8 @@ final class RoomService: ObservableObject {
                 installedPackSlugs: old.installedPackSlugs,
                 seatDepositAmount: old.seatDepositAmount,
                 memberDrowningOptIn: optIn,
-                notificationsEnabled: old.notificationsEnabled
+                notificationsEnabled: old.notificationsEnabled,
+                autoCloseHours: old.autoCloseHours
             )
         }
         self.lastError = nil
@@ -1216,7 +1239,8 @@ final class RoomService: ObservableObject {
                 installedPackSlugs: old.installedPackSlugs,
                 seatDepositAmount: old.seatDepositAmount,
                 memberDrowningOptIn: old.memberDrowningOptIn,
-                notificationsEnabled: enabled
+                notificationsEnabled: enabled,
+                autoCloseHours: old.autoCloseHours
             )
         }
         self.lastError = nil

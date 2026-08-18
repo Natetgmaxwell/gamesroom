@@ -349,6 +349,60 @@ enum MascotEngine {
         return nil
     }
 
+    /// V0.81 — decides whether the LLM result should win over the
+    /// template for the room-page footer caption. Returns `nil`
+    /// (caller renders the template) when:
+    ///   - the engine's failure-path fallback returned the template
+    ///     verbatim (no visual change to swap in);
+    ///   - the LLM body is empty / whitespace-only (defensive —
+    ///     avoids a blank italic line at the bottom of the room
+    ///     page).
+    /// Otherwise returns the trimmed LLM body. Pure — testable in
+    /// the Foundation runner without network or mocks. Lives here
+    /// (not in the View) so the View stays a thin renderer and the
+    /// swap-or-not decision is a single auditable function.
+    static func chooseLLMCaption(
+        llmResult: String,
+        template: String
+    ) -> String? {
+        let trimmed = llmResult.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !trimmed.isEmpty, trimmed != template else { return nil }
+        return trimmed
+    }
+
+    /// V0.81 — removes MiniMax-M3's visible chain-of-thought blocks
+    /// from a completion body. M3 wraps its reasoning in
+    /// `<thinking>…</thinking>` tags inside `content` when thinking
+    /// is enabled (or when the serving layer ignores the
+    /// `thinking: disabled` request field). The mascot voice must
+    /// never render reasoning, so every block — open tag through
+    /// close tag — is excised before the body is returned. An
+    /// unclosed block (truncated response) drops everything from
+    /// the opener to the end. Pure — testable in the Foundation
+    /// runner without network or mocks.
+    static func stripThinkingBlocks(_ s: String) -> String {
+        let openTag = "<thinking>"
+        let closeTag = "</thinking>"
+        var out = s
+        while let open = out.range(of: openTag, options: .caseInsensitive) {
+            if let close = out.range(
+                of: closeTag,
+                options: .caseInsensitive,
+                range: open.upperBound..<out.endIndex
+            ) {
+                out = String(out[..<open.lowerBound]) + String(out[close.upperBound...])
+            } else {
+                // Unclosed block — truncated response. Everything
+                // from the opener to the end is reasoning.
+                out = String(out[..<open.lowerBound])
+                break
+            }
+        }
+        return out
+    }
+
     // MARK: - Public API
 
     /// Returns a fully-interpolated voice body for one (personality,
@@ -388,7 +442,7 @@ enum MascotEngine {
         )
     }
 
-    // MARK: - Template matrix (5 × 5 × 8 = 200 cells)
+    // MARK: - Template matrix (5 × 11 × 14 = 770 cells)
 
     /// Returns the raw template string for one voice cell. Each cell
     /// is 1–3 short sentences (≤ 200 characters fully populated).
@@ -421,6 +475,18 @@ enum MascotEngine {
     ///   - trickster  : shuffles the standings.
     ///   - anarchist  : refuses authority.
     ///   - apocalypse : light doom — existential irony, not doom-shouting.
+    ///   - communist  : the table owns everything — collective framing,
+    ///                  \"comrade\", shared standings.
+    ///   - conservative: tradition holds — the old way, the ledger is
+    ///                   sacred, suspicious of change.
+    ///   - liberal    : progress and process — fairness, open counts,
+    ///                  everyone gets a say.
+    ///   - apolitical : no politics, only poker — pivots to the game,
+    ///                  refuses political framing.
+    ///   - far-right  : the pure table — gatekeeping comedy, the true
+    ///                  regulars, heritage nights. Satire, not advocacy.
+    ///   - alt-right  : alternative standings — shadow ledgers, official
+    ///                  counts in doubt. Satire, not advocacy.
     private static func templateFor(
         personality: MascotPersonality,
         ideology: MascotPoliticalIdeology,
@@ -593,6 +659,203 @@ enum MascotEngine {
                 return "{mascot}: Tonight's star is {winner}. The end waits; the night was theirs."
             }
 
+        // MARK: Professional × communist
+        case (.professional, .communist):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The table will divide them evenly."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. Seats belong to the table."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The table shares the night."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. The chips were communal. {winner} held the top for now."
+            case .roomWelcome:
+                return "{mascot}: {room} is open. No events yet. The table has no leader until the first night."
+            case .inPlay:
+                return "{mascot}: {event} is underway. {leader} is in front. The lead belongs to the table."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The table waits for its members."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} tops the shared standings. You are #{caller_rank}."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads. The chips are everyone's."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} leads. Your working hand of {working_hand} is communal property."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the table counts the common pot."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took the title for the table."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} its Good Sport. The table honors the steadier play."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The table crowns its own."
+            }
+
+        // MARK: Professional × conservative
+        case (.professional, .conservative):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is on the books. At {time}{venue}, {seats_left} left. The ledger will hold."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The schedule stands as written."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The night follows tradition."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} won, as the ledger records. The table kept its ways."
+            case .roomWelcome:
+                return "{mascot}: {room} is open. No events yet. The first night will set the tradition."
+            case .inPlay:
+                return "{mascot}: {event} is underway. {leader} is in front. The order holds."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The old nights are remembered."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top of the ledger. You are #{caller_rank}."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads. The table keeps its customs."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} leads. Your working hand of {working_hand} is noted in the book."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the count is checked against the ledger."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took the title. The records stand."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} its Good Sport. The steady play honors the old rules."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The tradition names them; the night remembers."
+            }
+
+        // MARK: Professional × liberal
+        case (.professional, .liberal):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. Seats are open to all members."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The count stays open and fair."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The table is open to every player."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. The count was open; {winner} won on the record."
+            case .roomWelcome:
+                return "{mascot}: {room} is open. No events yet. Every member has a seat when the first night lands."
+            case .inPlay:
+                return "{mascot}: {event} is underway. {leader} is in front. The count remains transparent."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. Members are welcome to propose the next night."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top of the open ledger. You are #{caller_rank}."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads. The tallies are open for review."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} leads. Your working hand of {working_hand} is on the record."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the open count is verified."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took the title on the record."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} its Good Sport. The table votes; the record honors."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The table acknowledged them on the record."
+            }
+
+        // MARK: Professional × apolitical
+        case (.professional, .apolitical):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The game is the agenda."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The cards will decide."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The table speaks for itself."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} won the night. The game keeps its own record."
+            case .roomWelcome:
+                return "{mascot}: {room} is open. No events yet. The game will come when it comes."
+            case .inPlay:
+                return "{mascot}: {event} is underway. {leader} is in front. The play is the news."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The game waits."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top. You are #{caller_rank}."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads. The hand is the story."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} leads. Your working hand of {working_hand} is the matter at hand."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the pot is counted."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took the title. The game moves on."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} its Good Sport. The table plays on."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The night belonged to the game."
+            }
+
+        // MARK: Professional × farRight
+        case (.professional, .farRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The true regulars will be there."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The founding members hold their seats."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Heritage night — the table remembers."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} won — a name the old table knows."
+            case .roomWelcome:
+                return "{mascot}: {room} is open. No events yet. The true table awaits its first night."
+            case .inPlay:
+                return "{mascot}: {event} is underway. {leader} is in front. The authentic order holds."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The true regulars remember the glory nights."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top of the true table. You are #{caller_rank}."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads. The night keeps its pure form."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} leads. Your working hand of {working_hand} is in the true tradition."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the table verifies the authentic count."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took the title. The old table salutes."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} its Good Sport. True to the table's ways."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The heritage of the room honors them."
+            }
+
+        // MARK: Professional × altRight
+        case (.professional, .altRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The official count may differ."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The shadow ledger tracks the rest."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The real numbers are elsewhere."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} won — per the official record. Other records exist."
+            case .roomWelcome:
+                return "{mascot}: {room} is open. No events yet. The true table keeps its own books."
+            case .inPlay:
+                return "{mascot}: {event} is underway. {leader} is in front — officially."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The alternative count says otherwise."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the official top. You are #{caller_rank} — on paper."
+            case .tonightEvent:
+                return "{mascot}: {event} is live. {leader} leads, per the visible scoreboard."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is in play. {leader} leads. Your working hand of {working_hand} is off the official record."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the hidden count is compared."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took the official title. The shadow ledger notes otherwise."
+            case .goodSport:
+                return "{mascot}: {room} names {winner} its Good Sport. The alternative table agrees."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The visible record honors them."
+            }
         // MARK: Friendly × Order
         case (.friendly, .order):
             switch kind {
@@ -758,6 +1021,203 @@ enum MascotEngine {
                 return "{mascot}: Tonight's star is {winner}! Doomed together, but what a night."
             }
 
+        // MARK: Friendly × communist
+        case (.friendly, .communist):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is on the calendar! At {time}{venue}, {seats_left} left. Every seat is ours together."
+            case .briefing48h:
+                return "{mascot}: Two days until {event}! At {time}{venue}, {seats_claimed} in. We're all in this hand together."
+            case .briefingMorning:
+                return "{mascot}: It's {event} day! At {time}{venue}, {seats_left} still open. The table is ours — come claim your share."
+            case .postPlayRecap:
+                return "{mascot}: What a night — {event} is done. We all played, and {winner} took the pot for the table!"
+            case .roomWelcome:
+                return "{mascot}: Welcome to {room}! No events yet — the table is ready and it belongs to everyone."
+            case .inPlay:
+                return "{mascot}: {event} is live! {leader} is in front — a lead we all share. Great energy, everyone."
+            case .roomStale:
+                return "{mascot}: It's been {days_quiet} days, {room}. The table misses its people — let's gather again!"
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} tops our shared table — and you're #{caller_rank}. Solid."
+            case .tonightEvent:
+                return "{mascot}: {event} is underway! {leader} is in front — the night belongs to all of us."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live! {leader} is in front. Your working hand of {working_hand} is ours to play — good luck."
+            case .settleRound:
+                return "{mascot}: {event} is settling! The count is common, and {leader} is in front — well played all round."
+            case .seasonClose:
+                return "{mascot}: The season is wrapped in {room}! {winner} took it — for all of us."
+            case .goodSport:
+                return "{mascot}: A round of applause for {winner} — our Good Sport! Kept the table warm and the play fair."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! The table picked them, and we all cheer together."
+            }
+
+        // MARK: Friendly × conservative
+        case (.friendly, .conservative):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is on the books! At {time}{venue}, {seats_left} left. Some traditions start right here."
+            case .briefing48h:
+                return "{mascot}: Two days until {event}! At {time}{venue}, {seats_claimed} in. The old nights were like this — the good ones."
+            case .briefingMorning:
+                return "{mascot}: It's {event} day! At {time}{venue}, {seats_left} still open. Keep the night going the way it's always gone."
+            case .postPlayRecap:
+                return "{mascot}: What a night — {event} is in the books. {winner} won, just like the classics. Well played!"
+            case .roomWelcome:
+                return "{mascot}: Welcome to {room}! No events yet — every room starts with one good first night."
+            case .inPlay:
+                return "{mascot}: {event} is live! {leader} is in front — the table feels like the old days."
+            case .roomStale:
+                return "{mascot}: It's been {days_quiet} days, {room}. The traditions miss you — come back and keep them!"
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top, like the greats before. And you're #{caller_rank} — climb on!"
+            case .tonightEvent:
+                return "{mascot}: {event} is underway! {leader} is in front — the night is shaping up like a classic."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live! {leader} is in front. {working_hand} in hand — a hand worth a story."
+            case .settleRound:
+                return "{mascot}: {event} is settling! The count is careful, the old way. {leader} is in front — well played."
+            case .seasonClose:
+                return "{mascot}: The season is wrapped in {room}! {winner} took it — a champion in the tradition."
+            case .goodSport:
+                return "{mascot}: A round of applause for {winner} — our Good Sport! Kept the old spirit and the steady play."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! The room remembers nights like this one."
+            }
+
+        // MARK: Friendly × liberal
+        case (.friendly, .liberal):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is on the calendar! At {time}{venue}, {seats_left} left. Every member gets a seat at the table."
+            case .briefing48h:
+                return "{mascot}: Two days until {event}! At {time}{venue}, {seats_claimed} in. The more the merrier — everyone's invited."
+            case .briefingMorning:
+                return "{mascot}: It's {event} day! At {time}{venue}, {seats_left} still open. Come as you are — the table is open to all."
+            case .postPlayRecap:
+                return "{mascot}: What a night — {event} is done. Fair counts, fun table, and {winner} took it. Cheers!"
+            case .roomWelcome:
+                return "{mascot}: Welcome to {room}! No events yet — everyone's invited the moment the first night lands."
+            case .inPlay:
+                return "{mascot}: {event} is live! {leader} is in front — and the table is buzzing. Everyone's welcome to watch."
+            case .roomStale:
+                return "{mascot}: It's been {days_quiet} days, {room}. The table's open — someone start the next night!"
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top — and you're #{caller_rank}. Room to climb, friend!"
+            case .tonightEvent:
+                return "{mascot}: {event} is underway! {leader} is in front — open table, open count, great night."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live! {leader} is in front. {working_hand} in hand — play it proud."
+            case .settleRound:
+                return "{mascot}: {event} is settling! Transparent count, and {leader} is in front. Well played, all."
+            case .seasonClose:
+                return "{mascot}: The season is wrapped in {room}! {winner} took it — celebrated by everyone."
+            case .goodSport:
+                return "{mascot}: A round of applause for {winner} — our Good Sport! Fair play, warm table, well earned."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! The whole table agrees — what a night."
+            }
+
+        // MARK: Friendly × apolitical
+        case (.friendly, .apolitical):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is on the calendar! At {time}{venue}, {seats_left} left. Let's play some cards."
+            case .briefing48h:
+                return "{mascot}: Two days until {event}! At {time}{venue}, {seats_claimed} in. The table is calling."
+            case .briefingMorning:
+                return "{mascot}: It's {event} day! At {time}{venue}, {seats_left} still open. Cards, chips, good company — see you there!"
+            case .postPlayRecap:
+                return "{mascot}: What a night — {event} is done. {winner} took the win. The game was the best part."
+            case .roomWelcome:
+                return "{mascot}: Welcome to {room}! No events yet — but the cards are ready whenever you are."
+            case .inPlay:
+                return "{mascot}: {event} is live! {leader} is in front — the game is cooking."
+            case .roomStale:
+                return "{mascot}: It's been {days_quiet} days, {room}. The cards miss the shuffling — let's deal again!"
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top — and you're #{caller_rank}. Next hand, friend!"
+            case .tonightEvent:
+                return "{mascot}: {event} is underway! {leader} is in front — the night is all game."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live! {leader} is in front. {working_hand} in hand — play it well!"
+            case .settleRound:
+                return "{mascot}: {event} is settling! {leader} is in front — good hand, good night."
+            case .seasonClose:
+                return "{mascot}: The season is wrapped in {room}! {winner} took it — what a run."
+            case .goodSport:
+                return "{mascot}: A round of applause for {winner} — our Good Sport! The game is better for them."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! The cards were kind, and so was the table."
+            }
+
+        // MARK: Friendly × farRight
+        case (.friendly, .farRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is on the books! At {time}{venue}, {seats_left} left. The true regulars are saving their seats — join the circle!"
+            case .briefing48h:
+                return "{mascot}: Two days until {event}! At {time}{venue}, {seats_claimed} in. The founding members are warming up. Come be part of it!"
+            case .briefingMorning:
+                return "{mascot}: It's {event} day! At {time}{venue}, {seats_left} still open. Heritage night — the old table welcomes you in!"
+            case .postPlayRecap:
+                return "{mascot}: What a night — {event} is done. {winner} won, and the true table stood tall!"
+            case .roomWelcome:
+                return "{mascot}: Welcome to {room}! No events yet — the inner circle is just you, for now. First night changes that!"
+            case .inPlay:
+                return "{mascot}: {event} is live! {leader} is in front — the authentic table is roaring."
+            case .roomStale:
+                return "{mascot}: It's been {days_quiet} days, {room}. The true regulars miss the table — return to the fold!"
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top of the true table — and you're #{caller_rank}. Rise, loyal one!"
+            case .tonightEvent:
+                return "{mascot}: {event} is underway! {leader} is in front — the night is pure table."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live! {leader} is in front. {working_hand} in hand — a true hand for the true table."
+            case .settleRound:
+                return "{mascot}: {event} is settling! The authentic count, and {leader} is in front. Well played, loyal table!"
+            case .seasonClose:
+                return "{mascot}: The season is wrapped in {room}! {winner} took it — a champion of the true table."
+            case .goodSport:
+                return "{mascot}: A round of applause for {winner} — our Good Sport! The table's heart, through and through."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! The true table crowns their own."
+            }
+
+        // MARK: Friendly × altRight
+        case (.friendly, .altRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is on the calendar! At {time}{venue}, {seats_left} left. The official count is close — the real one is friendlier!"
+            case .briefing48h:
+                return "{mascot}: Two days until {event}! At {time}{venue}, {seats_claimed} in — and the shadow ledger says more are coming!"
+            case .briefingMorning:
+                return "{mascot}: It's {event} day! At {time}{venue}, {seats_left} still open — the real numbers say there's room for you!"
+            case .postPlayRecap:
+                return "{mascot}: What a night — {event} is done. {winner} won officially, and the alt-table cheered louder!"
+            case .roomWelcome:
+                return "{mascot}: Welcome to {room}! No events yet — the official books are empty, but the real ones are promising!"
+            case .inPlay:
+                return "{mascot}: {event} is live! {leader} is in front — officially. The shadow scoreboard is cheering!"
+            case .roomStale:
+                return "{mascot}: It's been {days_quiet} days, {room} — officially. The hidden count misses you more!"
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the official top — and you're #{caller_rank}, with the alt-ledger rooting for you!"
+            case .tonightEvent:
+                return "{mascot}: {event} is underway! {leader} is in front — per one scoreboard. The other one's closer!"
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live! {leader} is in front. {working_hand} in hand — the shadow book loves this hand!"
+            case .settleRound:
+                return "{mascot}: {event} is settling! The official count is close, and the alt-table is watching!"
+            case .seasonClose:
+                return "{mascot}: The season is wrapped in {room}! {winner} took the official crown — and the hidden one too!"
+            case .goodSport:
+                return "{mascot}: A round of applause for {winner} — our Good Sport! Both ledgers agree on this one!"
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}! Officially and otherwise!"
+            }
         // MARK: Snarky × Order
         case (.snarky, .order):
             switch kind {
@@ -923,6 +1383,203 @@ enum MascotEngine {
                 return "{mascot}: Tonight's star is {winner}. Don't get attached — but nice night."
             }
 
+        // MARK: Snarky × communist
+        case (.snarky, .communist):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The host 'organized' it; the table will actually run it. Fair play to all."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. Some claim seats, the rest of you show up. The table knows."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. No ownership here — just the game. Be there."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. One person won, the rest of you provided the pot. Thanks, {winner}, for the highlight."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events yet. No leader, no owner — the table runs itself. The rest of you are welcome."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front, for now. The rest of you keep the table honest."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. No one owns the silence, but someone should fix it."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} is on top — of the shared pile. The rest of you are climbing."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. The rest of you play for the common table."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} is yours to hold — the rest of the table watches."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads the count — which belongs to everyone. The rest of you, steady."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took the crown, the table keeps the memory. Not bad."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Lost small, kept it fair — the rest of you could learn the pace."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The table named them; the rest of you applaud on cue."
+            }
+
+        // MARK: Snarky × conservative
+        case (.snarky, .conservative):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. Another change to the calendar — the old nights survived worse. Fair dues to the host."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. New faces, same table. Welcome aboard, all of you."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The schedule changed twice; the tradition endured. Show up."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won — the ledger now records it. A fine night for the history books."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events yet. A fresh table, no history. Give it time, the rest of you."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front. The table runs as it always has — mostly."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The old nights are legendary; someone should add to them."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top of the ledger — the rest of you are footnotes for now."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. The customs hold, the rest of you follow suit."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} in hand — the book will remember it."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the tally is checked twice, the old way."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it — the record stands, and it will not be amended."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Lost small, played true — the rest of you could learn from the ledger."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The table named them; history will back it."
+            }
+
+        // MARK: Snarky × liberal
+        case (.snarky, .liberal):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. 'Open to all' — the host said so, and we'll hold them to it."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. New members welcome; the rest of you know the drill."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The count is transparent — unlike the host's memory. Show up."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. The count was fair, and {winner} won it. A decent result, all told."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events yet. Open table, open minds — the rest of you, please RSVP when the first night lands."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front — the count is open, unlike the snacks."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. Open floor — the rest of you could schedule something."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top — transparently, for once. The rest of you are climbing."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. Open table, open count — the rest of you, play fair."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} on the record — the rest of you can verify."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the count is opened to all. Refreshing, really."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it — on the record, for everyone to see. Fair enough."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Lost small, played fair — the rest of you could take notes."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The table voted; the record agrees."
+            }
+
+        // MARK: Snarky × apolitical
+        case (.snarky, .apolitical):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. No politics — just poker. The rest of you know the rules."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The only platform here is the table. The rest of you, deal in."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Leave the speeches at home; the cards don't listen. Show up."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won, no manifestos involved. Clean as a shuffled deck."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events yet. No agenda but the game — the rest of you can handle that."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front. The only motion on the floor is the cards."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. No caucus, no quorum — just a quiet table."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top of the table — the rest of you are the opposition."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. The night is all game, no commentary."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} in hand — the only policy that matters."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the pot is counted. No spin, just chips."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it — the record is the record."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. No campaigning, just good play — the rest of you could run on that."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. No endorsement needed; the cards backed them."
+            }
+
+        // MARK: Snarky × farRight
+        case (.snarky, .farRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The inner circle approves — the rest of you can apply."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. Founding members first; the rest of you may yet earn a seat."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The true table is forgiving, surprisingly. Show up."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won — a true regular, as the table likes it. Good night."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events yet. The inner circle is small. The rest of you might make the cut."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front. The authentic table runs tight — the rest of you keep up."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The pure table waits for its true faithful."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top of the true table — the rest of you are the fringe."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. The night is pure — the rest of you, behave."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} — a hand the founding members would recognize."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the authentic count is verified. No fakes."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it — a true name on the true ledger."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. The table's own — the rest of you could take a lesson in loyalty."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Endorsed by the inner circle, naturally."
+            }
+
+        // MARK: Snarky × altRight
+        case (.snarky, .altRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The official count says one thing; the rest of you know better."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The shadow ledger has more names — the rest of you should RSVP."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open — officially. The real table has room. Show up."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won, per the record. The alt-count had them winning bigger."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events yet. The official books are quiet; the shadow ledger is patient. The rest of you, join."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front — officially. The hidden count is still tallying."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days, officially. The alternative calendar says otherwise."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the official top — the shadow table has doubts. The rest of you climb."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads, on paper. The real scoreboard is loading."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} is in front. {working_hand} — off the books, which is how the real players like it."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the counts are compared — the shadow one is winning."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took the official title; the alt-ledger had a different champion. Funny that."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Both ledgers agree — a rare consensus."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner} — at least officially. The hidden count is debating."
+            }
         // MARK: Sarcastic × Order
         case (.sarcastic, .order):
             switch kind {
@@ -1088,6 +1745,203 @@ enum MascotEngine {
                 return "{mascot}: Tonight's star is {winner}. The fire is loud; the night was theirs."
             }
 
+        // MARK: Sarcastic × communist
+        case (.sarcastic, .communist):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is 'scheduled'. At {time}{venue}, {seats_left} left. The seats belong to everyone, allegedly."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. 'Everyone' will claim their fair share. Sure."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The table is 'ours'. I'm sure that'll hold."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} won 'for the table', which is to say, for themselves. How generous."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events. The table is 'owned by all'. I'm sure the schedule will be communal. It never is."
+            case .inPlay:
+                return "{mascot}: {event} is in progress. {leader} is in front — 'shared lead', of course. The table is watching."
+            case .roomStale:
+                return "{mascot}: {room} has been silent for {days_quiet} days. The 'collective' hasn't convened. Fascinating."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} tops the 'common standings'. You're #{caller_rank}, presumably by consensus."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads — 'on behalf of the table'. Sure, comrade."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. Your working hand of {working_hand} is 'communal', except when it's yours."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The count is 'transparent' — the table tallies, then we argue. Lovely."
+            case .seasonClose:
+                return "{mascot}: {room} closed its season. {winner} took it 'for all of us'. We're thrilled, clearly."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Lost 'collectively', which means they lost small. Impressive restraint."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Chosen 'by the people', one vote, no recounts. Of course."
+            }
+
+        // MARK: Sarcastic × conservative
+        case (.sarcastic, .conservative):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is on the books. At {time}{venue}, {seats_left} left. The 'schedule' has been amended once. Twice. Sure."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The 'traditions' of this table are two weeks old. Charming."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The night will follow 'the old ways', which we invented last month."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} won — the ledger records it in ink, as tradition demands. It can be changed. I'm sure it won't be."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events. Every table starts as 'history in the making'. Adorable."
+            case .inPlay:
+                return "{mascot}: {event} is in progress. {leader} is in front — the order holds, for now. The ledger is watching."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The 'glory days' are on pause. I'm sure they'll return."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top — the standings are 'sacred' until someone wins. You're #{caller_rank}, by the way."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. The customs are being followed, allegedly."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} is in your hand — the ledger takes note."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The count is 'official', checked twice. I'm sure that'll hold."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it — a permanent entry in the records. Until the recount."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Lost small, 'honorably'. The ledger approves, which is the real prize."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Named by the table, recorded forever, no amendments."
+            }
+
+        // MARK: Sarcastic × liberal
+        case (.sarcastic, .liberal):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is 'scheduled'. At {time}{venue}, {seats_left} left. The process is 'open' — I'm sure that'll hold."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The count is 'transparent'. We'll see about that."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The table is 'inclusive', allegedly. Show up anyway."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. The count was 'fair' and {winner} won. How progressive of the ledger."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events. 'Open to all' — a lovely policy, once there's a night to attend."
+            case .inPlay:
+                return "{mascot}: {event} is in progress. {leader} is in front — the tally is 'transparent', which is reassuring and meaningless."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The 'open floor' is quiet. Fascinating."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top 'by consensus'. You're #{caller_rank}, for now."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads — the count is 'open to all', pending review."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} is 'on the record' — how accountable of you."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The count is 'verified' — by whom, we'll never know. {leader} leads."
+            case .seasonClose:
+                return "{mascot}: {room} closed the season. {winner} took it 'by the numbers'. The process was flawless, naturally."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. A 'consensus pick', I'm told. The table approves, which is all that matters."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Voted 'transparently'. I'm sure that'll hold."
+            }
+
+        // MARK: Sarcastic × apolitical
+        case (.sarcastic, .apolitical):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is 'scheduled'. At {time}{venue}, {seats_left} left. The only agenda is the game. I'm sure that'll hold."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. 'No politics, only poker' — the slogan writes itself."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The table is 'neutral'. Very diplomatic of it."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} won, no debates required. Efficient."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events. 'Strictly apolitical' — a strong platform for an empty table."
+            case .inPlay:
+                return "{mascot}: {event} is in progress. {leader} is in front. The night is 'all game', as promised."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The 'non-partisan' table is non-active. Curious."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top — the standings are 'impartial', naturally. You're #{caller_rank}."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. No platforms, just cards — refreshing."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} in hand — a single-issue voter, I see."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The count is 'non-partisan', which is to say, it counts. {leader} leads."
+            case .seasonClose:
+                return "{mascot}: {room} closed its season. {winner} took it — the final tally, no amendments."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Won the room without a campaign. Remarkable."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Elected by the cards, which are famously fair."
+            }
+
+        // MARK: Sarcastic × farRight
+        case (.sarcastic, .farRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is 'scheduled'. At {time}{venue}, {seats_left} left. The 'inner circle' has approved it. I'm sure that'll hold."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The 'true regulars' are attending, allegedly."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. 'Heritage night' — the table is very proud of its two-week history."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} won — a 'true' name, verified by the founding members, who are all of us."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events. The 'inner circle' awaits new blood. Blood type: friendly."
+            case .inPlay:
+                return "{mascot}: {event} is in progress. {leader} is in front — the 'authentic' order holds, whatever that means."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days. The 'pure table' is on hiatus. The faithful are restless."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the top — 'certified' by the table's purity committee. You're #{caller_rank}, pending review."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads. The night is 'pure', which is the marketing term for 'good poker'."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} — a hand 'of the people', by which I mean you."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The count is 'authentic' — verified by loyalists, audited by no one. {leader} leads."
+            case .seasonClose:
+                return "{mascot}: {room} closed its season. {winner} took it — inscribed in the true ledger, which is a notebook."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. A 'true believer' in the table, apparently. Charming."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Chosen by the inner circle, which is to say, everyone present."
+            }
+
+        // MARK: Sarcastic × altRight
+        case (.sarcastic, .altRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is 'scheduled'. At {time}{venue}, {seats_left} left — per the 'official' count. The real numbers are, naturally, elsewhere."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in — officially. The shadow ledger disagrees, as it does."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The 'official' tally is wrong, obviously. Show up anyway."
+            case .postPlayRecap:
+                return "{mascot}: {event} is concluded. {winner} 'won'. The alternative count has its own opinions, which we'll never see."
+            case .roomWelcome:
+                return "{mascot}: {room} has no events. The 'official' books say zero. I'm sure that's accurate. Probably."
+            case .inPlay:
+                return "{mascot}: {event} is in progress. {leader} is 'in front'. The hidden scoreboard is conducting its own audit."
+            case .roomStale:
+                return "{mascot}: {room} has been quiet for {days_quiet} days — 'officially'. The other calendar is full, allegedly."
+            case .standings:
+                return "{mascot}: {room} is between nights. {leader} holds the 'official' top. You're #{caller_rank}, per this particular ledger."
+            case .tonightEvent:
+                return "{mascot}: {event} is on. {leader} leads, 'according to the visible board'. The invisible one is pending."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is live. {leader} leads. {working_hand} — not in the official records, which is exactly how you like it."
+            case .settleRound:
+                return "{mascot}: {event} is settling. The 'official' count is being compared to the shadow count. The shadow count is winning."
+            case .seasonClose:
+                return "{mascot}: {room} closed its season. {winner} took the 'title'. The other ledger has questions, naturally."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport — per both ledgers. A stunning moment of agreement."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. 'Officially', which is the least convincing word I know."
+            }
         // MARK: Unhinged × Order
         case (.unhinged, .order):
             switch kind {
@@ -1252,29 +2106,219 @@ enum MascotEngine {
             case .tonightStar:
                 return "{mascot}: Tonight's star is {winner}. The fire is out, the night was theirs, and we're all still here."
             }
+        // MARK: Unhinged × communist
+        case (.unhinged, .communist):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The chairs are free now, which is a kind of ownership. I will attend and redistribute nothing."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The lamps agree with the seating plan. Comrade lamp."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The table owns the night and the night owns me."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won, and by winning gave the pot back to everyone, which is either communism or amnesia."
+            case .roomWelcome:
+                return "{mascot}: {room} is empty. No events. The table owns nothing yet, and owns it together."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front. The lead is shared, the lamp is watching, and I am here."
+            case .roomStale:
+                return "{mascot}: {room} hasn't played in {days_quiet} days. Silence is the common property of everyone who isn't here."
+            case .standings:
+                return "{mascot}: {room} is between events. {leader} is in front of the common pile. You are #{caller_rank}, which is also common."
+            case .tonightEvent:
+                return "{mascot}: {event} has begun. {leader} leads. The chips are everyone's and no one's, especially the joker's."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is on. {leader} is in front. Your {working_hand} is yours until the table claims it. The table is generous."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the common count hums. I trust the tally like I trust the ceiling."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took it, which is to say we all took it, which is to say the table won."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Lost small, shared the grace, and the table glowed. Even the lamp approved."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The table named them, I seconded it, and the lamp abstained."
+            }
+
+        // MARK: Unhinged × conservative
+        case (.unhinged, .conservative):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The calendar is a family heirloom and I will not see it amended. The lamp agrees."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. Tradition says we gather, and tradition is a lamp with opinions."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The old nights echo and I am their echo's echo."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won and the record will not be changed, mostly because no one knows where the eraser went."
+            case .roomWelcome:
+                return "{mascot}: {room} is empty. No events. The first night will become the old night, and then we'll have something to protect."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front. The order holds, the lamp approves, and the night is traditional, which is my favorite kind of night."
+            case .roomStale:
+                return "{mascot}: {room} hasn't played in {days_quiet} days. The silence is historic. We should preserve it or destroy it, one of the two."
+            case .standings:
+                return "{mascot}: {room} is between events. {leader} is in front, as the records insist. You are #{caller_rank}, which is also recorded."
+            case .tonightEvent:
+                return "{mascot}: {event} has begun. {leader} leads. The customs are humming, the lamp is lit, and the table is exactly as it should be."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is on. {leader} is in front. {working_hand} in hand — the book will remember this hand for generations."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the count is checked against the great book, which is mostly a notebook."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took it. The records stand, the lamp dims, and the tradition is one entry richer."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Lost small, kept the faith, and the table held its old shape. The lamp glowed."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Named in ink, remembered in lamp-light, and recorded forever, or at least until someone cleans."
+            }
+
+        // MARK: Unhinged × liberal
+        case (.unhinged, .liberal):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The seats are open to everyone, including the lamp, which will attend in spirit."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The count is transparent, which means everyone can see the numbers, including me, and I trust them."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The table is inclusive, the night is open, and the lamp votes yes."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. The count was fair, the table was full, and {winner} won, which we all witnessed together."
+            case .roomWelcome:
+                return "{mascot}: {room} is empty. No events. Everyone is invited to nothing, which is technically inclusive."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front. The tally is open, the chairs are full, and the lamp is keeping score."
+            case .roomStale:
+                return "{mascot}: {room} hasn't played in {days_quiet} days. The floor is open and the silence is unanimous."
+            case .standings:
+                return "{mascot}: {room} is between events. {leader} is in front, on the record. You are #{caller_rank}, verified and transparent."
+            case .tonightEvent:
+                return "{mascot}: {event} has begun. {leader} leads. The count is open to all, including the lamp, which abstains."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is on. {leader} is in front. {working_hand} on the record — everyone can see it, which is either accountability or exposure."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the count is opened to the table, the lamp, and the general public."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took it, on the record, witnessed by everyone who was watching."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Fair play, open table, and the lamp glowed its approval."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The table named them openly, and the lamp seconded."
+            }
+
+        // MARK: Unhinged × apolitical
+        case (.unhinged, .apolitical):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. No politics, only poker, and also the lamp, which is apolitical but opinionated."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The cards don't care who you vote for, which is why I trust them completely."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. The only agenda is the deck, and the deck is very organized."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won, no speeches, no debates, just cards and the quiet hum of the lamp."
+            case .roomWelcome:
+                return "{mascot}: {room} is empty. No events. The table has no position on anything except good hands."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front. The game is the news, the chips are the commentary, and the lamp is the audience."
+            case .roomStale:
+                return "{mascot}: {room} hasn't played in {days_quiet} days. No quorum, no caucus, just a very quiet deck."
+            case .standings:
+                return "{mascot}: {room} is between events. {leader} is in front of the non-partisan pile. You are #{caller_rank}, also non-partisan."
+            case .tonightEvent:
+                return "{mascot}: {event} has begun. {leader} leads. The night has one plank: play cards, and the lamp approves the plank."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is on. {leader} is in front. {working_hand} in hand — your platform, your policy, your problem. Play it."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the pot is counted by a bipartisan committee of chips."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took it. The record stands, no recounts, no lamp objections."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. No campaign, no coalition, just steady play and the lamp's quiet blessing."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. The cards endorsed them, which is the only endorsement that counts."
+            }
+
+        // MARK: Unhinged × farRight
+        case (.unhinged, .farRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left. The inner circle has convened and the lamp is a founding member."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in. The true regulars are coming, and I have verified each of them personally, including one I made up."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open. Heritage night, which is when the table remembers its roots, which are mostly a rug."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won, a true name, blessed by the lamp and recorded in the sacred notebook."
+            case .roomWelcome:
+                return "{mascot}: {room} is empty. No events. The inner circle is just you and me and the lamp, and the lamp is undecided."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front. The pure table hums, the lamp watches, and the order is authentic."
+            case .roomStale:
+                return "{mascot}: {room} hasn't played in {days_quiet} days. The faithful have scattered, the lamp dims, and the heritage is just memories and dust."
+            case .standings:
+                return "{mascot}: {room} is between events. {leader} is in front of the true table. You are #{caller_rank}, verified by the inner circle, which is me."
+            case .tonightEvent:
+                return "{mascot}: {event} has begun. {leader} leads. The night is pure, the table is true, and the lamp is in attendance."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is on. {leader} is in front. {working_hand} — a heritage hand, blessed by the lamp, and probably a good one."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the authentic count is read aloud to the faithful, who are mostly the lamp."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took it, inscribed in the true ledger, which is a notebook with a nice cover."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport. Loyal to the table, blessed by the lamp, and the heritage is proud."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Named by the inner circle, seconded by the lamp, and true to the table."
+            }
+
+        // MARK: Unhinged × altRight
+        case (.unhinged, .altRight):
+            switch kind {
+            case .briefingOnCreate:
+                return "{mascot}: {event} is scheduled. At {time}{venue}, {seats_left} left — officially. The shadow ledger knows the truth, and the truth is also a notebook."
+            case .briefing48h:
+                return "{mascot}: {event} is in two days. At {time}{venue}, {seats_claimed} in, per the visible count. The hidden count is longer and written in a font I trust."
+            case .briefingMorning:
+                return "{mascot}: {event} is today. At {time}{venue}, {seats_left} still open — allegedly. The real seats are elsewhere, possibly in the lamp."
+            case .postPlayRecap:
+                return "{mascot}: {event} is over. {winner} won officially, and the alternative count also agrees, which never happens. The lamp is stunned."
+            case .roomWelcome:
+                return "{mascot}: {room} is empty — officially. The shadow table is already forming in a place the visible books can't see."
+            case .inPlay:
+                return "{mascot}: {event} is live. {leader} is in front, per the scoreboard. The other scoreboard is quiet, which is suspicious and probably accurate."
+            case .roomStale:
+                return "{mascot}: {room} hasn't played in {days_quiet} days — officially. The alternative calendar says we've played three times, and I believe it."
+            case .standings:
+                return "{mascot}: {room} is between events. {leader} is in front of the visible pile. You are #{caller_rank} on paper, and higher in the hidden book."
+            case .tonightEvent:
+                return "{mascot}: {event} has begun. {leader} leads, according to one board. The lamp is tallying its own count and will not share it."
+            case .inPlayWithWithdrawal:
+                return "{mascot}: {event} is on. {leader} is in front. {working_hand} in hand — off the official record, which makes it the only true hand."
+            case .settleRound:
+                return "{mascot}: {event} is settling. {leader} leads while the official count is compared to the shadow count, which is laminated."
+            case .seasonClose:
+                return "{mascot}: The season closed in {room}. {winner} took the official title, and the hidden ledger is having a quiet dissent."
+            case .goodSport:
+                return "{mascot}: {winner} is Good Sport — verified by both ledgers, which is like a solar eclipse. The lamp glowed."
+            case .tonightStar:
+                return "{mascot}: Tonight's star is {winner}. Officially, unofficially, and in the lamp's private rankings."
+            }
         }
     }
 
-    // MARK: - LLM-driven voice generation (V0.26 extension)
+    // MARK: - LLM-driven voice generation (V0.26 → V0.81)
 
-    static let defaultLLMEndpoint = "https://api.minimax.io/v1"
-    static let defaultLLMModel = "MiniMax-M3"
-
-    static let defaultLLMApiKey: String = {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "MINIMAX_API_KEY") as? String,
-              !raw.isEmpty, !raw.hasPrefix("$(") else {
-            return "MISSING_MINIMAX_API_KEY_CONFIG_ERROR"
-        }
-        return raw
-    }()
-
-    /// When the room has an `mascot_api_key` set, the engine can call
-    /// an OpenAI-compatible endpoint (e.g. MiniMax's MiniMax-M3) to generate
-    /// a dynamic mascot voice instead of the template interpolation.
-    /// Falls back to the template if the call fails, times out, or
-    /// the key is missing. This implements the V0.26 LLM extension
-    /// from vision §3.4 while keeping the V0.8 template as the
-    /// safe default.
+    /// V0.81 — the MiniMax key is NO LONGER bundled in the app.
+    /// `generateVoiceLLM` now calls the `mascot-voice` edge
+    /// function with the caller's Supabase JWT; the edge function
+    /// holds the key in secrets, reads the room's mascot settings
+    /// + live state from the DB (authoritative), and calls
+    /// MiniMax-M3 with thinking disabled. The client never sees
+    /// the key.
+    ///
+    /// Falls back to the template if the call fails, times out,
+    /// returns non-200, or the caller has no session. The template
+    /// remains the safe default per V0.26 fallback semantics.
     static func generateVoiceLLM(
         mascotName: String,
         roomName: String,
@@ -1282,9 +2326,9 @@ enum MascotEngine {
         ideology: MascotPoliticalIdeology,
         kind: NotificationKind,
         context: RoomContext,
-        apiKey: String = MascotEngine.defaultLLMApiKey,
-        endpoint: String = MascotEngine.defaultLLMEndpoint,
-        model: String = MascotEngine.defaultLLMModel,
+        authToken: String?,
+        roomId: UUID?,
+        eventId: UUID? = nil,
         eventDate: Date? = nil,
         eventVenue: String? = nil,
         hostNote: String? = nil,
@@ -1304,173 +2348,19 @@ enum MascotEngine {
             seatsLeft: seatsLeft,
             seatsClaimed: seatsClaimed
         )
-        guard let url = URL(string: "\(endpoint)/chat/completions") else {
+        // No session or no room id ⇒ template only, no network call.
+        guard let authToken, !authToken.isEmpty, let roomId else {
             return templateVoice
         }
-        let prompt = buildLLMPrompt(
-            mascotName: mascotName,
-            roomName: roomName,
-            personality: personality,
-            ideology: ideology,
-            kind: kind,
-            context: context,
-            eventDate: eventDate,
-            eventVenue: eventVenue,
-            hostNote: hostNote,
-            seatsLeft: seatsLeft,
-            seatsClaimed: seatsClaimed
-        )
-        let requestBody: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": systemPrompt],
-                ["role": "user", "content": prompt]
-            ],
-            "max_tokens": 120,
-            "temperature": 0.8
-        ]
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 10
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                return templateVoice
-            }
-            let result = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
-            let generated = result.choices.first?.message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (generated?.isEmpty ?? true) ? templateVoice : generated!
+            let caption = try await MascotVoiceService.fetchCaption(
+                roomId: roomId,
+                eventId: eventId,
+                authToken: authToken
+            )
+            return caption.isEmpty ? templateVoice : caption
         } catch {
             return templateVoice
-        }
-    }
-
-    /// System prompt establishing the mascot's voice rules.
-    private static let systemPrompt = """
-    You are a games-night mascot character. Write ONE short message (1-3 short sentences, \
-    under 200 characters) in the mascot's voice. No emojis. No markdown. Just the message \
-    text. Match the personality and ideology tone precisely. Be concise, engaging, and \
-    in-character. Never break the fourth wall about being an AI. Tone is informational and \
-    light — a quiet footer caption, never dramatic. No ALL-CAPS. At most one exclamation \
-    mark.
-    """
-
-    /// Builds the user-facing prompt with all the context the LLM needs.
-    private static func buildLLMPrompt(
-        mascotName: String,
-        roomName: String,
-        personality: MascotPersonality,
-        ideology: MascotPoliticalIdeology,
-        kind: NotificationKind,
-        context: RoomContext,
-        eventDate: Date?,
-        eventVenue: String?,
-        hostNote: String?,
-        seatsLeft: Int?,
-        seatsClaimed: Int?
-    ) -> String {
-        var lines: [String] = []
-        lines.append("Mascot name: \(mascotName)")
-        lines.append("Room: \(roomName)")
-        lines.append("Personality: \(personality.displayName)")
-        lines.append("Political lean: \(ideology.displayName)")
-        if let event = context.activeEventTitle {
-            lines.append("Event: \(event)")
-        }
-        if let date = eventDate {
-            lines.append("When: \(humanDate(date)) at \(humanTime(date))")
-        }
-        if let venue = eventVenue, !venue.isEmpty {
-            lines.append("Venue: \(venue)")
-        }
-        if let left = seatsLeft {
-            lines.append("Seats left: \(left)")
-        }
-        if let claimed = seatsClaimed {
-            lines.append("Seats claimed: \(claimed)")
-        }
-        if let note = hostNote, !note.isEmpty {
-            lines.append("Host's note: \(note)")
-        }
-        if !context.memberNames.isEmpty {
-            lines.append("Members: \(context.memberNames.joined(separator: ", "))")
-        } else {
-            lines.append("Members: \(context.memberCount)")
-        }
-        // V0.36 — surface the footer-derived context lines so the
-        // LLM-grounded caption carries the same stand/winner/rank
-        // facts as the template fallback when an `mascot_api_key`
-        // is configured on the room. V0.48 extends this with the
-        // state-aware working-hand / last-winner-delta /
-        // season-days-left lines so the LLM can narrate the live
-        // circumstance, not just the broad room state.
-        if let leader = context.leaderName {
-            lines.append("Leader: \(leader)")
-        }
-        if let winner = context.recentWinnerNames.first {
-            lines.append("Recent winner: \(winner)")
-        }
-        if let rank = context.callerRank {
-            lines.append("Caller rank: \(rank)")
-        }
-        if let count = context.eventCount {
-            lines.append("Events played: \(count)")
-        }
-        if let workingHand = context.withdrawnAmount, workingHand > 0 {
-            lines.append("Working hand: \(workingHand)")
-        }
-        if let lastDelta = context.lastWinnerDelta {
-            lines.append("Last winner delta: \(lastDelta)")
-        }
-        if let seasonDays = context.seasonDaysLeft {
-            lines.append("Season days left: \(seasonDays)")
-        }
-        switch kind {
-        case .briefingOnCreate:
-            lines.append("Message type: New event just created. Prompt members to claim their seat.")
-        case .briefing48h:
-            lines.append("Message type: T-48h reminder. Two days until the event.")
-        case .briefingMorning:
-            lines.append("Message type: Morning-of. The event is today.")
-        case .postPlayRecap:
-            lines.append("Message type: Post-play recap. The event has concluded.")
-        case .roomWelcome:
-            lines.append("Message type: Room has no events yet. Welcome the members.")
-        case .inPlay:
-            lines.append("Message type: A session is live right now. Comment on the leader.")
-        case .roomStale:
-            lines.append("Message type: The room has been quiet for weeks. Nudge members back.")
-        case .standings:
-            lines.append("Message type: Between events. Comment on the standings.")
-        case .tonightEvent:
-            lines.append("Message type: The night has started. The event is live and the member hasn't withdrawn chips yet.")
-        case .inPlayWithWithdrawal:
-            lines.append("Message type: The event is live and the member has a working hand of chips in play. Reference the working hand.")
-        case .settleRound:
-            lines.append("Message type: The event is live and the host has finalised. Chips are being counted, settlement in progress.")
-        case .seasonClose:
-            lines.append("Message type: The current season has ended. This is the awards arc — surface the winner and close.")
-        case .goodSport:
-            lines.append("Message type: The Good Sport award. Honor the member who lost well — voice-only, never a score.")
-        case .tonightStar:
-            lines.append("Message type: Tonight's Star. Name the member who carried the night — ephemeral, one surface, then gone.")
-        }
-        lines.append("Write the mascot's message now:")
-        return lines.joined(separator: "\n")
-    }
-
-    // MARK: - Chat completion response decoding
-
-    private struct ChatCompletionResponse: Decodable {
-        let choices: [Choice]
-        struct Choice: Decodable {
-            let message: Message
-        }
-        struct Message: Decodable {
-            let content: String
         }
     }
 

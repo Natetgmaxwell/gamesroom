@@ -117,6 +117,7 @@
 		AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */; };
 		AAAAAAAA0000000000000494 /* ScanSettleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000493 /* ScanSettleService.swift */; };
 		AAAAAAAA0000000000000498 /* ScanSettleResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000497 /* ScanSettleResult.swift */; };
+		AAAAAAAA000000000000049C /* MascotVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000049B /* MascotVoiceService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -273,6 +274,7 @@
 		AAAAAAAA0000000000000802 /* Perf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Perf.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000493 /* ScanSettleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleService.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000497 /* ScanSettleResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleResult.swift; sourceTree = "<group>"; };
+		AAAAAAAA000000000000049B /* MascotVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotVoiceService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -425,6 +427,7 @@
 				AAAAAAAA0000000000000479 /* RoomStoreProtocol.swift */,
 				AAAAAAAA000000000000047B /* InMemoryRoomStore.swift */,
 				AAAAAAAA0000000000000493 /* ScanSettleService.swift */,
+				AAAAAAAA000000000000049B /* MascotVoiceService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -769,6 +772,7 @@
 				AAAAAAAA00000000000000ED /* RoomGraphSummary.swift in Sources */,
 				AAAAAAAA0000000000000494 /* ScanSettleService.swift in Sources */,
 				AAAAAAAA0000000000000498 /* ScanSettleResult.swift in Sources */,
+				AAAAAAAA000000000000049C /* MascotVoiceService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
