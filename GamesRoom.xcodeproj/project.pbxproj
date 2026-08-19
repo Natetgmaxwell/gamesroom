@@ -120,7 +120,7 @@
 		AAAAAAAA0000000000000498 /* ScanSettleResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000497 /* ScanSettleResult.swift */; };
 		AAAAAAAA000000000000049C /* MascotVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000049B /* MascotVoiceService.swift */; };
 		AAAAAAAA0000000000000500 /* TonightStarPick.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000501 /* TonightStarPick.swift */; };
-		AAAAAAAA00000000000004B0 /* NoShowTaxPromptCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA00000000000004B1 /* NoShowTaxPromptCard.swift */; };
+		AAAAAAAA0000000000000502 /* NoShowTaxPromptCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA00000000000004B1 /* NoShowTaxPromptCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -784,7 +784,7 @@
 				AAAAAAAA000000000000049C /* MascotVoiceService.swift in Sources */,
 				AAAAAAAA0000000000000500 /* TonightStarPick.swift in Sources */,
 				AAAAAAAA000000000000011B /* HostOpenerSuggestion.swift in Sources */,
-				AAAAAAAA00000000000004B0 /* NoShowTaxPromptCard.swift in Sources */,
+				AAAAAAAA0000000000000502 /* NoShowTaxPromptCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
