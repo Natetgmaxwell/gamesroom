@@ -115,6 +115,11 @@ struct NoShowTaxParams: Encodable, Sendable {
     let p_reason: String
 }
 
+struct MarkMemberNotesConsumedParams: Encodable, Sendable {
+    let p_room_id: String
+    let p_note_ids: [String]
+}
+
 // MARK: - LiveRoomStore
 //
 // The production Supabase-backed implementation of `RoomStore`. Each
@@ -933,10 +938,10 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// `consumed_by_host_at = now()` on the listed unconsumed notes.
     func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async throws {
         _ = try await SupabaseClientProvider.shared
-            .rpc("mark_member_notes_consumed", params: [
-                "p_room_id": roomId.uuidString,
-                "p_note_ids": noteIds.map(\.uuidString)
-            ])
+            .rpc("mark_member_notes_consumed", params: MarkMemberNotesConsumedParams(
+                p_room_id: roomId.uuidString,
+                p_note_ids: noteIds.map { $0.uuidString }
+            ))
             .execute()
             .value as Void
     }
