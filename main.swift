@@ -3231,6 +3231,44 @@ runner.run("MascotEngine goodSport cell exists for every personality × ideology
     }
 }
 
+runner.run("MascotEngine seasonClose cells are praise-first (behaviour named, not bare stat)") {
+    // V0.84 — every seasonClose cell must name a specific behaviour
+    // (not just announce the season is over) AND praise it sincerely.
+    // The bare-stat "took it" / "won the title" pattern is rejected
+    // unless the cell also carries a praise marker — the three-move
+    // praise-first pattern (Carnegie Ch 2.2 + 4.6).
+    let personalities = MascotPersonality.allCases
+    let ideologies = MascotPoliticalIdeology.allCases
+    let praiseMarkers = [
+        "showed up", "kept", "clawed", "held", "brought",
+        "played it out", "never once", "every night"
+    ]
+    for p in personalities {
+        for i in ideologies {
+            let body = MascotEngine.generateVoice(
+                mascotName: "Felty",
+                roomName: "Felt Faction",
+                personality: p,
+                ideology: i,
+                kind: .seasonClose,
+                context: .init(
+                    activeEventTitle: nil,
+                    lastEventDaysAgo: nil,
+                    memberCount: 4,
+                    memberNames: ["A", "B", "C", "D"],
+                    recentWinnerNames: ["Alex"]
+                )
+            )
+            runner.assertTrue(!body.isEmpty, "seasonClose cell empty for \(p.rawValue)×\(i.rawValue)")
+            runner.assertTrue(body.contains("Felty"), "seasonClose names the mascot for \(p.rawValue)×\(i.rawValue)")
+            runner.assertTrue(body.contains("Alex"), "seasonClose names the winner for \(p.rawValue)×\(i.rawValue)")
+            let hasMarker = praiseMarkers.contains { body.contains($0) }
+            runner.assertTrue(hasMarker, "seasonClose praise marker missing for \(p.rawValue)×\(i.rawValue): \(body)")
+            runner.assertTrue(body.count <= 200, "seasonClose body over 200 chars for \(p.rawValue)×\(i.rawValue) (\(body.count)): \(body)")
+        }
+    }
+}
+
 runner.run("MascotEngine tonightStar cell exists for every personality × ideology") {
     let personalities = MascotPersonality.allCases
     let ideologies = MascotPoliticalIdeology.allCases

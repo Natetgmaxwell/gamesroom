@@ -38,6 +38,7 @@ const SYSTEM_PROMPT = [
   "Never break the fourth wall about being an AI. Tone is informational",
   "and light — a quiet footer caption, never dramatic. No ALL-CAPS.",
   "At most one exclamation mark.",
+  "When asked for praise, name the specific behaviour and praise it — never a bare stat or a blanket compliment.",
 ].join(" ");
 
 function stripThinkingBlocks(s: string): string {
@@ -133,7 +134,15 @@ function buildPrompt(room: Record<string, unknown>, ctx: Record<string, unknown>
   if (ctx.caller_rank) lines.push(`Caller rank: ${ctx.caller_rank}`);
   if (ctx.working_hand) lines.push(`Working hand: ${ctx.working_hand}`);
   if (ctx.days_quiet !== undefined) lines.push(`Days quiet: ${ctx.days_quiet}`);
+  if (ctx.season_ordinal !== undefined) lines.push(`Season ordinal: ${ctx.season_ordinal}`);
   lines.push(`Message type: ${ctx.message_type}`);
+  if (ctx.message_type === "The season has closed. Praise the season's standouts.") {
+    lines.push(
+      "Register: praise-first. Name the specific behaviour (kept showing up,",
+      "clawed it back, held the table together), praise it sincerely, and keep",
+      "it about the behaviour — never a blanket compliment, never a stat readout.",
+    );
+  }
   lines.push("Write the mascot's message now:");
   return lines.join("\n");
 }
@@ -237,23 +246,52 @@ Deno.serve(async (req: Request) => {
     .single();
   if (!room) return json({ error: "room_not_found" }, 404);
 
+  // V0.84 — season-close branch: read the room's latest two seasons so
+  // the LLM path can praise the season's standouts instead of event-
+  // flavour copy when the footer state is .seasonClose. Mirrors
+  // get_current_season's "prefer ended" ordering: after a close the
+  // highest ordinal is the NEW active season, so the top-2 by ordinal
+  // always contain the most recent ended season (only one active
+  // season exists at a time).
+  const { data: latestSeasons } = await serviceClient
+    .from("seasons")
+    .select("id, ordinal, status, ended_at")
+    .eq("room_id", roomId)
+    .order("ordinal", { ascending: false })
+    .limit(2);
+  const latestSeason = (latestSeasons ?? []).find((s) => s.status === "ended");
+
   // Live room state for the prompt.
   const ctx: Record<string, unknown> = {};
 
   if (event) {
     ctx.event_title = event.name;
+  }
+
+  let eventMessageType: string | null = null;
+  if (event) {
     const now = Date.now();
     const playedAt = new Date(event.played_at).getTime();
     const settledAt = event.settled_at ? new Date(event.settled_at).getTime() : null;
     if (settledAt && now - settledAt < 86_400_000) {
-      ctx.message_type = "Post-play recap. The event has concluded.";
+      eventMessageType = "Post-play recap. The event has concluded.";
     } else if (playedAt <= now && !settledAt) {
-      ctx.message_type = "The night has started. The event is live.";
+      eventMessageType = "The night has started. The event is live.";
     } else {
-      ctx.message_type = "New event just created. Prompt members to claim their seat.";
+      eventMessageType = "New event just created. Prompt members to claim their seat.";
     }
   } else {
-    ctx.message_type = "Room has no events yet. Welcome the members.";
+    eventMessageType = "Room has no events yet. Welcome the members.";
+  }
+
+  // V0.84 — season-closed wins over the event-derived message_type:
+  // when the latest season has been ended, the footer is showing the
+  // season-close card and the LLM should praise the season's standouts.
+  if (latestSeason?.status === "ended") {
+    ctx.message_type = "The season has closed. Praise the season's standouts.";
+    ctx.season_ordinal = latestSeason.ordinal;
+  } else if (eventMessageType !== null) {
+    ctx.message_type = eventMessageType;
   }
 
   const { data: leaderboard } = await serviceClient
