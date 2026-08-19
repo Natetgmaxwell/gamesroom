@@ -28,8 +28,11 @@ struct HostOpenerSuggestion: Identifiable, Hashable {
 
     /// The opener line, WITHOUT the "{mascot} suggests:" prefix.
     /// The view applies the prefix using the room's mascot name (room
-    /// state, not model state). Always ≤ ~140 chars and ends in a
-    /// period so the view's prefix concatenation reads cleanly.
+    /// state, not model state). Hard-capped at `HostOpenerDerivation
+    /// .maxLineLength` chars (the derivation trims the composed
+    /// line — not just the member's text — with an ellipsis if the
+    /// template + name ran longer) and ends in a period so the view's
+    /// prefix concatenation reads cleanly.
     let line: String
 
     /// Which ladder branch produced the line. Surfaced for tests and
@@ -95,7 +98,8 @@ enum HostOpenerDerivation {
 
     /// Derive one opener line for each claimed RSVP, in the input
     /// order. Declined and unclaimed RSVPs are excluded — claimed
-    /// only.
+    /// only — and only RSVPs for `eventId` (defensive: callers
+    /// occasionally hand us the cached RSVPs across events).
     static func suggestions(
         eventId: UUID,
         members: [Member],
@@ -103,9 +107,18 @@ enum HostOpenerDerivation {
         leaderboard: [LeaderboardEntry],
         now: Date
     ) -> [HostOpenerSuggestion] {
-        let claimedRsvps = rsvps.filter { $0.state == .claimed }
-        let membersById = Dictionary(uniqueKeysWithValues: members.map { ($0.userId, $0) })
-        let leaderboardById = Dictionary(uniqueKeysWithValues: leaderboard.map { ($0.userId, $0) })
+        let claimedRsvps = rsvps.filter { $0.state == .claimed && $0.eventId == eventId }
+        // Cache-sourced lookups — duplicates are possible if the
+        // upstream cache has not deduped. Keep the first row so we
+        // don't trap on `uniqueKeysWithValues`.
+        let membersById = Dictionary(
+            members.map { ($0.userId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let leaderboardById = Dictionary(
+            leaderboard.map { ($0.userId, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         return claimedRsvps.map { rsvp in
             let member = membersById[rsvp.memberId] ?? fallbackMember(for: rsvp)
             let entry = leaderboardById[rsvp.memberId]
@@ -126,7 +139,10 @@ enum HostOpenerDerivation {
     /// + 4.7 (reputation to live up to) prescribe: stated preference
     /// first (so the mirror reads as deliberate), then conversation
     /// topic, then first-night welcome, then last-winner reputation,
-    /// then long-tenure reliability, then plain name fallback.
+    /// then long-tenure reliability, then plain name fallback. The
+    /// final composed line is hard-capped at `maxLineLength` chars
+    /// (ellipsis suffix) so a long displayName + a long member body
+    /// can't overflow the host's list cell.
     static func deriveLine(
         member: Member,
         displayName: String,
@@ -140,30 +156,34 @@ enum HostOpenerDerivation {
         // (a) Stated social preference — mirror it back, name-first,
         // and quote the member's own words so first-person reads as
         // quotation (not the host speaking for them).
+        let line: String
         if isUsable(social.socialText) {
             let text = stripSentenceTerminators(trim(social.socialText, to: 90))
-            return "\(safeName) — “\(text).”"
+            line = "\(safeName) — “\(text).”"
         }
         // (b) Conversation prompt — open on their stated topic,
         // quoted so the topic reads as the member's own framing.
-        if isUsable(social.conversationPrompt) {
+        else if isUsable(social.conversationPrompt) {
             let text = stripSentenceTerminators(trim(social.conversationPrompt, to: 90))
-            return "\(safeName) — open with “\(text).”"
+            line = "\(safeName) — open with “\(text).”"
         }
         // (c) First night — welcome by name, no history.
-        if let entry = leaderboardEntry, entry.sessionsPlayed == 0 {
-            return "First night — welcome \(safeName) by name."
+        else if let entry = leaderboardEntry, entry.sessionsPlayed == 0 {
+            line = "First night — welcome \(safeName) by name."
         }
         // (d) Won the last session — reputation to live up to.
-        if let entry = leaderboardEntry, entry.lastSessionDelta > 0 {
-            return "\(safeName) — last time you took the table. Tonight's yours to defend."
+        else if let entry = leaderboardEntry, entry.lastSessionDelta > 0 {
+            line = "\(safeName) — last time you took the table. Tonight's yours to defend."
         }
         // (e) Long tenure — name + reliability.
-        if let entry = leaderboardEntry, entry.sessionsPlayed >= 5 {
-            return "\(safeName) — five-plus nights in. You set the room's tempo."
+        else if let entry = leaderboardEntry, entry.sessionsPlayed >= 5 {
+            line = "\(safeName) — five-plus nights in. You set the room's tempo."
         }
         // (f) Plain name-forward greeting.
-        return "\(safeName) — good to see you at the table."
+        else {
+            line = "\(safeName) — good to see you at the table."
+        }
+        return trim(line, to: maxLineLength)
     }
 
     /// Mirror of `deriveLine` that returns only the matched branch.

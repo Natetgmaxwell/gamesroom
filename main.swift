@@ -3979,6 +3979,56 @@ runner.run("HostOpenerSuggestion id is stable composite of event + member") {
     runner.assertEqual(line.id, "\(eventId.uuidString):\(memberId.uuidString)")
 }
 
+runner.run("HostOpenerDerivation.suggestions keeps first row when cached members contain duplicate userIds") {
+    // V0.84 C1 review hardening — `Dictionary(uniqueKeysWithValues:)`
+    // traps on duplicate keys; the cache-sourced lookup must keep
+    // the first row instead of crashing the host view mid-render.
+    let eventId = UUID()
+    let dupId = UUID()
+    let first = openerTestMember(userId: dupId, displayName: "First")
+    let second = openerTestMember(userId: dupId, displayName: "Second")
+    let rsvps = [openerTestRsvp(eventId: eventId, memberId: dupId, displayName: "Second")]
+    let lines = HostOpenerDerivation.suggestions(
+        eventId: eventId,
+        members: [first, second],
+        rsvps: rsvps,
+        leaderboard: [],
+        now: Date()
+    )
+    runner.assertEqual(lines.count, 1)
+    runner.assertEqual(lines.first?.displayName, "First")
+}
+
+runner.run("HostOpenerDerivation caps the composed line at maxLineLength for long name + long socialText") {
+    // V0.84 C1 review hardening — the ≤140 envelope is now enforced
+    // on the FINAL composed line (not just the member body), so a
+    // long displayName + a 90-char socialText still fits inside the
+    // host's list cell with the ellipsis suffix.
+    let eventId = UUID()
+    let userId = UUID()
+    let longName = String(repeating: "X", count: 65)            // > 60 chars
+    let longBody = String(repeating: "y", count: 90)            // exactly at inner trim cap
+    let member = openerTestMember(
+        userId: userId,
+        displayName: longName,
+        socialPreference: SocialPreference(
+            socialText: longBody,
+            conversationPrompt: "",
+            defaultSet: true
+        )
+    )
+    let rsvp = openerTestRsvp(eventId: eventId, memberId: userId, displayName: longName)
+    let board = [openerTestLeaderboard(userId: userId, displayName: longName, sessionsPlayed: 3, lastSessionDelta: 0)]
+    let line = HostOpenerDerivation.suggestion(
+        eventId: eventId, member: member, rsvp: rsvp,
+        leaderboardEntry: board[0], now: Date()
+    )
+    runner.assertTrue(
+        line.line.count <= HostOpenerDerivation.maxLineLength,
+        "line capped at \(HostOpenerDerivation.maxLineLength) chars, got \(line.line.count)"
+    )
+}
+
 // MARK: - Summary
 
 print("")
