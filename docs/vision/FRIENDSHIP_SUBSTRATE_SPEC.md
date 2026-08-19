@@ -296,6 +296,14 @@ verbatim.) A feature that would survive on a twice-a-week user who is only ever
 in the app to get to the table is a feature that serves the substrate. Anything
 that needs more time-in-app to justify itself is the medium creeping back in.
 
+**The host's test (Carnegie, 2026-08-19):** *if a move keeps the host looking
+at the technique instead of the members, it fails the room.* Same shape, same
+severity, same direction as the product test. The host is the only human voice
+in the room; the mascot is the only system voice. A host who starts watching
+their own technique — the praise, the opener, the override — instead of the
+people across the table has become the medium in human form. The product test
+guards the app; the host test guards the host. Both must hold.
+
 ---
 
 ## Part 4: Where this lands (handoff to the next two specs)
