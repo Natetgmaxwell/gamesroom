@@ -3640,6 +3640,8 @@ runner.run("StorageKeys.memberNotePromptDismissed stable format contains uuid") 
     let again = StorageKeys.memberNotePromptDismissed(eventId: eventId)
     runner.assertEqual(key, again)
     runner.assertTrue(key.contains(eventId.uuidString))
+}
+
 // MARK: - HostOpenerSuggestion (V0.84 C1)
 
 /// Helper: a fully-populated Member with the supplied socialPreference
