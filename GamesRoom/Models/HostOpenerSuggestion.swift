@@ -137,15 +137,18 @@ enum HostOpenerDerivation {
         let safeName = name.isEmpty ? "Member" : name
         let social = member.socialPreference
 
-        // (a) Stated social preference — mirror it back, name-first.
+        // (a) Stated social preference — mirror it back, name-first,
+        // and quote the member's own words so first-person reads as
+        // quotation (not the host speaking for them).
         if isUsable(social.socialText) {
-            let text = trim(social.socialText, to: 90)
-            return "\(safeName) — \(text)."
+            let text = stripSentenceTerminators(trim(social.socialText, to: 90))
+            return "\(safeName) — “\(text).”"
         }
-        // (b) Conversation prompt — open on their stated topic.
+        // (b) Conversation prompt — open on their stated topic,
+        // quoted so the topic reads as the member's own framing.
         if isUsable(social.conversationPrompt) {
-            let text = trim(social.conversationPrompt, to: 90)
-            return "\(safeName) — ask about \(text)."
+            let text = stripSentenceTerminators(trim(social.conversationPrompt, to: 90))
+            return "\(safeName) — open with “\(text).”"
         }
         // (c) First night — welcome by name, no history.
         if let entry = leaderboardEntry, entry.sessionsPlayed == 0 {
@@ -212,6 +215,18 @@ enum HostOpenerDerivation {
         if trimmed.count <= max { return trimmed }
         let cutoff = trimmed.index(trimmed.startIndex, offsetBy: max - 1)
         return "\(trimmed[..<cutoff])…"
+    }
+
+    /// Strip a trailing `.`, `!`, or `?` from a member-written string
+    /// after whitespace trim, so the template-supplied terminal period
+    /// doesn't double-punctuate against member punctuation. Used by
+    /// branches (a)/(b) before the curly-quote template wraps the
+    /// member's words.
+    private static func stripSentenceTerminators(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.trimmingCharacters(
+            in: CharacterSet(charactersIn: ".!?")
+        )
     }
 
     /// Prefer the member's displayName (cached at the leaderboard

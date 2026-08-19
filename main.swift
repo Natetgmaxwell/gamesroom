@@ -3718,6 +3718,32 @@ runner.run("HostOpenerDerivation (a) mirrors the member's socialText, name-first
     runner.assertEqual(line.branch, .memberStatedPreference)
     runner.assertTrue(line.line.contains("Alex"), "name-first")
     runner.assertTrue(line.line.contains("deep strategy games"), "preference mirrored")
+    runner.assertTrue(line.line.contains("\u{201C}"), "branch (a) quotes the member's words with a curly opening quote")
+}
+
+runner.run("HostOpenerDerivation (a) strips the member's trailing period so the template period does not double-punctuate") {
+    // Member-written first-person ending in "." — the template-supplied
+    // terminal period must not collide with theirs; the line must
+    // contain exactly one terminal period (no "..").
+    let eventId = UUID()
+    let userId = UUID()
+    let member = openerTestMember(
+        userId: userId,
+        displayName: "Alex",
+        socialPreference: SocialPreference(
+            socialText: "I love deep strategy games.",
+            conversationPrompt: "",
+            defaultSet: true
+        )
+    )
+    let rsvp = openerTestRsvp(eventId: eventId, memberId: userId, displayName: "Alex")
+    let board = [openerTestLeaderboard(userId: userId, displayName: "Alex", sessionsPlayed: 3, lastSessionDelta: 0)]
+    let line = HostOpenerDerivation.suggestion(
+        eventId: eventId, member: member, rsvp: rsvp,
+        leaderboardEntry: board[0], now: Date()
+    )
+    runner.assertEqual(line.branch, .memberStatedPreference)
+    runner.assertFalse(line.line.contains(".."), "double period: \(line.line)")
 }
 
 runner.run("HostOpenerDerivation (b) opens on conversationPrompt when no socialText") {
