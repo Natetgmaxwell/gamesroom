@@ -3460,6 +3460,150 @@ runner.run("EventTransaction without meta or without flag is not dispensed") {
     runner.assertEqual(noFlagTxn.isDispensed, false)
 }
 
+// MARK: - V0.84 C2+C5 — Tonight's Star + member notes (migration 083)
+
+runner.run("TonightStarOverrideCategory has five cases with SQL enum raw values") {
+    runner.assertEqual(TonightStarOverrideCategory.allCases.count, 5)
+    runner.assertEqual(TonightStarOverrideCategory.bestPlay.rawValue, "best_play")
+    runner.assertEqual(TonightStarOverrideCategory.goodSport.rawValue, "good_sport")
+    runner.assertEqual(TonightStarOverrideCategory.heldTheRoom.rawValue, "held_the_room")
+    runner.assertEqual(TonightStarOverrideCategory.showedUp.rawValue, "showed_up")
+    runner.assertEqual(TonightStarOverrideCategory.custom.rawValue, "custom")
+}
+
+runner.run("TonightStarOverrideCategory displayName + shortLabel are non-empty for every case") {
+    let expectedDisplay = [
+        "Best Play", "Good Sport", "Held the Room", "Showed Up", "Custom"
+    ]
+    let expectedShort = [
+        "Best play", "Good sport", "Held the room", "Showed up", "Custom"
+    ]
+    let displays = TonightStarOverrideCategory.allCases.map(\.displayName)
+    let shorts = TonightStarOverrideCategory.allCases.map(\.shortLabel)
+    runner.assertEqual(displays, expectedDisplay)
+    runner.assertEqual(shorts, expectedShort)
+}
+
+runner.run("TonightStarOverrideCategory Codable round-trips every case") {
+    for category in TonightStarOverrideCategory.allCases {
+        let data = try JSONEncoder().encode(category)
+        let decoded = try JSONDecoder().decode(
+            TonightStarOverrideCategory.self, from: data
+        )
+        runner.assertEqual(decoded, category)
+    }
+}
+
+runner.run("TonightStarCard decodes host_pick JSON with all fields populated") {
+    let json = """
+    {
+        "member_id": "11111111-2222-3333-4444-555555555555",
+        "member_display_name": "Alex",
+        "override_category": "best_play",
+        "custom_text": null,
+        "source": "host_pick"
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let card = try JSONDecoder().decode(TonightStarCard.self, from: data)
+    runner.assertEqual(card.memberDisplayName, "Alex")
+    runner.assertEqual(card.overrideCategory, .bestPlay)
+    runner.assertNil(card.customText)
+    runner.assertEqual(card.source, "host_pick")
+}
+
+runner.run("TonightStarCard decodes chip_swing JSON with nil override category") {
+    let json = """
+    {
+        "member_id": "22222222-3333-4444-5555-666666666666",
+        "member_display_name": "Sam",
+        "override_category": null,
+        "custom_text": null,
+        "source": "chip_swing"
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let card = try JSONDecoder().decode(TonightStarCard.self, from: data)
+    runner.assertNil(card.overrideCategory)
+    runner.assertEqual(card.source, "chip_swing")
+}
+
+runner.run("TonightStarCard decodes custom host_pick with custom text") {
+    let json = """
+    {
+        "member_id": "33333333-4444-5555-6666-777777777777",
+        "member_display_name": "Felix",
+        "override_category": "custom",
+        "custom_text": "Saved the last round with a four-of-a-kind.",
+        "source": "host_pick"
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let card = try JSONDecoder().decode(TonightStarCard.self, from: data)
+    runner.assertEqual(card.overrideCategory, .custom)
+    runner.assertEqual(card.customText, "Saved the last round with a four-of-a-kind.")
+}
+
+runner.run("RoomMemberNote decodes full row snake_case") {
+    let json = """
+    {
+        "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "room_id": "11111111-2222-3333-4444-555555555555",
+        "member_id": "22222222-3333-4444-5555-666666666666",
+        "member_display_name": "Alex",
+        "note_text": "Friday worked — let's do the same again next week.",
+        "created_at": 773136000,
+        "consumed_by_host_at": null
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let note = try JSONDecoder().decode(RoomMemberNote.self, from: data)
+    runner.assertEqual(note.memberDisplayName, "Alex")
+    runner.assertEqual(note.noteText, "Friday worked — let's do the same again next week.")
+    runner.assertNil(note.consumedByHostAt)
+}
+
+runner.run("RoomMemberNote tolerates missing optional consumed_by_host_at") {
+    // Field defaults to nil via decodeIfPresent.
+    let json = """
+    {
+        "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "room_id": "11111111-2222-3333-4444-555555555555",
+        "member_id": "22222222-3333-4444-5555-666666666666",
+        "member_display_name": "Alex",
+        "note_text": "Pickup tonight at 8.",
+        "created_at": 773136000
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let note = try JSONDecoder().decode(RoomMemberNote.self, from: data)
+    runner.assertNil(note.consumedByHostAt)
+}
+
+runner.run("TonightStarOverrideCategory.mascotLine covers every case with non-empty body") {
+    for category in TonightStarOverrideCategory.allCases {
+        let line = category.mascotLine(winnerName: "Alex")
+        runner.assertTrue(!line.isEmpty, "mascotLine for \(category.rawValue) must be non-empty")
+        runner.assertTrue(line.contains("Alex"), "mascotLine for \(category.rawValue) must name the winner")
+        runner.assertFalse(
+            line.contains("{winner}"),
+            "mascotLine for \(category.rawValue) must not leave unresolved {winner} placeholder"
+        )
+        runner.assertFalse(
+            line.contains("{"),
+            "mascotLine for \(category.rawValue) must not leave any unresolved {placeholder}"
+        )
+    }
+}
+
+runner.run("StorageKeys.memberNotePromptDismissed stable format contains uuid") {
+    let eventId = UUID()
+    let key = StorageKeys.memberNotePromptDismissed(eventId: eventId)
+    let again = StorageKeys.memberNotePromptDismissed(eventId: eventId)
+    runner.assertEqual(key, again)
+    runner.assertTrue(key.contains(eventId.uuidString))
+}
+
 // MARK: - Summary
 
 print("")

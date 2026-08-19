@@ -848,4 +848,79 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         }
         return room
     }
+
+    // MARK: - Tonight's Star + member notes (V0.84 C2 + C5)
+
+    /// The live RPC is `get_tonight_star_card(p_event_id)`
+    /// (migration 083). Returns the host pick when one exists;
+    /// else the 067 chip-swing fallback with
+    /// `override_category == nil`. Empty when neither has a
+    /// winner.
+    func fetchTonightStarCard(eventId: UUID) async throws -> TonightStarCard? {
+        let rows: [TonightStarCard] = try await SupabaseClientProvider.shared
+            .rpc("get_tonight_star_card", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value
+        return rows.first
+    }
+
+    /// The live RPC is `set_tonight_star_pick(p_event_id,
+    /// p_member_id, p_override_category, p_custom_text)` (migration
+    /// 083). Host-only; upserts on `tonight_star_picks.unique(event_id)`.
+    func setTonightStarPick(
+        eventId: UUID,
+        memberId: UUID,
+        category: TonightStarOverrideCategory,
+        customText: String?
+    ) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_tonight_star_pick", params: [
+                "p_event_id": eventId.uuidString,
+                "p_member_id": memberId.uuidString,
+                "p_override_category": category.rawValue,
+                "p_custom_text": customText ?? ""
+            ])
+            .execute()
+            .value as Void
+    }
+
+    /// The live RPC is `get_unconsumed_member_notes(p_room_id)`
+    /// (migration 083). Host-only; oldest first.
+    func fetchUnconsumedMemberNotes(roomId: UUID) async throws -> [RoomMemberNote] {
+        let rows: [RoomMemberNote] = try await SupabaseClientProvider.shared
+            .rpc("get_unconsumed_member_notes", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
+    /// The live RPC is `submit_member_note(p_room_id, p_note_text)`
+    /// (migration 083). Server enforces trim-non-empty, ≤500 chars,
+    /// at most one per calendar day per member.
+    func submitMemberNote(roomId: UUID, noteText: String) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("submit_member_note", params: [
+                "p_room_id": roomId.uuidString,
+                "p_note_text": noteText
+            ])
+            .execute()
+            .value as Void
+    }
+
+    /// The live RPC is `mark_member_notes_consumed(p_room_id,
+    /// p_note_ids uuid[])` (migration 083). Host-only; stamps
+    /// `consumed_by_host_at = now()` on the listed unconsumed notes.
+    func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("mark_member_notes_consumed", params: [
+                "p_room_id": roomId.uuidString,
+                "p_note_ids": noteIds.map(\.uuidString)
+            ])
+            .execute()
+            .value as Void
+    }
 }

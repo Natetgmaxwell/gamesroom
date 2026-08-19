@@ -401,6 +401,42 @@ actor InMemoryRoomStore: RoomStore {
         ]
         self.roomSystemEvents = [:]
         self.chapterLines = [:]
+        // V0.84 C2 + C5 — seed one host_pick tonight-star card on
+        // the first event and one unconsumed member note on the
+        // first room so previews exercise the new ceremonial-card
+        // surface end-to-end. The host_pick uses the leaderboard
+        // leader as the synthetic winner; the note is written by
+        // a non-host synthetic member so the host's view (the
+        // default `currentSyntheticMemberId` is the host) reads
+        // it correctly.
+        let seedLeaderboard = self.leaderboards[carwoola.id] ?? []
+        let seedWinner = seedLeaderboard.first(where: { !$0.role.lowercased().contains("host") })
+            ?? seedLeaderboard.first
+        var cards: [UUID: TonightStarCard] = [:]
+        if let winner = seedWinner {
+            cards[carwoolaEvent.id] = TonightStarCard(
+                memberId: winner.userId,
+                memberDisplayName: winner.displayName,
+                overrideCategory: .bestPlay,
+                customText: nil,
+                source: "host_pick"
+            )
+        }
+        self.tonightStarCards = cards
+        let seedNoteMember = UUID()
+        self.unconsumedNotes = [
+            carwoola.id: [
+                RoomMemberNote(
+                    id: UUID(),
+                    roomId: carwoola.id,
+                    memberId: seedNoteMember,
+                    memberDisplayName: "Alex",
+                    noteText: "Friday worked — let's do the same again next week.",
+                    createdAt: Date().addingTimeInterval(-3600),
+                    consumedByHostAt: nil
+                )
+            ]
+        ]
 
         // W-05 — seed the first room (Carwoola Crew) with two
         // prior ended seasons, most recent first in the array.
@@ -1285,4 +1321,145 @@ actor InMemoryRoomStore: RoomStore {
         return id
     }
     private var _cachedSyntheticMemberId: UUID?
+
+    // MARK: - Tonight's Star + member notes (V0.84 C2 + C5)
+
+    /// Map of `eventId → TonightStarCard` for the host-pick
+    /// persistence mirror. Pre-populated with one synthetic
+    /// host_pick on the first seeded event so previews exercise
+    /// the ceremonial-card star surface end-to-end.
+    private var tonightStarCards: [UUID: TonightStarCard]
+
+    /// Map of `roomId → unconsumed notes`. Pre-populated with one
+    /// synthetic member note on the first seeded room so the
+    /// host's pre-event BriefingSlot can render the notes section.
+    private var unconsumedNotes: [UUID: [RoomMemberNote]]
+
+    /// In-memory mirror of `get_tonight_star_card(p_event_id)`
+    /// (migration 083). Returns the host pick when one has been
+    /// stored; else synthesises a chip-swing card from the seeded
+    /// leaderboard's top member so the ceremonial-card star
+    /// surface renders in previews. Empty when the event has no
+    /// winner either way.
+    func fetchTonightStarCard(eventId: UUID) async throws -> TonightStarCard? {
+        if let card = tonightStarCards[eventId] {
+            return card
+        }
+        // V0.84 — chip-swing fallback mirrors the 067
+        // `get_tonight_star` shape: biggest single-session net
+        // positive. The seeded leaderboard is keyed by roomId
+        // rather than by event, so we use the leader's row as the
+        // synthetic winner so previews render something real.
+        guard let roomId = events.first(where: { $0.value.id == eventId })?.key,
+              let board = leaderboards[roomId],
+              let leader = board.first(where: { !$0.role.lowercased().contains("host") })
+                ?? board.first
+        else { return nil }
+        return TonightStarCard(
+            memberId: leader.userId,
+            memberDisplayName: leader.displayName,
+            overrideCategory: nil,
+            customText: nil,
+            source: "chip_swing"
+        )
+    }
+
+    /// In-memory mirror of `set_tonight_star_pick` (migration
+    /// 083). Upserts into `tonightStarCards` keyed by `eventId` so
+    /// previews reflect the host's pick immediately. Throws on
+    /// unknown events.
+    func setTonightStarPick(
+        eventId: UUID,
+        memberId: UUID,
+        category: TonightStarOverrideCategory,
+        customText: String?
+    ) async throws {
+        guard events.values.contains(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        let displayName: String
+        if let roomId = events.first(where: { $0.value.id == eventId })?.key,
+           let members = try? await fetchRoomMembers(roomId: roomId),
+           let member = members.first(where: { $0.userId == memberId }) {
+            displayName = member.displayName
+        } else {
+            displayName = "Member"
+        }
+        tonightStarCards[eventId] = TonightStarCard(
+            memberId: memberId,
+            memberDisplayName: displayName,
+            overrideCategory: category,
+            customText: category == .custom ? customText : nil,
+            source: "host_pick"
+        )
+    }
+
+    /// In-memory mirror of `get_unconsumed_member_notes(p_room_id)`
+    /// (migration 083). Returns the synthetic note for the first
+    /// seeded room so the host's BriefingSlot notes section
+    /// renders in previews.
+    func fetchUnconsumedMemberNotes(roomId: UUID) async throws -> [RoomMemberNote] {
+        return unconsumedNotes[roomId] ?? []
+    }
+
+    /// In-memory mirror of `submit_member_note` (migration 083).
+    /// Appends to the unconsumed-notes map keyed by `roomId` so
+    /// previews reflect the drop. Throws when the synthetic
+    /// caller has already submitted today (mirrors the live
+    /// soft-rate guard).
+    func submitMemberNote(roomId: UUID, noteText: String) async throws {
+        guard rooms.contains(where: { $0.id == roomId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "room not found"]
+            )
+        }
+        let trimmed = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Note text cannot be empty"]
+            )
+        }
+        if let existing = unconsumedNotes[roomId],
+           existing.contains(where: {
+               $0.memberId == currentSyntheticMemberId()
+               && Calendar.current.isDateInToday($0.createdAt)
+           }) {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "You already left a note today"]
+            )
+        }
+        var notes = unconsumedNotes[roomId] ?? []
+        notes.append(RoomMemberNote(
+            id: UUID(),
+            roomId: roomId,
+            memberId: currentSyntheticMemberId(),
+            memberDisplayName: "You",
+            noteText: trimmed,
+            createdAt: Date(),
+            consumedByHostAt: nil
+        ))
+        unconsumedNotes[roomId] = notes
+    }
+
+    /// In-memory mirror of `mark_member_notes_consumed` (migration
+    /// 083). Stamps `consumedByHostAt` on the listed notes so the
+    /// next `fetchUnconsumedMemberNotes` drops them.
+    func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async throws {
+        var notes = unconsumedNotes[roomId] ?? []
+        let stamped = notes.filter { noteIds.contains($0.id) }
+        let stampedIds = Set(stamped.map(\.id))
+        guard !stamped.isEmpty else { return }
+        notes.removeAll { stampedIds.contains($0.id) }
+        unconsumedNotes[roomId] = notes
+    }
 }

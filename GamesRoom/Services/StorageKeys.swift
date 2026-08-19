@@ -34,4 +34,13 @@ enum StorageKeys {
     static func calendarEventIdentifier(eventId: UUID) -> String {
         "calendarEventIdentifier-\(eventId.uuidString)"
     }
+
+    /// V0.84 C5 — per-event member-note prompt dismissal. The
+    /// prompt is local: "one tap to dismiss, no nagging, never
+    /// returns until next recap". Stored as `"1"` (not Bool) so
+    /// @AppStorage reads it the same way it reads the
+    /// `lastViewedRoomId` empty-string sentinel.
+    static func memberNotePromptDismissed(eventId: UUID) -> String {
+        "memberNotePromptDismissed-\(eventId.uuidString)"
+    }
 }

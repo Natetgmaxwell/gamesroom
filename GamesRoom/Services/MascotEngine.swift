@@ -2536,4 +2536,42 @@ enum MascotEngine {
             .replacingOccurrences(of: " ?", with: "?")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    // MARK: - TonightStarOverrideCategory voice (V0.84 C2)
+
+    /// Mascot-voiced line for the host's Tonight's Star override
+    /// category. Names the behaviour, not the stat — praise-first
+    /// per C4. Voice lives here (not the model file) so the
+    /// mascot register stays one place. Static, no LLM dependency.
+    /// The custom case carries a separate `custom_text` that the
+    /// view renders alongside, not inside, the mascot line.
+    static func tonightStarLine(
+        category: TonightStarOverrideCategory,
+        winnerName: String
+    ) -> String {
+        switch category {
+        case .bestPlay:
+            return "\(winnerName) played the night's best hand. The host saw it; the table knows."
+        case .goodSport:
+            return "\(winnerName) lost every pot and kept the table laughing. That's the Good Sport."
+        case .heldTheRoom:
+            return "\(winnerName) held the room together — runner, dealer, settler of side bets."
+        case .showedUp:
+            return "\(winnerName) showed up and slotted straight in. The table's better for it."
+        case .custom:
+            return "\(winnerName) — the host's own call."
+        }
+    }
+}
+
+extension TonightStarOverrideCategory {
+    /// Mascot-voiced line for the host's Tonight's Star override.
+    /// Bridge onto the enum so the call site reads
+    /// `category.mascotLine(winnerName:)` rather than routing
+    /// through `MascotEngine` for every read. Delegates to
+    /// `MascotEngine.tonightStarLine` so the voice register stays
+    /// in one file.
+    func mascotLine(winnerName: String) -> String {
+        MascotEngine.tonightStarLine(category: self, winnerName: winnerName)
+    }
 }

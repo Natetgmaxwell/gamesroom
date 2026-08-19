@@ -60,6 +60,11 @@ struct RoomDetailView: View {
     /// V0.79 — flips when the one-time notif prompt is answered so
     /// SwiftUI re-renders the card away (UserDefaults isn't observed).
     @State private var notifPromptDismissed: Bool = false
+    // V0.84 C5 — flips when the one-line drop is dismissed locally
+    // so SwiftUI re-renders the prompt away (UserDefaults isn't
+    // observed directly). The underlying dismissal flag is stored
+    // under `StorageKeys.memberNotePromptDismissed(eventId:)`.
+    @State private var memberNotePromptDismissedFlip: Bool = false
 
     // P0.5 — withdraw + settle sheet bindings. Owned by the view
     // layer so `openWithdraw` / `openScan` can flip them without
@@ -637,7 +642,14 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event }
+                    onEdit: { editEvent = event },
+                    room: room,
+                    unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
+                    onMarkNotesConsumed: isHost
+                        ? { ids in
+                            Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
+                        }
+                        : nil
                 )
             case .claimed(let event):
                 BriefingSlot(
@@ -651,7 +663,14 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event }
+                    onEdit: { editEvent = event },
+                    room: room,
+                    unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
+                    onMarkNotesConsumed: isHost
+                        ? { ids in
+                            Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
+                        }
+                        : nil
                 )
             case .declined(let event):
                 // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
@@ -670,7 +689,14 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event }
+                    onEdit: { editEvent = event },
+                    room: room,
+                    unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
+                    onMarkNotesConsumed: isHost
+                        ? { ids in
+                            Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
+                        }
+                        : nil
                 )
 
             case .inPlay(let event):
@@ -826,7 +852,25 @@ struct RoomDetailView: View {
             case .justSettled(let event):
                 CeremonialCard(
                     event: event,
-                    chapterLine: roomService.cachedEventChapterLine(eventId: event.id)
+                    chapterLine: roomService.cachedEventChapterLine(eventId: event.id),
+                    tonightStarCard: roomService.cachedTonightStarCard(eventId: event.id),
+                    hostPickMembers: roomService.cachedMembers(roomId: room.id),
+                    isHost: isHost,
+                    memberNoteWindowOpen: memberNoteWindowOpen(for: event),
+                    memberNotePromptVisible: memberNotePromptVisible(for: event.id),
+                    onTonightStarPick: isHost
+                        ? { memberId, category, custom in
+                            Task { await setTonightStarPick(event: event, memberId: memberId, category: category, customText: custom) }
+                        }
+                        : nil,
+                    onSubmitMemberNote: !isHost
+                        ? { text in
+                            Task { await submitMemberNote(roomId: room.id, text: text) }
+                        }
+                        : nil,
+                    onSkipMemberNote: !isHost
+                        ? { skipMemberNotePrompt(for: event.id) }
+                        : nil
                 )
 
             case .readStandings:
@@ -871,7 +915,13 @@ struct RoomDetailView: View {
         async let chapterLoad: () = loadChapterLineIfNeeded(force: force)
         async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded()
         async let workingHandsLoad: () = loadWorkingHandsIfNeeded()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad)
+        // V0.84 C2 — Tonight's Star card. Loaded every refresh so
+        // a host pick made on another device shows up on next open.
+        async let tonightStarLoad: () = loadTonightStarCardIfNeeded(force: force)
+        // V0.84 C5 — host-only unconsumed member notes. Guarded
+        // on `isHost` so the member path is free of the RPC.
+        async let notesLoad: () = loadUnconsumedNotesIfNeeded(force: force)
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad, tonightStarLoad, notesLoad)
         Perf.event("refresh end")
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
@@ -900,6 +950,23 @@ struct RoomDetailView: View {
     private func loadChapterLineIfNeeded(force: Bool = false) async {
         guard let event = activeEvent else { return }
         await roomService.loadEventChapterLine(eventId: event.id, force: force)
+    }
+
+    /// V0.84 C2 — loads Tonight's Star card for the active event so
+    /// the ceremonial-card star section renders. No-op when there's
+    /// no active event.
+    private func loadTonightStarCardIfNeeded(force: Bool = false) async {
+        guard let event = activeEvent else { return }
+        await roomService.loadTonightStarCard(eventId: event.id, force: force)
+    }
+
+    /// V0.84 C5 — host-only. Loads the room's unconsumed member
+    /// notes so the BriefingSlot pre-event notes section renders
+    /// when the host opens the room. Guarded on `isHost` so the
+    /// member path is free of the RPC.
+    private func loadUnconsumedNotesIfNeeded(force: Bool = false) async {
+        guard isHost else { return }
+        _ = await roomService.loadUnconsumedMemberNotes(roomId: room.id, force: force)
     }
 
     /// Loads the per-round breakdown for the active event so the
@@ -1143,6 +1210,105 @@ struct RoomDetailView: View {
         }
     }
 
+    /// V0.84 C2 — host-only. Sets the Tonight's Star pick for an
+    /// event via `set_tonight_star_pick` (migration 083). The
+    /// service invalidates and reloads the Tonight's Star card
+    /// cache so the ceremonial-card star section refreshes
+    /// immediately. Errors surface via `lastError`.
+    private func setTonightStarPick(
+        event: Event,
+        memberId: UUID,
+        category: TonightStarOverrideCategory,
+        customText: String?
+    ) async {
+        do {
+            try await roomService.setTonightStarPick(
+                eventId: event.id,
+                memberId: memberId,
+                category: category,
+                customText: customText
+            )
+            Haptics.success()
+        } catch {
+            Perf.event("tonight star pick failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// V0.84 C5 — member writes a one-line drop via
+    /// `submit_member_note` (migration 083). The service
+    /// invalidates the notes cache; the host's next read picks it
+    /// up. Locally hides the prompt via `memberNotePromptDismissedFlip`
+    /// so the card disappears immediately on success.
+    private func submitMemberNote(roomId: UUID, text: String) async {
+        do {
+            try await roomService.submitMemberNote(
+                roomId: roomId, noteText: text
+            )
+            memberNotePromptDismissedFlip.toggle()
+            Haptics.success()
+        } catch {
+            Perf.event("member note submit failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// V0.84 C5 — host-only. Stamps the listed notes consumed via
+    /// `mark_member_notes_consumed` (migration 083). The service
+    /// reloads the unconsumed-notes cache so the BriefingSlot
+    /// notes section clears.
+    private func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async {
+        guard !noteIds.isEmpty else { return }
+        do {
+            try await roomService.markMemberNotesConsumed(
+                roomId: roomId, noteIds: noteIds
+            )
+            Haptics.light()
+        } catch {
+            Perf.event("member notes consumed failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// V0.84 C5 — whether the one-line drop prompt is visible for
+    /// this event. Driven by the local `UserDefaults` flag under
+    /// `StorageKeys.memberNotePromptDismissed(eventId:)` plus a
+    /// re-render trigger (`memberNotePromptDismissedFlip`) so
+    /// SwiftUI observes the change. The prompt is local-only:
+    /// "one tap to dismiss, no nagging, never returns until next
+    /// recap". The window itself is gated separately by
+    /// `memberNoteWindowOpen(for:)` — the per-event window here
+    /// only answers "did this member already dismiss?".
+    private func memberNotePromptVisible(for eventId: UUID) -> Bool {
+        _ = memberNotePromptDismissedFlip
+        return UserDefaults.standard.string(
+            forKey: StorageKeys.memberNotePromptDismissed(eventId: eventId)
+        ) == nil
+    }
+
+    /// V0.84 C5 — whether the one-line drop window is open for this
+    /// event. Per the locked spec the drop arrives the NEXT MORNING
+    /// with the recap, NOT on the post-session screen. The window
+    /// opens once `event.settledAt` is at least 12h before now —
+    /// the member reflects in private, then writes one line when
+    /// the recap surfaces on the next-morning open. False before
+    /// settle (no row to attach to) and during the 12h cool-down
+    /// after settle.
+    private func memberNoteWindowOpen(for event: Event) -> Bool {
+        guard let settledAt = event.settledAt else { return false }
+        return settledAt <= Date().addingTimeInterval(-12 * 3600)
+    }
+
+    /// V0.84 C5 — local-only dismissal of the one-line drop prompt.
+    /// Per the spec: "one tap to dismiss, no nagging, never returns
+    /// until next recap". Stored under
+    /// `StorageKeys.memberNotePromptDismissed(eventId:)` as `"1"`
+    /// (empty/non-present means visible).
+    private func skipMemberNotePrompt(for eventId: UUID) {
+        UserDefaults.standard.set(
+            "1",
+            forKey: StorageKeys.memberNotePromptDismissed(eventId: eventId)
+        )
+        memberNotePromptDismissedFlip.toggle()
+    }
+
     /// Chip-withdraw CTA on the at-play Witness Slot. P0.5 virtual-
     /// only Casino: flips `withdrawSheetEvent` so the
     /// `WithdrawChipsSheet` renders. The sheet loads the member's
@@ -1252,6 +1418,10 @@ private struct BriefingSlot: View {
     let myRSVP: MemberRSVPState
     let onClaim: () -> Void
     let onDecline: () -> Void
+    /// V0.84 C5 — the room the briefing belongs to. Read by the
+    /// host's notes section to surface the mascot name in the
+    /// "Mascot: Member left a note for next time" line.
+    let room: Room
     /// V0.9 Wave 1 Slice 1.2 - when the member has already declined,
     /// the briefing slot surfaces a "Re-accept / Re-decline" pill so
     /// the user can change their mind before the event. Wired up
@@ -1273,6 +1443,14 @@ private struct BriefingSlot: View {
     /// W2.4 — member-side event edit. Wired up only when the
     /// parent passes a non-nil callback.
     let onEdit: (() -> Void)?
+    /// V0.84 C5 — host-only unconsumed notes for the room's
+    /// pre-event host prep. Empty array (the default) means the
+    /// section is hidden.
+    let unconsumedNotes: [RoomMemberNote]
+    /// V0.84 C5 — host-only. Stamps the listed notes consumed so
+    /// the section clears. Wired up only when the parent passes
+    /// a non-nil callback.
+    let onMarkNotesConsumed: (([UUID]) -> Void)?
     // V0.79 — notification toggle params removed. Preferences moved
     // to the one-time RoomNotifPromptCard (main room page) and
     // RoomSettingsSheet's "My notifications" section.
@@ -1290,7 +1468,10 @@ private struct BriefingSlot: View {
         currentUserId: UUID? = nil,
         isHost: Bool,
         isHero: Bool,
-        onEdit: (() -> Void)? = nil
+        onEdit: (() -> Void)? = nil,
+        room: Room,
+        unconsumedNotes: [RoomMemberNote] = [],
+        onMarkNotesConsumed: (([UUID]) -> Void)? = nil
     ) {
         self.event = event
         self.briefing = briefing
@@ -1305,6 +1486,9 @@ private struct BriefingSlot: View {
         self.isHost = isHost
         self.isHero = isHero
         self.onEdit = onEdit
+        self.room = room
+        self.unconsumedNotes = unconsumedNotes
+        self.onMarkNotesConsumed = onMarkNotesConsumed
     }
 
     var body: some View {
@@ -1349,6 +1533,21 @@ private struct BriefingSlot: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 2)
+            }
+
+            // V0.84 C5 — host-only notes section, above the seat
+            // grid. Hidden when there are no unconsumed notes.
+            // Per the spec: "for each note — '<MascotName>: <Member>
+            // left a note for next time.' + the note text (body font).
+            // After render (onAppear of section), host taps 'Done
+            // reading' ⇒ markMemberNotesConsumed."
+            if isHost, !unconsumedNotes.isEmpty, let onMarkNotesConsumed {
+                UnconsumedMemberNotesSection(
+                    room: room,
+                    notes: unconsumedNotes,
+                    onDone: { ids in onMarkNotesConsumed(ids) }
+                )
+                .padding(.top, 4)
             }
 
             // 2026-08-10 feedback round — the seat grid is the
@@ -1495,6 +1694,60 @@ private struct V0StateReEntryPills: View {
 }
 
 // MARK: - Briefing seat-count row
+
+// MARK: - Unconsumed member notes (V0.84 C5 — host pre-event)
+
+/// V0.84 C5 — host-only section surfaced ABOVE the seat grid on
+/// the BriefingSlot when the room has unconsumed member notes.
+/// Per the spec: for each note — "<MascotName>: <Member> left a
+/// note for next time." + the note text (body font). After render
+/// (onAppear of section), host taps "Done reading" ⇒
+/// `markMemberNotesConsumed` with the listed ids.
+private struct UnconsumedMemberNotesSection: View {
+    let room: Room
+    let notes: [RoomMemberNote]
+    let onDone: ([UUID]) -> Void
+
+    /// Stable ids used by the "Done reading" CTA. Captured on
+    /// `onAppear` so we don't re-snapshot every render.
+    @State private var capturedIds: [UUID] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Notes for next time")
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.Palette.accent)
+            ForEach(notes, id: \.id) { note in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(room.mascotName): \(note.memberDisplayName) left a note for next time.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    Text(note.noteText)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
+            }
+            Button(action: { onDone(capturedIds) }) {
+                Text("Done reading")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.background)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Theme.Palette.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+        }
+        .onAppear {
+            if capturedIds.isEmpty {
+                capturedIds = notes.map(\.id)
+            }
+        }
+    }
+}
 
 private struct BriefingSeatCount: View {
     let summary: BriefingSummary
@@ -1943,6 +2196,44 @@ private struct WitnessSlot: View {
 private struct CeremonialCard: View {
     let event: Event
     let chapterLine: ChapterLine?
+    /// V0.84 C2 — Tonight's Star card for this event (host pick or
+    /// chip-swing fallback). `nil` when no winner either way —
+    /// the section is hidden in that case (matches the 067 empty
+    /// case).
+    let tonightStarCard: TonightStarCard?
+    /// V0.84 C2 — host-only. Members of the room the host can pick
+    /// from. Empty array means the host can't open the picker
+    /// (the parent gates on `isHost && !members.isEmpty`).
+    let hostPickMembers: [Member]
+    let isHost: Bool
+    /// V0.84 C5 — whether the next-morning drop window is open for
+    /// this event. Per the locked spec the drop arrives the next
+    /// morning with the recap, NOT on the post-session screen, so
+    /// the prompt stays hidden during the 12h cool-down after
+    /// settle. Combined with `memberNotePromptVisible` to decide
+    /// whether the prompt renders.
+    let memberNoteWindowOpen: Bool
+    /// V0.84 C5 — whether the current member has already submitted
+    /// or dismissed the one-line drop for this event. Drives
+    /// whether the prompt renders below the star section (gated
+    /// further by `memberNoteWindowOpen` — the drop only arrives
+    /// the next morning, not the post-session screen).
+    let memberNotePromptVisible: Bool
+    /// V0.84 C2 + C5 — host-only actions for the picker.
+    let onTonightStarPick: ((UUID, TonightStarOverrideCategory, String?) -> Void)?
+    /// V0.84 C5 — member submit/skip for the one-line drop.
+    let onSubmitMemberNote: ((String) -> Void)?
+    let onSkipMemberNote: (() -> Void)?
+
+    /// V0.84 C2 — local UI state for the inline picker. Empty
+    /// string means "no member selected yet"; picker only
+    /// submits when a member is selected.
+    @State private var pickerSelectedMemberId: UUID?
+    @State private var pickerSelectedCategory: TonightStarOverrideCategory = .bestPlay
+    @State private var pickerCustomText: String = ""
+
+    /// V0.84 C5 — local UI state for the one-line drop text field.
+    @State private var memberNoteDraft: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 64) {
@@ -1965,6 +2256,64 @@ private struct CeremonialCard: View {
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
                 }
+            }
+
+            // V0.84 C2 — Tonight's Star section. Hidden when
+            // `tonightStarCard == nil` (no host pick AND no
+            // chip-swing winner — matches the 067 empty case).
+            if let card = tonightStarCard {
+                TonightStarSection(card: card)
+            }
+
+            // V0.84 C5 — one-line drop prompt. Member-only, gated on
+            // both `memberNoteWindowOpen` (the next-morning window
+            // has opened, ≥12h since settle) AND
+            // `memberNotePromptVisible` (the member hasn't already
+            // submitted or dismissed it). Next-morning rule: the
+            // drop arrives the next morning with the recap, NOT on
+            // the post-session screen — the 12h cool-down gives
+            // the member private space to reflect first.
+            if !isHost, memberNoteWindowOpen, memberNotePromptVisible, let onSubmitMemberNote, let onSkipMemberNote {
+                MemberNotePromptSection(
+                    draft: $memberNoteDraft,
+                    onSubmit: {
+                        let text = memberNoteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !text.isEmpty else { return }
+                        onSubmitMemberNote(text)
+                        memberNoteDraft = ""
+                    },
+                    onSkip: {
+                        onSkipMemberNote()
+                        memberNoteDraft = ""
+                    }
+                )
+            }
+
+            // V0.84 C2 — host-only inline picker. Sits below the
+            // member-visible star section. Gated on `isHost` AND a
+            // non-nil `onTonightStarPick` callback (parents don't
+            // wire the callback when the room has no members).
+            if isHost, let onTonightStarPick, !hostPickMembers.isEmpty {
+                HostTonightStarPickerSection(
+                    members: hostPickMembers,
+                    currentCard: tonightStarCard,
+                    selectedMemberId: $pickerSelectedMemberId,
+                    selectedCategory: $pickerSelectedCategory,
+                    customText: $pickerCustomText,
+                    onSave: {
+                        guard let memberId = pickerSelectedMemberId else { return }
+                        let category = pickerSelectedCategory
+                        let text: String?
+                        if category == .custom {
+                            let trimmed = pickerCustomText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !trimmed.isEmpty else { return }
+                            text = trimmed
+                        } else {
+                            text = nil
+                        }
+                        onTonightStarPick(memberId, category, text)
+                    }
+                )
             }
 
             Spacer().frame(height: 32)
@@ -1999,6 +2348,226 @@ private struct CeremonialCard: View {
         // finding) is no longer in the tree — the slot renderer
         // drives the wash via `isHero`.
         .sectionCard(.hero)
+    }
+}
+
+// MARK: - Tonight's Star section (V0.84 C2)
+
+/// V0.84 C2 — Tonight's Star read section on the ceremonial card.
+/// Renders the winner (display name) + the category line (mascot
+/// voice when the host picked a category; plain "the night's
+/// biggest swing" when the chip-swing fallback is in play). The
+/// `custom_text` from a `.custom` host pick is rendered alongside
+/// (not inside) the mascot line, per the spec.
+private struct TonightStarSection: View {
+    let card: TonightStarCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "star.fill")
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                Text("Tonight's Star")
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+            }
+            Text(card.memberDisplayName)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.Palette.primaryText)
+            Text(categoryLine)
+                .font(Theme.Typography.body.italic())
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            if let custom = card.customText, !custom.isEmpty {
+                Text("“\(custom)”")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var categoryLine: String {
+        if let category = card.overrideCategory {
+            return category.mascotLine(winnerName: card.memberDisplayName)
+        }
+        return "The night's biggest swing."
+    }
+}
+
+// MARK: - Member note prompt (V0.84 C5)
+
+/// V0.84 C5 — the one-line drop. Italic mascot-styled prompt above
+/// the text field, Send + Skip buttons (caption size). Send ⇒
+/// `onSubmit` with the trimmed draft; Skip ⇒ `onSkip`. Local
+/// state: "one tap to dismiss, no nagging, never returns until
+/// next recap".
+private struct MemberNotePromptSection: View {
+    @Binding var draft: String
+    let onSubmit: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Anything you want the room to know next time?")
+                .font(Theme.Typography.body.italic())
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            TextField(
+                "",
+                text: $draft,
+                prompt: Text("One line for the host")
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            )
+            .textFieldStyle(.plain)
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.Palette.primaryText)
+            .padding(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
+            HStack(spacing: 12) {
+                Button(action: onSubmit) {
+                    Text("Send")
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.background)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Theme.Palette.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(action: onSkip) {
+                    Text("Skip")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// MARK: - Host Tonight's Star picker (V0.84 C2)
+
+/// V0.84 C2 — host-only inline picker for Tonight's Star. Member
+/// menu + category chips row + custom text field (visible only
+/// when `.custom`, required) + Save. Mascot-styled header "The
+/// host calls it — not a vote." lives in the body header line.
+private struct HostTonightStarPickerSection: View {
+    let members: [Member]
+    let currentCard: TonightStarCard?
+    @Binding var selectedMemberId: UUID?
+    @Binding var selectedCategory: TonightStarOverrideCategory
+    @Binding var customText: String
+    let onSave: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("The host calls it — not a vote.")
+                .font(Theme.Typography.body.italic())
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            HStack(spacing: 8) {
+                ForEach(TonightStarOverrideCategory.allCases, id: \.self) { cat in
+                    Button(action: { selectedCategory = cat }) {
+                        Text(cat.shortLabel)
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(
+                                selectedCategory == cat
+                                    ? Theme.Palette.background
+                                    : Theme.Palette.primaryText.opacity(0.75)
+                            )
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                selectedCategory == cat
+                                    ? Theme.Palette.accent
+                                    : Theme.Palette.surface
+                            )
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            MemberMenuPicker(
+                members: members,
+                selection: $selectedMemberId
+            )
+            if selectedCategory == .custom {
+                TextField(
+                    "",
+                    text: $customText,
+                    prompt: Text("Custom line")
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                )
+                .textFieldStyle(.plain)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText)
+                .padding(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
+            }
+            Button(action: onSave) {
+                Text("Save the call")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.background)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Theme.Palette.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSave)
+        }
+        .onAppear {
+            if selectedMemberId == nil {
+                selectedMemberId = currentCard?.memberId ?? members.first?.userId
+            }
+        }
+    }
+
+    private var canSave: Bool {
+        guard selectedMemberId != nil else { return false }
+        if selectedCategory == .custom {
+            return !customText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return true
+    }
+}
+
+// MARK: - Member menu picker (V0.84 C2 host)
+
+/// V0.84 C2 — host-only member picker. SwiftUI `Menu` driven by
+/// the room's `Member` roster so the host can re-point Tonight's
+/// Star at any room member, not just the chip-swing default.
+private struct MemberMenuPicker: View {
+    let members: [Member]
+    @Binding var selection: UUID?
+
+    var body: some View {
+        Menu {
+            ForEach(members, id: \.userId) { member in
+                Button(member.displayName) { selection = member.userId }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(currentLabel)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Image(systemName: Theme.Icon.chevronDown)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
+        }
+    }
+
+    private var currentLabel: String {
+        guard let selection,
+              let member = members.first(where: { $0.userId == selection }) else {
+            return "Pick a member"
+        }
+        return member.displayName
     }
 }
 

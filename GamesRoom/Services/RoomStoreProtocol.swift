@@ -343,4 +343,48 @@ protocol RoomStore: Sendable {
         chipColorMap: [ChipColor: Int],
         standardPresets: Bool
     ) async throws
+
+    // MARK: - Tonight's Star + member notes (V0.84 C2 + C5)
+
+    /// Reads Tonight's Star card for one event. Returns the host
+    /// pick when one exists; else the 067 chip-swing default with
+    /// `overrideCategory == nil`. Empty (`nil`) when neither path
+    /// has a winner.
+    ///
+    /// Server side: `get_tonight_star_card(p_event_id)` (migration 083).
+    func fetchTonightStarCard(eventId: UUID) async throws -> TonightStarCard?
+
+    /// Host-only. Upserts the host's Tonight's Star pick for an
+    /// event. Validates `custom ⇒ customText` non-empty; nulls it
+    /// otherwise. Throws on non-host calls or unknown members.
+    ///
+    /// Server side: `set_tonight_star_pick(p_event_id, p_member_id,
+    /// p_override_category, p_custom_text)` (migration 083).
+    func setTonightStarPick(
+        eventId: UUID,
+        memberId: UUID,
+        category: TonightStarOverrideCategory,
+        customText: String?
+    ) async throws
+
+    /// Host-only. Reads the room's unconsumed member notes,
+    /// oldest first. Empty when the host has read everything
+    /// or when there are no notes yet.
+    ///
+    /// Server side: `get_unconsumed_member_notes(p_room_id)` (migration 083).
+    func fetchUnconsumedMemberNotes(roomId: UUID) async throws -> [RoomMemberNote]
+
+    /// Member writes one's own room_member_notes row. Server
+    /// enforces trim-non-empty, ≤500 chars, at most one per
+    /// calendar day.
+    ///
+    /// Server side: `submit_member_note(p_room_id, p_note_text)` (migration 083).
+    func submitMemberNote(roomId: UUID, noteText: String) async throws
+
+    /// Host-only. Stamps `consumed_by_host_at = now()` on the
+    /// listed notes belonging to the room.
+    ///
+    /// Server side: `mark_member_notes_consumed(p_room_id,
+    /// p_note_ids uuid[])` (migration 083).
+    func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async throws
 }

@@ -179,6 +179,17 @@ final class RoomService: ObservableObject {
     /// ceremonial card (W2.6, migration 051).
     @Published private(set) var chapterLineByEvent: [UUID: ChapterLine] = [:]
 
+    /// V0.84 C2 — Tonight's Star card per event. Populated lazily
+    /// by `loadTonightStarCard(eventId:)`; consumed by the
+    /// ceremonial card. `nil` means no host pick AND no chip-swing
+    /// winner — section hidden (matches the 067 empty case).
+    @Published private(set) var tonightStarCardByEvent: [UUID: TonightStarCard] = [:]
+
+    /// V0.84 C5 — unconsumed member notes per room. Populated
+    /// lazily by `loadUnconsumedMemberNotes(roomId:)`; consumed
+    /// by the host's BriefingSlot pre-event notes section.
+    @Published private(set) var unconsumedNotesByRoom: [UUID: [RoomMemberNote]] = [:]
+
     // MARK: - Rooms list
 
     /// Re-fetch the rooms list. Safe to call from `.task` and
@@ -879,6 +890,96 @@ final class RoomService: ObservableObject {
     /// Cached chapter line for one event, if any.
     func cachedEventChapterLine(eventId: UUID) -> ChapterLine? {
         chapterLineByEvent[eventId]
+    }
+
+    /// V0.84 C2 — loads Tonight's Star card for one event into the
+    /// cache. `nil` means no host pick AND no chip-swing winner —
+    /// the section is hidden in that case (matches the 067 empty
+    /// case). Mirrors `loadEventChapterLine(eventId:force:)`.
+    @discardableResult
+    func loadTonightStarCard(eventId: UUID, force: Bool = false) async -> TonightStarCard? {
+        let key = "tonightStarCard:\(eventId.uuidString)"
+        if !force, isFresh(key) { return tonightStarCardByEvent[eventId] }
+        do {
+            let card = try await store.fetchTonightStarCard(eventId: eventId)
+            self.tonightStarCardByEvent[eventId] = card
+            self.cacheTimestamps[key] = Date()
+            self.lastError = nil
+            return card
+        } catch {
+            self.lastError = error.localizedDescription
+            return tonightStarCardByEvent[eventId]
+        }
+    }
+
+    /// Cached Tonight's Star card for one event, if any.
+    func cachedTonightStarCard(eventId: UUID) -> TonightStarCard? {
+        tonightStarCardByEvent[eventId]
+    }
+
+    /// V0.84 C5 — loads the room's unconsumed member notes (host
+    /// view). Mirrors `loadEventChapterLine(eventId:force:)`. Empty
+    /// array means the host has read everything (or there are no
+    /// notes yet).
+    @discardableResult
+    func loadUnconsumedMemberNotes(roomId: UUID, force: Bool = false) async -> [RoomMemberNote] {
+        let key = "memberNotes:\(roomId.uuidString)"
+        if !force, isFresh(key) { return unconsumedNotesByRoom[roomId] ?? [] }
+        do {
+            let notes = try await store.fetchUnconsumedMemberNotes(roomId: roomId)
+            self.unconsumedNotesByRoom[roomId] = notes
+            self.cacheTimestamps[key] = Date()
+            self.lastError = nil
+            return notes
+        } catch {
+            self.lastError = error.localizedDescription
+            return unconsumedNotesByRoom[roomId] ?? []
+        }
+    }
+
+    /// Cached unconsumed member notes for `roomId`, possibly
+    /// empty.
+    func cachedUnconsumedMemberNotes(roomId: UUID) -> [RoomMemberNote] {
+        unconsumedNotesByRoom[roomId] ?? []
+    }
+
+    /// V0.84 C2 — host-only. Sets the Tonight's Star pick for an
+    /// event, then invalidates and reloads the card cache so the
+    /// ceremonial-card star surface refreshes immediately.
+    func setTonightStarPick(
+        eventId: UUID,
+        memberId: UUID,
+        category: TonightStarOverrideCategory,
+        customText: String?
+    ) async throws {
+        try await store.setTonightStarPick(
+            eventId: eventId,
+            memberId: memberId,
+            category: category,
+            customText: customText
+        )
+        self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "tonightStarCard:\(eventId.uuidString)")
+        _ = await loadTonightStarCard(eventId: eventId, force: true)
+    }
+
+    /// V0.84 C5 — member writes a one-line drop for the room.
+    /// Invalidates the notes cache so the next host read picks
+    /// it up.
+    func submitMemberNote(roomId: UUID, noteText: String) async throws {
+        try await store.submitMemberNote(roomId: roomId, noteText: noteText)
+        self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "memberNotes:\(roomId.uuidString)")
+    }
+
+    /// V0.84 C5 — host-only. Stamps `consumed_by_host_at` on the
+    /// listed notes and reloads the unconsumed-notes cache so the
+    /// BriefingSlot notes section clears.
+    func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async throws {
+        try await store.markMemberNotesConsumed(roomId: roomId, noteIds: noteIds)
+        self.lastError = nil
+        cacheTimestamps.removeValue(forKey: "memberNotes:\(roomId.uuidString)")
+        _ = await loadUnconsumedMemberNotes(roomId: roomId, force: true)
     }
 
     /// W2.6 — host-only. Sets the active season's subtitle via the
