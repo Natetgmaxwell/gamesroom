@@ -464,6 +464,35 @@ struct RoomDetailView: View {
                     )
                     .sectionCard(.standard)
                 }
+                // V0.84 C3 — host-only no-show tax prompt at session
+                // start. Renders when the room's trigger is `.prompt`
+                // (the canonical V0.84 C3 mode), the active event is
+                // live, the caller is the host, and there are
+                // claimed-but-absent members to decide on. Hidden
+                // for `.auto` (legacy settle path) and `.manual`
+                // (no prompt; apply comes from Operations later).
+                if let event = activeEvent,
+                   isHost,
+                   event.playedAt <= Date(),
+                   event.settledAt == nil,
+                   liveRoom.noShowTaxTrigger == .prompt,
+                   !roomService.cachedNoShowCandidates(eventId: event.id).isEmpty {
+                    NoShowTaxPromptCard(
+                        room: liveRoom,
+                        event: event,
+                        candidates: roomService.cachedNoShowCandidates(eventId: event.id),
+                        onApply: { candidate in
+                            Task { await resolveNoShowTax(candidate, apply: true, reason: nil) }
+                        },
+                        onSkipTexted: { candidate in
+                            Task { await resolveNoShowTax(candidate, apply: false, reason: "texted") }
+                        },
+                        onSkipAway: { candidate in
+                            Task { await resolveNoShowTax(candidate, apply: false, reason: "away") }
+                        }
+                    )
+                    .sectionCard(.standard)
+                }
                 if !systemEvents.isEmpty {
                     SystemBanner(
                         events: systemEvents,
@@ -941,7 +970,10 @@ struct RoomDetailView: View {
         // V0.84 C5 — host-only unconsumed member notes. Guarded
         // on `isHost` so the member path is free of the RPC.
         async let notesLoad: () = loadUnconsumedNotesIfNeeded(force: force)
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad, tonightStarLoad, notesLoad)
+        // V0.84 C3 — no-show tax prompt source. Host-only RPC;
+        // the member path never fires it (guard inside loader).
+        async let noShowLoad: () = loadNoShowCandidatesIfNeeded(force: force)
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad, tonightStarLoad, notesLoad, noShowLoad)
         Perf.event("refresh end")
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
@@ -1122,6 +1154,56 @@ struct RoomDetailView: View {
         // so every existing `casinoWithdrawn` reader (sheets, mascot,
         // witness-slot badge) stays correct without touching call sites.
         casinoWithdrawn = myWorkingHand
+    }
+
+    /// V0.84 C3 — loads the no-show tax prompt source
+    /// (`list_no_show_candidates(p_event_id)`, migration 082).
+    /// No-op when there's no active event or the room's trigger
+    /// isn't `.prompt` (the canonical V0.84 C3 mode) — `.auto`
+    /// keeps the dormant 043 settle path, `.manual` exposes
+    /// apply from the Operations sub-sheet (future slice). Host-
+    /// gated so a member view never trips the RPC's host check.
+    private func loadNoShowCandidatesIfNeeded(force: Bool = false) async {
+        guard isHost else { return }
+        guard liveRoom.noShowTaxTrigger == .prompt else { return }
+        guard let event = activeEvent else { return }
+        await roomService.loadNoShowCandidates(eventId: event.id, force: force)
+    }
+
+    /// V0.84 C3 — host-only. Routes a single candidate's
+    /// button-tap to either `apply_no_show_tax` or
+    /// `skip_no_show_tax` (migration 082). On failure the body-
+    /// level `.alert` (`showSeatActionError`) presents the
+    /// localized message; on success the service removes the
+    /// candidate from the cached list so the prompt card
+    /// re-renders without the resolved row. Reloads
+    /// candidates + leaderboard so the public ledger rows the
+    /// apply path writes show up on the next refresh.
+    private func resolveNoShowTax(
+        _ candidate: NoShowTaxCandidate,
+        apply: Bool,
+        reason: String?
+    ) async {
+        guard let event = activeEvent else { return }
+        do {
+            if apply {
+                try await roomService.applyNoShowTax(
+                    eventId: event.id, userId: candidate.userId, reason: reason
+                )
+            } else {
+                try await roomService.skipNoShowTax(
+                    eventId: event.id, userId: candidate.userId,
+                    reason: reason ?? "texted"
+                )
+            }
+            seatActionError = nil
+            Haptics.light()
+            _ = await roomService.loadLeaderboard(roomId: room.id, force: true)
+            await loadNoShowCandidatesIfNeeded(force: true)
+        } catch {
+            seatActionError = (error as NSError).localizedDescription
+            showSeatActionError = true
+        }
     }
 
     // MARK: - Action handlers (wired to the service layer)

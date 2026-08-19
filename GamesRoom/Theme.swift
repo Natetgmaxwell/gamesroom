@@ -189,6 +189,8 @@ enum Theme {
         static let personCropCircleBadgePlus = "person.crop.circle.badge.plus"
         /// V0.81 — autosave failure status in room settings.
         static let exclamationmarkTriangleFill = "exclamationmark.triangle.fill"
+        /// V0.84 C3 — the host-side no-show tax prompt card header.
+        static let handRaisedFill = "hand.raised.fill"
     }
 }
 

@@ -132,6 +132,37 @@ struct Room: Identifiable, Codable, Hashable {
     /// 1...72 server-side. Defaults to 8 (the V0.83 default).
     let autoCloseHours: Int
 
+    /// V0.84 C3 — no-show tax amount in virtual points (migration
+    /// 082). Host-adjustable from Room Settings → Operations;
+    /// bounded 0...1000 server-side. Defaults to 200 (the
+    /// V0.84 C3 default). Drives the `tax_amount` column on every
+    /// row of `list_no_show_candidates(p_event_id)` and the
+    /// `apply_no_show_tax` RPC's recorded ledger amount.
+    let noShowTaxAmount: Int
+
+    /// V0.84 C3 — how the no-show tax surfaces at session start
+    /// (migration 082). `.prompt` is the canonical V0.84 C3 mode;
+    /// `.auto` skips the prompt and falls back to the dormant 043
+    /// settle path; `.manual` exposes apply-only from the
+    /// Operations sub-sheet (a future slice). Defaults to
+    /// `.prompt`. The SwiftUI gate on `NoShowTaxPromptCard`
+    /// renders only when this is `.prompt` and there are
+    /// candidates.
+    let noShowTaxTrigger: NoShowTaxTrigger
+
+    /// V0.84 C3 — minutes after `played_at` during which a no-show
+    /// is still considered "within grace" for the prompt card
+    /// (migration 082). Host-adjustable; bounded 0...120. Defaults
+    /// to 10 (the V0.84 C3 default).
+    let noShowTaxGraceMinutes: Int
+
+    /// V0.84 C3 — where the forfeited no-show chip lands (migration
+    /// 082). `.nextPot` is the locked default; the chip moves to
+    /// the room's next event pot at its creation. `.hostCharityPot`
+    /// and `.split` record the destination in `meta` so a
+    /// downstream slice consumes it.
+    let noShowTaxDestination: NoShowTaxDestination
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -160,6 +191,10 @@ struct Room: Identifiable, Codable, Hashable {
     case overlapCount = "overlap_count"
     case overlapNames = "overlap_names"
     case autoCloseHours = "auto_close_hours"
+    case noShowTaxAmount = "no_show_tax_amount"
+    case noShowTaxTrigger = "no_show_tax_trigger"
+    case noShowTaxGraceMinutes = "no_show_tax_grace_minutes"
+    case noShowTaxDestination = "no_show_tax_destination"
     }
 
     init(
@@ -189,7 +224,11 @@ struct Room: Identifiable, Codable, Hashable {
         notificationsEnabled: Bool = false,
         overlapCount: Int = 0,
         overlapNames: [String] = [],
-        autoCloseHours: Int = 8
+        autoCloseHours: Int = 8,
+        noShowTaxAmount: Int = 200,
+        noShowTaxTrigger: NoShowTaxTrigger = .prompt,
+        noShowTaxGraceMinutes: Int = 10,
+        noShowTaxDestination: NoShowTaxDestination = .nextPot
     ) {
         self.id = id
         self.name = name
@@ -218,6 +257,10 @@ struct Room: Identifiable, Codable, Hashable {
         self.overlapCount = overlapCount
         self.overlapNames = overlapNames
         self.autoCloseHours = autoCloseHours
+        self.noShowTaxAmount = noShowTaxAmount
+        self.noShowTaxTrigger = noShowTaxTrigger
+        self.noShowTaxGraceMinutes = noShowTaxGraceMinutes
+        self.noShowTaxDestination = noShowTaxDestination
     }
 
     init(from decoder: Decoder) throws {
@@ -249,5 +292,11 @@ struct Room: Identifiable, Codable, Hashable {
         overlapCount = try c.decodeIfPresent(Int.self, forKey: .overlapCount) ?? 0
         overlapNames = try c.decodeIfPresent([String].self, forKey: .overlapNames) ?? []
         autoCloseHours = try c.decodeIfPresent(Int.self, forKey: .autoCloseHours) ?? 8
+        noShowTaxAmount = try c.decodeIfPresent(Int.self, forKey: .noShowTaxAmount) ?? 200
+        let triggerRaw = try c.decodeIfPresent(String.self, forKey: .noShowTaxTrigger) ?? NoShowTaxTrigger.prompt.rawValue
+        noShowTaxTrigger = NoShowTaxTrigger(rawValue: triggerRaw) ?? .prompt
+        noShowTaxGraceMinutes = try c.decodeIfPresent(Int.self, forKey: .noShowTaxGraceMinutes) ?? 10
+        let destRaw = try c.decodeIfPresent(String.self, forKey: .noShowTaxDestination) ?? NoShowTaxDestination.nextPot.rawValue
+        noShowTaxDestination = NoShowTaxDestination(rawValue: destRaw) ?? .nextPot
     }
 }

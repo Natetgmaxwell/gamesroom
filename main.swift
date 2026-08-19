@@ -1623,7 +1623,11 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents honors the room's autoCl
         briefing48hEnabled: hosted.briefing48hEnabled,
         calendarAutoAddHost: hosted.calendarAutoAddHost,
         socialPreferencesEnabled: hosted.socialPreferencesEnabled,
-        autoCloseHours: 1
+        autoCloseHours: 1,
+        noShowTaxAmount: hosted.noShowTaxAmount,
+        noShowTaxTrigger: hosted.noShowTaxTrigger,
+        noShowTaxGraceMinutes: hosted.noShowTaxGraceMinutes,
+        noShowTaxDestination: hosted.noShowTaxDestination
     )
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Two Hours Old",
@@ -4029,6 +4033,198 @@ runner.run("HostOpenerDerivation caps the composed line at maxLineLength for lon
         line.line.count <= HostOpenerDerivation.maxLineLength,
         "line capped at \(HostOpenerDerivation.maxLineLength) chars, got \(line.line.count)"
     )
+}
+// MARK: - NoShowTaxTrigger / Destination / PromptVoice / Candidate decoding (V0.84 C3 — migration 082)
+
+runner.run("NoShowTaxTrigger decode round-trips every case (V0.84 C3)") {
+    for trigger in NoShowTaxTrigger.allCases {
+        let data = try JSONEncoder().encode(trigger)
+        let decoded = try JSONDecoder().decode(NoShowTaxTrigger.self, from: data)
+        runner.assertEqual(decoded, trigger)
+        runner.assertFalse(trigger.displayName.isEmpty, "missing displayName for \(trigger.rawValue)")
+    }
+    runner.assertEqual(NoShowTaxTrigger.auto.rawValue, "auto")
+    runner.assertEqual(NoShowTaxTrigger.prompt.rawValue, "prompt")
+    runner.assertEqual(NoShowTaxTrigger.manual.rawValue, "manual")
+}
+
+runner.run("NoShowTaxTrigger unknown raw falls back to .prompt (V0.84 C3)") {
+    let data = "\"some_future_mode\"".data(using: .utf8)!
+    let decoded = try JSONDecoder().decode(NoShowTaxTrigger.self, from: data)
+    runner.assertEqual(decoded, .prompt)
+}
+
+runner.run("NoShowTaxDestination decode round-trips every case (V0.84 C3)") {
+    for destination in NoShowTaxDestination.allCases {
+        let data = try JSONEncoder().encode(destination)
+        let decoded = try JSONDecoder().decode(NoShowTaxDestination.self, from: data)
+        runner.assertEqual(decoded, destination)
+        runner.assertFalse(destination.displayName.isEmpty, "missing displayName for \(destination.rawValue)")
+    }
+    runner.assertEqual(NoShowTaxDestination.nextPot.rawValue, "next_pot")
+    runner.assertEqual(NoShowTaxDestination.hostCharityPot.rawValue, "host_charity_pot")
+    runner.assertEqual(NoShowTaxDestination.split.rawValue, "split")
+}
+
+runner.run("NoShowTaxDestination unknown raw falls back to .nextPot (V0.84 C3)") {
+    let data = "\"another_destination\"".data(using: .utf8)!
+    let decoded = try JSONDecoder().decode(NoShowTaxDestination.self, from: data)
+    runner.assertEqual(decoded, .nextPot)
+}
+
+runner.run("NoShowTaxPromptVoice.promptLine carries mascot + display name + amount + 'apply?' (V0.84 C3)") {
+    let line = NoShowTaxPromptVoice.promptLine(
+        mascotName: "Felty",
+        displayName: "Sam",
+        taxAmount: 200
+    )
+    runner.assertTrue(line.contains("Felty"), "prompt line should attribute the mascot")
+    runner.assertTrue(line.contains("Sam"), "prompt line should mention the display name")
+    runner.assertTrue(line.contains("200"), "prompt line should mention the tax amount")
+    runner.assertTrue(line.contains("apply?"), "prompt line should ask the host to apply")
+}
+
+runner.run("NoShowTaxPromptVoice skipLine picks the right reason variant (V0.84 C3)") {
+    let texted = NoShowTaxPromptVoice.skipLine(
+        mascotName: "Borat",
+        displayName: "Alex",
+        reason: "texted"
+    )
+    runner.assertTrue(texted.contains("texted"))
+    runner.assertTrue(texted.contains("Alex"))
+    let away = NoShowTaxPromptVoice.skipLine(
+        mascotName: "Borat",
+        displayName: "Alex",
+        reason: "away"
+    )
+    runner.assertTrue(away.contains("away"))
+    runner.assertTrue(away.contains("Alex"))
+    let unknown = NoShowTaxPromptVoice.skipLine(
+        mascotName: "Borat",
+        displayName: "Alex",
+        reason: "unknown"
+    )
+    runner.assertTrue(unknown.contains("waived"), "unknown reason falls back to a waived caption")
+}
+
+runner.run("NoShowTaxCandidate decodes server shape (user_id, display_name, tax_amount, within_grace) (V0.84 C3)") {
+    let json = """
+    {
+      "user_id": "11111111-2222-3333-4444-555555555555",
+      "display_name": "Sam",
+      "tax_amount": 200,
+      "within_grace": true
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let candidate = try JSONDecoder().decode(NoShowTaxCandidate.self, from: data)
+    runner.assertEqual(candidate.userId.uuidString, "11111111-2222-3333-4444-555555555555")
+    runner.assertEqual(candidate.displayName, "Sam")
+    runner.assertEqual(candidate.taxAmount, 200)
+    runner.assertTrue(candidate.withinGrace)
+    runner.assertTrue(candidate.id == candidate.userId, "Identifiable id matches userId")
+}
+
+runner.run("NoShowTaxCandidate tolerates missing fields (pre-082 server shape) (V0.84 C3)") {
+    let json = """
+    {
+      "user_id": "11111111-2222-3333-4444-555555555555"
+    }
+    """
+    let data = json.data(using: .utf8)!
+    let candidate = try JSONDecoder().decode(NoShowTaxCandidate.self, from: data)
+    runner.assertTrue(candidate.displayName == "Member", "display name falls back to 'Member'")
+    runner.assertTrue(candidate.taxAmount == 0, "missing tax amount defaults to 0")
+    runner.assertFalse(candidate.withinGrace, "missing within_grace defaults to false")
+}
+
+runner.run("Room decodes no_show_tax_* defaults when columns absent (V0.84 C3)") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Legacy Room",
+      "mascot_name": "Felty",
+      "mascot_personality": "professional",
+      "mascot_political_ideology": "order",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "join_starting_bonus": 200,
+      "user_role": "member"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertTrue(room.noShowTaxAmount == 200, "missing tax amount defaults to 200")
+    runner.assertTrue(room.noShowTaxTrigger == .prompt, "missing trigger defaults to .prompt")
+    runner.assertTrue(room.noShowTaxGraceMinutes == 10, "missing grace defaults to 10")
+    runner.assertTrue(room.noShowTaxDestination == .nextPot, "missing destination defaults to .nextPot")
+}
+
+runner.run("Room decodes no_show_tax_* overrides from server shape (V0.84 C3)") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Configured Room",
+      "mascot_name": "Borat",
+      "mascot_personality": "snarky",
+      "mascot_political_ideology": "anarchist",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "join_starting_bonus": 200,
+      "user_role": "host",
+      "no_show_tax_amount": 350,
+      "no_show_tax_trigger": "manual",
+      "no_show_tax_grace_minutes": 25,
+      "no_show_tax_destination": "host_charity_pot"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.noShowTaxAmount, 350)
+    runner.assertEqual(room.noShowTaxTrigger, .manual)
+    runner.assertEqual(room.noShowTaxGraceMinutes, 25)
+    runner.assertEqual(room.noShowTaxDestination, .hostCharityPot)
+}
+
+runner.runAsync("InMemoryRoomStore.updateRoom passthrough carries the four no_show_tax_* values (V0.84 C3)") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    let updated = try await store.updateRoom(
+        id: hosted.id,
+        name: hosted.name,
+        mascotName: hosted.mascotName,
+        mascotPersonality: hosted.mascotPersonality,
+        mascotPoliticalIdeology: hosted.mascotPoliticalIdeology,
+        maxSeats: hosted.maxSeats,
+        memberInviteQuota: hosted.memberInviteQuota,
+        joinStartingBonus: hosted.joinStartingBonus,
+        socialNarrationEnabled: hosted.socialNarrationEnabled,
+        briefing48hEnabled: hosted.briefing48hEnabled,
+        calendarAutoAddHost: hosted.calendarAutoAddHost,
+        socialPreferencesEnabled: hosted.socialPreferencesEnabled,
+        autoCloseHours: hosted.autoCloseHours,
+        noShowTaxAmount: 450,
+        noShowTaxTrigger: .manual,
+        noShowTaxGraceMinutes: 30,
+        noShowTaxDestination: .split
+    )
+    runner.assertEqual(updated.noShowTaxAmount, 450)
+    runner.assertEqual(updated.noShowTaxTrigger, .manual)
+    runner.assertEqual(updated.noShowTaxGraceMinutes, 30)
+    runner.assertEqual(updated.noShowTaxDestination, .split)
+    // And the persisted Room mirrors the four values on the next
+    // rooms-list read.
+    let reread = try await store.fetchRooms().first { $0.id == hosted.id }
+    runner.assertEqual(reread?.noShowTaxAmount, 450)
+    runner.assertEqual(reread?.noShowTaxTrigger, .manual)
+    runner.assertEqual(reread?.noShowTaxGraceMinutes, 30)
+    runner.assertEqual(reread?.noShowTaxDestination, .split)
 }
 
 // MARK: - Summary

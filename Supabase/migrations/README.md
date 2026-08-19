@@ -16,8 +16,8 @@ writing the next migration.
    abandoned. Leave them alone.
 
 3. **Next number.** Take the highest existing number and increment.
-    Current high-water mark: **071** (071_break_rls_policy_recursion.sql) → next
-    is **072**. A migration file name is `<NNN>_<kebab-slug>.sql`.
+    Current high-water mark: **084** (084_season_close_praise_first.sql) → next
+    is **085**. A migration file name is `<NNN>_<kebab-slug>.sql`.
 
 4. **Suffix pattern for same-version fixes.** When a migration needed a
    same-version correction, the fix landed as a suffixed sibling

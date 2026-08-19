@@ -94,6 +94,17 @@ actor InMemoryRoomStore: RoomStore {
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
 
+    /// V0.84 C3 — per-event list of claimed-but-absent member
+    /// ids, mirrored from the in-memory `list_no_show_candidates`
+    /// equivalent. Empty by default; populated lazily by
+    /// `loadNoShowCandidates(eventId:)` so previews can render
+    /// the prompt card with real rows without a network. The
+    /// list is consumed by `applyNoShowTax` / `skipNoShowTax`
+    /// (in-memory mirrors of the migration-082 RPCs) so the
+    /// preview's state machine matches the live server's
+    /// behaviour for tests.
+    private var noShowCandidatesByEvent: [UUID: [NoShowTaxCandidate]]
+
     /// V0.54 — per-event mute flags. `[eventId: [memberId: muted]]`.
     /// Mirrors the `event_rsvps.notifications_muted` server-side
     /// column so `fetchEventRSVPs` can layer it onto the read.
@@ -271,6 +282,11 @@ actor InMemoryRoomStore: RoomStore {
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
         self.rsvps = [:]
+        // V0.84 C3 — empty until the host opens a live session.
+        // `loadNoShowCandidates` seeds a synthetic row from the
+        // seeded roster for previews; the live RPC fills it from
+        // the server's claimed-but-absent rows.
+        self.noShowCandidatesByEvent = [:]
         self.eventMutes = [:]
         self.notificationsEnabledByRoom = [:]
         self.packConfigs = [:]
@@ -1227,7 +1243,11 @@ actor InMemoryRoomStore: RoomStore {
         briefing48hEnabled: Bool,
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
-        autoCloseHours: Int
+        autoCloseHours: Int,
+        noShowTaxAmount: Int,
+        noShowTaxTrigger: NoShowTaxTrigger,
+        noShowTaxGraceMinutes: Int,
+        noShowTaxDestination: NoShowTaxDestination
     ) async throws -> Room {
         guard let idx = rooms.firstIndex(where: { $0.id == id }) else {
             throw NSError(
@@ -1257,7 +1277,11 @@ actor InMemoryRoomStore: RoomStore {
             socialNarrationEnabled: socialNarrationEnabled,
             maxSeats: maxSeats,
             memberInviteQuota: memberInviteQuota,
-            autoCloseHours: autoCloseHours
+            autoCloseHours: autoCloseHours,
+            noShowTaxAmount: noShowTaxAmount,
+            noShowTaxTrigger: noShowTaxTrigger,
+            noShowTaxGraceMinutes: noShowTaxGraceMinutes,
+            noShowTaxDestination: noShowTaxDestination
         )
         rooms[idx] = updated
         return updated
@@ -1300,10 +1324,65 @@ actor InMemoryRoomStore: RoomStore {
             maxSeats: existing.maxSeats,
             memberInviteQuota: existing.memberInviteQuota,
             hostJournal: journal,
-            autoCloseHours: existing.autoCloseHours
+            autoCloseHours: existing.autoCloseHours,
+            noShowTaxAmount: existing.noShowTaxAmount,
+            noShowTaxTrigger: existing.noShowTaxTrigger,
+            noShowTaxGraceMinutes: existing.noShowTaxGraceMinutes,
+            noShowTaxDestination: existing.noShowTaxDestination
         )
         rooms[idx] = updated
         return updated
+    }
+
+    // MARK: No-show tax prompt (V0.84 C3 — migration 082)
+
+    /// In-memory mirror of `list_no_show_candidates(p_event_id)`
+    /// (migration 082). Synthesises one row per claimed RSVP
+    /// member of the event's room that has no transactions row
+    /// for the event — the V0.84 C3 prompt card source. Empty
+    /// when the room has no roster or every member has settled.
+    /// The tax amount rides the room's `noShowTaxAmount`.
+    func loadNoShowCandidates(eventId: UUID) async throws -> [NoShowTaxCandidate] {
+        guard let event = events.values.first(where: { $0.id == eventId }) else {
+            return []
+        }
+        guard let room = rooms.first(where: { $0.id == event.roomId }) else {
+            return []
+        }
+        let members = try await fetchRoomMembers(roomId: event.roomId)
+        let states = rsvps[eventId] ?? [:]
+        return members.compactMap { member -> NoShowTaxCandidate? in
+            guard states[member.userId] == .claimed else { return nil }
+            return NoShowTaxCandidate(
+                userId: member.userId,
+                displayName: member.displayName,
+                taxAmount: room.noShowTaxAmount,
+                withinGrace: true
+            )
+        }
+    }
+
+    /// In-memory mirror of `apply_no_show_tax(p_event_id,
+    /// p_user_id, p_reason)` (migration 082). Removes the row
+    /// from the cached candidate list so the prompt card stops
+    /// asking. No ledger writes in the in-memory path — the live
+    /// server is the source of truth for the public ledger.
+    func applyNoShowTax(eventId: UUID, userId: UUID, reason: String?) async throws {
+        var candidates = noShowCandidatesByEvent[eventId] ?? []
+        candidates.removeAll { $0.userId == userId }
+        noShowCandidatesByEvent[eventId] = candidates
+        _ = reason
+    }
+
+    /// In-memory mirror of `skip_no_show_tax(p_event_id,
+    /// p_user_id, p_reason)` (migration 082). Same shape as the
+    /// apply path: the row is removed from the cached list so the
+    /// prompt card stops asking.
+    func skipNoShowTax(eventId: UUID, userId: UUID, reason: String) async throws {
+        var candidates = noShowCandidatesByEvent[eventId] ?? []
+        candidates.removeAll { $0.userId == userId }
+        noShowCandidatesByEvent[eventId] = candidates
+        _ = reason
     }
 
     // MARK: Synthetic identity

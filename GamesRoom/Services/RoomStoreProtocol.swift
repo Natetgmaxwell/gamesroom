@@ -192,7 +192,11 @@ protocol RoomStore: Sendable {
         briefing48hEnabled: Bool,
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
-        autoCloseHours: Int
+        autoCloseHours: Int,
+        noShowTaxAmount: Int,
+        noShowTaxTrigger: NoShowTaxTrigger,
+        noShowTaxGraceMinutes: Int,
+        noShowTaxDestination: NoShowTaxDestination
     ) async throws -> Room
 
     // MARK: Host journal (P1.5)
@@ -324,6 +328,35 @@ protocol RoomStore: Sendable {
     /// `set_room_pack_config(p_room_id, p_pack_slug, p_win_points)`
     /// (migration 047). Throws on non-host writes or unknown slugs.
     func setRoomPackConfig(roomId: UUID, packSlug: String, winPoints: Int) async throws
+
+    // MARK: No-show tax prompt (V0.84 C3 — migration 082)
+
+    /// V0.84 C3 — host-only. Returns one row per claimed-but-
+    /// absent member for the event (claimed RSVP, no transactions
+    /// row for the event). Mirrors `list_no_show_candidates(p_event_id)`
+    /// (migration 082). The SwiftUI prompt card renders one row
+    /// per member and lets the host pick Apply / Skip (texted) /
+    /// Skip (away) for each in isolation. Throws on non-host
+    /// reads or unknown event ids.
+    func loadNoShowCandidates(eventId: UUID) async throws -> [NoShowTaxCandidate]
+
+    /// V0.84 C3 — host-only. Forfeits one held seat deposit of the
+    /// room's no_show_tax_amount (or, when no deposit was held,
+    /// debits points_balance by the tax amount). Mirrors
+    /// `apply_no_show_tax(p_event_id, p_user_id, p_reason)` —
+    /// idempotent per (event, user). `reason` is free-form copy
+    /// the host enters (e.g. "no_show" or a face-saving note);
+    /// it lands in the transactions row's meta. Throws on
+    /// non-host writes.
+    func applyNoShowTax(eventId: UUID, userId: UUID, reason: String?) async throws
+
+    /// V0.84 C3 — host-only. Records the host's skip call with a
+    /// face-saving reason (`texted` or `away`). Mirrors
+    /// `skip_no_show_tax(p_event_id, p_user_id, p_reason)` —
+    /// idempotent per (event, user). The transaction row is
+    /// amount=0; the meta carries the reason so the ledger reads
+    /// as "host decided, not the system".
+    func skipNoShowTax(eventId: UUID, userId: UUID, reason: String) async throws
 
     // MARK: Casino config (W-06, US-26)
 

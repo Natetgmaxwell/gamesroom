@@ -109,6 +109,12 @@ struct UpsertCasinoConfigParams: Encodable, Sendable {
     let p_standard_presets: Bool
 }
 
+struct NoShowTaxParams: Encodable, Sendable {
+    let p_event_id: String
+    let p_user_id: String
+    let p_reason: String
+}
+
 // MARK: - LiveRoomStore
 //
 // The production Supabase-backed implementation of `RoomStore`. Each
@@ -778,10 +784,13 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// p_max_seats, p_member_invite_quota, p_join_starting_bonus,
     /// p_social_narration_enabled, p_briefing_48h_enabled,
     /// p_calendar_auto_add_host, p_social_preferences_enabled,
-    /// p_auto_close_hours)` (migration 020 + V0.8 extensions +
-    /// V0.83 auto-close window). The server resolves the
-    /// host check via the `is_host_of_room(p_room_id)` helper and
-    /// throws on non-host writes.
+    /// p_auto_close_hours, p_no_show_tax_amount,
+    /// p_no_show_tax_trigger, p_no_show_tax_grace_minutes,
+    /// p_no_show_tax_destination)` (migration 020 + V0.8 extensions
+    /// + V0.83 auto-close window + V0.84 C3 no-show-tax settings,
+    /// migration 082). The server resolves the host check via the
+    /// `is_host_of_room(p_room_id)` helper and throws on non-host
+    /// writes.
     func updateRoom(
         id: UUID,
         name: String,
@@ -795,7 +804,11 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         briefing48hEnabled: Bool,
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
-        autoCloseHours: Int
+        autoCloseHours: Int,
+        noShowTaxAmount: Int,
+        noShowTaxTrigger: NoShowTaxTrigger,
+        noShowTaxGraceMinutes: Int,
+        noShowTaxDestination: NoShowTaxDestination
     ) async throws -> Room {
         let rows: [Room] = try await SupabaseClientProvider.shared
             .rpc("update_room_settings", params: [
@@ -811,7 +824,11 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 "p_briefing_48h_enabled": String(briefing48hEnabled),
                 "p_calendar_auto_add_host": String(calendarAutoAddHost),
                 "p_social_preferences_enabled": String(socialPreferencesEnabled),
-                "p_auto_close_hours": String(autoCloseHours)
+                "p_auto_close_hours": String(autoCloseHours),
+                "p_no_show_tax_amount": String(noShowTaxAmount),
+                "p_no_show_tax_trigger": noShowTaxTrigger.rawValue,
+                "p_no_show_tax_grace_minutes": String(noShowTaxGraceMinutes),
+                "p_no_show_tax_destination": noShowTaxDestination.rawValue
             ])
             .execute()
             .value
@@ -920,6 +937,58 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 "p_room_id": roomId.uuidString,
                 "p_note_ids": noteIds.map(\.uuidString)
             ])
+            .execute()
+            .value as Void
+    }
+
+    // MARK: No-show tax prompt (V0.84 C3 — migration 082)
+
+    /// V0.84 C3 — host-only. The live RPC is
+    /// `list_no_show_candidates(p_event_id)` (migration 082).
+    /// Returns one row per claimed-but-absent member (claimed
+    /// RSVP, no transactions row for the event). Read-only prompt
+    /// source for `NoShowTaxPromptCard`. Throws on non-host
+    /// reads (42501) or unknown event ids (P0002).
+    func loadNoShowCandidates(eventId: UUID) async throws -> [NoShowTaxCandidate] {
+        let rows: [NoShowTaxCandidate] = try await SupabaseClientProvider.shared
+            .rpc("list_no_show_candidates", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
+    /// V0.84 C3 — host-only. The live RPC is
+    /// `apply_no_show_tax(p_event_id, p_user_id, p_reason)`
+    /// (migration 082). Forfeits one held seat deposit of the
+    /// room's `no_show_tax_amount` (or, when no deposit was held,
+    /// debits membership points_balance). Idempotent per
+    /// (event, user). Throws on non-host writes (42501).
+    func applyNoShowTax(eventId: UUID, userId: UUID, reason: String?) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("apply_no_show_tax", params: NoShowTaxParams(
+                p_event_id: eventId.uuidString,
+                p_user_id: userId.uuidString,
+                p_reason: reason ?? ""
+            ))
+            .execute()
+            .value as Void
+    }
+
+    /// V0.84 C3 — host-only. The live RPC is
+    /// `skip_no_show_tax(p_event_id, p_user_id, p_reason)`
+    /// (migration 082). Records a waiver row (amount=0) so the
+    /// ledger carries the host's call. `reason` is `texted` or
+    /// `away`. Idempotent per (event, user). Throws on non-host
+    /// writes (42501).
+    func skipNoShowTax(eventId: UUID, userId: UUID, reason: String) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("skip_no_show_tax", params: NoShowTaxParams(
+                p_event_id: eventId.uuidString,
+                p_user_id: userId.uuidString,
+                p_reason: reason
+            ))
             .execute()
             .value as Void
     }

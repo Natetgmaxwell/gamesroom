@@ -190,6 +190,14 @@ final class RoomService: ObservableObject {
     /// by the host's BriefingSlot pre-event notes section.
     @Published private(set) var unconsumedNotesByRoom: [UUID: [RoomMemberNote]] = [:]
 
+    /// V0.84 C3 — no-show tax prompt source, per event.
+    /// Populated lazily by `loadNoShowCandidates(eventId:)`;
+    /// consumed by `NoShowTaxPromptCard` on the host-side render
+    /// of `RoomDetailView`. Each entry is one claimed-but-absent
+    /// member; the host picks Apply / Skip (texted) / Skip
+    /// (away) per row in isolation.
+    @Published private(set) var noShowCandidatesByEvent: [UUID: [NoShowTaxCandidate]] = [:]
+
     // MARK: - Rooms list
 
     /// Re-fetch the rooms list. Safe to call from `.task` and
@@ -813,7 +821,11 @@ final class RoomService: ObservableObject {
         briefing48hEnabled: Bool,
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
-        autoCloseHours: Int
+        autoCloseHours: Int,
+        noShowTaxAmount: Int,
+        noShowTaxTrigger: NoShowTaxTrigger,
+        noShowTaxGraceMinutes: Int,
+        noShowTaxDestination: NoShowTaxDestination
     ) async throws -> Room {
         let updated = try await store.updateRoom(
             id: id,
@@ -828,7 +840,11 @@ final class RoomService: ObservableObject {
             briefing48hEnabled: briefing48hEnabled,
             calendarAutoAddHost: calendarAutoAddHost,
             socialPreferencesEnabled: socialPreferencesEnabled,
-            autoCloseHours: autoCloseHours
+            autoCloseHours: autoCloseHours,
+            noShowTaxAmount: noShowTaxAmount,
+            noShowTaxTrigger: noShowTaxTrigger,
+            noShowTaxGraceMinutes: noShowTaxGraceMinutes,
+            noShowTaxDestination: noShowTaxDestination
         )
         self.lastError = nil
         if let idx = rooms.firstIndex(where: { $0.id == updated.id }) {
@@ -1297,7 +1313,11 @@ final class RoomService: ObservableObject {
                 seatDepositAmount: old.seatDepositAmount,
                 memberDrowningOptIn: optIn,
                 notificationsEnabled: old.notificationsEnabled,
-                autoCloseHours: old.autoCloseHours
+                autoCloseHours: old.autoCloseHours,
+                noShowTaxAmount: old.noShowTaxAmount,
+                noShowTaxTrigger: old.noShowTaxTrigger,
+                noShowTaxGraceMinutes: old.noShowTaxGraceMinutes,
+                noShowTaxDestination: old.noShowTaxDestination
             )
         }
         self.lastError = nil
@@ -1341,7 +1361,11 @@ final class RoomService: ObservableObject {
                 seatDepositAmount: old.seatDepositAmount,
                 memberDrowningOptIn: old.memberDrowningOptIn,
                 notificationsEnabled: enabled,
-                autoCloseHours: old.autoCloseHours
+                autoCloseHours: old.autoCloseHours,
+                noShowTaxAmount: old.noShowTaxAmount,
+                noShowTaxTrigger: old.noShowTaxTrigger,
+                noShowTaxGraceMinutes: old.noShowTaxGraceMinutes,
+                noShowTaxDestination: old.noShowTaxDestination
             )
         }
         self.lastError = nil
@@ -1418,6 +1442,66 @@ final class RoomService: ObservableObject {
             rooms[idx] = updated
         }
         return updated
+    }
+
+    // MARK: - No-show tax prompt (V0.84 C3 — migration 082)
+
+    /// V0.84 C3 — host-only. Loads the per-event list of
+    /// claimed-but-absent members for the no-show tax prompt
+    /// card. Wraps `list_no_show_candidates(p_event_id)` (migration
+    /// 082); cached per-event with the same 30s TTL pattern the
+    /// other loaders use. Returns the cached value (possibly
+    /// empty).
+    @discardableResult
+    func loadNoShowCandidates(eventId: UUID, force: Bool = false) async -> [NoShowTaxCandidate] {
+        let key = "noShowCandidates:\(eventId.uuidString)"
+        if !force, isFresh(key) { return noShowCandidatesByEvent[eventId] ?? [] }
+        do {
+            let rows = try await store.loadNoShowCandidates(eventId: eventId)
+            self.noShowCandidatesByEvent[eventId] = rows
+            self.cacheTimestamps[key] = Date()
+            self.lastError = nil
+            return rows
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return noShowCandidatesByEvent[eventId] ?? []
+        }
+    }
+
+    /// Cached no-show tax candidates for `eventId`, possibly
+    /// empty. Drives the host prompt card render gate.
+    func cachedNoShowCandidates(eventId: UUID) -> [NoShowTaxCandidate] {
+        noShowCandidatesByEvent[eventId] ?? []
+    }
+
+    /// V0.84 C3 — host-only. Applies the no-show tax for one
+    /// candidate. Wraps `apply_no_show_tax(p_event_id, p_user_id,
+    /// p_reason)` (migration 082); on success removes the
+    /// candidate from the cached list so the prompt card stops
+    /// asking. Throws on RLS rejection (non-host write).
+    func applyNoShowTax(eventId: UUID, userId: UUID, reason: String?) async throws {
+        try await store.applyNoShowTax(eventId: eventId, userId: userId, reason: reason)
+        self.lastError = nil
+        if var rows = noShowCandidatesByEvent[eventId] {
+            rows.removeAll { $0.userId == userId }
+            noShowCandidatesByEvent[eventId] = rows
+        }
+        cacheTimestamps.removeValue(forKey: "noShowCandidates:\(eventId.uuidString)")
+    }
+
+    /// V0.84 C3 — host-only. Records the host's skip call for one
+    /// candidate. Wraps `skip_no_show_tax(p_event_id, p_user_id,
+    /// p_reason)` (migration 082); on success removes the
+    /// candidate from the cached list. `reason` is `texted` or
+    /// `away`.
+    func skipNoShowTax(eventId: UUID, userId: UUID, reason: String) async throws {
+        try await store.skipNoShowTax(eventId: eventId, userId: userId, reason: reason)
+        self.lastError = nil
+        if var rows = noShowCandidatesByEvent[eventId] {
+            rows.removeAll { $0.userId == userId }
+            noShowCandidatesByEvent[eventId] = rows
+        }
+        cacheTimestamps.removeValue(forKey: "noShowCandidates:\(eventId.uuidString)")
     }
 }
 
