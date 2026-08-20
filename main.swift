@@ -2672,6 +2672,75 @@ runner.run("MascotEngine.generateVoice — legacy logistics placeholders drop cl
     )
 }
 
+runner.run("MascotEngine.generateVoice — {member_name} personalises the briefing body (V0.87)") {
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .friendly,
+        ideology: .centrist,
+        kind: .briefing48h,
+        context: .init(
+            activeEventTitle: "Poker",
+            lastEventDaysAgo: nil,
+            memberCount: 4,
+            memberNames: [],
+            memberName: "Alice"
+        ),
+        eventDate: Date().addingTimeInterval(2 * 86_400)
+    )
+    runner.assertTrue(body.contains("Alice"), "member name surfaced")
+    runner.assertTrue(body.hasPrefix("Max: Alice, "), "mascot then member address")
+    runner.assertFalse(body.contains("{member_name}"), "placeholder substituted")
+}
+
+runner.run("MascotEngine.generateVoice — nil {member_name} drops cleanly for footer (V0.87)") {
+    // Footer path never passes a member name — the placeholder +
+    // trailing comma must vanish, not render "Max: , Poker…".
+    let body = MascotEngine.generateVoice(
+        mascotName: "Max",
+        roomName: "Friday Night",
+        personality: .professional,
+        ideology: .order,
+        kind: .briefingOnCreate,
+        context: .init(
+            activeEventTitle: "Poker",
+            lastEventDaysAgo: nil,
+            memberCount: 4,
+            memberNames: []
+        )
+    )
+    runner.assertFalse(body.contains("{member_name}"), "placeholder removed")
+    runner.assertFalse(body.contains(", Poker"), "no stray comma before event")
+    runner.assertTrue(body.hasPrefix("Max: Poker"), "reads clean without a name")
+}
+
+runner.run("MascotEngine.unclaimedClause — one personality-voiced claim nudge per personality (V0.87)") {
+    // The unclaimed t-48h / morning-of variant appends this clause to
+    // the matrix body. Each personality must produce a distinct,
+    // non-empty, ideology-neutral nudge.
+    var seen: Set<String> = []
+    for personality in MascotPersonality.allCases {
+        let clause = MascotEngine.unclaimedClause(personality: personality)
+        runner.assertFalse(clause.isEmpty, "clause non-empty for \(personality)")
+        runner.assertFalse(clause.contains("{"), "no raw placeholder in \(personality) clause")
+        runner.assertTrue(seen.insert(clause).inserted, "distinct clause per personality")
+    }
+    runner.assertEqual(seen.count, 5)
+}
+
+runner.run("CatchUpMessage — memberName personalises the voiced body (V0.87)") {
+    let body = CatchUpMessage.body(
+        eventName: "Friday Night Hold'em",
+        playedAt: Date().addingTimeInterval(86_400),
+        mascotName: "Felty",
+        leaderboardSummary: "",
+        rsvpState: .unclaimed,
+        memberName: "Alex"
+    )
+    runner.assertTrue(body.contains("Alex"), "member name surfaced in catch-up")
+    runner.assertFalse(body.contains("{member_name}"), "placeholder substituted")
+}
+
 private func uuidString(_ uuid: UUID) -> String { uuid.uuidString }
 
 // MARK: - MascotEngine V0.81 — edge-function voice generation

@@ -34,6 +34,7 @@ struct CatchUpMessage {
         mascotName: String,
         leaderboardSummary: String,
         rsvpState: MemberRSVPState,
+        memberName: String? = nil,
         personality: MascotPersonality = .friendly,
         ideology: MascotPoliticalIdeology = .centrist
     ) -> String {
@@ -41,7 +42,8 @@ struct CatchUpMessage {
             activeEventTitle: eventName,
             lastEventDaysAgo: nil,
             memberCount: 0,
-            memberNames: []
+            memberNames: [],
+            memberName: memberName
         )
         if playedAt > Date() {
             let voiced = MascotEngine.generateVoice(

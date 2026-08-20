@@ -21,12 +21,13 @@
 //  option to change their mind before the room forgets about them,
 //  but they don't get a secondary nudge).
 //
-//  Body-text conventions:
-//   - on-create (all states): "{mascot}: {event} is on the books — open the room to claim your seat."
-//   - T-48h claimed        : "{event} is in two days — {date} at {time}, {venue}."
-//   - T-48h unclaimed      : "reminder — {event} is in two days. Open the room to claim your seat."
-//   - morning-of claimed   : "{event} today — {time}, {venue}."
-//   - morning-of unclaimed : "reminder — {event} is today. Open the room to confirm."
+//  Body-text conventions (V0.87 — every push is the mascot's voice,
+//  personalised by member name; no bare "reminder" register):
+//   - on-create (all states): "{mascot}: {member_name}, {event} is on the books — open the room to claim your seat."
+//   - T-48h claimed        : matrix-voiced "{mascot}: {member_name}, {event} is in two days…"
+//   - T-48h unclaimed      : matrix-voiced body + personality claim clause
+//   - morning-of claimed   : matrix-voiced "{mascot}: {member_name}, {event} is today…"
+//   - morning-of unclaimed : matrix-voiced body + personality claim clause
 //
 //  Identifiers are stable per (eventId, cadence, userId) so a
 //  duplicate call is idempotent at the UN layer and `cancel` can
@@ -119,7 +120,7 @@ final class NotificationDispatcher {
         playedAt: Date,
         mascotName: String,
         perMemberCadence: [UUID: MemberRSVPState],
-        memberNames: [String] = [],
+        memberNameById: [UUID: String] = [:],
         /// V0.54 — members whose per-room `notifications_enabled` is
         /// true. The fan-out reaches ONLY this set (plus the
         /// declined-state exception per the audit's item 2 hard
@@ -207,8 +208,11 @@ final class NotificationDispatcher {
             // session, the body is LLM-generated via the
             // `mascot-voice` edge function; otherwise falls back
             // to the template.
+            let memberName = memberNameById[memberId]
             var onCreateBodyText = onCreateBody(
-                mascotName: mascotName, eventName: eventName
+                mascotName: mascotName,
+                eventName: eventName,
+                memberName: memberName
             )
             let authToken = await SupabaseClientProvider.currentSession()?.accessToken
             if let authToken, !authToken.isEmpty {
@@ -216,7 +220,8 @@ final class NotificationDispatcher {
                     activeEventTitle: eventName,
                     lastEventDaysAgo: nil,
                     memberCount: perMemberCadence.count,
-                    memberNames: memberNames
+                    memberNames: Array(memberNameById.values),
+                    memberName: memberName
                 )
                 onCreateBodyText = await MascotEngine.generateVoiceLLM(
                     mascotName: mascotName,
@@ -237,7 +242,7 @@ final class NotificationDispatcher {
                 identifier: identifier(
                     eventId: eventId, kind: .onCreate, userId: memberId
                 ),
-                title: eventName,
+                title: "\\(mascotName): \\(eventName)",
                 body: onCreateBodyText,
                 kindRaw: NotificationKindRaw.onCreate,
                 eventId: eventId,
@@ -254,6 +259,7 @@ final class NotificationDispatcher {
                     eventName: eventName,
                     playedAt: playedAt,
                     state: state,
+                    memberName: memberName,
                     hostNote: hostNote,
                     personality: mascotPersonality,
                     ideology: mascotIdeology,
@@ -279,6 +285,7 @@ final class NotificationDispatcher {
                     eventName: eventName,
                     playedAt: playedAt,
                     state: state,
+                    memberName: memberName,
                     personality: mascotPersonality,
                     ideology: mascotIdeology,
                     memberCount: perMemberCadence.count
@@ -326,6 +333,7 @@ final class NotificationDispatcher {
         mascotName: String,
         leaderboardSummary: String,
         rsvpState: MemberRSVPState,
+        memberName: String? = nil,
         personality: MascotPersonality = .friendly,
         ideology: MascotPoliticalIdeology = .centrist
     ) async {
@@ -337,13 +345,14 @@ final class NotificationDispatcher {
             mascotName: mascotName,
             leaderboardSummary: leaderboardSummary,
             rsvpState: rsvpState,
+            memberName: memberName,
             personality: personality,
             ideology: ideology
         )
         await schedule(
             center: center,
-            identifier: "\(eventId.uuidString)-catchup",
-            title: eventName,
+            identifier: "\\(eventId.uuidString)-catchup",
+            title: "\\(mascotName): \\(eventName)",
             body: body,
             kindRaw: NotificationKindRaw.catchUp,
             eventId: eventId,
@@ -353,31 +362,37 @@ final class NotificationDispatcher {
 
     // MARK: - Body builders
 
-    private func onCreateBody(mascotName: String, eventName: String) -> String {
-        "\(mascotName): \(eventName) is on the books — open the room to claim your seat."
+    private func onCreateBody(
+        mascotName: String, eventName: String, memberName: String?
+    ) -> String {
+        let address = memberName ?? "friend"
+        return "\(mascotName): \(address), \(eventName) is on the books — open the room to claim your seat."
     }
 
     /// Title + body pair for the T-48h push. Logistics prefix for
-    /// claimed members, "reminder —" prefix for unclaimed. When the
+    /// claimed members, claim-clause nudge for unclaimed. When the
     /// host has written a pre-event note (≤280 chars), the claimed
     /// variant appends it per vision §3.6: "Host's note: [note]".
     ///
     /// V0.81 — the body is voiced through the 25-voice matrix
-    /// (personality × ideology × `.briefing48h`), so the push
-    /// reads in the room mascot's voice. The title stays plain
-    /// logistics (the OS renders it in the lock-screen summary).
+    /// (personality × ideology × `.briefing48h`).
+    /// V0.87 — `memberName` personalises the `{member_name}`
+    /// placeholder; unclaimed members get a claim-your-seat nudge in
+    /// the same register (no more bare neutral-system reminder text).
     private func t48Body(
         mascotName: String,
         eventName: String,
         playedAt: Date,
         state: MemberRSVPState,
+        memberName: String? = nil,
         hostNote: String? = nil,
         personality: MascotPersonality = .friendly,
         ideology: MascotPoliticalIdeology = .centrist,
         memberCount: Int = 0
     ) -> (title: String, body: String) {
+        let title = "\(mascotName): \(eventName) — in two days"
         switch state {
-        case .claimed:
+        case .claimed, .unclaimed:
             var body = MascotEngine.generateVoice(
                 mascotName: mascotName,
                 roomName: "",
@@ -388,49 +403,47 @@ final class NotificationDispatcher {
                     activeEventTitle: eventName,
                     lastEventDaysAgo: nil,
                     memberCount: memberCount,
-                    memberNames: []
+                    memberNames: [],
+                    memberName: memberName
                 ),
                 eventDate: playedAt
             )
+            if state == .unclaimed {
+                body += " " + MascotEngine.unclaimedClause(personality: personality)
+            }
             if let note = hostNote, !note.isEmpty {
                 body += " Host's note: \(note)"
             }
-            return (
-                "\(eventName) — in two days",
-                body
-            )
-        case .unclaimed:
-            return (
-                "reminder — \(eventName)",
-                "reminder — \(eventName) is in two days. Open the room to claim your seat."
-            )
-        case .declined:
-            return (
-                "reminder — \(eventName)",
-                "reminder — \(eventName) is in two days."
-            )
+            return (title, body)
+        default:
+            // .declined is unreachable here — declined members are
+            // skipped at fan-out (V0.54). Exhaustiveness fallback.
+            return (title, "")
         }
     }
 
     /// Title + body pair for the morning-of push. Logistics prefix
-    /// for claimed members, "reminder —" prefix for unclaimed.
+    /// for claimed members, claim-clause nudge for unclaimed.
     ///
     /// V0.81 — the body is voiced through the 25-voice matrix
-    /// (personality × ideology × `.briefingMorning`), so the push
-    /// reads in the room mascot's voice. The title stays plain
-    /// logistics.
+    /// (personality × ideology × `.briefingMorning`).
+    /// V0.87 — `memberName` personalises the `{member_name}`
+    /// placeholder; unclaimed members get a claim-your-seat nudge in
+    /// the same register (no more bare neutral-system reminder text).
     private func morningBody(
         mascotName: String,
         eventName: String,
         playedAt: Date,
         state: MemberRSVPState,
+        memberName: String? = nil,
         personality: MascotPersonality = .friendly,
         ideology: MascotPoliticalIdeology = .centrist,
         memberCount: Int = 0
     ) -> (title: String, body: String) {
+        let title = "\(mascotName): \(eventName) — today"
         switch state {
-        case .claimed:
-            let body = MascotEngine.generateVoice(
+        case .claimed, .unclaimed:
+            var body = MascotEngine.generateVoice(
                 mascotName: mascotName,
                 roomName: "",
                 personality: personality,
@@ -440,24 +453,19 @@ final class NotificationDispatcher {
                     activeEventTitle: eventName,
                     lastEventDaysAgo: nil,
                     memberCount: memberCount,
-                    memberNames: []
+                    memberNames: [],
+                    memberName: memberName
                 ),
                 eventDate: playedAt
             )
-            return (
-                "\(eventName) today",
-                body
-            )
-        case .unclaimed:
-            return (
-                "reminder — \(eventName)",
-                "reminder — \(eventName) is today. Open the room to confirm."
-            )
-        case .declined:
-            return (
-                "reminder — \(eventName)",
-                "reminder — \(eventName) is today."
-            )
+            if state == .unclaimed {
+                body += " " + MascotEngine.unclaimedClause(personality: personality)
+            }
+            return (title, body)
+        default:
+            // .declined is unreachable here — declined members are
+            // skipped at fan-out (V0.54). Exhaustiveness fallback.
+            return (title, "")
         }
     }
 

@@ -136,12 +136,15 @@ final class RealtimeEventService {
         // Schedule the briefing trio for THIS device's user only —
         // one cadence entry (the local user, .unclaimed). The
         // host's own addEvent path already scheduled the host's.
+        let callerName = roomService?.membersByRoom[roomId]?
+            .first(where: { $0.userId == callerId })?.displayName
         await NotificationDispatcher.shared.scheduleBriefingTrio(
             eventId: id,
             eventName: name,
             playedAt: playedAt,
             mascotName: room.mascotName,
             perMemberCadence: [callerId: .unclaimed],
+            memberNameById: [callerId: callerName ?? "friend"],
             optedInMemberIds: [callerId],
             mutedMemberIds: [],
             hostNote: nil,

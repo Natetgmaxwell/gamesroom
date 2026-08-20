@@ -348,9 +348,21 @@ final class RoomService: ObservableObject {
             mascotName: room.mascotName,
             leaderboardSummary: summary,
             rsvpState: .unclaimed,
+            memberName: await memberName(for: room),
             personality: room.mascotPersonality,
             ideology: room.mascotPoliticalIdeology
         )
+    }
+
+    /// V0.87 — the signed-in member's display name in `room`, or
+    /// `nil` when the roster cache has no row for the caller. Used
+    /// to personalise the joined-late catch-up push.
+    private func memberName(for room: Room) async -> String? {
+        guard
+            let uid = await SupabaseClientProvider.currentSession()?.user.id,
+            let member = membersByRoom[room.id]?.first(where: { $0.userId == uid })
+        else { return nil }
+        return member.displayName
     }
 
     // MARK: - Room detail (event + briefing + leaderboard + RSVP)
@@ -681,6 +693,9 @@ final class RoomService: ObservableObject {
                 playedAt: event.playedAt,
                 mascotName: room?.mascotName ?? "Your mascot",
                 perMemberCadence: cadence,
+                memberNameById: Dictionary(
+                    uniqueKeysWithValues: roster.map { ($0.userId, $0.displayName) }
+                ),
                 optedInMemberIds: optedInMemberIds,
                 mutedMemberIds: mutedMemberIds,
                 hostNote: event.hostNote,
@@ -766,7 +781,9 @@ final class RoomService: ObservableObject {
             playedAt: playedAt,
             mascotName: room?.mascotName ?? "Your mascot",
             perMemberCadence: cadence,
-            memberNames: roster.map(\.displayName),
+            memberNameById: Dictionary(
+                uniqueKeysWithValues: roster.map { ($0.userId, $0.displayName) }
+            ),
             optedInMemberIds: optedInMemberIds,
             mascotPersonality: room?.mascotPersonality ?? .friendly,
             mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist
