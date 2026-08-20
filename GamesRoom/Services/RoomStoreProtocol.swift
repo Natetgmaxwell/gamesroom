@@ -193,10 +193,10 @@ protocol RoomStore: Sendable {
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
         autoCloseHours: Int,
-        noShowTaxAmount: Int,
-        noShowTaxTrigger: NoShowTaxTrigger,
-        noShowTaxGraceMinutes: Int,
-        noShowTaxDestination: NoShowTaxDestination
+        seatDepositAmount: Int,
+        seatDepositTrigger: SeatDepositTrigger,
+        seatDepositGraceMinutes: Int,
+        seatDepositDestination: SeatDepositDestination
     ) async throws -> Room
 
     // MARK: Host journal (P1.5)
@@ -329,34 +329,52 @@ protocol RoomStore: Sendable {
     /// (migration 047). Throws on non-host writes or unknown slugs.
     func setRoomPackConfig(roomId: UUID, packSlug: String, winPoints: Int) async throws
 
-    // MARK: No-show tax prompt (V0.84 C3 — migration 082)
+    // MARK: Seat deposit escrow (V0.85 — migration 085)
 
-    /// V0.84 C3 — host-only. Returns one row per claimed-but-
-    /// absent member for the event (claimed RSVP, no transactions
-    /// row for the event). Mirrors `list_no_show_candidates(p_event_id)`
-    /// (migration 082). The SwiftUI prompt card renders one row
-    /// per member and lets the host pick Apply / Skip (texted) /
-    /// Skip (away) for each in isolation. Throws on non-host
-    /// reads or unknown event ids.
-    func loadNoShowCandidates(eventId: UUID) async throws -> [NoShowTaxCandidate]
+    /// V0.85 — member. Claims the seat and moves the room's seat
+    /// deposit from points_balance into escrow (held
+    /// seat_deposits row + RSVP claim in one transaction).
+    /// Mirrors `claim_seat_with_deposit(p_event_id)` (migration
+    /// 085). Fails 42501 when balance < amount. Idempotent per
+    /// (event, member).
+    func claimSeatWithDeposit(eventId: UUID) async throws
 
-    /// V0.84 C3 — host-only. Forfeits one held seat deposit of the
-    /// room's no_show_tax_amount (or, when no deposit was held,
-    /// debits points_balance by the tax amount). Mirrors
-    /// `apply_no_show_tax(p_event_id, p_user_id, p_reason)` —
-    /// idempotent per (event, user). `reason` is free-form copy
-    /// the host enters (e.g. "no_show" or a face-saving note);
-    /// it lands in the transactions row's meta. Throws on
-    /// non-host writes.
-    func applyNoShowTax(eventId: UUID, userId: UUID, reason: String?) async throws
+    /// V0.85 — host-only broke-member path. Claims the seat with
+    /// a zero-amount held deposit row so the arrival card still
+    /// tracks the seat. Mirrors `claim_seat_waived(p_event_id,
+    /// p_member_id)` (migration 085). Idempotent.
+    func claimSeatWaived(eventId: UUID, memberId: UUID) async throws
 
-    /// V0.84 C3 — host-only. Records the host's skip call with a
-    /// face-saving reason (`texted` or `away`). Mirrors
-    /// `skip_no_show_tax(p_event_id, p_user_id, p_reason)` —
-    /// idempotent per (event, user). The transaction row is
-    /// amount=0; the meta carries the reason so the ledger reads
-    /// as "host decided, not the system".
-    func skipNoShowTax(eventId: UUID, userId: UUID, reason: String) async throws
+    /// V0.85 — member. The "I'm here" tap: the held deposit
+    /// returns to points_balance instantly. The reclaim IS the
+    /// attendance check-in. Mirrors `check_in_seat(p_event_id)`
+    /// (migration 085). Idempotent.
+    func checkInSeat(eventId: UUID) async throws
+
+    /// V0.85 — host-only. Returns one row per held deposit
+    /// (claimed, no check-in, no play transaction) at session
+    /// start — the arrival card source. Mirrors
+    /// `list_arrival_candidates(p_event_id)` (migration 085).
+    /// Throws on non-host reads.
+    func loadArrivalCandidates(eventId: UUID) async throws -> [SeatDepositCandidate]
+
+    /// V0.85 — host-only. The confirmed no-show call: the held
+    /// deposit stays out, status forfeited, ledger row carries
+    /// the destination meta. Mirrors `forfeit_seat_deposit(
+    /// p_event_id, p_member_id)` (migration 085). Idempotent.
+    func forfeitSeatDeposit(eventId: UUID, memberId: UUID) async throws
+
+    /// V0.85 — host-only. Returns a held deposit without the
+    /// member's tap (texted / away / arrived-unscanned). Mirrors
+    /// `waive_seat_deposit(p_event_id, p_member_id)` (migration
+    /// 085). Idempotent.
+    func waiveSeatDeposit(eventId: UUID, memberId: UUID) async throws
+
+    /// V0.85 — the caller's seat deposit for an event, or nil
+    /// when none exists. Mirrors `get_my_seat_deposit_status(
+    /// p_event_id)` (migration 085 — replaces 043's dropped
+    /// variant). Read-only; drives the chair card's held state.
+    func fetchMySeatDeposit(eventId: UUID) async throws -> SeatDeposit?
 
     // MARK: Casino config (W-06, US-26)
 

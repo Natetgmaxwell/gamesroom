@@ -464,31 +464,31 @@ struct RoomDetailView: View {
                     )
                     .sectionCard(.standard)
                 }
-                // V0.84 C3 — host-only no-show tax prompt at session
-                // start. Renders when the room's trigger is `.prompt`
-                // (the canonical V0.84 C3 mode), the active event is
-                // live, the caller is the host, and there are
-                // claimed-but-absent members to decide on. Hidden
-                // for `.auto` (legacy settle path) and `.manual`
-                // (no prompt; apply comes from Operations later).
+                // V0.85 — host-only arrival card at session start.
+                // Renders when the room runs the deposit escrow,
+                // the active event is live (played, not settled),
+                // the caller is the host, and held deposits are
+                // waiting on a check-in the grace window has
+                // covered. The host decides forfeit vs skip per
+                // candidate; the system never decides alone.
                 if let event = activeEvent,
                    isHost,
                    event.playedAt <= Date(),
                    event.settledAt == nil,
-                   liveRoom.noShowTaxTrigger == .prompt,
-                   !roomService.cachedNoShowCandidates(eventId: event.id).isEmpty {
-                    NoShowTaxPromptCard(
+                   liveRoom.seatDepositTrigger == .escrow,
+                   !roomService.cachedArrivalCandidates(eventId: event.id).isEmpty {
+                    ArrivalCard(
                         room: liveRoom,
                         event: event,
-                        candidates: roomService.cachedNoShowCandidates(eventId: event.id),
-                        onApply: { candidate in
-                            Task { await resolveNoShowTax(candidate, apply: true, reason: nil) }
+                        candidates: roomService.cachedArrivalCandidates(eventId: event.id),
+                        onForfeit: { candidate in
+                            Task { await resolveArrivalCandidate(candidate, forfeit: true) }
                         },
                         onSkipTexted: { candidate in
-                            Task { await resolveNoShowTax(candidate, apply: false, reason: "texted") }
+                            Task { await resolveArrivalCandidate(candidate, forfeit: false, reason: "texted") }
                         },
                         onSkipAway: { candidate in
-                            Task { await resolveNoShowTax(candidate, apply: false, reason: "away") }
+                            Task { await resolveArrivalCandidate(candidate, forfeit: false, reason: "away") }
                         }
                     )
                     .sectionCard(.standard)
@@ -698,7 +698,9 @@ struct RoomDetailView: View {
                         ? { ids in
                             Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
                         }
-                        : nil
+                        : nil,
+                    heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
+                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
                 )
             case .claimed(let event):
                 BriefingSlot(
@@ -719,7 +721,9 @@ struct RoomDetailView: View {
                         ? { ids in
                             Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
                         }
-                        : nil
+                        : nil,
+                    heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
+                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
                 )
             case .declined(let event):
                 // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
@@ -970,10 +974,17 @@ struct RoomDetailView: View {
         // V0.84 C5 — host-only unconsumed member notes. Guarded
         // on `isHost` so the member path is free of the RPC.
         async let notesLoad: () = loadUnconsumedNotesIfNeeded(force: force)
-        // V0.84 C3 — no-show tax prompt source. Host-only RPC;
-        // the member path never fires it (guard inside loader).
-        async let noShowLoad: () = loadNoShowCandidatesIfNeeded(force: force)
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad, tonightStarLoad, notesLoad, noShowLoad)
+        // V0.85 — arrival card source. Host-only RPC; the member
+        // path never fires it (guard inside loader).
+        async let arrivalLoad: () = loadArrivalCandidatesIfNeeded(force: force)
+        // V0.85 — the caller's own held deposit (the chair card
+        // reclaim state). Member path; cheap read. No event →
+        // nothing to hold.
+        async let myDepositLoad: () = {
+            guard let event = activeEvent else { return }
+            await roomService.loadMySeatDeposit(eventId: event.id, force: force)
+        }()
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packConfigLoad, packsLoad, roundsLoad, chapterLoad, hostWithdrawalsLoad, workingHandsLoad, tonightStarLoad, notesLoad, arrivalLoad, myDepositLoad)
         Perf.event("refresh end")
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
@@ -1156,50 +1167,47 @@ struct RoomDetailView: View {
         casinoWithdrawn = myWorkingHand
     }
 
-    /// V0.84 C3 — loads the no-show tax prompt source
-    /// (`list_no_show_candidates(p_event_id)`, migration 082).
-    /// No-op when there's no active event or the room's trigger
-    /// isn't `.prompt` (the canonical V0.84 C3 mode) — `.auto`
-    /// keeps the dormant 043 settle path, `.manual` exposes
-    /// apply from the Operations sub-sheet (future slice). Host-
-    /// gated so a member view never trips the RPC's host check.
-    private func loadNoShowCandidatesIfNeeded(force: Bool = false) async {
+    /// V0.85 — loads the arrival card source
+    /// (`list_arrival_candidates(p_event_id)`, migration 085).
+    /// No-op when there's no active event or the room runs
+    /// deposits off. Host-gated so a member view never trips the
+    /// RPC's host check.
+    private func loadArrivalCandidatesIfNeeded(force: Bool = false) async {
         guard isHost else { return }
-        guard liveRoom.noShowTaxTrigger == .prompt else { return }
+        guard liveRoom.seatDepositTrigger == .escrow else { return }
         guard let event = activeEvent else { return }
-        await roomService.loadNoShowCandidates(eventId: event.id, force: force)
+        await roomService.loadArrivalCandidates(eventId: event.id, force: force)
     }
 
-    /// V0.84 C3 — host-only. Routes a single candidate's
-    /// button-tap to either `apply_no_show_tax` or
-    /// `skip_no_show_tax` (migration 082). On failure the body-
-    /// level `.alert` (`showSeatActionError`) presents the
-    /// localized message; on success the service removes the
-    /// candidate from the cached list so the prompt card
-    /// re-renders without the resolved row. Reloads
-    /// candidates + leaderboard so the public ledger rows the
-    /// apply path writes show up on the next refresh.
-    private func resolveNoShowTax(
-        _ candidate: NoShowTaxCandidate,
-        apply: Bool,
-        reason: String?
+    /// V0.85 — host-only. Routes a single candidate's button-tap
+    /// to either `forfeit_seat_deposit` or `waive_seat_deposit`
+    /// (migration 085). On failure the body-level `.alert`
+    /// (`showSeatActionError`) presents the localized message; on
+    /// success the service removes the candidate from the cached
+    /// list so the arrival card re-renders without the resolved
+    /// row. Reloads candidates + leaderboard so the public
+    /// ledger rows the forfeit path writes show up on the next
+    /// refresh.
+    private func resolveArrivalCandidate(
+        _ candidate: SeatDepositCandidate,
+        forfeit: Bool,
+        reason: String? = nil
     ) async {
         guard let event = activeEvent else { return }
         do {
-            if apply {
-                try await roomService.applyNoShowTax(
-                    eventId: event.id, userId: candidate.userId, reason: reason
+            if forfeit {
+                try await roomService.forfeitSeatDeposit(
+                    eventId: event.id, memberId: candidate.userId
                 )
             } else {
-                try await roomService.skipNoShowTax(
-                    eventId: event.id, userId: candidate.userId,
-                    reason: reason ?? "texted"
+                try await roomService.waiveSeatDeposit(
+                    eventId: event.id, memberId: candidate.userId, reason: reason
                 )
             }
             seatActionError = nil
             Haptics.light()
             _ = await roomService.loadLeaderboard(roomId: room.id, force: true)
-            await loadNoShowCandidatesIfNeeded(force: true)
+            await loadArrivalCandidatesIfNeeded(force: true)
         } catch {
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
@@ -1208,17 +1216,19 @@ struct RoomDetailView: View {
 
     // MARK: - Action handlers (wired to the service layer)
 
-    /// Fires `RoomService.upsertEventRSVP(eventId, .claimed)` for
-    /// the active event. On success the service's `rsvpByEvent`
-    /// cache is updated and the slot rotates to `.claimed`. On
-    /// failure the previous state is preserved, `lastError` is
-    /// set on the service, and the body-level `.alert`
-    /// (`showSeatActionError`) presents the localized message
-    /// so the user isn't left staring at a silent grid.
+    /// Fires `RoomService.claimSeat(eventId)` for the active
+    /// event. When the room runs the deposit escrow
+    /// (`seatDepositTrigger == .escrow`) the service routes
+    /// through `claim_seat_with_deposit` (migration 085) so the
+    /// deposit leaves the balance into escrow atomically with
+    /// the RSVP claim; otherwise the plain RSVP upsert runs. On
+    /// failure the previous state is preserved and the
+    /// body-level `.alert` (`showSeatActionError`) presents the
+    /// localized message (e.g. the 42501 balance-too-low error).
     private func claimSeat(eventId: UUID) async {
         let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .claimed, currentUserId: currentUserId)
         do {
-            _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .claimed)
+            _ = try await roomService.claimSeat(eventId: eventId)
             seatActionError = nil
             Haptics.success()
         } catch {
@@ -1238,6 +1248,23 @@ struct RoomDetailView: View {
             Haptics.light()
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
+            seatActionError = (error as NSError).localizedDescription
+            showSeatActionError = true
+        }
+    }
+
+    /// V0.85 — the "I'm here" reclaim. Fires
+    /// `RoomService.checkInSeat(eventId)` (migration 085's
+    /// `check_in_seat` RPC); the held deposit returns to the
+    /// balance and the cached deposit flips out of `.held` so
+    /// the chair card drops the reclaim button. Errors surface
+    /// via the shared seat-action alert.
+    private func checkInSeat(eventId: UUID) async {
+        do {
+            try await roomService.checkInSeat(eventId: eventId)
+            seatActionError = nil
+            Haptics.success()
+        } catch {
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
         }
@@ -1553,6 +1580,14 @@ private struct BriefingSlot: View {
     /// the section clears. Wired up only when the parent passes
     /// a non-nil callback.
     let onMarkNotesConsumed: (([UUID]) -> Void)?
+    /// V0.85 — the caller's seat deposit for the event, or nil.
+    /// A held deposit renders the "I'm here" reclaim button on
+    /// the chair card; nil keeps the claimed state as it was.
+    let heldDeposit: SeatDeposit?
+    /// V0.85 — the "I'm here" tap. Returns the held deposit
+    /// instantly; the reclaim IS the check-in. Wired up only
+    /// when the parent passes a non-nil callback.
+    let onCheckIn: (() -> Void)?
     // V0.79 — notification toggle params removed. Preferences moved
     // to the one-time RoomNotifPromptCard (main room page) and
     // RoomSettingsSheet's "My notifications" section.
@@ -1573,7 +1608,9 @@ private struct BriefingSlot: View {
         onEdit: (() -> Void)? = nil,
         room: Room,
         unconsumedNotes: [RoomMemberNote] = [],
-        onMarkNotesConsumed: (([UUID]) -> Void)? = nil
+        onMarkNotesConsumed: (([UUID]) -> Void)? = nil,
+        heldDeposit: SeatDeposit? = nil,
+        onCheckIn: (() -> Void)? = nil
     ) {
         self.event = event
         self.briefing = briefing
@@ -1591,6 +1628,8 @@ private struct BriefingSlot: View {
         self.room = room
         self.unconsumedNotes = unconsumedNotes
         self.onMarkNotesConsumed = onMarkNotesConsumed
+        self.heldDeposit = heldDeposit
+        self.onCheckIn = onCheckIn
     }
 
     var body: some View {
@@ -1714,6 +1753,27 @@ private struct BriefingSlot: View {
                         Text("You're in.")
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.accent)
+                    }
+                    // V0.85 — the reclaim. A held deposit renders
+                    // the "I'm here" button: one tap returns the
+                    // deposit and records attendance itself. The
+                    // member wants their chips back, so no nagging
+                    // is ever needed.
+                    if let deposit = heldDeposit, deposit.status == .held, let onCheckIn {
+                        Text("Tap when you walk in — your deposit comes straight back.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        Button(action: onCheckIn) {
+                            Text("I'm here — reclaim \(deposit.amount) CC")
+                                .font(Theme.Typography.body.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.background)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Theme.Palette.accent)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Check in and reclaim the \(deposit.amount) CC seat deposit"))
                     }
                     // 2026-08-10 feedback round — a claimed seat is
                     // not terminal: the member can release it and

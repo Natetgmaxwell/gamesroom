@@ -62,15 +62,14 @@ struct RoomSettingsSheet: View {
     @State private var maxSeats: Int
     @State private var memberInviteQuota: Int
     @State private var joinStartingBonus: Int
-    @State private var seatDepositAmount: Int
     @State private var briefing48hEnabled: Bool
     @State private var calendarAutoAddHost: Bool
     @State private var socialPreferencesEnabled: Bool
     @State private var autoCloseHours: Int
-    @State private var noShowTaxAmount: Int
-    @State private var noShowTaxTrigger: NoShowTaxTrigger
-    @State private var noShowTaxGraceMinutes: Int
-    @State private var noShowTaxDestination: NoShowTaxDestination
+    @State private var seatDepositAmount: Int
+    @State private var seatDepositTrigger: SeatDepositTrigger
+    @State private var seatDepositGraceMinutes: Int
+    @State private var seatDepositDestination: SeatDepositDestination
     @State private var hostJournal: String
 
     // P0.2 — share-code surface state. Generated on demand.
@@ -133,15 +132,14 @@ struct RoomSettingsSheet: View {
         _maxSeats = State(initialValue: room.maxSeats)
         _memberInviteQuota = State(initialValue: room.memberInviteQuota)
         _joinStartingBonus = State(initialValue: room.joinStartingBonus)
-        _seatDepositAmount = State(initialValue: room.seatDepositAmount)
         _briefing48hEnabled = State(initialValue: room.briefing48hEnabled)
         _calendarAutoAddHost = State(initialValue: room.calendarAutoAddHost)
         _socialPreferencesEnabled = State(initialValue: room.socialPreferencesEnabled)
         _autoCloseHours = State(initialValue: room.autoCloseHours)
-        _noShowTaxAmount = State(initialValue: room.noShowTaxAmount)
-        _noShowTaxTrigger = State(initialValue: room.noShowTaxTrigger)
-        _noShowTaxGraceMinutes = State(initialValue: room.noShowTaxGraceMinutes)
-        _noShowTaxDestination = State(initialValue: room.noShowTaxDestination)
+        _seatDepositAmount = State(initialValue: room.seatDepositAmount)
+        _seatDepositTrigger = State(initialValue: room.seatDepositTrigger)
+        _seatDepositGraceMinutes = State(initialValue: room.seatDepositGraceMinutes)
+        _seatDepositDestination = State(initialValue: room.seatDepositDestination)
         _hostJournal = State(initialValue: room.hostJournal ?? "")
         _seasonSubtitle = State(initialValue: "")
     }
@@ -178,15 +176,14 @@ struct RoomSettingsSheet: View {
                             maxSeats: $maxSeats,
                             memberInviteQuota: $memberInviteQuota,
                             joinStartingBonus: $joinStartingBonus,
-                            seatDepositAmount: $seatDepositAmount,
                             briefing48hEnabled: $briefing48hEnabled,
                             calendarAutoAddHost: $calendarAutoAddHost,
                             socialPreferencesEnabled: $socialPreferencesEnabled,
                             autoCloseHours: $autoCloseHours,
-                            noShowTaxAmount: $noShowTaxAmount,
-                            noShowTaxTrigger: $noShowTaxTrigger,
-                            noShowTaxGraceMinutes: $noShowTaxGraceMinutes,
-                            noShowTaxDestination: $noShowTaxDestination,
+                            seatDepositAmount: $seatDepositAmount,
+                            seatDepositTrigger: $seatDepositTrigger,
+                            seatDepositGraceMinutes: $seatDepositGraceMinutes,
+                            seatDepositDestination: $seatDepositDestination,
                             shareCode: $shareCode,
                             isGeneratingCode: $isGeneratingCode
                         )
@@ -389,10 +386,10 @@ struct RoomSettingsSheet: View {
             .onChange(of: calendarAutoAddHost) { _, _ in bumpDraft() }
             .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
             .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
-            .onChange(of: noShowTaxAmount) { _, _ in bumpDraft() }
-            .onChange(of: noShowTaxTrigger) { _, _ in bumpDraft() }
-            .onChange(of: noShowTaxGraceMinutes) { _, _ in bumpDraft() }
-            .onChange(of: noShowTaxDestination) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositTrigger) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositGraceMinutes) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositDestination) { _, _ in bumpDraft() }
             .onChange(of: seasonSubtitle) { _, newValue in
                 if newValue != seededSeasonSubtitle { bumpDraft() }
             }
@@ -588,10 +585,10 @@ struct RoomSettingsSheet: View {
                     calendarAutoAddHost: calendarAutoAddHost,
                     socialPreferencesEnabled: socialPreferencesEnabled,
                     autoCloseHours: autoCloseHours,
-                    noShowTaxAmount: noShowTaxAmount,
-                    noShowTaxTrigger: noShowTaxTrigger,
-                    noShowTaxGraceMinutes: noShowTaxGraceMinutes,
-                    noShowTaxDestination: noShowTaxDestination
+                    seatDepositAmount: seatDepositAmount,
+                    seatDepositTrigger: seatDepositTrigger,
+                    seatDepositGraceMinutes: seatDepositGraceMinutes,
+                    seatDepositDestination: seatDepositDestination
                 )
                 let trimmedJournal = hostJournal.trimmingCharacters(in: .whitespacesAndNewlines)
                 _ = try await roomService.updateHostJournal(
@@ -698,15 +695,14 @@ struct RoomSettingsOperationsSheet: View {
     @Binding var maxSeats: Int
     @Binding var memberInviteQuota: Int
     @Binding var joinStartingBonus: Int
-    @Binding var seatDepositAmount: Int
     @Binding var briefing48hEnabled: Bool
     @Binding var calendarAutoAddHost: Bool
     @Binding var socialPreferencesEnabled: Bool
     @Binding var autoCloseHours: Int
-    @Binding var noShowTaxAmount: Int
-    @Binding var noShowTaxTrigger: NoShowTaxTrigger
-    @Binding var noShowTaxGraceMinutes: Int
-    @Binding var noShowTaxDestination: NoShowTaxDestination
+    @Binding var seatDepositAmount: Int
+    @Binding var seatDepositTrigger: SeatDepositTrigger
+    @Binding var seatDepositGraceMinutes: Int
+    @Binding var seatDepositDestination: SeatDepositDestination
     @Binding var shareCode: String?
     @Binding var isGeneratingCode: Bool
 
@@ -724,15 +720,14 @@ struct RoomSettingsOperationsSheet: View {
         maxSeats: Binding<Int>,
         memberInviteQuota: Binding<Int>,
         joinStartingBonus: Binding<Int>,
-        seatDepositAmount: Binding<Int>,
         briefing48hEnabled: Binding<Bool>,
         calendarAutoAddHost: Binding<Bool>,
         socialPreferencesEnabled: Binding<Bool>,
         autoCloseHours: Binding<Int>,
-        noShowTaxAmount: Binding<Int>,
-        noShowTaxTrigger: Binding<NoShowTaxTrigger>,
-        noShowTaxGraceMinutes: Binding<Int>,
-        noShowTaxDestination: Binding<NoShowTaxDestination>,
+        seatDepositAmount: Binding<Int>,
+        seatDepositTrigger: Binding<SeatDepositTrigger>,
+        seatDepositGraceMinutes: Binding<Int>,
+        seatDepositDestination: Binding<SeatDepositDestination>,
         shareCode: Binding<String?>,
         isGeneratingCode: Binding<Bool>
     ) {
@@ -740,15 +735,14 @@ struct RoomSettingsOperationsSheet: View {
         _maxSeats = maxSeats
         _memberInviteQuota = memberInviteQuota
         _joinStartingBonus = joinStartingBonus
-        _seatDepositAmount = seatDepositAmount
         _briefing48hEnabled = briefing48hEnabled
         _calendarAutoAddHost = calendarAutoAddHost
         _socialPreferencesEnabled = socialPreferencesEnabled
         _autoCloseHours = autoCloseHours
-        _noShowTaxAmount = noShowTaxAmount
-        _noShowTaxTrigger = noShowTaxTrigger
-        _noShowTaxGraceMinutes = noShowTaxGraceMinutes
-        _noShowTaxDestination = noShowTaxDestination
+        _seatDepositAmount = seatDepositAmount
+        _seatDepositTrigger = seatDepositTrigger
+        _seatDepositGraceMinutes = seatDepositGraceMinutes
+        _seatDepositDestination = seatDepositDestination
         _shareCode = shareCode
         _isGeneratingCode = isGeneratingCode
     }
@@ -759,44 +753,44 @@ struct RoomSettingsOperationsSheet: View {
                 Stepper("Max seats: \(maxSeats)", value: $maxSeats, in: 2...20)
                 Stepper("Invite quota: \(memberInviteQuota)", value: $memberInviteQuota, in: 0...20)
                 Stepper("Starting bonus: \(joinStartingBonus) pts", value: $joinStartingBonus, in: 0...1000, step: 50)
-                Stepper("Seat deposit: \(seatDepositAmount) pts", value: $seatDepositAmount, in: 0...500, step: 10)
                 // V0.83 — auto-close window. The lazy close stamps
                 // settled_at on an un-finalized event this many hours
                 // after played_at. Bounded 1...72 server-side.
                 Stepper("Auto-close event after: \(autoCloseHours)h", value: $autoCloseHours, in: 1...72)
             }
 
-            // V0.84 C3 — no-show tax settings (migration 082).
-            // Stepper + picker pair; the four values ride the
-            // autosave wire identical to autoCloseHours (each edit
-            // restarts the V0.81 600ms debounce + writeAll call).
-            // `amount` is 0...1000 server-side, `grace` is 0...120;
-            // the picker raw values match the migration's CHECK
-            // constraint members exactly so the RPC never rejects
-            // the write.
+            // V0.85 — seat deposit settings (migration 085). The
+            // deposit reframes the tax: it leaves the balance at
+            // claim and returns on the member's "I'm here" tap.
+            // The four values ride the autosave wire identical to
+            // autoCloseHours (each edit restarts the V0.81 600ms
+            // debounce + writeAll call). `amount` is 0...1000
+            // server-side, `grace` is 0...120; the picker raw
+            // values match the migration's CHECK constraint
+            // members exactly so the RPC never rejects the write.
             Section {
                 Stepper(
-                    "No-show tax: \(noShowTaxAmount) CC",
-                    value: $noShowTaxAmount, in: 0...1000, step: 50
+                    "Seat deposit: \(seatDepositAmount) CC",
+                    value: $seatDepositAmount, in: 0...1000, step: 50
                 )
-                Picker("No-show tax prompt", selection: $noShowTaxTrigger) {
-                    ForEach(NoShowTaxTrigger.allCases, id: \.self) { t in
+                Picker("Deposits", selection: $seatDepositTrigger) {
+                    ForEach(SeatDepositTrigger.allCases, id: \.self) { t in
                         Text(t.displayName).tag(t)
                     }
                 }
                 Stepper(
-                    "Grace window: \(noShowTaxGraceMinutes) min",
-                    value: $noShowTaxGraceMinutes, in: 0...120
+                    "Grace window: \(seatDepositGraceMinutes) min",
+                    value: $seatDepositGraceMinutes, in: 0...120
                 )
-                Picker("Tax destination", selection: $noShowTaxDestination) {
-                    ForEach(NoShowTaxDestination.allCases, id: \.self) { d in
+                Picker("Forfeit destination", selection: $seatDepositDestination) {
+                    ForEach(SeatDepositDestination.allCases, id: \.self) { d in
                         Text(d.displayName).tag(d)
                     }
                 }
             } header: {
-                Text("No-show tax")
+                Text("Seat deposit")
             } footer: {
-                Text("How the room handles a claimed-but-absent member at session start. Prompt asks you per member (carried to the next pot by default); Auto skips the prompt; Manual never prompts.")
+                Text("Escrow holds each member's deposit from claim until they tap I'm here. A no-show is yours to call at session start — forfeit to the next pot by default, or hand it back.")
             }
 
             Section("Features") {

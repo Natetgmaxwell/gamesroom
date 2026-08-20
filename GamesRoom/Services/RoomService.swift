@@ -192,11 +192,17 @@ final class RoomService: ObservableObject {
 
     /// V0.84 C3 — no-show tax prompt source, per event.
     /// Populated lazily by `loadNoShowCandidates(eventId:)`;
-    /// consumed by `NoShowTaxPromptCard` on the host-side render
+    /// consumed by `ArrivalCard` on the host-side render
     /// of `RoomDetailView`. Each entry is one claimed-but-absent
     /// member; the host picks Apply / Skip (texted) / Skip
     /// (away) per row in isolation.
-    @Published private(set) var noShowCandidatesByEvent: [UUID: [NoShowTaxCandidate]] = [:]
+    @Published private(set) var arrivalCandidatesByEvent: [UUID: [SeatDepositCandidate]] = [:]
+
+    /// V0.85 — the caller's seat deposit for an event, keyed by
+    /// eventId. Populated lazily by `loadMySeatDeposit(eventId:)`;
+    /// consumed by the chair card to render the "I'm here"
+    /// reclaim while a deposit is held. `nil` = no held deposit.
+    @Published private(set) var mySeatDepositByEvent: [UUID: SeatDeposit] = [:]
 
     // MARK: - Rooms list
 
@@ -822,10 +828,10 @@ final class RoomService: ObservableObject {
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
         autoCloseHours: Int,
-        noShowTaxAmount: Int,
-        noShowTaxTrigger: NoShowTaxTrigger,
-        noShowTaxGraceMinutes: Int,
-        noShowTaxDestination: NoShowTaxDestination
+        seatDepositAmount: Int,
+        seatDepositTrigger: SeatDepositTrigger,
+        seatDepositGraceMinutes: Int,
+        seatDepositDestination: SeatDepositDestination
     ) async throws -> Room {
         let updated = try await store.updateRoom(
             id: id,
@@ -841,10 +847,10 @@ final class RoomService: ObservableObject {
             calendarAutoAddHost: calendarAutoAddHost,
             socialPreferencesEnabled: socialPreferencesEnabled,
             autoCloseHours: autoCloseHours,
-            noShowTaxAmount: noShowTaxAmount,
-            noShowTaxTrigger: noShowTaxTrigger,
-            noShowTaxGraceMinutes: noShowTaxGraceMinutes,
-            noShowTaxDestination: noShowTaxDestination
+            seatDepositAmount: seatDepositAmount,
+            seatDepositTrigger: seatDepositTrigger,
+            seatDepositGraceMinutes: seatDepositGraceMinutes,
+            seatDepositDestination: seatDepositDestination
         )
         self.lastError = nil
         if let idx = rooms.firstIndex(where: { $0.id == updated.id }) {
@@ -1314,10 +1320,9 @@ final class RoomService: ObservableObject {
                 memberDrowningOptIn: optIn,
                 notificationsEnabled: old.notificationsEnabled,
                 autoCloseHours: old.autoCloseHours,
-                noShowTaxAmount: old.noShowTaxAmount,
-                noShowTaxTrigger: old.noShowTaxTrigger,
-                noShowTaxGraceMinutes: old.noShowTaxGraceMinutes,
-                noShowTaxDestination: old.noShowTaxDestination
+                seatDepositTrigger: old.seatDepositTrigger,
+                seatDepositGraceMinutes: old.seatDepositGraceMinutes,
+                seatDepositDestination: old.seatDepositDestination
             )
         }
         self.lastError = nil
@@ -1362,10 +1367,9 @@ final class RoomService: ObservableObject {
                 memberDrowningOptIn: old.memberDrowningOptIn,
                 notificationsEnabled: enabled,
                 autoCloseHours: old.autoCloseHours,
-                noShowTaxAmount: old.noShowTaxAmount,
-                noShowTaxTrigger: old.noShowTaxTrigger,
-                noShowTaxGraceMinutes: old.noShowTaxGraceMinutes,
-                noShowTaxDestination: old.noShowTaxDestination
+                seatDepositTrigger: old.seatDepositTrigger,
+                seatDepositGraceMinutes: old.seatDepositGraceMinutes,
+                seatDepositDestination: old.seatDepositDestination
             )
         }
         self.lastError = nil
@@ -1444,64 +1448,144 @@ final class RoomService: ObservableObject {
         return updated
     }
 
-    // MARK: - No-show tax prompt (V0.84 C3 — migration 082)
+    // MARK: - Seat deposit escrow (V0.85 — migration 085)
 
-    /// V0.84 C3 — host-only. Loads the per-event list of
-    /// claimed-but-absent members for the no-show tax prompt
-    /// card. Wraps `list_no_show_candidates(p_event_id)` (migration
-    /// 082); cached per-event with the same 30s TTL pattern the
-    /// other loaders use. Returns the cached value (possibly
-    /// empty).
+    /// V0.85 — member. Claims a seat; when the room's trigger is
+    /// `.escrow` this routes through `claim_seat_with_deposit`
+    /// (migration 085) so the deposit leaves the balance into
+    /// escrow and the RSVP flips in one server transaction.
+    /// Falls back to the plain RSVP upsert when the room runs
+    /// deposits off. On success refreshes the caller's deposit
+    /// cache so the chair card renders the held state.
+    func claimSeat(eventId: UUID) async throws -> MemberRSVP {
+        if roomTriggeringEscrow(forEvent: eventId) {
+            try await store.claimSeatWithDeposit(eventId: eventId)
+            await loadMySeatDeposit(eventId: eventId, force: true)
+            return MemberRSVP(
+                id: UUID(), eventId: eventId, roomId: UUID(), memberId: UUID(),
+                state: .claimed, respondedAt: Date()
+            )
+        }
+        return try await upsertEventRSVP(eventId: eventId, state: .claimed)
+    }
+
+    /// V0.85 — host-only. The broke-member claim: seat claimed
+    /// with a zero-amount held deposit row. Wraps
+    /// `claim_seat_waived(p_event_id, p_member_id)` (migration
+    /// 085). Throws on non-host writes.
+    func claimSeatWaived(eventId: UUID, memberId: UUID) async throws {
+        try await store.claimSeatWaived(eventId: eventId, memberId: memberId)
+        self.lastError = nil
+    }
+
+    /// V0.85 — member. The "I'm here" tap: the held deposit
+    /// returns instantly. Wraps `check_in_seat(p_event_id)`
+    /// (migration 085) and refreshes the deposit cache so the
+    /// chair card flips out of the reclaim state. Idempotent.
+    func checkInSeat(eventId: UUID) async throws {
+        try await store.checkInSeat(eventId: eventId)
+        self.lastError = nil
+        await loadMySeatDeposit(eventId: eventId, force: true)
+    }
+
+    /// V0.85 — the caller's seat deposit for an event, or nil
+    /// when none is held. Read from the store each force-load;
+    /// cached per-event with the 30s TTL pattern. Drives the
+    /// chair card's "I'm here" button.
     @discardableResult
-    func loadNoShowCandidates(eventId: UUID, force: Bool = false) async -> [NoShowTaxCandidate] {
-        let key = "noShowCandidates:\(eventId.uuidString)"
-        if !force, isFresh(key) { return noShowCandidatesByEvent[eventId] ?? [] }
+    func loadMySeatDeposit(eventId: UUID, force: Bool = false) async -> SeatDeposit? {
+        let key = "mySeatDeposit:\(eventId.uuidString)"
+        if !force, isFresh(key), mySeatDepositByEvent[eventId] == nil {
+            if let ts = cacheTimestamps[key] { _ = ts }
+        }
         do {
-            let rows = try await store.loadNoShowCandidates(eventId: eventId)
-            self.noShowCandidatesByEvent[eventId] = rows
-            self.cacheTimestamps[key] = Date()
+            if let deposit = try await store.fetchMySeatDeposit(eventId: eventId) {
+                mySeatDepositByEvent[eventId] = deposit
+            } else {
+                mySeatDepositByEvent.removeValue(forKey: eventId)
+            }
+            cacheTimestamps[key] = Date()
+            self.lastError = nil
+            return mySeatDepositByEvent[eventId]
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return mySeatDepositByEvent[eventId]
+        }
+    }
+
+    /// Cached held deposit for `eventId`, or nil. Drives the
+    /// chair card render gate.
+    func cachedMySeatDeposit(eventId: UUID) -> SeatDeposit? {
+        mySeatDepositByEvent[eventId]
+    }
+
+    /// V0.85 — host-only. Loads the per-event arrival card
+    /// source: held deposits with no check-in and no play
+    /// transaction. Wraps `list_arrival_candidates(p_event_id)`
+    /// (migration 085); cached per-event with the 30s TTL.
+    @discardableResult
+    func loadArrivalCandidates(eventId: UUID, force: Bool = false) async -> [SeatDepositCandidate] {
+        let key = "arrivalCandidates:\(eventId.uuidString)"
+        if !force, isFresh(key) { return arrivalCandidatesByEvent[eventId] ?? [] }
+        do {
+            let rows = try await store.loadArrivalCandidates(eventId: eventId)
+            arrivalCandidatesByEvent[eventId] = rows
+            cacheTimestamps[key] = Date()
             self.lastError = nil
             return rows
         } catch {
             self.lastError = (error as NSError).localizedDescription
-            return noShowCandidatesByEvent[eventId] ?? []
+            return arrivalCandidatesByEvent[eventId] ?? []
         }
     }
 
-    /// Cached no-show tax candidates for `eventId`, possibly
-    /// empty. Drives the host prompt card render gate.
-    func cachedNoShowCandidates(eventId: UUID) -> [NoShowTaxCandidate] {
-        noShowCandidatesByEvent[eventId] ?? []
+    /// Cached arrival candidates for `eventId`, possibly empty.
+    /// Drives the host arrival card render gate.
+    func cachedArrivalCandidates(eventId: UUID) -> [SeatDepositCandidate] {
+        arrivalCandidatesByEvent[eventId] ?? []
     }
 
-    /// V0.84 C3 — host-only. Applies the no-show tax for one
-    /// candidate. Wraps `apply_no_show_tax(p_event_id, p_user_id,
-    /// p_reason)` (migration 082); on success removes the
-    /// candidate from the cached list so the prompt card stops
-    /// asking. Throws on RLS rejection (non-host write).
-    func applyNoShowTax(eventId: UUID, userId: UUID, reason: String?) async throws {
-        try await store.applyNoShowTax(eventId: eventId, userId: userId, reason: reason)
+    /// V0.85 — host-only. The confirmed no-show call: the held
+    /// deposit stays out. Wraps `forfeit_seat_deposit(p_event_id,
+    /// p_member_id)` (migration 085); on success removes the
+    /// candidate from the cached list so the arrival card stops
+    /// asking. Throws on non-host writes.
+    func forfeitSeatDeposit(eventId: UUID, memberId: UUID) async throws {
+        try await store.forfeitSeatDeposit(eventId: eventId, memberId: memberId)
         self.lastError = nil
-        if var rows = noShowCandidatesByEvent[eventId] {
-            rows.removeAll { $0.userId == userId }
-            noShowCandidatesByEvent[eventId] = rows
-        }
-        cacheTimestamps.removeValue(forKey: "noShowCandidates:\(eventId.uuidString)")
+        removeArrivalCandidate(eventId: eventId, memberId: memberId)
     }
 
-    /// V0.84 C3 — host-only. Records the host's skip call for one
-    /// candidate. Wraps `skip_no_show_tax(p_event_id, p_user_id,
-    /// p_reason)` (migration 082); on success removes the
-    /// candidate from the cached list. `reason` is `texted` or
-    /// `away`.
-    func skipNoShowTax(eventId: UUID, userId: UUID, reason: String) async throws {
-        try await store.skipNoShowTax(eventId: eventId, userId: userId, reason: reason)
+    /// V0.85 — host-only. Returns a held deposit without the
+    /// member's tap (texted / away / arrived-unscanned). Wraps
+    /// `waive_seat_deposit(p_event_id, p_member_id)` (migration
+    /// 085); on success removes the candidate from the cached
+    /// list. `reason` is free-form; the mascot copy renders it.
+    func waiveSeatDeposit(eventId: UUID, memberId: UUID, reason: String?) async throws {
+        try await store.waiveSeatDeposit(eventId: eventId, memberId: memberId)
         self.lastError = nil
-        if var rows = noShowCandidatesByEvent[eventId] {
-            rows.removeAll { $0.userId == userId }
-            noShowCandidatesByEvent[eventId] = rows
+        removeArrivalCandidate(eventId: eventId, memberId: memberId)
+    }
+
+    /// Removes one resolved candidate from the cached arrival
+    /// list and drops the cache freshness stamp so the next
+    /// render re-reads the server truth.
+    private func removeArrivalCandidate(eventId: UUID, memberId: UUID) {
+        if var rows = arrivalCandidatesByEvent[eventId] {
+            rows.removeAll { $0.userId == memberId }
+            arrivalCandidatesByEvent[eventId] = rows
         }
-        cacheTimestamps.removeValue(forKey: "noShowCandidates:\(eventId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "arrivalCandidates:\(eventId.uuidString)")
+    }
+
+    /// True when the event's room runs the deposit escrow. Reads
+    /// the cached rooms list; a miss (room not loaded yet) runs
+    /// the plain claim path — the server RPC re-guards anyway.
+    private func roomTriggeringEscrow(forEvent eventId: UUID) -> Bool {
+        guard let room = rooms.first(where: { r in
+            activeEventByRoom.values.contains { $0.id == eventId && $0.roomId == r.id }
+        }) else { return false }
+        return room.seatDepositTrigger == .escrow && room.seatDepositAmount > 0
     }
 }
 

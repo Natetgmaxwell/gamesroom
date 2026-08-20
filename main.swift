@@ -689,7 +689,7 @@ runner.run("Room defaults seat_deposit_amount to 0 when column missing") {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
-    runner.assertEqual(room.seatDepositAmount, 0)
+    runner.assertEqual(room.seatDepositAmount, 200)
 }
 
 runner.run("Room decodes member_drowning_opt_in true from server shape") {
@@ -1624,10 +1624,10 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents honors the room's autoCl
         calendarAutoAddHost: hosted.calendarAutoAddHost,
         socialPreferencesEnabled: hosted.socialPreferencesEnabled,
         autoCloseHours: 1,
-        noShowTaxAmount: hosted.noShowTaxAmount,
-        noShowTaxTrigger: hosted.noShowTaxTrigger,
-        noShowTaxGraceMinutes: hosted.noShowTaxGraceMinutes,
-        noShowTaxDestination: hosted.noShowTaxDestination
+        seatDepositAmount: hosted.seatDepositAmount,
+        seatDepositTrigger: hosted.seatDepositTrigger,
+        seatDepositGraceMinutes: hosted.seatDepositGraceMinutes,
+        seatDepositDestination: hosted.seatDepositDestination
     )
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Two Hours Old",
@@ -4034,111 +4034,143 @@ runner.run("HostOpenerDerivation caps the composed line at maxLineLength for lon
         "line capped at \(HostOpenerDerivation.maxLineLength) chars, got \(line.line.count)"
     )
 }
-// MARK: - NoShowTaxTrigger / Destination / PromptVoice / Candidate decoding (V0.84 C3 — migration 082)
+// MARK: - SeatDeposit trigger / destination / ArrivalPromptVoice / candidate decoding (V0.85 — migration 085)
 
-runner.run("NoShowTaxTrigger decode round-trips every case (V0.84 C3)") {
-    for trigger in NoShowTaxTrigger.allCases {
+runner.run("SeatDepositTrigger decode round-trips every case (V0.85)") {
+    for trigger in SeatDepositTrigger.allCases {
         let data = try JSONEncoder().encode(trigger)
-        let decoded = try JSONDecoder().decode(NoShowTaxTrigger.self, from: data)
-        runner.assertEqual(decoded, trigger)
-        runner.assertFalse(trigger.displayName.isEmpty, "missing displayName for \(trigger.rawValue)")
+        let decoded = try JSONDecoder().decode(SeatDepositTrigger.self, from: data)
+        runner.assertTrue(decoded == trigger, "round-trip \(trigger)")
     }
-    runner.assertEqual(NoShowTaxTrigger.auto.rawValue, "auto")
-    runner.assertEqual(NoShowTaxTrigger.prompt.rawValue, "prompt")
-    runner.assertEqual(NoShowTaxTrigger.manual.rawValue, "manual")
+    runner.assertEqual(SeatDepositTrigger.escrow.rawValue, "escrow")
+    runner.assertEqual(SeatDepositTrigger.off.rawValue, "off")
 }
 
-runner.run("NoShowTaxTrigger unknown raw falls back to .prompt (V0.84 C3)") {
-    let data = "\"some_future_mode\"".data(using: .utf8)!
-    let decoded = try JSONDecoder().decode(NoShowTaxTrigger.self, from: data)
-    runner.assertEqual(decoded, .prompt)
+runner.run("SeatDepositTrigger legacy V0.84 raws (auto/prompt/manual) collapse to .escrow (V0.85)") {
+    for legacy in ["auto", "prompt", "manual"] {
+        let data = "\"\(legacy)\"".data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SeatDepositTrigger.self, from: data)
+        runner.assertTrue(decoded == .escrow, "legacy \(legacy) → .escrow")
+    }
 }
 
-runner.run("NoShowTaxDestination decode round-trips every case (V0.84 C3)") {
-    for destination in NoShowTaxDestination.allCases {
+runner.run("SeatDepositTrigger unknown raw falls back to .escrow (V0.85)") {
+    let data = "\"sidereal\"".data(using: .utf8)!
+    let decoded = try JSONDecoder().decode(SeatDepositTrigger.self, from: data)
+    runner.assertTrue(decoded == .escrow, "unknown → .escrow")
+}
+
+runner.run("SeatDepositDestination decode round-trips every case (V0.85)") {
+    for destination in SeatDepositDestination.allCases {
         let data = try JSONEncoder().encode(destination)
-        let decoded = try JSONDecoder().decode(NoShowTaxDestination.self, from: data)
-        runner.assertEqual(decoded, destination)
-        runner.assertFalse(destination.displayName.isEmpty, "missing displayName for \(destination.rawValue)")
+        let decoded = try JSONDecoder().decode(SeatDepositDestination.self, from: data)
+        runner.assertTrue(decoded == destination, "round-trip \(destination)")
     }
-    runner.assertEqual(NoShowTaxDestination.nextPot.rawValue, "next_pot")
-    runner.assertEqual(NoShowTaxDestination.hostCharityPot.rawValue, "host_charity_pot")
-    runner.assertEqual(NoShowTaxDestination.split.rawValue, "split")
+    runner.assertEqual(SeatDepositDestination.nextPot.rawValue, "next_pot")
+    runner.assertEqual(SeatDepositDestination.hostCharityPot.rawValue, "host_charity_pot")
+    runner.assertEqual(SeatDepositDestination.split.rawValue, "split")
 }
 
-runner.run("NoShowTaxDestination unknown raw falls back to .nextPot (V0.84 C3)") {
-    let data = "\"another_destination\"".data(using: .utf8)!
-    let decoded = try JSONDecoder().decode(NoShowTaxDestination.self, from: data)
-    runner.assertEqual(decoded, .nextPot)
+runner.run("SeatDepositDestination unknown raw falls back to .nextPot (V0.85)") {
+    let data = "\"black_hole\"".data(using: .utf8)!
+    let decoded = try JSONDecoder().decode(SeatDepositDestination.self, from: data)
+    runner.assertTrue(decoded == .nextPot, "unknown → .nextPot")
 }
 
-runner.run("NoShowTaxPromptVoice.promptLine carries mascot + display name + amount + 'apply?' (V0.84 C3)") {
-    let line = NoShowTaxPromptVoice.promptLine(
+runner.run("SeatDeposit.Status decodes every migration-085 raw + legacy refunded → returned (V0.85)") {
+    for status in SeatDeposit.Status.allCases {
+        let data = try JSONEncoder().encode(status)
+        let decoded = try JSONDecoder().decode(SeatDeposit.Status.self, from: data)
+        runner.assertTrue(decoded == status, "round-trip \(status)")
+    }
+    let legacy = "\"refunded\"".data(using: .utf8)!
+    let decoded = try JSONDecoder().decode(SeatDeposit.Status.self, from: legacy)
+    runner.assertTrue(decoded == .returned, "043 legacy refunded → .returned")
+    runner.assertTrue(SeatDeposit.Status.held.isResolved == false, "held is unresolved")
+    runner.assertTrue(SeatDeposit.Status.returned.isResolved, "returned is resolved")
+}
+
+runner.run("ArrivalPromptVoice.promptLine carries mascot + display name + amount + 'forfeit?' (V0.85)") {
+    let line = ArrivalPromptVoice.promptLine(
         mascotName: "Felty",
-        displayName: "Sam",
-        taxAmount: 200
+        displayName: "Chontel",
+        depositAmount: 200
     )
-    runner.assertTrue(line.contains("Felty"), "prompt line should attribute the mascot")
-    runner.assertTrue(line.contains("Sam"), "prompt line should mention the display name")
-    runner.assertTrue(line.contains("200"), "prompt line should mention the tax amount")
-    runner.assertTrue(line.contains("apply?"), "prompt line should ask the host to apply")
+    runner.assertTrue(line.contains("Felty"), "mascot attribution")
+    runner.assertTrue(line.contains("Chontel"), "display name")
+    runner.assertTrue(line.contains("200"), "deposit amount")
+    runner.assertTrue(line.contains("forfeit"), "the decision verb")
 }
 
-runner.run("NoShowTaxPromptVoice skipLine picks the right reason variant (V0.84 C3)") {
-    let texted = NoShowTaxPromptVoice.skipLine(
-        mascotName: "Borat",
-        displayName: "Alex",
-        reason: "texted"
-    )
-    runner.assertTrue(texted.contains("texted"))
-    runner.assertTrue(texted.contains("Alex"))
-    let away = NoShowTaxPromptVoice.skipLine(
-        mascotName: "Borat",
-        displayName: "Alex",
-        reason: "away"
-    )
-    runner.assertTrue(away.contains("away"))
-    runner.assertTrue(away.contains("Alex"))
-    let unknown = NoShowTaxPromptVoice.skipLine(
-        mascotName: "Borat",
-        displayName: "Alex",
-        reason: "unknown"
-    )
-    runner.assertTrue(unknown.contains("waived"), "unknown reason falls back to a waived caption")
+runner.run("ArrivalPromptVoice skipLine picks the right reason variant (V0.85)") {
+    let texted = ArrivalPromptVoice.skipLine(mascotName: "Felty", displayName: "Chontel", reason: "texted")
+    let away = ArrivalPromptVoice.skipLine(mascotName: "Felty", displayName: "Chontel", reason: "away")
+    let unknown = ArrivalPromptVoice.skipLine(mascotName: "Felty", displayName: "Chontel", reason: "gibberish")
+    runner.assertTrue(texted.contains("texted"), "texted variant")
+    runner.assertTrue(away.contains("away"), "away variant")
+    runner.assertTrue(unknown.contains("returned"), "default variant returns the deposit")
+    for line in [texted, away, unknown] {
+        runner.assertTrue(line.contains("Felty"), "mascot attribution")
+    }
 }
 
-runner.run("NoShowTaxCandidate decodes server shape (user_id, display_name, tax_amount, within_grace) (V0.84 C3)") {
+runner.run("ArrivalPromptVoice.checkedInLine is the reclaim receipt (V0.85)") {
+    let line = ArrivalPromptVoice.checkedInLine(mascotName: "Felty", depositAmount: 200)
+    runner.assertTrue(line.contains("Felty"), "mascot attribution")
+    runner.assertTrue(line.contains("200"), "deposit amount")
+    runner.assertTrue(line.contains("back in your balance"), "the deposit is back")
+}
+
+runner.run("SeatDepositCandidate decodes server shape (user_id, display_name, deposit_amount, status, within_grace) (V0.85)") {
     let json = """
     {
-      "user_id": "11111111-2222-3333-4444-555555555555",
-      "display_name": "Sam",
-      "tax_amount": 200,
+      "user_id": "33333333-3333-3333-3333-333333333333",
+      "display_name": "Connor",
+      "deposit_amount": 200,
+      "status": "held",
       "within_grace": true
     }
     """
-    let data = json.data(using: .utf8)!
-    let candidate = try JSONDecoder().decode(NoShowTaxCandidate.self, from: data)
-    runner.assertEqual(candidate.userId.uuidString, "11111111-2222-3333-4444-555555555555")
-    runner.assertEqual(candidate.displayName, "Sam")
-    runner.assertEqual(candidate.taxAmount, 200)
-    runner.assertTrue(candidate.withinGrace)
-    runner.assertTrue(candidate.id == candidate.userId, "Identifiable id matches userId")
+    let candidate = try JSONDecoder().decode(SeatDepositCandidate.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(candidate.userId.uuidString, "33333333-3333-3333-3333-333333333333")
+    runner.assertEqual(candidate.displayName, "Connor")
+    runner.assertEqual(candidate.depositAmount, 200)
+    runner.assertEqual(candidate.status, "held")
+    runner.assertTrue(candidate.withinGrace, "within grace")
+    runner.assertTrue(candidate.id == candidate.userId, "Identifiable by userId")
 }
 
-runner.run("NoShowTaxCandidate tolerates missing fields (pre-082 server shape) (V0.84 C3)") {
+runner.run("SeatDepositCandidate tolerates missing fields (pre-085 server shape) (V0.85)") {
     let json = """
     {
-      "user_id": "11111111-2222-3333-4444-555555555555"
+      "user_id": "33333333-3333-3333-3333-333333333333"
     }
     """
-    let data = json.data(using: .utf8)!
-    let candidate = try JSONDecoder().decode(NoShowTaxCandidate.self, from: data)
-    runner.assertTrue(candidate.displayName == "Member", "display name falls back to 'Member'")
-    runner.assertTrue(candidate.taxAmount == 0, "missing tax amount defaults to 0")
-    runner.assertFalse(candidate.withinGrace, "missing within_grace defaults to false")
+    let candidate = try JSONDecoder().decode(SeatDepositCandidate.self, from: json.data(using: .utf8)!)
+    runner.assertTrue(candidate.displayName == "Member", "missing display_name → Member")
+    runner.assertTrue(candidate.depositAmount == 0, "missing amount → 0")
+    runner.assertTrue(candidate.status == "held", "missing status → held")
+    runner.assertFalse(candidate.withinGrace, "missing within_grace → false")
 }
 
-runner.run("Room decodes no_show_tax_* defaults when columns absent (V0.84 C3)") {
+runner.run("SeatDeposit decodes migration-085 row shape (id, amount, status, held_at) (V0.85)") {
+    let json = """
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "amount": 350,
+      "status": "held",
+      "held_at": "2026-08-20T10:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let deposit = try decoder.decode(SeatDeposit.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(deposit.amount, 350)
+    runner.assertTrue(deposit.status == .held)
+    runner.assertFalse(deposit.isResolved, "a held deposit is unresolved")
+}
+
+runner.run("Room decodes seat_deposit_* defaults when columns absent (V0.85)") {
     let json = """
     {
       "id": "11111111-1111-1111-1111-111111111111",
@@ -4157,13 +4189,13 @@ runner.run("Room decodes no_show_tax_* defaults when columns absent (V0.84 C3)")
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
-    runner.assertTrue(room.noShowTaxAmount == 200, "missing tax amount defaults to 200")
-    runner.assertTrue(room.noShowTaxTrigger == .prompt, "missing trigger defaults to .prompt")
-    runner.assertTrue(room.noShowTaxGraceMinutes == 10, "missing grace defaults to 10")
-    runner.assertTrue(room.noShowTaxDestination == .nextPot, "missing destination defaults to .nextPot")
+    runner.assertTrue(room.seatDepositAmount == 200, "missing deposit amount defaults to 200")
+    runner.assertTrue(room.seatDepositTrigger == .escrow, "missing trigger defaults to .escrow")
+    runner.assertTrue(room.seatDepositGraceMinutes == 10, "missing grace defaults to 10")
+    runner.assertTrue(room.seatDepositDestination == .nextPot, "missing destination defaults to .nextPot")
 }
 
-runner.run("Room decodes no_show_tax_* overrides from server shape (V0.84 C3)") {
+runner.run("Room decodes seat_deposit_* overrides from server shape (V0.85)") {
     let json = """
     {
       "id": "11111111-1111-1111-1111-111111111111",
@@ -4177,22 +4209,100 @@ runner.run("Room decodes no_show_tax_* overrides from server shape (V0.84 C3)") 
       "is_live": true,
       "join_starting_bonus": 200,
       "user_role": "host",
-      "no_show_tax_amount": 350,
-      "no_show_tax_trigger": "manual",
-      "no_show_tax_grace_minutes": 25,
-      "no_show_tax_destination": "host_charity_pot"
+      "seat_deposit_amount": 350,
+      "seat_deposit_trigger": "off",
+      "seat_deposit_grace_minutes": 25,
+      "seat_deposit_destination": "host_charity_pot"
     }
     """
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
-    runner.assertEqual(room.noShowTaxAmount, 350)
-    runner.assertEqual(room.noShowTaxTrigger, .manual)
-    runner.assertEqual(room.noShowTaxGraceMinutes, 25)
-    runner.assertEqual(room.noShowTaxDestination, .hostCharityPot)
+    runner.assertEqual(room.seatDepositAmount, 350)
+    runner.assertEqual(room.seatDepositTrigger, .off)
+    runner.assertEqual(room.seatDepositGraceMinutes, 25)
+    runner.assertEqual(room.seatDepositDestination, .hostCharityPot)
 }
 
-runner.runAsync("InMemoryRoomStore.updateRoom passthrough carries the four no_show_tax_* values (V0.84 C3)") {
+runner.run("Room decodes legacy V0.84 no_show_tax_* raws onto the V0.85 fields (V0.85)") {
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Pre-085 Room",
+      "mascot_name": "Felty",
+      "mascot_personality": "professional",
+      "mascot_political_ideology": "order",
+      "created_by": "22222222-2222-2222-2222-222222222222",
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "is_live": true,
+      "join_starting_bonus": 200,
+      "user_role": "host",
+      "no_show_tax_amount": 450,
+      "no_show_tax_trigger": "manual",
+      "no_show_tax_grace_minutes": 30,
+      "no_show_tax_destination": "split"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let room = try decoder.decode(Room.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(room.seatDepositAmount, 450)
+    runner.assertTrue(room.seatDepositTrigger == .escrow, "legacy manual → .escrow (V0.84 raws collapse)")
+    runner.assertEqual(room.seatDepositGraceMinutes, 30)
+    runner.assertEqual(room.seatDepositDestination, .split)
+}
+
+runner.runAsync("InMemoryRoomStore escrow round-trip: claim holds, check-in returns, candidates drain (V0.85)") {
+    let store = InMemoryRoomStore()
+    let hosted = try await store.fetchRooms().first!
+    guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+        runner.assertTrue(false, "seeded room has an active event")
+        return
+    }
+    try await store.claimSeatWithDeposit(eventId: event.id)
+    var deposit = try await store.fetchMySeatDeposit(eventId: event.id)
+    runner.assertTrue(deposit?.status == .held, "claim holds the deposit")
+    runner.assertTrue(deposit?.amount == hosted.seatDepositAmount, "held amount mirrors the room's deposit")
+    var candidates = try await store.loadArrivalCandidates(eventId: event.id)
+    runner.assertTrue(candidates.count == 1, "one arrival candidate while held")
+    try await store.checkInSeat(eventId: event.id)
+    deposit = try await store.fetchMySeatDeposit(eventId: event.id)
+    runner.assertTrue(deposit?.status == .returned, "check-in returns the deposit")
+    candidates = try await store.loadArrivalCandidates(eventId: event.id)
+    runner.assertTrue(candidates.isEmpty, "no candidates after check-in")
+}
+
+runner.runAsync("InMemoryRoomStore forfeit + waive resolve held deposits (V0.85)") {
+    // Forfeit leg — fresh store.
+    let forfeitStore = InMemoryRoomStore()
+    let hosted = try await forfeitStore.fetchRooms().first!
+    guard let event = try await forfeitStore.fetchActiveEvent(roomId: hosted.id) else {
+        runner.assertTrue(false, "seeded room has an active event")
+        return
+    }
+    try await forfeitStore.claimSeatWithDeposit(eventId: event.id)
+    try await forfeitStore.forfeitSeatDeposit(eventId: event.id, memberId: hosted.createdBy)
+    var deposit = try await forfeitStore.fetchMySeatDeposit(eventId: event.id)
+    runner.assertTrue(deposit?.status == .forfeited, "forfeit resolves to .forfeited")
+    runner.assertTrue(try await forfeitStore.loadArrivalCandidates(eventId: event.id).isEmpty, "forfeit drains candidates")
+
+    // Waive leg — fresh store (claim is idempotent per event+member,
+    // so a forfeited row blocks re-claim on the same store).
+    let waiveStore = InMemoryRoomStore()
+    let hosted2 = try await waiveStore.fetchRooms().first!
+    guard let event2 = try await waiveStore.fetchActiveEvent(roomId: hosted2.id) else {
+        runner.assertTrue(false, "seeded room has an active event")
+        return
+    }
+    try await waiveStore.claimSeatWithDeposit(eventId: event2.id)
+    try await waiveStore.waiveSeatDeposit(eventId: event2.id, memberId: hosted2.createdBy)
+    deposit = try await waiveStore.fetchMySeatDeposit(eventId: event2.id)
+    runner.assertTrue(deposit?.status == .waived, "waive resolves to .waived")
+    runner.assertTrue(try await waiveStore.loadArrivalCandidates(eventId: event2.id).isEmpty, "waive drains candidates")
+}
+
+runner.runAsync("InMemoryRoomStore updateRoom passthrough carries the four seat_deposit_* values (V0.85)") {
     let store = InMemoryRoomStore()
     let hosted = try await store.fetchRooms().first!
     let updated = try await store.updateRoom(
@@ -4209,22 +4319,20 @@ runner.runAsync("InMemoryRoomStore.updateRoom passthrough carries the four no_sh
         calendarAutoAddHost: hosted.calendarAutoAddHost,
         socialPreferencesEnabled: hosted.socialPreferencesEnabled,
         autoCloseHours: hosted.autoCloseHours,
-        noShowTaxAmount: 450,
-        noShowTaxTrigger: .manual,
-        noShowTaxGraceMinutes: 30,
-        noShowTaxDestination: .split
+        seatDepositAmount: 450,
+        seatDepositTrigger: .off,
+        seatDepositGraceMinutes: 30,
+        seatDepositDestination: .split
     )
-    runner.assertEqual(updated.noShowTaxAmount, 450)
-    runner.assertEqual(updated.noShowTaxTrigger, .manual)
-    runner.assertEqual(updated.noShowTaxGraceMinutes, 30)
-    runner.assertEqual(updated.noShowTaxDestination, .split)
-    // And the persisted Room mirrors the four values on the next
-    // rooms-list read.
+    runner.assertEqual(updated.seatDepositAmount, 450)
+    runner.assertTrue(updated.seatDepositTrigger == .off)
+    runner.assertEqual(updated.seatDepositGraceMinutes, 30)
+    runner.assertTrue(updated.seatDepositDestination == .split)
     let reread = try await store.fetchRooms().first { $0.id == hosted.id }
-    runner.assertEqual(reread?.noShowTaxAmount, 450)
-    runner.assertEqual(reread?.noShowTaxTrigger, .manual)
-    runner.assertEqual(reread?.noShowTaxGraceMinutes, 30)
-    runner.assertEqual(reread?.noShowTaxDestination, .split)
+    runner.assertEqual(reread?.seatDepositAmount, 450)
+    runner.assertTrue(reread?.seatDepositTrigger == .off)
+    runner.assertEqual(reread?.seatDepositGraceMinutes, 30)
+    runner.assertTrue(reread?.seatDepositDestination == .split)
 }
 
 // MARK: - Summary

@@ -1,54 +1,54 @@
 //
-//  NoShowTaxPromptCard.swift
+//  ArrivalCard.swift
 //  GamesRoom
 //
-//  V0.84 C3 — host-only no-show tax prompt (migration 082).
+//  V0.85 — host-only arrival card at session start (migration
+//  085). The seat deposit reframes the V0.84 C3 no-show tax: a
+//  deposit needs only a reclaim, so the card asks about held
+//  deposits whose members never tapped "I'm here".
 //
 //  Rendered in `RoomDetailView.scrollBody` when the room is
 //  live (active event whose `playedAt <= now`, not settled),
-//  `room.noShowTaxTrigger == .prompt`, the caller is the host,
-//  and the candidate list is non-empty. The card surfaces one
-//  row per claimed-but-absent member and lets the host decide
-//  Apply / Skip (texted) / Skip (away) per row in isolation.
-//  The substrate line is "the host always decides; the system
-//  never decides alone" (Carnegie 3.1 — don't argue; 4.5 —
-//  save face).
+//  `room.seatDepositTrigger == .escrow`, the caller is the
+//  host, and the candidate list is non-empty. One row per
+//  unresolved candidate; the host decides Forfeit / Skip
+//  (texted) / Skip (away) per row in isolation. The substrate
+//  line is "the host always decides; the system never decides
+//  alone" (Carnegie 3.1 — don't argue; 4.5 — save face).
 //
-//  The prompt copy is the mascot's, never a neutral system
-//  message. `NoShowTaxPromptVoice.promptLine(mascotName:
-//  displayName: taxAmount:)` is the source of truth for the
-//  header text — the Swift string interpolation always takes
-//  the mascot name from the caller (per the locked directive
-//  "the mascot is the only system voice").
+//  The copy is the mascot's, never a neutral system message.
+//  `ArrivalPromptVoice.promptLine(mascotName:displayName:
+//  depositAmount:)` is the source of truth for the header text
+//  (per the locked directive "the mascot is the only system
+//  voice").
 //
-//  Apply calls `roomService.applyNoShowTax(eventId:userId:
-//  reason:)`; Skip (texted) / Skip (away) call
-//  `roomService.skipNoShowTax(eventId:userId:reason:)`. Both
-//  remove the row from the service's cached candidate list so
-//  the next render omits it. Errors surface via the existing
+//  Forfeit calls `roomService.forfeitSeatDeposit(eventId:
+//  memberId:)`; Skip calls `roomService.waiveSeatDeposit(...)`.
+//  Both remove the row from the service's cached candidate list
+//  so the next render omits it. Errors surface via the existing
 //  `seatActionError` alert pattern.
 //
 
 import SwiftUI
 
-struct NoShowTaxPromptCard: View {
+struct ArrivalCard: View {
     let room: Room
     let event: Event
-    let candidates: [NoShowTaxCandidate]
-    let onApply: (NoShowTaxCandidate) async -> Void
-    let onSkipTexted: (NoShowTaxCandidate) async -> Void
-    let onSkipAway: (NoShowTaxCandidate) async -> Void
+    let candidates: [SeatDepositCandidate]
+    let onForfeit: (SeatDepositCandidate) async -> Void
+    let onSkipTexted: (SeatDepositCandidate) async -> Void
+    let onSkipAway: (SeatDepositCandidate) async -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
             HStack(spacing: 8) {
                 Image(systemName: Theme.Icon.handRaisedFill)
                     .foregroundStyle(Theme.Palette.accent)
-                Text("No-show tax")
+                Text("Arrivals")
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText)
             }
-            Text("A claimed seat went empty. You decide what the room does with the chip.")
+            Text("Held deposits waiting on a check-in. You decide what comes back.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             VStack(spacing: 0) {
@@ -71,22 +71,22 @@ struct NoShowTaxPromptCard: View {
     }
 
     @ViewBuilder
-    private func candidateRow(_ candidate: NoShowTaxCandidate) -> some View {
+    private func candidateRow(_ candidate: SeatDepositCandidate) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(
-                NoShowTaxPromptVoice.promptLine(
+                ArrivalPromptVoice.promptLine(
                     mascotName: room.mascotName,
                     displayName: candidate.displayName,
-                    taxAmount: candidate.taxAmount
+                    depositAmount: candidate.depositAmount
                 )
             )
             .font(Theme.Typography.body)
             .foregroundStyle(Theme.Palette.primaryText)
             HStack(spacing: 8) {
                 Button {
-                    Task { await onApply(candidate) }
+                    Task { await onForfeit(candidate) }
                 } label: {
-                    Text("Apply")
+                    Text("Forfeit")
                         .font(Theme.Typography.caption.weight(.semibold))
                         .foregroundStyle(Theme.Palette.background)
                         .padding(.horizontal, 12)
@@ -97,7 +97,7 @@ struct NoShowTaxPromptCard: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Apply \(candidate.taxAmount) CC no-show tax for \(candidate.displayName)"))
+                .accessibilityLabel(Text("Forfeit \(candidate.displayName)'s \(candidate.depositAmount) CC seat deposit"))
                 Button {
                     Task { await onSkipTexted(candidate) }
                 } label: {
@@ -112,7 +112,7 @@ struct NoShowTaxPromptCard: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Skip no-show tax for \(candidate.displayName) — they were texted"))
+                .accessibilityLabel(Text("Return \(candidate.displayName)'s deposit — they were texted"))
                 Button {
                     Task { await onSkipAway(candidate) }
                 } label: {
@@ -127,7 +127,7 @@ struct NoShowTaxPromptCard: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Skip no-show tax for \(candidate.displayName) — they were away"))
+                .accessibilityLabel(Text("Return \(candidate.displayName)'s deposit — they were away"))
             }
         }
         .padding(Theme.Layout.cardInset)

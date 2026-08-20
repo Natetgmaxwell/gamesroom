@@ -120,7 +120,7 @@
 		AAAAAAAA0000000000000498 /* ScanSettleResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000497 /* ScanSettleResult.swift */; };
 		AAAAAAAA000000000000049C /* MascotVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000049B /* MascotVoiceService.swift */; };
 		AAAAAAAA0000000000000500 /* TonightStarPick.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000501 /* TonightStarPick.swift */; };
-		AAAAAAAA0000000000000502 /* NoShowTaxPromptCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA00000000000004B1 /* NoShowTaxPromptCard.swift */; };
+		AAAAAAAA0000000000000502 /* ArrivalCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA00000000000004B1 /* ArrivalCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -280,7 +280,7 @@
 		AAAAAAAA0000000000000497 /* ScanSettleResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleResult.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000049B /* MascotVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotVoiceService.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000501 /* TonightStarPick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonightStarPick.swift; sourceTree = "<group>"; };
-		AAAAAAAA00000000000004B1 /* NoShowTaxPromptCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoShowTaxPromptCard.swift; sourceTree = "<group>"; };
+		AAAAAAAA00000000000004B1 /* ArrivalCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArrivalCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -470,7 +470,7 @@
 				AAAAAAAA0000000000000484 /* CAHCardScanSheet.swift */,
 				AAAAAAAA0000000000000491 /* ScanCameraView.swift */,
 				AAAAAAAA000000000000048B /* SeasonStatCardView.swift */,
-				AAAAAAAA00000000000004B1 /* NoShowTaxPromptCard.swift */,
+				AAAAAAAA00000000000004B1 /* ArrivalCard.swift */,
 				AAAAAAAA00000000000000FC /* Components */,
 			);
 		path = Views;
@@ -784,7 +784,7 @@
 				AAAAAAAA000000000000049C /* MascotVoiceService.swift in Sources */,
 				AAAAAAAA0000000000000500 /* TonightStarPick.swift in Sources */,
 				AAAAAAAA000000000000011B /* HostOpenerSuggestion.swift in Sources */,
-				AAAAAAAA0000000000000502 /* NoShowTaxPromptCard.swift in Sources */,
+				AAAAAAAA0000000000000502 /* ArrivalCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -101,10 +101,6 @@ struct Room: Identifiable, Codable, Hashable {
     /// the same shelf.
     let installedPackSlugs: [String]?
 
-    /// F-MVP-04 — per-room seat deposit amount in virtual points.
-    /// Zero means deposits are disabled (the default). When non-zero,
-    /// claiming a seat holds this many points until the host settles.
-    let seatDepositAmount: Int
     /// Per-room opt-in for sharing the member's own Drowning season-end award.
     /// When true, other opted-in members + the host can read this
     /// member's Drowning row (RLS-gated by migration 045). Default false.
@@ -132,36 +128,33 @@ struct Room: Identifiable, Codable, Hashable {
     /// 1...72 server-side. Defaults to 8 (the V0.83 default).
     let autoCloseHours: Int
 
-    /// V0.84 C3 — no-show tax amount in virtual points (migration
-    /// 082). Host-adjustable from Room Settings → Operations;
-    /// bounded 0...1000 server-side. Defaults to 200 (the
-    /// V0.84 C3 default). Drives the `tax_amount` column on every
-    /// row of `list_no_show_candidates(p_event_id)` and the
-    /// `apply_no_show_tax` RPC's recorded ledger amount.
-    let noShowTaxAmount: Int
+    /// V0.85 — seat deposit amount in CC (migration 085; renames
+    /// 082's `no_show_tax_amount`, absorbing the dormant 043
+    /// `seat_deposit_amount`). Host-adjustable from Room Settings
+    /// → Seat deposit; bounded 0...1000 server-side. Defaults to
+    /// 200. The amount that leaves the member's balance into
+    /// escrow at claim and returns on the "I'm here" tap.
+    let seatDepositAmount: Int
 
-    /// V0.84 C3 — how the no-show tax surfaces at session start
-    /// (migration 082). `.prompt` is the canonical V0.84 C3 mode;
-    /// `.auto` skips the prompt and falls back to the dormant 043
-    /// settle path; `.manual` exposes apply-only from the
-    /// Operations sub-sheet (a future slice). Defaults to
-    /// `.prompt`. The SwiftUI gate on `NoShowTaxPromptCard`
-    /// renders only when this is `.prompt` and there are
-    /// candidates.
-    let noShowTaxTrigger: NoShowTaxTrigger
+    /// V0.85 — whether the deposit escrow runs (migration 085).
+    /// `.escrow` (default) is the canonical V0.85 mode: claim
+    /// charges the deposit, arrival returns it, the host decides
+    /// forfeits. `.off` disables deposits — claims are plain RSVP
+    /// upserts. The old auto/prompt/manual raws decode to
+    /// `.escrow` (the host forfeit-confirm replaces them).
+    let seatDepositTrigger: SeatDepositTrigger
 
-    /// V0.84 C3 — minutes after `played_at` during which a no-show
-    /// is still considered "within grace" for the prompt card
-    /// (migration 082). Host-adjustable; bounded 0...120. Defaults
-    /// to 10 (the V0.84 C3 default).
-    let noShowTaxGraceMinutes: Int
+    /// V0.85 — minutes after `played_at` during which a missing
+    /// check-in is still "within grace" on the arrival card
+    /// (migration 085). Host-adjustable; bounded 0...120.
+    /// Defaults to 10.
+    let seatDepositGraceMinutes: Int
 
-    /// V0.84 C3 — where the forfeited no-show chip lands (migration
-    /// 082). `.nextPot` is the locked default; the chip moves to
-    /// the room's next event pot at its creation. `.hostCharityPot`
-    /// and `.split` record the destination in `meta` so a
-    /// downstream slice consumes it.
-    let noShowTaxDestination: NoShowTaxDestination
+    /// V0.85 — where a forfeited deposit lands (migration 085).
+    /// `.nextPot` is the locked default; the chips ride the next
+    /// event's pot. `.hostCharityPot` and `.split` record the
+    /// destination in the ledger row's meta.
+    let seatDepositDestination: SeatDepositDestination
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -186,15 +179,21 @@ struct Room: Identifiable, Codable, Hashable {
         case hostJournal = "host_journal"
         case installedPackSlugs = "installed_pack_slugs"
         case seatDepositAmount = "seat_deposit_amount"
-    case memberDrowningOptIn = "member_drowning_opt_in"
+        case seatDepositTrigger = "seat_deposit_trigger"
+        case seatDepositGraceMinutes = "seat_deposit_grace_minutes"
+        case seatDepositDestination = "seat_deposit_destination"
+        /// V0.85 — pre-085 payloads still carry 082's raws; the
+        /// decoder falls back to these when the renamed keys are
+        /// absent. Encode always writes the V0.85 keys.
+        case legacyNoShowTaxAmount = "no_show_tax_amount"
+        case legacyNoShowTaxTrigger = "no_show_tax_trigger"
+        case legacyNoShowTaxGraceMinutes = "no_show_tax_grace_minutes"
+        case legacyNoShowTaxDestination = "no_show_tax_destination"
+        case memberDrowningOptIn = "member_drowning_opt_in"
     case notificationsEnabled = "notifications_enabled"
     case overlapCount = "overlap_count"
     case overlapNames = "overlap_names"
     case autoCloseHours = "auto_close_hours"
-    case noShowTaxAmount = "no_show_tax_amount"
-    case noShowTaxTrigger = "no_show_tax_trigger"
-    case noShowTaxGraceMinutes = "no_show_tax_grace_minutes"
-    case noShowTaxDestination = "no_show_tax_destination"
     }
 
     init(
@@ -219,16 +218,15 @@ struct Room: Identifiable, Codable, Hashable {
         memberInviteQuota: Int = 3,
         hostJournal: String? = nil,
         installedPackSlugs: [String]? = nil,
-        seatDepositAmount: Int = 0,
+        seatDepositAmount: Int = 200,
+        seatDepositTrigger: SeatDepositTrigger = .escrow,
+        seatDepositGraceMinutes: Int = 10,
+        seatDepositDestination: SeatDepositDestination = .nextPot,
         memberDrowningOptIn: Bool = false,
         notificationsEnabled: Bool = false,
         overlapCount: Int = 0,
         overlapNames: [String] = [],
-        autoCloseHours: Int = 8,
-        noShowTaxAmount: Int = 200,
-        noShowTaxTrigger: NoShowTaxTrigger = .prompt,
-        noShowTaxGraceMinutes: Int = 10,
-        noShowTaxDestination: NoShowTaxDestination = .nextPot
+        autoCloseHours: Int = 8
     ) {
         self.id = id
         self.name = name
@@ -252,15 +250,14 @@ struct Room: Identifiable, Codable, Hashable {
         self.hostJournal = hostJournal
         self.installedPackSlugs = installedPackSlugs
         self.seatDepositAmount = seatDepositAmount
+        self.seatDepositTrigger = seatDepositTrigger
+        self.seatDepositGraceMinutes = seatDepositGraceMinutes
+        self.seatDepositDestination = seatDepositDestination
         self.memberDrowningOptIn = memberDrowningOptIn
         self.notificationsEnabled = notificationsEnabled
         self.overlapCount = overlapCount
         self.overlapNames = overlapNames
         self.autoCloseHours = autoCloseHours
-        self.noShowTaxAmount = noShowTaxAmount
-        self.noShowTaxTrigger = noShowTaxTrigger
-        self.noShowTaxGraceMinutes = noShowTaxGraceMinutes
-        self.noShowTaxDestination = noShowTaxDestination
     }
 
     init(from decoder: Decoder) throws {
@@ -286,17 +283,61 @@ struct Room: Identifiable, Codable, Hashable {
         memberInviteQuota = try c.decodeIfPresent(Int.self, forKey: .memberInviteQuota) ?? 3
         hostJournal = try c.decodeIfPresent(String.self, forKey: .hostJournal)
         installedPackSlugs = try c.decodeIfPresent([String].self, forKey: .installedPackSlugs)
-        seatDepositAmount = try c.decodeIfPresent(Int.self, forKey: .seatDepositAmount) ?? 0
+        seatDepositAmount = try c.decodeIfPresent(Int.self, forKey: .seatDepositAmount)
+            ?? c.decodeIfPresent(Int.self, forKey: .legacyNoShowTaxAmount) ?? 200
+        let triggerRaw = try c.decodeIfPresent(String.self, forKey: .seatDepositTrigger)
+            ?? c.decodeIfPresent(String.self, forKey: .legacyNoShowTaxTrigger)
+            ?? SeatDepositTrigger.escrow.rawValue
+        seatDepositTrigger = SeatDepositTrigger(rawValue: triggerRaw) ?? .escrow
+        seatDepositGraceMinutes = try c.decodeIfPresent(Int.self, forKey: .seatDepositGraceMinutes)
+            ?? c.decodeIfPresent(Int.self, forKey: .legacyNoShowTaxGraceMinutes) ?? 10
+        let destRaw = try c.decodeIfPresent(String.self, forKey: .seatDepositDestination)
+            ?? c.decodeIfPresent(String.self, forKey: .legacyNoShowTaxDestination)
+            ?? SeatDepositDestination.nextPot.rawValue
+        seatDepositDestination = SeatDepositDestination(rawValue: destRaw) ?? .nextPot
         memberDrowningOptIn = try c.decodeIfPresent(Bool.self, forKey: .memberDrowningOptIn) ?? false
         notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
         overlapCount = try c.decodeIfPresent(Int.self, forKey: .overlapCount) ?? 0
         overlapNames = try c.decodeIfPresent([String].self, forKey: .overlapNames) ?? []
         autoCloseHours = try c.decodeIfPresent(Int.self, forKey: .autoCloseHours) ?? 8
-        noShowTaxAmount = try c.decodeIfPresent(Int.self, forKey: .noShowTaxAmount) ?? 200
-        let triggerRaw = try c.decodeIfPresent(String.self, forKey: .noShowTaxTrigger) ?? NoShowTaxTrigger.prompt.rawValue
-        noShowTaxTrigger = NoShowTaxTrigger(rawValue: triggerRaw) ?? .prompt
-        noShowTaxGraceMinutes = try c.decodeIfPresent(Int.self, forKey: .noShowTaxGraceMinutes) ?? 10
-        let destRaw = try c.decodeIfPresent(String.self, forKey: .noShowTaxDestination) ?? NoShowTaxDestination.nextPot.rawValue
-        noShowTaxDestination = NoShowTaxDestination(rawValue: destRaw) ?? .nextPot
+    }
+
+    /// V0.85 — encode always writes the renamed seat_deposit_* keys
+    /// (never the legacy no_show_tax_* raws). The legacy CodingKeys
+    /// exist only for decode fallback, so a custom encoder is
+    /// required — synthesized Encodable would choke on the
+    /// property-less legacy cases.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(mascotName, forKey: .mascotName)
+        try c.encode(mascotPersonality, forKey: .mascotPersonality)
+        try c.encode(mascotPoliticalIdeology, forKey: .mascotPoliticalIdeology)
+        try c.encodeIfPresent(mascotApiKey, forKey: .mascotApiKey)
+        try c.encode(createdBy, forKey: .createdBy)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encode(isLive, forKey: .isLive)
+        try c.encodeIfPresent(nextEventDescription, forKey: .nextEventDescription)
+        try c.encode(joinStartingBonus, forKey: .joinStartingBonus)
+        try c.encode(userRole, forKey: .userRole)
+        try c.encode(briefing48hEnabled, forKey: .briefing48hEnabled)
+        try c.encode(calendarAutoAddHost, forKey: .calendarAutoAddHost)
+        try c.encode(socialPreferencesEnabled, forKey: .socialPreferencesEnabled)
+        try c.encode(socialNarrationEnabled, forKey: .socialNarrationEnabled)
+        try c.encode(maxSeats, forKey: .maxSeats)
+        try c.encode(memberInviteQuota, forKey: .memberInviteQuota)
+        try c.encodeIfPresent(hostJournal, forKey: .hostJournal)
+        try c.encodeIfPresent(installedPackSlugs, forKey: .installedPackSlugs)
+        try c.encode(seatDepositAmount, forKey: .seatDepositAmount)
+        try c.encode(seatDepositTrigger, forKey: .seatDepositTrigger)
+        try c.encode(seatDepositGraceMinutes, forKey: .seatDepositGraceMinutes)
+        try c.encode(seatDepositDestination, forKey: .seatDepositDestination)
+        try c.encode(memberDrowningOptIn, forKey: .memberDrowningOptIn)
+        try c.encode(notificationsEnabled, forKey: .notificationsEnabled)
+        try c.encode(overlapCount, forKey: .overlapCount)
+        try c.encode(overlapNames, forKey: .overlapNames)
+        try c.encode(autoCloseHours, forKey: .autoCloseHours)
     }
 }

@@ -109,10 +109,13 @@ struct UpsertCasinoConfigParams: Encodable, Sendable {
     let p_standard_presets: Bool
 }
 
-struct NoShowTaxParams: Encodable, Sendable {
+struct SeatDepositMemberParams: Encodable, Sendable {
     let p_event_id: String
-    let p_user_id: String
-    let p_reason: String
+    let p_member_id: String
+}
+
+struct SeatDepositEventParams: Encodable, Sendable {
+    let p_event_id: String
 }
 
 struct MarkMemberNotesConsumedParams: Encodable, Sendable {
@@ -789,13 +792,13 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// p_max_seats, p_member_invite_quota, p_join_starting_bonus,
     /// p_social_narration_enabled, p_briefing_48h_enabled,
     /// p_calendar_auto_add_host, p_social_preferences_enabled,
-    /// p_auto_close_hours, p_no_show_tax_amount,
-    /// p_no_show_tax_trigger, p_no_show_tax_grace_minutes,
-    /// p_no_show_tax_destination)` (migration 020 + V0.8 extensions
-    /// + V0.83 auto-close window + V0.84 C3 no-show-tax settings,
-    /// migration 082). The server resolves the host check via the
-    /// `is_host_of_room(p_room_id)` helper and throws on non-host
-    /// writes.
+    /// p_auto_close_hours, p_seat_deposit_amount,
+    /// p_seat_deposit_trigger, p_seat_deposit_grace_minutes,
+    /// p_seat_deposit_destination)` (migration 020 + V0.8 extensions
+    /// + V0.83 auto-close window + V0.85 seat-deposit escrow
+    /// settings, migration 085). The server resolves the host check
+    /// via the `is_host_of_room(p_room_id)` helper and throws on
+    /// non-host writes.
     func updateRoom(
         id: UUID,
         name: String,
@@ -810,10 +813,10 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
         autoCloseHours: Int,
-        noShowTaxAmount: Int,
-        noShowTaxTrigger: NoShowTaxTrigger,
-        noShowTaxGraceMinutes: Int,
-        noShowTaxDestination: NoShowTaxDestination
+        seatDepositAmount: Int,
+        seatDepositTrigger: SeatDepositTrigger,
+        seatDepositGraceMinutes: Int,
+        seatDepositDestination: SeatDepositDestination
     ) async throws -> Room {
         let rows: [Room] = try await SupabaseClientProvider.shared
             .rpc("update_room_settings", params: [
@@ -830,10 +833,10 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 "p_calendar_auto_add_host": String(calendarAutoAddHost),
                 "p_social_preferences_enabled": String(socialPreferencesEnabled),
                 "p_auto_close_hours": String(autoCloseHours),
-                "p_no_show_tax_amount": String(noShowTaxAmount),
-                "p_no_show_tax_trigger": noShowTaxTrigger.rawValue,
-                "p_no_show_tax_grace_minutes": String(noShowTaxGraceMinutes),
-                "p_no_show_tax_destination": noShowTaxDestination.rawValue
+                "p_seat_deposit_amount": String(seatDepositAmount),
+                "p_seat_deposit_trigger": seatDepositTrigger.rawValue,
+                "p_seat_deposit_grace_minutes": String(seatDepositGraceMinutes),
+                "p_seat_deposit_destination": seatDepositDestination.rawValue
             ])
             .execute()
             .value
@@ -946,17 +949,58 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .value as Void
     }
 
-    // MARK: No-show tax prompt (V0.84 C3 — migration 082)
+    // MARK: Seat deposit escrow (V0.85 — migration 085)
 
-    /// V0.84 C3 — host-only. The live RPC is
-    /// `list_no_show_candidates(p_event_id)` (migration 082).
-    /// Returns one row per claimed-but-absent member (claimed
-    /// RSVP, no transactions row for the event). Read-only prompt
-    /// source for `NoShowTaxPromptCard`. Throws on non-host
-    /// reads (42501) or unknown event ids (P0002).
-    func loadNoShowCandidates(eventId: UUID) async throws -> [NoShowTaxCandidate] {
-        let rows: [NoShowTaxCandidate] = try await SupabaseClientProvider.shared
-            .rpc("list_no_show_candidates", params: [
+    /// V0.85 — member. The live RPC is
+    /// `claim_seat_with_deposit(p_event_id)` (migration 085).
+    /// Claims the seat and moves the room's deposit from
+    /// points_balance into escrow (held seat_deposits row). Fails
+    /// 42501 when balance < amount — the broke-member path is the
+    /// host-waiver RPC. Idempotent per (event, member).
+    func claimSeatWithDeposit(eventId: UUID) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("claim_seat_with_deposit", params: SeatDepositEventParams(
+                p_event_id: eventId.uuidString
+            ))
+            .execute()
+            .value as Void
+    }
+
+    /// V0.85 — host-only. The live RPC is
+    /// `claim_seat_waived(p_event_id, p_member_id)` (migration
+    /// 085). Claims the seat for a broke member with a zero-amount
+    /// held deposit row. Idempotent per (event, member).
+    func claimSeatWaived(eventId: UUID, memberId: UUID) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("claim_seat_waived", params: SeatDepositMemberParams(
+                p_event_id: eventId.uuidString,
+                p_member_id: memberId.uuidString
+            ))
+            .execute()
+            .value as Void
+    }
+
+    /// V0.85 — member. The live RPC is `check_in_seat(p_event_id)`
+    /// (migration 085). The "I'm here" tap: the held deposit
+    /// returns to points_balance instantly. The reclaim IS the
+    /// attendance check-in. Idempotent.
+    func checkInSeat(eventId: UUID) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("check_in_seat", params: SeatDepositEventParams(
+                p_event_id: eventId.uuidString
+            ))
+            .execute()
+            .value as Void
+    }
+
+    /// V0.85 — host-only. The live RPC is
+    /// `list_arrival_candidates(p_event_id)` (migration 085).
+    /// Returns one row per held deposit (claimed, no check-in, no
+    /// play transaction) at session start. Read-only arrival card
+    /// source. Throws on non-host reads (42501).
+    func loadArrivalCandidates(eventId: UUID) async throws -> [SeatDepositCandidate] {
+        let rows: [SeatDepositCandidate] = try await SupabaseClientProvider.shared
+            .rpc("list_arrival_candidates", params: [
                 "p_event_id": eventId.uuidString
             ])
             .execute()
@@ -964,37 +1008,46 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         return rows
     }
 
-    /// V0.84 C3 — host-only. The live RPC is
-    /// `apply_no_show_tax(p_event_id, p_user_id, p_reason)`
-    /// (migration 082). Forfeits one held seat deposit of the
-    /// room's `no_show_tax_amount` (or, when no deposit was held,
-    /// debits membership points_balance). Idempotent per
-    /// (event, user). Throws on non-host writes (42501).
-    func applyNoShowTax(eventId: UUID, userId: UUID, reason: String?) async throws {
+    /// V0.85 — host-only. The live RPC is
+    /// `forfeit_seat_deposit(p_event_id, p_member_id)` (migration
+    /// 085). The host's confirmed no-show call: the held deposit
+    /// stays out (it left at claim), status forfeited, ledger row
+    /// carries the destination meta. Idempotent.
+    func forfeitSeatDeposit(eventId: UUID, memberId: UUID) async throws {
         _ = try await SupabaseClientProvider.shared
-            .rpc("apply_no_show_tax", params: NoShowTaxParams(
+            .rpc("forfeit_seat_deposit", params: SeatDepositMemberParams(
                 p_event_id: eventId.uuidString,
-                p_user_id: userId.uuidString,
-                p_reason: reason ?? ""
+                p_member_id: memberId.uuidString
             ))
             .execute()
             .value as Void
     }
 
-    /// V0.84 C3 — host-only. The live RPC is
-    /// `skip_no_show_tax(p_event_id, p_user_id, p_reason)`
-    /// (migration 082). Records a waiver row (amount=0) so the
-    /// ledger carries the host's call. `reason` is `texted` or
-    /// `away`. Idempotent per (event, user). Throws on non-host
-    /// writes (42501).
-    func skipNoShowTax(eventId: UUID, userId: UUID, reason: String) async throws {
+    /// V0.85 — host-only. The live RPC is
+    /// `waive_seat_deposit(p_event_id, p_member_id)` (migration
+    /// 085). Returns a held deposit without the member's tap
+    /// (texted / away / arrived-unscanned). Idempotent.
+    func waiveSeatDeposit(eventId: UUID, memberId: UUID) async throws {
         _ = try await SupabaseClientProvider.shared
-            .rpc("skip_no_show_tax", params: NoShowTaxParams(
+            .rpc("waive_seat_deposit", params: SeatDepositMemberParams(
                 p_event_id: eventId.uuidString,
-                p_user_id: userId.uuidString,
-                p_reason: reason
+                p_member_id: memberId.uuidString
             ))
             .execute()
             .value as Void
+    }
+
+    /// V0.85 — the live RPC is `get_my_seat_deposit_status(
+    /// p_event_id)` (migration 085). Returns the caller's deposit
+    /// row for the event (held/returned/forfeited/waived), or
+    /// nil when none exists. Read-only.
+    func fetchMySeatDeposit(eventId: UUID) async throws -> SeatDeposit? {
+        let rows: [SeatDeposit] = try await SupabaseClientProvider.shared
+            .rpc("get_my_seat_deposit_status", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value
+        return rows.first
     }
 }

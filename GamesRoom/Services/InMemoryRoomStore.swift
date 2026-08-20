@@ -94,16 +94,23 @@ actor InMemoryRoomStore: RoomStore {
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
 
-    /// V0.84 C3 — per-event list of claimed-but-absent member
-    /// ids, mirrored from the in-memory `list_no_show_candidates`
+    /// V0.85 — per-event list of unresolved arrival candidates,
+    /// mirrored from the in-memory `list_arrival_candidates`
     /// equivalent. Empty by default; populated lazily by
-    /// `loadNoShowCandidates(eventId:)` so previews can render
-    /// the prompt card with real rows without a network. The
-    /// list is consumed by `applyNoShowTax` / `skipNoShowTax`
-    /// (in-memory mirrors of the migration-082 RPCs) so the
-    /// preview's state machine matches the live server's
-    /// behaviour for tests.
-    private var noShowCandidatesByEvent: [UUID: [NoShowTaxCandidate]]
+    /// `loadArrivalCandidates(eventId:)` so previews can render
+    /// the arrival card with real rows without a network. The
+    /// list is consumed by `forfeitSeatDeposit` /
+    /// `waiveSeatDeposit` (in-memory mirrors of the
+    /// migration-085 RPCs) so the preview's state machine matches
+    /// the live server's behaviour for tests.
+    private var arrivalCandidatesByEvent: [UUID: [SeatDepositCandidate]]
+
+    /// V0.85 — per-event held seat deposits, keyed
+    /// `(eventId, memberId)`. The in-memory escrow: claim inserts
+    /// a held row, check-in / waive / forfeit resolve it. Drives
+    /// `loadArrivalCandidates` and the chair card's "I'm here"
+    /// state without a network.
+    private var seatDepositsByEventMember: [UUID: [UUID: SeatDeposit]]
 
     /// V0.54 — per-event mute flags. `[eventId: [memberId: muted]]`.
     /// Mirrors the `event_rsvps.notifications_muted` server-side
@@ -282,11 +289,11 @@ actor InMemoryRoomStore: RoomStore {
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
         self.rsvps = [:]
-        // V0.84 C3 — empty until the host opens a live session.
-        // `loadNoShowCandidates` seeds a synthetic row from the
-        // seeded roster for previews; the live RPC fills it from
-        // the server's claimed-but-absent rows.
-        self.noShowCandidatesByEvent = [:]
+        // V0.85 — empty until a claim happens. Claim inserts the
+        // held escrow row; the live RPC path fills the same shape
+        // from the server.
+        self.arrivalCandidatesByEvent = [:]
+        self.seatDepositsByEventMember = [:]
         self.eventMutes = [:]
         self.notificationsEnabledByRoom = [:]
         self.packConfigs = [:]
@@ -1244,10 +1251,10 @@ actor InMemoryRoomStore: RoomStore {
         calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
         autoCloseHours: Int,
-        noShowTaxAmount: Int,
-        noShowTaxTrigger: NoShowTaxTrigger,
-        noShowTaxGraceMinutes: Int,
-        noShowTaxDestination: NoShowTaxDestination
+        seatDepositAmount: Int,
+        seatDepositTrigger: SeatDepositTrigger,
+        seatDepositGraceMinutes: Int,
+        seatDepositDestination: SeatDepositDestination
     ) async throws -> Room {
         guard let idx = rooms.firstIndex(where: { $0.id == id }) else {
             throw NSError(
@@ -1277,11 +1284,11 @@ actor InMemoryRoomStore: RoomStore {
             socialNarrationEnabled: socialNarrationEnabled,
             maxSeats: maxSeats,
             memberInviteQuota: memberInviteQuota,
-            autoCloseHours: autoCloseHours,
-            noShowTaxAmount: noShowTaxAmount,
-            noShowTaxTrigger: noShowTaxTrigger,
-            noShowTaxGraceMinutes: noShowTaxGraceMinutes,
-            noShowTaxDestination: noShowTaxDestination
+            seatDepositAmount: seatDepositAmount,
+            seatDepositTrigger: seatDepositTrigger,
+            seatDepositGraceMinutes: seatDepositGraceMinutes,
+            seatDepositDestination: seatDepositDestination,
+            autoCloseHours: autoCloseHours
         )
         rooms[idx] = updated
         return updated
@@ -1324,65 +1331,116 @@ actor InMemoryRoomStore: RoomStore {
             maxSeats: existing.maxSeats,
             memberInviteQuota: existing.memberInviteQuota,
             hostJournal: journal,
-            autoCloseHours: existing.autoCloseHours,
-            noShowTaxAmount: existing.noShowTaxAmount,
-            noShowTaxTrigger: existing.noShowTaxTrigger,
-            noShowTaxGraceMinutes: existing.noShowTaxGraceMinutes,
-            noShowTaxDestination: existing.noShowTaxDestination
+            seatDepositAmount: existing.seatDepositAmount,
+            seatDepositTrigger: existing.seatDepositTrigger,
+            seatDepositGraceMinutes: existing.seatDepositGraceMinutes,
+            seatDepositDestination: existing.seatDepositDestination,
+            autoCloseHours: existing.autoCloseHours
         )
         rooms[idx] = updated
         return updated
     }
 
-    // MARK: No-show tax prompt (V0.84 C3 — migration 082)
+    // MARK: Seat deposit escrow (V0.85 — migration 085)
 
-    /// In-memory mirror of `list_no_show_candidates(p_event_id)`
-    /// (migration 082). Synthesises one row per claimed RSVP
-    /// member of the event's room that has no transactions row
-    /// for the event — the V0.84 C3 prompt card source. Empty
-    /// when the room has no roster or every member has settled.
-    /// The tax amount rides the room's `noShowTaxAmount`.
-    func loadNoShowCandidates(eventId: UUID) async throws -> [NoShowTaxCandidate] {
-        guard let event = events.values.first(where: { $0.id == eventId }) else {
-            return []
-        }
-        guard let room = rooms.first(where: { $0.id == event.roomId }) else {
-            return []
-        }
+    /// In-memory mirror of `claim_seat_with_deposit(p_event_id)`
+    /// (migration 085). Claims the RSVP and inserts a held
+    /// deposit row of the room's amount. Idempotent per
+    /// (event, member): an existing row of any status
+    /// short-circuits. No balance math in the preview path — the
+    /// live server owns points_balance.
+    func claimSeatWithDeposit(eventId: UUID) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }),
+              let room = rooms.first(where: { $0.id == event.roomId }) else { return }
+        rsvps[eventId, default: [:]][room.createdBy] = .claimed
+        guard seatDepositsByEventMember[eventId]?[room.createdBy] == nil else { return }
+        guard room.seatDepositTrigger == .escrow, room.seatDepositAmount > 0 else { return }
+        seatDepositsByEventMember[eventId, default: [:]][room.createdBy] = SeatDeposit(
+            id: UUID(), amount: room.seatDepositAmount, status: .held, heldAt: Date()
+        )
+    }
+
+    /// In-memory mirror of `claim_seat_waived(p_event_id,
+    /// p_member_id)` (migration 085). Claims the RSVP with a
+    /// zero-amount held row — chip-neutral at every resolution.
+    func claimSeatWaived(eventId: UUID, memberId: UUID) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }) else { return }
+        rsvps[eventId, default: [:]][memberId] = .claimed
+        guard seatDepositsByEventMember[eventId]?[memberId] == nil else { return }
+        seatDepositsByEventMember[eventId, default: [:]][memberId] = SeatDeposit(
+            id: UUID(), amount: 0, status: .held, heldAt: Date()
+        )
+    }
+
+    /// In-memory mirror of `check_in_seat(p_event_id)`
+    /// (migration 085). Resolves the caller's held deposit to
+    /// `.returned`. Idempotent.
+    func checkInSeat(eventId: UUID) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }),
+              let room = rooms.first(where: { $0.id == event.roomId }) else { return }
+        resolveDeposit(eventId: eventId, memberId: room.createdBy, status: .returned)
+    }
+
+    /// In-memory mirror of `list_arrival_candidates(p_event_id)`
+    /// (migration 085). One row per held deposit whose member
+    /// has a claimed RSVP — the arrival card source. Empty when
+    /// every deposit is resolved.
+    func loadArrivalCandidates(eventId: UUID) async throws -> [SeatDepositCandidate] {
+        guard let event = events.values.first(where: { $0.id == eventId }),
+              let room = rooms.first(where: { $0.id == event.roomId }) else { return [] }
         let members = try await fetchRoomMembers(roomId: event.roomId)
+        let deposits = seatDepositsByEventMember[eventId] ?? [:]
         let states = rsvps[eventId] ?? [:]
-        return members.compactMap { member -> NoShowTaxCandidate? in
-            guard states[member.userId] == .claimed else { return nil }
-            return NoShowTaxCandidate(
+        return members.compactMap { member -> SeatDepositCandidate? in
+            guard states[member.userId] == .claimed,
+                  let deposit = deposits[member.userId],
+                  deposit.status == .held else { return nil }
+            return SeatDepositCandidate(
                 userId: member.userId,
                 displayName: member.displayName,
-                taxAmount: room.noShowTaxAmount,
+                depositAmount: deposit.amount,
+                status: deposit.status.rawValue,
                 withinGrace: true
             )
         }
     }
 
-    /// In-memory mirror of `apply_no_show_tax(p_event_id,
-    /// p_user_id, p_reason)` (migration 082). Removes the row
-    /// from the cached candidate list so the prompt card stops
-    /// asking. No ledger writes in the in-memory path — the live
-    /// server is the source of truth for the public ledger.
-    func applyNoShowTax(eventId: UUID, userId: UUID, reason: String?) async throws {
-        var candidates = noShowCandidatesByEvent[eventId] ?? []
-        candidates.removeAll { $0.userId == userId }
-        noShowCandidatesByEvent[eventId] = candidates
-        _ = reason
+    /// In-memory mirror of `forfeit_seat_deposit(p_event_id,
+    /// p_member_id)` (migration 085). Resolves the held deposit
+    /// to `.forfeited`.
+    func forfeitSeatDeposit(eventId: UUID, memberId: UUID) async throws {
+        resolveDeposit(eventId: eventId, memberId: memberId, status: .forfeited)
     }
 
-    /// In-memory mirror of `skip_no_show_tax(p_event_id,
-    /// p_user_id, p_reason)` (migration 082). Same shape as the
-    /// apply path: the row is removed from the cached list so the
-    /// prompt card stops asking.
-    func skipNoShowTax(eventId: UUID, userId: UUID, reason: String) async throws {
-        var candidates = noShowCandidatesByEvent[eventId] ?? []
-        candidates.removeAll { $0.userId == userId }
-        noShowCandidatesByEvent[eventId] = candidates
-        _ = reason
+    /// In-memory mirror of `waive_seat_deposit(p_event_id,
+    /// p_member_id)` (migration 085). Resolves the held deposit
+    /// to `.waived`.
+    func waiveSeatDeposit(eventId: UUID, memberId: UUID) async throws {
+        resolveDeposit(eventId: eventId, memberId: memberId, status: .waived)
+    }
+
+    /// In-memory mirror of `get_my_seat_deposit_status(p_event_id)`
+    /// (migration 085). The seeded caller is the room's host
+    /// (the synthetic current member).
+    func fetchMySeatDeposit(eventId: UUID) async throws -> SeatDeposit? {
+        guard let event = events.values.first(where: { $0.id == eventId }),
+              let room = rooms.first(where: { $0.id == event.roomId }) else { return nil }
+        return seatDepositsByEventMember[eventId]?[room.createdBy]
+    }
+
+    /// Shared resolver for the check-in / forfeit / waive
+    /// mirrors: flips a held row to `status` and drops the
+    /// member from the cached candidate list. No-op when there's
+    /// no held row (idempotent).
+    private func resolveDeposit(eventId: UUID, memberId: UUID, status: SeatDeposit.Status) {
+        if let deposit = seatDepositsByEventMember[eventId]?[memberId], deposit.status == .held {
+            seatDepositsByEventMember[eventId]?[memberId] = SeatDeposit(
+                id: deposit.id, amount: deposit.amount, status: status, heldAt: deposit.heldAt
+            )
+        }
+        var candidates = arrivalCandidatesByEvent[eventId] ?? []
+        candidates.removeAll { $0.userId == memberId }
+        arrivalCandidatesByEvent[eventId] = candidates
     }
 
     // MARK: Synthetic identity
