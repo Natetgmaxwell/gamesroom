@@ -1317,12 +1317,12 @@ final class RoomService: ObservableObject {
                 hostJournal: old.hostJournal,
                 installedPackSlugs: old.installedPackSlugs,
                 seatDepositAmount: old.seatDepositAmount,
-                memberDrowningOptIn: optIn,
-                notificationsEnabled: old.notificationsEnabled,
-                autoCloseHours: old.autoCloseHours,
                 seatDepositTrigger: old.seatDepositTrigger,
                 seatDepositGraceMinutes: old.seatDepositGraceMinutes,
-                seatDepositDestination: old.seatDepositDestination
+                seatDepositDestination: old.seatDepositDestination,
+                memberDrowningOptIn: optIn,
+                notificationsEnabled: old.notificationsEnabled,
+                autoCloseHours: old.autoCloseHours
             )
         }
         self.lastError = nil
@@ -1364,12 +1364,12 @@ final class RoomService: ObservableObject {
                 hostJournal: old.hostJournal,
                 installedPackSlugs: old.installedPackSlugs,
                 seatDepositAmount: old.seatDepositAmount,
-                memberDrowningOptIn: old.memberDrowningOptIn,
-                notificationsEnabled: enabled,
-                autoCloseHours: old.autoCloseHours,
                 seatDepositTrigger: old.seatDepositTrigger,
                 seatDepositGraceMinutes: old.seatDepositGraceMinutes,
-                seatDepositDestination: old.seatDepositDestination
+                seatDepositDestination: old.seatDepositDestination,
+                memberDrowningOptIn: old.memberDrowningOptIn,
+                notificationsEnabled: enabled,
+                autoCloseHours: old.autoCloseHours
             )
         }
         self.lastError = nil
