@@ -119,8 +119,8 @@ member, clears their history, shames them. Real friendships tolerate gaps; if
 the product does not, it is not serving the substrate.
 
 **The line we will not cross:** no "come back" engagement, no streak-keeping, no
-absence penalties beyond the no-show tax (which is about the *next night's pot*,
-not a score against the absent member).
+absence penalties beyond the seat deposit (which is about the *forfeit being
+lost*, not a score against the absent member).
 
 ### 1.4 High density (proximity)
 

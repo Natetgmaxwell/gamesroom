@@ -65,8 +65,10 @@ Reframes 082 (which stays as history). Live changes:
      old `auto`/`prompt`/`manual` collapse into `escrow` + host
      forfeit-confirm)
    - `seat_deposit_grace_minutes` (default 10)
-   - `seat_deposit_destination` — `next_pot` / `host_charity` / `split`
-     (default `next_pot`)
+   - `seat_deposit_destination` — **removed (2026-08-20).** Forfeited
+     deposits are **burned** — they leave the ledger as a public
+     `seat_deposit_forfeit` record and are not redistributed. No one
+     gains from a no-show; the room never profits from absence.
 2. **New table** `seat_deposits`:
    - `id uuid pk`
    - `event_id uuid` (FK events)
