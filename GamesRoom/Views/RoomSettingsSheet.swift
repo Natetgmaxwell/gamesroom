@@ -69,7 +69,6 @@ struct RoomSettingsSheet: View {
     @State private var seatDepositAmount: Int
     @State private var seatDepositTrigger: SeatDepositTrigger
     @State private var seatDepositGraceMinutes: Int
-    @State private var seatDepositDestination: SeatDepositDestination
     @State private var hostJournal: String
 
     // P0.2 — share-code surface state. Generated on demand.
@@ -139,7 +138,6 @@ struct RoomSettingsSheet: View {
         _seatDepositAmount = State(initialValue: room.seatDepositAmount)
         _seatDepositTrigger = State(initialValue: room.seatDepositTrigger)
         _seatDepositGraceMinutes = State(initialValue: room.seatDepositGraceMinutes)
-        _seatDepositDestination = State(initialValue: room.seatDepositDestination)
         _hostJournal = State(initialValue: room.hostJournal ?? "")
         _seasonSubtitle = State(initialValue: "")
     }
@@ -183,7 +181,6 @@ struct RoomSettingsSheet: View {
                             seatDepositAmount: $seatDepositAmount,
                             seatDepositTrigger: $seatDepositTrigger,
                             seatDepositGraceMinutes: $seatDepositGraceMinutes,
-                            seatDepositDestination: $seatDepositDestination,
                             shareCode: $shareCode,
                             isGeneratingCode: $isGeneratingCode
                         )
@@ -389,7 +386,6 @@ struct RoomSettingsSheet: View {
             .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
             .onChange(of: seatDepositTrigger) { _, _ in bumpDraft() }
             .onChange(of: seatDepositGraceMinutes) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositDestination) { _, _ in bumpDraft() }
             .onChange(of: seasonSubtitle) { _, newValue in
                 if newValue != seededSeasonSubtitle { bumpDraft() }
             }
@@ -587,8 +583,7 @@ struct RoomSettingsSheet: View {
                     autoCloseHours: autoCloseHours,
                     seatDepositAmount: seatDepositAmount,
                     seatDepositTrigger: seatDepositTrigger,
-                    seatDepositGraceMinutes: seatDepositGraceMinutes,
-                    seatDepositDestination: seatDepositDestination
+                    seatDepositGraceMinutes: seatDepositGraceMinutes
                 )
                 let trimmedJournal = hostJournal.trimmingCharacters(in: .whitespacesAndNewlines)
                 _ = try await roomService.updateHostJournal(
@@ -702,7 +697,6 @@ struct RoomSettingsOperationsSheet: View {
     @Binding var seatDepositAmount: Int
     @Binding var seatDepositTrigger: SeatDepositTrigger
     @Binding var seatDepositGraceMinutes: Int
-    @Binding var seatDepositDestination: SeatDepositDestination
     @Binding var shareCode: String?
     @Binding var isGeneratingCode: Bool
 
@@ -727,7 +721,6 @@ struct RoomSettingsOperationsSheet: View {
         seatDepositAmount: Binding<Int>,
         seatDepositTrigger: Binding<SeatDepositTrigger>,
         seatDepositGraceMinutes: Binding<Int>,
-        seatDepositDestination: Binding<SeatDepositDestination>,
         shareCode: Binding<String?>,
         isGeneratingCode: Binding<Bool>
     ) {
@@ -742,7 +735,6 @@ struct RoomSettingsOperationsSheet: View {
         _seatDepositAmount = seatDepositAmount
         _seatDepositTrigger = seatDepositTrigger
         _seatDepositGraceMinutes = seatDepositGraceMinutes
-        _seatDepositDestination = seatDepositDestination
         _shareCode = shareCode
         _isGeneratingCode = isGeneratingCode
     }
@@ -782,15 +774,10 @@ struct RoomSettingsOperationsSheet: View {
                     "Grace window: \(seatDepositGraceMinutes) min",
                     value: $seatDepositGraceMinutes, in: 0...120
                 )
-                Picker("Forfeit destination", selection: $seatDepositDestination) {
-                    ForEach(SeatDepositDestination.allCases, id: \.self) { d in
-                        Text(d.displayName).tag(d)
-                    }
-                }
             } header: {
                 Text("Seat deposit")
             } footer: {
-                Text("Escrow holds each member's deposit from claim until they tap I'm here. A no-show is yours to call at session start — forfeit to the next pot by default, or hand it back.")
+                Text("Escrow holds each member's deposit from claim until they tap I'm here. A no-show is yours to call at session start — forfeit it and the deposit is gone, or hand it back.")
             }
 
             Section("Features") {

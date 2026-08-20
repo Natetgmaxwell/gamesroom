@@ -195,8 +195,7 @@ protocol RoomStore: Sendable {
         autoCloseHours: Int,
         seatDepositAmount: Int,
         seatDepositTrigger: SeatDepositTrigger,
-        seatDepositGraceMinutes: Int,
-        seatDepositDestination: SeatDepositDestination
+        seatDepositGraceMinutes: Int
     ) async throws -> Room
 
     // MARK: Host journal (P1.5)

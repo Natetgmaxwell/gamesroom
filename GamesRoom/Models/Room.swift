@@ -150,12 +150,6 @@ struct Room: Identifiable, Codable, Hashable {
     /// Defaults to 10.
     let seatDepositGraceMinutes: Int
 
-    /// V0.85 — where a forfeited deposit lands (migration 085).
-    /// `.nextPot` is the locked default; the chips ride the next
-    /// event's pot. `.hostCharityPot` and `.split` record the
-    /// destination in the ledger row's meta.
-    let seatDepositDestination: SeatDepositDestination
-
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -181,14 +175,12 @@ struct Room: Identifiable, Codable, Hashable {
         case seatDepositAmount = "seat_deposit_amount"
         case seatDepositTrigger = "seat_deposit_trigger"
         case seatDepositGraceMinutes = "seat_deposit_grace_minutes"
-        case seatDepositDestination = "seat_deposit_destination"
         /// V0.85 — pre-085 payloads still carry 082's raws; the
         /// decoder falls back to these when the renamed keys are
         /// absent. Encode always writes the V0.85 keys.
         case legacyNoShowTaxAmount = "no_show_tax_amount"
         case legacyNoShowTaxTrigger = "no_show_tax_trigger"
         case legacyNoShowTaxGraceMinutes = "no_show_tax_grace_minutes"
-        case legacyNoShowTaxDestination = "no_show_tax_destination"
         case memberDrowningOptIn = "member_drowning_opt_in"
     case notificationsEnabled = "notifications_enabled"
     case overlapCount = "overlap_count"
@@ -221,7 +213,6 @@ struct Room: Identifiable, Codable, Hashable {
         seatDepositAmount: Int = 200,
         seatDepositTrigger: SeatDepositTrigger = .escrow,
         seatDepositGraceMinutes: Int = 10,
-        seatDepositDestination: SeatDepositDestination = .nextPot,
         memberDrowningOptIn: Bool = false,
         notificationsEnabled: Bool = false,
         overlapCount: Int = 0,
@@ -252,7 +243,6 @@ struct Room: Identifiable, Codable, Hashable {
         self.seatDepositAmount = seatDepositAmount
         self.seatDepositTrigger = seatDepositTrigger
         self.seatDepositGraceMinutes = seatDepositGraceMinutes
-        self.seatDepositDestination = seatDepositDestination
         self.memberDrowningOptIn = memberDrowningOptIn
         self.notificationsEnabled = notificationsEnabled
         self.overlapCount = overlapCount
@@ -291,10 +281,6 @@ struct Room: Identifiable, Codable, Hashable {
         seatDepositTrigger = SeatDepositTrigger(rawValue: triggerRaw) ?? .escrow
         seatDepositGraceMinutes = try c.decodeIfPresent(Int.self, forKey: .seatDepositGraceMinutes)
             ?? c.decodeIfPresent(Int.self, forKey: .legacyNoShowTaxGraceMinutes) ?? 10
-        let destRaw = try c.decodeIfPresent(String.self, forKey: .seatDepositDestination)
-            ?? c.decodeIfPresent(String.self, forKey: .legacyNoShowTaxDestination)
-            ?? SeatDepositDestination.nextPot.rawValue
-        seatDepositDestination = SeatDepositDestination(rawValue: destRaw) ?? .nextPot
         memberDrowningOptIn = try c.decodeIfPresent(Bool.self, forKey: .memberDrowningOptIn) ?? false
         notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
         overlapCount = try c.decodeIfPresent(Int.self, forKey: .overlapCount) ?? 0
@@ -333,7 +319,6 @@ struct Room: Identifiable, Codable, Hashable {
         try c.encode(seatDepositAmount, forKey: .seatDepositAmount)
         try c.encode(seatDepositTrigger, forKey: .seatDepositTrigger)
         try c.encode(seatDepositGraceMinutes, forKey: .seatDepositGraceMinutes)
-        try c.encode(seatDepositDestination, forKey: .seatDepositDestination)
         try c.encode(memberDrowningOptIn, forKey: .memberDrowningOptIn)
         try c.encode(notificationsEnabled, forKey: .notificationsEnabled)
         try c.encode(overlapCount, forKey: .overlapCount)

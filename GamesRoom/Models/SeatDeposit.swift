@@ -8,11 +8,17 @@
 //  member wants their chips back, so attendance records itself
 //  without the host marking anyone.
 //
+//  V0.85 amend (migration 086) — forfeited deposits are BURNED.
+//  The forfeit destination is gone: a forfeited deposit leaves
+//  the ledger as a public seat_deposit_forfeit record and is not
+//  redistributed. No one gains from a no-show; the room never
+//  profits from absence.
+//
 //  Pure data types. Foundation only. Mirrors migration 085's
 //  extended public.seat_deposits (held/returned/forfeited/waived)
-//  plus the trigger/destination enums, the arrival-candidate
-//  row, and the mascot-voiced arrival card copy. The SwiftUI
-//  surface (ArrivalCard) reads candidates from
+//  plus the trigger enum, the arrival-candidate row, and the
+//  mascot-voiced arrival card copy. The SwiftUI surface
+//  (ArrivalCard) reads candidates from
 //  RoomService.loadArrivalCandidates and renders with
 //  ArrivalPromptVoice.
 //
@@ -113,35 +119,6 @@ enum SeatDepositTrigger: String, Codable, CaseIterable, Hashable {
     }
 }
 
-/// Where a forfeited deposit lands. Locked since V0.84 C3:
-///
-/// - `.nextPot` (default) — banked to the room's NEXT pot at its
-///   creation. Public next-pot money; the absent member's social
-///   standing is untouched. Drowning stays private.
-/// - `.hostCharityPot` — same ledger row, meta
-///   `destination='host_charity_pot'`.
-/// - `.split` — same ledger row, meta `destination='split'`.
-///
-enum SeatDepositDestination: String, Codable, CaseIterable, Hashable {
-    case nextPot = "next_pot"
-    case hostCharityPot = "host_charity_pot"
-    case split
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        let raw = try c.decode(String.self)
-        self = SeatDepositDestination(rawValue: raw) ?? .nextPot
-    }
-
-    var displayName: String {
-        switch self {
-        case .nextPot:        return "Next pot"
-        case .hostCharityPot: return "Host charity pot"
-        case .split:          return "Split"
-        }
-    }
-}
-
 ///
 /// One row from the V0.85 `list_arrival_candidates(p_event_id)`
 /// RPC (migration 085): a held seat deposit whose member claimed,
@@ -212,12 +189,13 @@ enum ArrivalPromptVoice {
     }
 
     /// Confirmation caption rendered after the host taps Forfeit.
+    /// V0.85 amend — the deposit is burned, not routed anywhere.
     static func forfeitLine(
         mascotName: String,
         displayName: String,
         depositAmount: Int
     ) -> String {
-        "\(mascotName): \(depositAmount) CC forfeited — \(displayName)'s chips ride the next pot."
+        "\(mascotName): \(depositAmount) CC forfeited — \(displayName)'s deposit is gone."
     }
 
     /// Confirmation caption for Skip — `reason` is one of

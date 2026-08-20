@@ -1253,8 +1253,7 @@ actor InMemoryRoomStore: RoomStore {
         autoCloseHours: Int,
         seatDepositAmount: Int,
         seatDepositTrigger: SeatDepositTrigger,
-        seatDepositGraceMinutes: Int,
-        seatDepositDestination: SeatDepositDestination
+        seatDepositGraceMinutes: Int
     ) async throws -> Room {
         guard let idx = rooms.firstIndex(where: { $0.id == id }) else {
             throw NSError(
@@ -1287,7 +1286,6 @@ actor InMemoryRoomStore: RoomStore {
             seatDepositAmount: seatDepositAmount,
             seatDepositTrigger: seatDepositTrigger,
             seatDepositGraceMinutes: seatDepositGraceMinutes,
-            seatDepositDestination: seatDepositDestination,
             autoCloseHours: autoCloseHours
         )
         rooms[idx] = updated
@@ -1334,7 +1332,6 @@ actor InMemoryRoomStore: RoomStore {
             seatDepositAmount: existing.seatDepositAmount,
             seatDepositTrigger: existing.seatDepositTrigger,
             seatDepositGraceMinutes: existing.seatDepositGraceMinutes,
-            seatDepositDestination: existing.seatDepositDestination,
             autoCloseHours: existing.autoCloseHours
         )
         rooms[idx] = updated

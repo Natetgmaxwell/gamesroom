@@ -1626,8 +1626,7 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents honors the room's autoCl
         autoCloseHours: 1,
         seatDepositAmount: hosted.seatDepositAmount,
         seatDepositTrigger: hosted.seatDepositTrigger,
-        seatDepositGraceMinutes: hosted.seatDepositGraceMinutes,
-        seatDepositDestination: hosted.seatDepositDestination
+        seatDepositGraceMinutes: hosted.seatDepositGraceMinutes
     )
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Two Hours Old",
@@ -4060,23 +4059,6 @@ runner.run("SeatDepositTrigger unknown raw falls back to .escrow (V0.85)") {
     runner.assertTrue(decoded == .escrow, "unknown → .escrow")
 }
 
-runner.run("SeatDepositDestination decode round-trips every case (V0.85)") {
-    for destination in SeatDepositDestination.allCases {
-        let data = try JSONEncoder().encode(destination)
-        let decoded = try JSONDecoder().decode(SeatDepositDestination.self, from: data)
-        runner.assertTrue(decoded == destination, "round-trip \(destination)")
-    }
-    runner.assertEqual(SeatDepositDestination.nextPot.rawValue, "next_pot")
-    runner.assertEqual(SeatDepositDestination.hostCharityPot.rawValue, "host_charity_pot")
-    runner.assertEqual(SeatDepositDestination.split.rawValue, "split")
-}
-
-runner.run("SeatDepositDestination unknown raw falls back to .nextPot (V0.85)") {
-    let data = "\"black_hole\"".data(using: .utf8)!
-    let decoded = try JSONDecoder().decode(SeatDepositDestination.self, from: data)
-    runner.assertTrue(decoded == .nextPot, "unknown → .nextPot")
-}
-
 runner.run("SeatDeposit.Status decodes every migration-085 raw + legacy refunded → returned (V0.85)") {
     for status in SeatDeposit.Status.allCases {
         let data = try JSONEncoder().encode(status)
@@ -4192,7 +4174,6 @@ runner.run("Room decodes seat_deposit_* defaults when columns absent (V0.85)") {
     runner.assertTrue(room.seatDepositAmount == 200, "missing deposit amount defaults to 200")
     runner.assertTrue(room.seatDepositTrigger == .escrow, "missing trigger defaults to .escrow")
     runner.assertTrue(room.seatDepositGraceMinutes == 10, "missing grace defaults to 10")
-    runner.assertTrue(room.seatDepositDestination == .nextPot, "missing destination defaults to .nextPot")
 }
 
 runner.run("Room decodes seat_deposit_* overrides from server shape (V0.85)") {
@@ -4211,8 +4192,7 @@ runner.run("Room decodes seat_deposit_* overrides from server shape (V0.85)") {
       "user_role": "host",
       "seat_deposit_amount": 350,
       "seat_deposit_trigger": "off",
-      "seat_deposit_grace_minutes": 25,
-      "seat_deposit_destination": "host_charity_pot"
+      "seat_deposit_grace_minutes": 25
     }
     """
     let decoder = JSONDecoder()
@@ -4221,7 +4201,6 @@ runner.run("Room decodes seat_deposit_* overrides from server shape (V0.85)") {
     runner.assertEqual(room.seatDepositAmount, 350)
     runner.assertEqual(room.seatDepositTrigger, .off)
     runner.assertEqual(room.seatDepositGraceMinutes, 25)
-    runner.assertEqual(room.seatDepositDestination, .hostCharityPot)
 }
 
 runner.run("Room decodes legacy V0.84 no_show_tax_* raws onto the V0.85 fields (V0.85)") {
@@ -4240,8 +4219,7 @@ runner.run("Room decodes legacy V0.84 no_show_tax_* raws onto the V0.85 fields (
       "user_role": "host",
       "no_show_tax_amount": 450,
       "no_show_tax_trigger": "manual",
-      "no_show_tax_grace_minutes": 30,
-      "no_show_tax_destination": "split"
+      "no_show_tax_grace_minutes": 30
     }
     """
     let decoder = JSONDecoder()
@@ -4250,7 +4228,6 @@ runner.run("Room decodes legacy V0.84 no_show_tax_* raws onto the V0.85 fields (
     runner.assertEqual(room.seatDepositAmount, 450)
     runner.assertTrue(room.seatDepositTrigger == .escrow, "legacy manual → .escrow (V0.84 raws collapse)")
     runner.assertEqual(room.seatDepositGraceMinutes, 30)
-    runner.assertEqual(room.seatDepositDestination, .split)
 }
 
 runner.runAsync("InMemoryRoomStore escrow round-trip: claim holds, check-in returns, candidates drain (V0.85)") {
@@ -4321,18 +4298,15 @@ runner.runAsync("InMemoryRoomStore updateRoom passthrough carries the four seat_
         autoCloseHours: hosted.autoCloseHours,
         seatDepositAmount: 450,
         seatDepositTrigger: .off,
-        seatDepositGraceMinutes: 30,
-        seatDepositDestination: .split
+        seatDepositGraceMinutes: 30
     )
     runner.assertEqual(updated.seatDepositAmount, 450)
     runner.assertTrue(updated.seatDepositTrigger == .off)
     runner.assertEqual(updated.seatDepositGraceMinutes, 30)
-    runner.assertTrue(updated.seatDepositDestination == .split)
     let reread = try await store.fetchRooms().first { $0.id == hosted.id }
     runner.assertEqual(reread?.seatDepositAmount, 450)
     runner.assertTrue(reread?.seatDepositTrigger == .off)
     runner.assertEqual(reread?.seatDepositGraceMinutes, 30)
-    runner.assertTrue(reread?.seatDepositDestination == .split)
 }
 
 // MARK: - Summary

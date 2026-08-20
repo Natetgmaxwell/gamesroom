@@ -830,8 +830,7 @@ final class RoomService: ObservableObject {
         autoCloseHours: Int,
         seatDepositAmount: Int,
         seatDepositTrigger: SeatDepositTrigger,
-        seatDepositGraceMinutes: Int,
-        seatDepositDestination: SeatDepositDestination
+        seatDepositGraceMinutes: Int
     ) async throws -> Room {
         let updated = try await store.updateRoom(
             id: id,
@@ -849,8 +848,7 @@ final class RoomService: ObservableObject {
             autoCloseHours: autoCloseHours,
             seatDepositAmount: seatDepositAmount,
             seatDepositTrigger: seatDepositTrigger,
-            seatDepositGraceMinutes: seatDepositGraceMinutes,
-            seatDepositDestination: seatDepositDestination
+            seatDepositGraceMinutes: seatDepositGraceMinutes
         )
         self.lastError = nil
         if let idx = rooms.firstIndex(where: { $0.id == updated.id }) {
@@ -1319,7 +1317,6 @@ final class RoomService: ObservableObject {
                 seatDepositAmount: old.seatDepositAmount,
                 seatDepositTrigger: old.seatDepositTrigger,
                 seatDepositGraceMinutes: old.seatDepositGraceMinutes,
-                seatDepositDestination: old.seatDepositDestination,
                 memberDrowningOptIn: optIn,
                 notificationsEnabled: old.notificationsEnabled,
                 autoCloseHours: old.autoCloseHours
@@ -1366,7 +1363,6 @@ final class RoomService: ObservableObject {
                 seatDepositAmount: old.seatDepositAmount,
                 seatDepositTrigger: old.seatDepositTrigger,
                 seatDepositGraceMinutes: old.seatDepositGraceMinutes,
-                seatDepositDestination: old.seatDepositDestination,
                 memberDrowningOptIn: old.memberDrowningOptIn,
                 notificationsEnabled: enabled,
                 autoCloseHours: old.autoCloseHours

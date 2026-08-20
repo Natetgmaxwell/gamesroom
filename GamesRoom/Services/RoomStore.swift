@@ -793,11 +793,12 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// p_social_narration_enabled, p_briefing_48h_enabled,
     /// p_calendar_auto_add_host, p_social_preferences_enabled,
     /// p_auto_close_hours, p_seat_deposit_amount,
-    /// p_seat_deposit_trigger, p_seat_deposit_grace_minutes,
-    /// p_seat_deposit_destination)` (migration 020 + V0.8 extensions
-    /// + V0.83 auto-close window + V0.85 seat-deposit escrow
-    /// settings, migration 085). The server resolves the host check
-    /// via the `is_host_of_room(p_room_id)` helper and throws on
+    /// p_seat_deposit_trigger, p_seat_deposit_grace_minutes)`
+    /// (migration 020 + V0.8 extensions + V0.83 auto-close window
+    /// + V0.85 seat-deposit escrow settings, migration 085; the
+    /// forfeit destination was removed in migration 086 — burned).
+    /// The server resolves the host check via the
+    /// `is_host_of_room(p_room_id)` helper and throws on
     /// non-host writes.
     func updateRoom(
         id: UUID,
@@ -815,8 +816,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         autoCloseHours: Int,
         seatDepositAmount: Int,
         seatDepositTrigger: SeatDepositTrigger,
-        seatDepositGraceMinutes: Int,
-        seatDepositDestination: SeatDepositDestination
+        seatDepositGraceMinutes: Int
     ) async throws -> Room {
         let rows: [Room] = try await SupabaseClientProvider.shared
             .rpc("update_room_settings", params: [
@@ -835,8 +835,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 "p_auto_close_hours": String(autoCloseHours),
                 "p_seat_deposit_amount": String(seatDepositAmount),
                 "p_seat_deposit_trigger": seatDepositTrigger.rawValue,
-                "p_seat_deposit_grace_minutes": String(seatDepositGraceMinutes),
-                "p_seat_deposit_destination": seatDepositDestination.rawValue
+                "p_seat_deposit_grace_minutes": String(seatDepositGraceMinutes)
             ])
             .execute()
             .value
