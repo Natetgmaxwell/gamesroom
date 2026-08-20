@@ -230,7 +230,8 @@ struct MemberCalendarSettingsSheet: View {
 /// the per-member settings sheet where the user can flip the
 /// toggle + trigger the system permission prompt via
 /// `CalendarService.requestAccess()`.
-private struct CalendarVoiceLineRow: View {
+/// Non-private: rendered from RoomDetailView.swift (BriefingSlot).
+struct CalendarVoiceLineRow: View {
     @State private var showSettings: Bool = false
 
     var body: some View {
