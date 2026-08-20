@@ -28,12 +28,17 @@ enum StorageKeys {
     /// photo never leaves the device.
     static let keepScanPhotos = "keepScanPhotos"
 
-    /// T1.1 — per-event EKEvent identifier, keyed by the room
-    /// event's UUID. Lets `CalendarService` update/remove the same
-    /// calendar row across edits. Absent = no calendar row yet.
-    static func calendarEventIdentifier(eventId: UUID) -> String {
-        "calendarEventIdentifier-\(eventId.uuidString)"
-    }
+    /// V0.86 — the calendar identifier storage moved server-side
+    /// (`events.event_calendar_identifier`, migration 087). iOS
+    /// event UUIDs are not stable across reinstalls and the
+    /// UserDefaults map was wiped on every uninstall, so the host's
+    /// `calendar_auto_add_host` toggle "kept turning off every
+    /// time I rebuild the app". The calendar identifier is now
+    /// reported back via `report_calendar_identifier(p_event_id,
+    /// p_identifier)` after each successful EKEvent.save().
+    /// `CalendarService` reads the identifier from the
+    /// `Event.eventCalendarIdentifier` field (server-canonical)
+    /// instead of UserDefaults.
 
     /// V0.84 C5 — per-event member-note prompt dismissal. The
     /// prompt is local: "one tap to dismiss, no nagging, never

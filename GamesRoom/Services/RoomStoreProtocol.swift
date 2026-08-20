@@ -178,7 +178,11 @@ protocol RoomStore: Sendable {
     /// Updates the room's mascot + operations + feature-toggle
     /// columns. Returns the freshly-read `Room` so the UI can
     /// mirror the server-canonical state. Throws on
-    /// non-host-write rejection.
+    /// nonhost-write rejection.
+    ///
+    /// V0.86 — dropped `calendarAutoAddHost` (per-room toggle is
+    /// gone; the calendar mirror moved to a per-user surface
+    /// handled by `setMemberCalendarAutoAdd`).
     func updateRoom(
         id: UUID,
         name: String,
@@ -190,13 +194,30 @@ protocol RoomStore: Sendable {
         joinStartingBonus: Int,
         socialNarrationEnabled: Bool,
         briefing48hEnabled: Bool,
-        calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
         autoCloseHours: Int,
         seatDepositAmount: Int,
         seatDepositTrigger: SeatDepositTrigger,
         seatDepositGraceMinutes: Int
     ) async throws -> Room
+
+    // MARK: Calendar (V0.86 — per-member toggle + server-side identifier)
+
+    /// V0.86 — flips the caller's own
+    /// `room_memberships.calendar_auto_add` across EVERY room they
+    /// belong to (per-user toggle, NOT per-room). Mirrors migration
+    /// 087's `set_member_calendar_auto_add(p_enabled boolean)` RPC.
+    /// Idempotent. Throws on auth failure (42501).
+    func setMemberCalendarAutoAdd(enabled: Bool) async throws
+
+    /// V0.86 — caller's EventKit row identifier for one of their
+    /// room's events so the server can map back to the EKEvent on
+    /// update/delete. Persisted into
+    /// `events.event_calendar_identifier`. Idempotent (a second
+    /// call overwrites with the latest identifier). Mirrors
+    /// migration 087's `report_calendar_identifier(p_event_id,
+    /// p_identifier)` RPC.
+    func reportCalendarIdentifier(eventId: UUID, identifier: String) async throws
 
     // MARK: Host journal (P1.5)
 

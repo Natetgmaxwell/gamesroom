@@ -168,7 +168,7 @@ actor InMemoryRoomStore: RoomStore {
             joinStartingBonus: 200,
             userRole: .host,
             briefing48hEnabled: true,
-            calendarAutoAddHost: false,
+            calendarAutoAdd: false,
             socialPreferencesEnabled: true,
             socialNarrationEnabled: true,
             maxSeats: 6,
@@ -188,7 +188,7 @@ actor InMemoryRoomStore: RoomStore {
             joinStartingBonus: 200,
             userRole: .member,
             briefing48hEnabled: true,
-            calendarAutoAddHost: false,
+            calendarAutoAdd: false,
             socialPreferencesEnabled: true,
             socialNarrationEnabled: true,
             maxSeats: 4,
@@ -208,7 +208,7 @@ actor InMemoryRoomStore: RoomStore {
             joinStartingBonus: 200,
             userRole: .member,
             briefing48hEnabled: true,
-            calendarAutoAddHost: false,
+            calendarAutoAdd: false,
             socialPreferencesEnabled: true,
             socialNarrationEnabled: true,
             maxSeats: 8,
@@ -545,7 +545,7 @@ actor InMemoryRoomStore: RoomStore {
             mascotApiKey: mascotApiKey,
             userRole: .host,
             briefing48hEnabled: true,
-            calendarAutoAddHost: false,
+            calendarAutoAdd: false,
             socialPreferencesEnabled: true,
             socialNarrationEnabled: true,
             maxSeats: 6,
@@ -1248,7 +1248,6 @@ actor InMemoryRoomStore: RoomStore {
         joinStartingBonus: Int,
         socialNarrationEnabled: Bool,
         briefing48hEnabled: Bool,
-        calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
         autoCloseHours: Int,
         seatDepositAmount: Int,
@@ -1278,7 +1277,7 @@ actor InMemoryRoomStore: RoomStore {
             mascotApiKey: existing.mascotApiKey,
             userRole: existing.userRole,
             briefing48hEnabled: briefing48hEnabled,
-            calendarAutoAddHost: calendarAutoAddHost,
+            calendarAutoAdd: existing.calendarAutoAdd,
             socialPreferencesEnabled: socialPreferencesEnabled,
             socialNarrationEnabled: socialNarrationEnabled,
             maxSeats: maxSeats,
@@ -1290,6 +1289,68 @@ actor InMemoryRoomStore: RoomStore {
         )
         rooms[idx] = updated
         return updated
+    }
+
+    // MARK: Calendar (V0.86 — per-member toggle + server-side identifier)
+
+    /// In-memory mirror of `set_member_calendar_auto_add(p_enabled)`
+    /// (migration 087). Per-USER toggle — mutates every room the
+    /// synthetic caller belongs to. Idempotent.
+    func setMemberCalendarAutoAdd(enabled: Bool) async throws {
+        for idx in rooms.indices {
+            rooms[idx] = Room(
+                id: rooms[idx].id,
+                name: rooms[idx].name,
+                mascotName: rooms[idx].mascotName,
+                mascotPersonality: rooms[idx].mascotPersonality,
+                mascotPoliticalIdeology: rooms[idx].mascotPoliticalIdeology,
+                createdBy: rooms[idx].createdBy,
+                createdAt: rooms[idx].createdAt,
+                updatedAt: Date(),
+                isLive: rooms[idx].isLive,
+                nextEventDescription: rooms[idx].nextEventDescription,
+                joinStartingBonus: rooms[idx].joinStartingBonus,
+                mascotApiKey: rooms[idx].mascotApiKey,
+                userRole: rooms[idx].userRole,
+                briefing48hEnabled: rooms[idx].briefing48hEnabled,
+                calendarAutoAdd: enabled,
+                socialPreferencesEnabled: rooms[idx].socialPreferencesEnabled,
+                socialNarrationEnabled: rooms[idx].socialNarrationEnabled,
+                maxSeats: rooms[idx].maxSeats,
+                memberInviteQuota: rooms[idx].memberInviteQuota,
+                seatDepositAmount: rooms[idx].seatDepositAmount,
+                seatDepositTrigger: rooms[idx].seatDepositTrigger,
+                seatDepositGraceMinutes: rooms[idx].seatDepositGraceMinutes,
+                autoCloseHours: rooms[idx].autoCloseHours
+            )
+        }
+    }
+
+    /// In-memory mirror of `report_calendar_identifier(p_event_id,
+    /// p_identifier)` (migration 087). Writes the EventKit row id
+    /// onto the Event so the next fetchActiveEvent round-trip reads
+    /// it back. Idempotent (overwrites).
+    func reportCalendarIdentifier(eventId: UUID, identifier: String) async throws {
+        guard let roomId = events.values.first(where: { $0.id == eventId })?.roomId,
+              let existing = events[roomId], existing.id == eventId else {
+            return
+        }
+        events[roomId] = Event(
+            id: existing.id,
+            roomId: existing.roomId,
+            name: existing.name,
+            playedAt: existing.playedAt,
+            createdAt: existing.createdAt,
+            venue: existing.venue,
+            hostNote: existing.hostNote,
+            maxSeats: existing.maxSeats,
+            startedAt: existing.startedAt,
+            settledAt: existing.settledAt,
+            sessionId: existing.sessionId,
+            packSlug: existing.packSlug,
+            hostFinalized: existing.hostFinalized,
+            eventCalendarIdentifier: identifier
+        )
     }
 
     // MARK: Host journal (P1.5)
@@ -1323,7 +1384,7 @@ actor InMemoryRoomStore: RoomStore {
             mascotApiKey: existing.mascotApiKey,
             userRole: existing.userRole,
             briefing48hEnabled: existing.briefing48hEnabled,
-            calendarAutoAddHost: existing.calendarAutoAddHost,
+            calendarAutoAdd: existing.calendarAutoAdd,
             socialPreferencesEnabled: existing.socialPreferencesEnabled,
             socialNarrationEnabled: existing.socialNarrationEnabled,
             maxSeats: existing.maxSeats,

@@ -18,6 +18,12 @@
 //  same `@State` draft as the hub (form state is hoisted) so a
 //  single autosave path can write once the host pauses.
 //
+//  V0.86 — the per-room host calendar toggle is REMOVED. The
+//  calendar mirror moved to a per-user surface
+//  (`MemberCalendarSettingsSheet`) reachable from a NavigationLink
+//  in the hub's root. The host does not need to enter any room to
+//  toggle their own calendar (it's per-user).
+//
 //  V0.81 — autosave: every edit to the draft restarts a 600ms
 //  trailing debounce via `.task(id: draft)`; the write fires
 //  `RoomService.updateRoom(...)` + the P1.5 journal write + the
@@ -63,7 +69,6 @@ struct RoomSettingsSheet: View {
     @State private var memberInviteQuota: Int
     @State private var joinStartingBonus: Int
     @State private var briefing48hEnabled: Bool
-    @State private var calendarAutoAddHost: Bool
     @State private var socialPreferencesEnabled: Bool
     @State private var autoCloseHours: Int
     @State private var seatDepositAmount: Int
@@ -112,6 +117,11 @@ struct RoomSettingsSheet: View {
     @State private var showDeleteConfirm: Bool = false
     @State private var isDeleting: Bool = false
 
+    // V0.86 — member-facing calendar surface. The sheet is opened
+    // from the hub (member-visible), lives outside any specific
+    // room — the toggle is per-user.
+    @State private var showCalendarSettings: Bool = false
+
     // W2.6 — season-subtitle host-approval beat. Seeded from the
     // current season; saved via set_season_subtitle on Save.
     @State private var seasonSubtitle: String
@@ -132,7 +142,6 @@ struct RoomSettingsSheet: View {
         _memberInviteQuota = State(initialValue: room.memberInviteQuota)
         _joinStartingBonus = State(initialValue: room.joinStartingBonus)
         _briefing48hEnabled = State(initialValue: room.briefing48hEnabled)
-        _calendarAutoAddHost = State(initialValue: room.calendarAutoAddHost)
         _socialPreferencesEnabled = State(initialValue: room.socialPreferencesEnabled)
         _autoCloseHours = State(initialValue: room.autoCloseHours)
         _seatDepositAmount = State(initialValue: room.seatDepositAmount)
@@ -150,6 +159,38 @@ struct RoomSettingsSheet: View {
                 // owns the durable opt-in + per-event mute controls
                 // that left the briefing card.
                 RoomNotifSettingsSection(room: room)
+
+                // V0.86 — member-facing calendar surface. The
+                // toggle is per-USER (applies to every room the
+                // caller is in), so it lives on the member's own
+                // settings, NOT inside any room. Rendered as a
+                // sheet trigger next to "My notifications" so the
+                // user already managing their prefs finds the
+                // calendar toggle in the same mental slot.
+                Button {
+                    showCalendarSettings = true
+                } label: {
+                    HStack(spacing: Theme.Layout.gutter) {
+                        Image(systemName: "calendar")
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Palette.accent)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("My calendar")
+                                .font(Theme.Typography.body.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.primaryText)
+                            Text("Auto-add events to your iOS calendar")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        }
+                        Spacer()
+                        Image(systemName: Theme.Icon.chevronRight)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    }
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
 
                 Section {
                     NavigationLink {
@@ -175,7 +216,6 @@ struct RoomSettingsSheet: View {
                             memberInviteQuota: $memberInviteQuota,
                             joinStartingBonus: $joinStartingBonus,
                             briefing48hEnabled: $briefing48hEnabled,
-                            calendarAutoAddHost: $calendarAutoAddHost,
                             socialPreferencesEnabled: $socialPreferencesEnabled,
                             autoCloseHours: $autoCloseHours,
                             seatDepositAmount: $seatDepositAmount,
@@ -380,7 +420,6 @@ struct RoomSettingsSheet: View {
             .onChange(of: memberInviteQuota) { _, _ in bumpDraft() }
             .onChange(of: joinStartingBonus) { _, _ in bumpDraft() }
             .onChange(of: briefing48hEnabled) { _, _ in bumpDraft() }
-            .onChange(of: calendarAutoAddHost) { _, _ in bumpDraft() }
             .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
             .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
             .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
@@ -440,6 +479,15 @@ struct RoomSettingsSheet: View {
             }
         }
         .tint(Theme.Palette.accent)
+        // V0.86 — member-facing calendar surface. The toggle is
+        // per-USER; this sheet is the place where the
+        // CalendarService.requestAccess() prompt fires (the
+        // BriefingSlot mascot voice line accompanies the system
+        // prompt on first launch).
+        .sheet(isPresented: $showCalendarSettings) {
+            MemberCalendarSettingsSheet(room: room)
+                .environmentObject(roomService)
+        }
     }
 
     /// Visual row inside the hub. Shared shape; sub-sheets own
@@ -578,7 +626,6 @@ struct RoomSettingsSheet: View {
                     joinStartingBonus: joinStartingBonus,
                     socialNarrationEnabled: socialNarrationEnabled,
                     briefing48hEnabled: briefing48hEnabled,
-                    calendarAutoAddHost: calendarAutoAddHost,
                     socialPreferencesEnabled: socialPreferencesEnabled,
                     autoCloseHours: autoCloseHours,
                     seatDepositAmount: seatDepositAmount,
@@ -597,17 +644,14 @@ struct RoomSettingsSheet: View {
                     roomId: room.id,
                     subtitle: trimmedSubtitle.isEmpty ? nil : trimmedSubtitle
                 )
-                // T1.1 — when the host turns the toggle on, ask for
-                // calendar access up front. Denied = inline warning,
-                // not a hard failure; the toggle stays on and the
-                // next event create re-prompts.
-                if calendarAutoAddHost {
-                    let granted = await CalendarService.shared.requestAccess()
-                    guard granted else {
-                        saveState = .failed("Calendar access denied — events won't auto-add. You can allow it in Settings.")
-                        return
-                    }
-                }
+                // V0.86 — calendar permission is a per-member
+                // surface, fired by the
+                // `MemberCalendarSettingsSheet` (not the room's
+                // host settings). The host's own calendar row is
+                // written when the host has the toggle on
+                // (host = user, same toggle applies — no
+                // special-case for hosts). This branch is empty
+                // intentionally; kept here to mark the migration.
                 saveState = .saved
             } catch {
                 saveState = .failed((error as NSError).localizedDescription)
@@ -685,13 +729,17 @@ struct RoomSettingsSocialSheet: View {
 
 /// M2.2 — Operations section. Seats, invite quota, starting
 /// bonus, feature toggles, share-code surface, pack toggles.
+///
+/// V0.86 — the "Auto-add to host calendar" toggle is REMOVED.
+/// The calendar mirror moved to a per-user surface
+/// (`MemberCalendarSettingsSheet`), reachable from the hub's
+/// NavigationLink in the member-visible section.
 struct RoomSettingsOperationsSheet: View {
     let roomId: UUID
     @Binding var maxSeats: Int
     @Binding var memberInviteQuota: Int
     @Binding var joinStartingBonus: Int
     @Binding var briefing48hEnabled: Bool
-    @Binding var calendarAutoAddHost: Bool
     @Binding var socialPreferencesEnabled: Bool
     @Binding var autoCloseHours: Int
     @Binding var seatDepositAmount: Int
@@ -715,7 +763,6 @@ struct RoomSettingsOperationsSheet: View {
         memberInviteQuota: Binding<Int>,
         joinStartingBonus: Binding<Int>,
         briefing48hEnabled: Binding<Bool>,
-        calendarAutoAddHost: Binding<Bool>,
         socialPreferencesEnabled: Binding<Bool>,
         autoCloseHours: Binding<Int>,
         seatDepositAmount: Binding<Int>,
@@ -729,7 +776,6 @@ struct RoomSettingsOperationsSheet: View {
         _memberInviteQuota = memberInviteQuota
         _joinStartingBonus = joinStartingBonus
         _briefing48hEnabled = briefing48hEnabled
-        _calendarAutoAddHost = calendarAutoAddHost
         _socialPreferencesEnabled = socialPreferencesEnabled
         _autoCloseHours = autoCloseHours
         _seatDepositAmount = seatDepositAmount
@@ -782,7 +828,6 @@ struct RoomSettingsOperationsSheet: View {
 
             Section("Features") {
                 Toggle("48-hour briefing push", isOn: $briefing48hEnabled)
-                Toggle("Auto-add to host calendar", isOn: $calendarAutoAddHost)
                 Toggle("Members can set preferences", isOn: $socialPreferencesEnabled)
             }
 

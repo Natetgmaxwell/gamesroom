@@ -791,13 +791,14 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// p_mascot_name, p_mascot_personality, p_mascot_political_ideology,
     /// p_max_seats, p_member_invite_quota, p_join_starting_bonus,
     /// p_social_narration_enabled, p_briefing_48h_enabled,
-    /// p_calendar_auto_add_host, p_social_preferences_enabled,
+    /// p_social_preferences_enabled,
     /// p_auto_close_hours, p_seat_deposit_amount,
     /// p_seat_deposit_trigger, p_seat_deposit_grace_minutes)`
     /// (migration 020 + V0.8 extensions + V0.83 auto-close window
-    /// + V0.85 seat-deposit escrow settings, migration 085; the
-    /// forfeit destination was removed in migration 086 — burned).
-    /// The server resolves the host check via the
+    /// + V0.85 seat-deposit escrow settings, migration 085;
+    /// 086 dropped the forfeit destination; 087 dropped
+    /// `p_calendar_auto_add_host` — the per-room host toggle is
+    /// gone). The server resolves the host check via the
     /// `is_host_of_room(p_room_id)` helper and throws on
     /// non-host writes.
     func updateRoom(
@@ -811,7 +812,6 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         joinStartingBonus: Int,
         socialNarrationEnabled: Bool,
         briefing48hEnabled: Bool,
-        calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
         autoCloseHours: Int,
         seatDepositAmount: Int,
@@ -830,7 +830,6 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 "p_join_starting_bonus": String(joinStartingBonus),
                 "p_social_narration_enabled": String(socialNarrationEnabled),
                 "p_briefing_48h_enabled": String(briefing48hEnabled),
-                "p_calendar_auto_add_host": String(calendarAutoAddHost),
                 "p_social_preferences_enabled": String(socialPreferencesEnabled),
                 "p_auto_close_hours": String(autoCloseHours),
                 "p_seat_deposit_amount": String(seatDepositAmount),
@@ -847,6 +846,36 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             )
         }
         return room
+    }
+
+    // MARK: Calendar (V0.86 — per-member toggle + server-side identifier)
+
+    /// The live RPC is
+    /// `set_member_calendar_auto_add(p_enabled boolean)` (migration
+    /// 087). Per-USER toggle — applies to every room the caller is
+    /// in (no room_id parameter on purpose). Idempotent.
+    func setMemberCalendarAutoAdd(enabled: Bool) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_member_calendar_auto_add", params: [
+                "p_enabled": String(enabled)
+            ])
+            .execute()
+            .value as Void
+    }
+
+    /// The live RPC is
+    /// `report_calendar_identifier(p_event_id, p_identifier)`
+    /// (migration 087). Idempotent — second call overwrites with
+    /// the latest identifier (the EKEvent id can change after an
+    /// edit on a different device).
+    func reportCalendarIdentifier(eventId: UUID, identifier: String) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("report_calendar_identifier", params: [
+                "p_event_id": eventId.uuidString,
+                "p_identifier": identifier
+            ])
+            .execute()
+            .value as Void
     }
 
     // MARK: Host journal (P1.5)

@@ -1720,6 +1720,20 @@ private struct BriefingSlot: View {
             // per-event (dispatcher's declined gate), so no mute
             // control lives here anymore.
 
+            // V0.86 — first-time-only mascot voice line for the
+            // calendar permission. The brief: "Games Room can add
+            // events to your calendar. Tap to allow." One-time,
+            // then gone (substrate: no come-back engagement). The
+            // gate is `EKEventStore.authorizationStatus(for:
+            // .event) == .notDetermined && !CalendarPrompt
+            // .hasSeenVoiceLine()`. The markSeen() fires on
+            // first interaction (denied or granted) — the row
+            // never re-appears.
+            if CalendarService.shared.authorizationStatus() == .notDetermined,
+               !CalendarPrompt.hasSeenVoiceLine() {
+                CalendarVoiceLineRow()
+            }
+
             switch myRSVP {
             case .unclaimed:
                 HStack(spacing: 12) {

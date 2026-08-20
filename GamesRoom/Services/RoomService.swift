@@ -716,7 +716,12 @@ final class RoomService: ObservableObject {
         // T1.1 — calendar auto-add. Best-effort: a denied prompt
         // or a failed write never blocks the event flow. Uses the
         // server-canonical event from the cache when available.
-        if let room = rooms.first(where: { $0.id == roomId }), room.calendarAutoAddHost {
+        // V0.86 — the toggle moved from a per-room host toggle to
+        // a per-member toggle (`room.calendarAutoAdd`). The host's
+        // calendar row is NOT written unless the host is also a
+        // member with the toggle on (host = user, same toggle
+        // applies — no special-case for hosts).
+        if let room = rooms.first(where: { $0.id == roomId }), room.calendarAutoAdd {
             let granted = await CalendarService.shared.requestAccess()
             if granted {
                 let event = activeEventByRoom[roomId] ?? Event(
@@ -727,7 +732,16 @@ final class RoomService: ObservableObject {
                     createdAt: Date(),
                     packSlug: packSlug
                 )
-                await CalendarService.shared.addEvent(room: room, event: event)
+                await CalendarService.shared.addEvent(
+                    room: room,
+                    event: event,
+                    memberToggleOn: true,
+                    reportIdentifier: { eventId, identifier in
+                        try? await self.reportCalendarIdentifier(
+                            eventId: eventId, identifier: identifier
+                        )
+                    }
+                )
             }
         }
         // P1.3 — schedule the briefing trio. The dispatcher is
@@ -775,9 +789,18 @@ final class RoomService: ObservableObject {
             // edits. Reads the post-reload event so the row carries
             // the fresh values.
             if let room = rooms.first(where: { $0.id == event.roomId }),
-               room.calendarAutoAddHost,
+               room.calendarAutoAdd,
                let fresh = activeEventByRoom[event.roomId] {
-                await CalendarService.shared.updateEvent(room: room, event: fresh)
+                await CalendarService.shared.updateEvent(
+                    room: room,
+                    event: fresh,
+                    memberToggleOn: true,
+                    reportIdentifier: { eventId, identifier in
+                        try? await self.reportCalendarIdentifier(
+                            eventId: eventId, identifier: identifier
+                        )
+                    }
+                )
             }
         }
     }
@@ -792,7 +815,13 @@ final class RoomService: ObservableObject {
     /// non-host calls.
     func deleteRoom(roomId: UUID) async throws {
         for event in activeEventByRoom.values where event.roomId == roomId {
-            await CalendarService.shared.removeEvent(eventId: event.id)
+            // V0.86 — pass the server-cached EventKit identifier
+            // (no UserDefaults lookup) so the calendar row is
+            // removed even after a reinstall.
+            await CalendarService.shared.removeEvent(
+                eventId: event.id,
+                identifier: event.eventCalendarIdentifier
+            )
         }
         try await store.deleteRoom(roomId: roomId)
         self.lastError = nil
@@ -813,6 +842,10 @@ final class RoomService: ObservableObject {
     /// server-applied defaults) and updates the rooms-list cache so
     /// the Rooms-page row reflects the new name + mascot
     /// immediately.
+    ///
+    /// V0.86 — `calendarAutoAddHost` parameter dropped (the
+    /// per-room host toggle is gone). The calendar mirror moved
+    /// to a per-user surface (`setMemberCalendarAutoAdd`).
     @discardableResult
     func updateRoom(
         id: UUID,
@@ -825,7 +858,6 @@ final class RoomService: ObservableObject {
         joinStartingBonus: Int,
         socialNarrationEnabled: Bool,
         briefing48hEnabled: Bool,
-        calendarAutoAddHost: Bool,
         socialPreferencesEnabled: Bool,
         autoCloseHours: Int,
         seatDepositAmount: Int,
@@ -843,7 +875,6 @@ final class RoomService: ObservableObject {
             joinStartingBonus: joinStartingBonus,
             socialNarrationEnabled: socialNarrationEnabled,
             briefing48hEnabled: briefing48hEnabled,
-            calendarAutoAddHost: calendarAutoAddHost,
             socialPreferencesEnabled: socialPreferencesEnabled,
             autoCloseHours: autoCloseHours,
             seatDepositAmount: seatDepositAmount,
@@ -855,6 +886,74 @@ final class RoomService: ObservableObject {
             rooms[idx] = updated
         }
         return updated
+    }
+
+    /// V0.86 — flips the caller's own
+    /// `room_memberships.calendar_auto_add` across every room
+    /// they belong to (per-user toggle, NOT per-room). The RPC
+    /// is the source of truth; the rooms cache is mirrored so
+    /// the BriefingSlot gate and the settings toggle re-render
+    /// immediately. Throws on auth failure (42501).
+    func setMemberCalendarAutoAdd(enabled: Bool) async throws {
+        try await store.setMemberCalendarAutoAdd(enabled: enabled)
+        self.lastError = nil
+        // Mirror the toggle onto the cached rooms so any view
+        // that reads `liveRoom.calendarAutoAdd` re-renders. The
+        // toggle is global per user, but we mirror into every
+        // cached row to keep the cache self-consistent (a future
+        // migration 087 follow-up reads this from
+        // room_memberships).
+        for idx in rooms.indices {
+            let old = rooms[idx]
+            rooms[idx] = Room(
+                id: old.id,
+                name: old.name,
+                mascotName: old.mascotName,
+                mascotPersonality: old.mascotPersonality,
+                mascotPoliticalIdeology: old.mascotPoliticalIdeology,
+                createdBy: old.createdBy,
+                createdAt: old.createdAt,
+                updatedAt: old.updatedAt,
+                isLive: old.isLive,
+                nextEventDescription: old.nextEventDescription,
+                joinStartingBonus: old.joinStartingBonus,
+                mascotApiKey: old.mascotApiKey,
+                userRole: old.userRole,
+                briefing48hEnabled: old.briefing48hEnabled,
+                calendarAutoAdd: enabled,
+                socialPreferencesEnabled: old.socialPreferencesEnabled,
+                socialNarrationEnabled: old.socialNarrationEnabled,
+                maxSeats: old.maxSeats,
+                memberInviteQuota: old.memberInviteQuota,
+                hostJournal: old.hostJournal,
+                installedPackSlugs: old.installedPackSlugs,
+                seatDepositAmount: old.seatDepositAmount,
+                seatDepositTrigger: old.seatDepositTrigger,
+                seatDepositGraceMinutes: old.seatDepositGraceMinutes,
+                memberDrowningOptIn: old.memberDrowningOptIn,
+                notificationsEnabled: old.notificationsEnabled,
+                overlapCount: old.overlapCount,
+                overlapNames: old.overlapNames,
+                autoCloseHours: old.autoCloseHours
+            )
+        }
+    }
+
+    /// V0.86 — reports the EventKit row identifier for an
+    /// event so the server can map back to the EKEvent on
+    /// update / delete. Persisted into
+    /// `events.event_calendar_identifier` (migration 087).
+    /// Idempotent (a second call overwrites with the latest).
+    /// Refreshes the active-event cache for the affected room
+    /// so subsequent reads see the identifier without a manual
+    /// reload.
+    func reportCalendarIdentifier(eventId: UUID, identifier: String) async throws {
+        try await store.reportCalendarIdentifier(eventId: eventId, identifier: identifier)
+        self.lastError = nil
+        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
+            cacheTimestamps.removeValue(forKey: "activeEvent:\(event.roomId.uuidString)")
+            _ = await loadActiveEvent(roomId: event.roomId)
+        }
     }
 
     /// Loads active pre-play events and their claimed RSVP rows for the rooms list.
@@ -1307,7 +1406,7 @@ final class RoomService: ObservableObject {
                 mascotApiKey: old.mascotApiKey,
                 userRole: old.userRole,
                 briefing48hEnabled: old.briefing48hEnabled,
-                calendarAutoAddHost: old.calendarAutoAddHost,
+                calendarAutoAdd: old.calendarAutoAdd,
                 socialPreferencesEnabled: old.socialPreferencesEnabled,
                 socialNarrationEnabled: old.socialNarrationEnabled,
                 maxSeats: old.maxSeats,
@@ -1353,7 +1452,7 @@ final class RoomService: ObservableObject {
                 mascotApiKey: old.mascotApiKey,
                 userRole: old.userRole,
                 briefing48hEnabled: old.briefing48hEnabled,
-                calendarAutoAddHost: old.calendarAutoAddHost,
+                calendarAutoAdd: old.calendarAutoAdd,
                 socialPreferencesEnabled: old.socialPreferencesEnabled,
                 socialNarrationEnabled: old.socialNarrationEnabled,
                 maxSeats: old.maxSeats,

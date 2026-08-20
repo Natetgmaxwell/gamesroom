@@ -61,9 +61,14 @@ struct Room: Identifiable, Codable, Hashable {
     /// T-48h and morning-of.
     let briefing48hEnabled: Bool
 
-    /// Whether the host's events auto-add to their personal
-    /// calendar (with consent).
-    let calendarAutoAddHost: Bool
+    /// V0.86 — per-member calendar auto-add. NOT per-room. A single
+    /// toggle the caller flips for themselves; applies to every
+    /// room the caller is in. Replaces V0.26's
+    /// `rooms.calendar_auto_add_host` (the per-room host toggle is
+    /// gone — see migration 087). Surfaced via `get_my_rooms` so
+    /// the iOS settings UI can render the toggle state without a
+    /// separate fetch.
+    let calendarAutoAdd: Bool
 
     /// Whether members can author a social-preference row.
     let socialPreferencesEnabled: Bool
@@ -165,7 +170,7 @@ struct Room: Identifiable, Codable, Hashable {
         case joinStartingBonus = "join_starting_bonus"
         case userRole = "user_role"
         case briefing48hEnabled = "briefing_48h_enabled"
-        case calendarAutoAddHost = "calendar_auto_add_host"
+        case calendarAutoAdd = "calendar_auto_add"
         case socialPreferencesEnabled = "social_preferences_enabled"
         case socialNarrationEnabled = "social_narration_enabled"
         case maxSeats = "max_seats"
@@ -203,7 +208,7 @@ struct Room: Identifiable, Codable, Hashable {
         mascotApiKey: String? = nil,
         userRole: RoomRole,
         briefing48hEnabled: Bool = true,
-        calendarAutoAddHost: Bool = false,
+        calendarAutoAdd: Bool = false,
         socialPreferencesEnabled: Bool = true,
         socialNarrationEnabled: Bool = true,
         maxSeats: Int = 6,
@@ -233,7 +238,7 @@ struct Room: Identifiable, Codable, Hashable {
         self.joinStartingBonus = joinStartingBonus
         self.userRole = userRole
         self.briefing48hEnabled = briefing48hEnabled
-        self.calendarAutoAddHost = calendarAutoAddHost
+        self.calendarAutoAdd = calendarAutoAdd
         self.socialPreferencesEnabled = socialPreferencesEnabled
         self.socialNarrationEnabled = socialNarrationEnabled
         self.maxSeats = maxSeats
@@ -266,7 +271,10 @@ struct Room: Identifiable, Codable, Hashable {
         joinStartingBonus = try c.decodeIfPresent(Int.self, forKey: .joinStartingBonus) ?? 200
         userRole = try c.decode(RoomRole.self, forKey: .userRole)
         briefing48hEnabled = try c.decodeIfPresent(Bool.self, forKey: .briefing48hEnabled) ?? true
-        calendarAutoAddHost = try c.decodeIfPresent(Bool.self, forKey: .calendarAutoAddHost) ?? false
+        // V0.86 — server now returns calendar_auto_add (per-user),
+        // not rooms.calendar_auto_add_host (per-room, gone). Legacy
+        // decode paths handled the old key on get_my_rooms only.
+        calendarAutoAdd = try c.decodeIfPresent(Bool.self, forKey: .calendarAutoAdd) ?? false
         socialPreferencesEnabled = try c.decodeIfPresent(Bool.self, forKey: .socialPreferencesEnabled) ?? true
         socialNarrationEnabled = try c.decodeIfPresent(Bool.self, forKey: .socialNarrationEnabled) ?? true
         maxSeats = try c.decodeIfPresent(Int.self, forKey: .maxSeats) ?? 6
@@ -309,7 +317,7 @@ struct Room: Identifiable, Codable, Hashable {
         try c.encode(joinStartingBonus, forKey: .joinStartingBonus)
         try c.encode(userRole, forKey: .userRole)
         try c.encode(briefing48hEnabled, forKey: .briefing48hEnabled)
-        try c.encode(calendarAutoAddHost, forKey: .calendarAutoAddHost)
+        try c.encode(calendarAutoAdd, forKey: .calendarAutoAdd)
         try c.encode(socialPreferencesEnabled, forKey: .socialPreferencesEnabled)
         try c.encode(socialNarrationEnabled, forKey: .socialNarrationEnabled)
         try c.encode(maxSeats, forKey: .maxSeats)

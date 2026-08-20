@@ -70,6 +70,15 @@ struct Event: Identifiable, Codable, Hashable {
     /// chips` CTA visibility on the Witness Screen.
     let hostFinalized: Bool
 
+    /// V0.86 — the EventKit row identifier that maps back to this
+    /// event on the device. Server-side persisted in
+    /// `events.event_calendar_identifier` (migration 087) so the
+    /// id survives reinstalls + device transfers. `nil` when this
+    /// event was never written to any calendar. Mirrors migration
+    /// 087's `get_active_event` + `report_calendar_identifier`
+    /// contract.
+    let eventCalendarIdentifier: String?
+
     /// Sentinel UUID used when the active-event RPC omits `room_id`
     /// (migration 012) — `gen_random_uuid()` never produces all-zeros,
     /// so this cannot collide with a real room. Migration 060 returns
@@ -92,6 +101,7 @@ struct Event: Identifiable, Codable, Hashable {
         case sessionId = "session_id"
         case packSlug = "pack_slug"
         case hostFinalized = "host_finalized"
+        case eventCalendarIdentifier = "event_calendar_identifier"
     }
 
     init(
@@ -107,7 +117,8 @@ struct Event: Identifiable, Codable, Hashable {
         settledAt: Date? = nil,
         sessionId: UUID? = nil,
         packSlug: String = "casino",
-        hostFinalized: Bool = false
+        hostFinalized: Bool = false,
+        eventCalendarIdentifier: String? = nil
     ) {
         self.id = id
         self.roomId = roomId
@@ -122,6 +133,7 @@ struct Event: Identifiable, Codable, Hashable {
         self.sessionId = sessionId
         self.packSlug = packSlug
         self.hostFinalized = hostFinalized
+        self.eventCalendarIdentifier = eventCalendarIdentifier
     }
 
     init(from decoder: Decoder) throws {
@@ -143,6 +155,10 @@ struct Event: Identifiable, Codable, Hashable {
         sessionId = try c.decodeIfPresent(UUID.self, forKey: .sessionId)
         packSlug = try c.decodeIfPresent(String.self, forKey: .packSlug) ?? "casino"
         hostFinalized = try c.decodeIfPresent(Bool.self, forKey: .hostFinalized) ?? false
+        // V0.86 — server-side identifier (migration 087). Legacy
+        // rows from before the column existed decode as nil (the
+        // event was never written to any calendar).
+        eventCalendarIdentifier = try c.decodeIfPresent(String.self, forKey: .eventCalendarIdentifier)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -164,5 +180,6 @@ struct Event: Identifiable, Codable, Hashable {
         try c.encodeIfPresent(sessionId, forKey: .sessionId)
         try c.encode(packSlug, forKey: .packSlug)
         try c.encode(hostFinalized, forKey: .hostFinalized)
+        try c.encodeIfPresent(eventCalendarIdentifier, forKey: .eventCalendarIdentifier)
     }
 }
