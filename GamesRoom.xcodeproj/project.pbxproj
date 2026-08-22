@@ -117,6 +117,9 @@
 		AAAAAAAA00000000000000ED /* RoomGraphSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048C /* RoomGraphSummary.swift */; };
 		AAAAAAAA000000000000048F /* Fraunces-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */; };
 		AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */; };
+		AAAAAAAA0000000000000701 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */; };
+		AAAAAAAA0000000000000703 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000702 /* PrivacyInfo.xcprivacy */; };
+		AAAAAAAA0000000000000705 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000704 /* PrivacyInfo.xcprivacy */; };
 		AAAAAAAA0000000000000494 /* ScanSettleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000493 /* ScanSettleService.swift */; };
 		AAAAAAAA0000000000000498 /* ScanSettleResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000497 /* ScanSettleResult.swift */; };
 		AAAAAAAA000000000000049C /* MascotVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000049B /* MascotVoiceService.swift */; };
@@ -277,6 +280,9 @@
 		AAAAAAAA000000000000048C /* RoomGraphSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomGraphSummary.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Regular.ttf; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Italic.ttf; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000702 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000704 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000802 /* Perf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Perf.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000493 /* ScanSettleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleService.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000497 /* ScanSettleResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleResult.swift; sourceTree = "<group>"; };
@@ -325,6 +331,7 @@
 				AAAAAAAA0000000000000443 /* GamesRoom.entitlements */,
 				AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */,
 				AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */,
+				AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */,
 			);
 			path = GamesRoom;
 			sourceTree = "<group>";
@@ -345,6 +352,7 @@
 				AAAAAAAA0000000000000462 /* GamesRoomWidgets.swift */,
 				AAAAAAAA0000000000000463 /* Info.plist */,
 				AAAAAAAA000000000000046E /* GamesRoomWidgets.entitlements */,
+				AAAAAAAA0000000000000702 /* PrivacyInfo.xcprivacy */,
 			);
 			path = GamesRoomWidgets;
 			sourceTree = "<group>";
@@ -355,6 +363,7 @@
 				AAAAAAAA0000000000000464 /* GamesRoomWatchApp.swift */,
 				AAAAAAAA0000000000000465 /* Info.plist */,
 				AAAAAAAA000000000000046F /* GamesRoomWatch.entitlements */,
+				AAAAAAAA0000000000000704 /* PrivacyInfo.xcprivacy */,
 			);
 			path = GamesRoomWatch;
 			sourceTree = "<group>";
@@ -624,6 +633,7 @@
 				AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */,
 				AAAAAAAA000000000000048F /* Fraunces-Regular.ttf in Resources */,
 				AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */,
+				AAAAAAAA0000000000000701 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -631,6 +641,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AAAAAAAA0000000000000703 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -638,6 +649,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AAAAAAAA0000000000000705 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
