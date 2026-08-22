@@ -101,4 +101,18 @@ final class AuthService: ObservableObject {
         // — but the preview helpers downstream use it just for type presence.
         return svc
     }
+
+    #if DEBUG
+    /// V0.92 screenshot bypass — inject a deterministic stub
+    /// `currentUser` so the in-app surfaces (rooms list, room detail,
+    /// casino, settings) can be captured for App Store screenshots
+    /// without going through Apple Sign-In. This branch compiles only
+    /// in Debug builds; release builds never call it.
+    func injectStubUserForScreenshots() {
+        self.currentUser = User(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            displayName: "Nathan"
+        )
+    }
+    #endif
 }
