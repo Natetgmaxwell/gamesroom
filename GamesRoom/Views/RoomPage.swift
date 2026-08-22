@@ -65,6 +65,24 @@ struct RoomPage: View {
     /// the push; clearing it pops back.
     @State private var selectedRoom: Room?
 
+    /// iPhone-only path binding for the rooms-list `NavigationStack`.
+    /// Used to programmatically push into a room when in screenshot
+    /// mode (V0.92) — the production tap path still uses the
+    /// `NavigationLink(value:)` driven push at `.navigationDestination`.
+    @State private var roomsPath: [Room] = []
+
+    #if DEBUG
+    /// V0.92 — initial-screen selector. When launched with
+    /// `-screenshots-screen=room-detail`, push the first seeded
+    /// room onto the iPhone NavigationStack on first appearance.
+    /// Other values: nil = default rooms list.
+    private static var screenshotInitialRoomPush: Bool {
+        CommandLine.arguments.contains("-screenshots-screen=room-detail") ||
+        CommandLine.arguments.contains("-screenshots-screen=casino") ||
+        CommandLine.arguments.contains("-screenshots-screen=pack-detail")
+    }
+    #endif
+
     /// The room whose settings the user is editing. `nil` ⇒ the
     /// settings sheet is dismissed. Only valid for host role rooms.
     @State private var settingsRoom: Room?
@@ -112,6 +130,17 @@ struct RoomPage: View {
         .task {
             await roomService.refresh()
             await roomService.loadRoomsSocialProof()
+            #if DEBUG
+            // V0.92 — screenshot mode: push the first room onto
+            // the iPhone NavigationStack so the room-detail surface
+            // is the first thing on screen when the screenshot
+            // fires. Production tap path is unaffected.
+            if Self.screenshotInitialRoomPush,
+               roomsPath.isEmpty,
+               let first = roomService.rooms.first {
+                roomsPath = [first]
+            }
+            #endif
         }
         .refreshable {
             await roomService.refresh()
@@ -128,7 +157,7 @@ struct RoomPage: View {
 
     /// iPhone path — the pre-W2.8 NavigationStack, byte-identical.
     private var stackView: some View {
-        NavigationStack {
+        NavigationStack(path: $roomsPath) {
             content
                 .background(Theme.Palette.background.ignoresSafeArea())
                 .navigationTitle("Rooms")

@@ -22,7 +22,21 @@ import Supabase
 @main
 struct GamesRoomApp: App {
     @StateObject private var auth = AuthService()
+    #if DEBUG
+    // V0.92 screenshot mode — when launched with
+    // `-screenshots-bypass-auth`, swap the live Supabase store for
+    // `InMemoryRoomStore.shared` so the screens render against the
+    // seeded rooms / events / casino state instead of an empty
+    // network-backed fetch. Production builds never see this branch.
+    private static func makeScreenshotStore() -> RoomStore {
+        CommandLine.arguments.contains("-screenshots-bypass-auth")
+            ? InMemoryRoomStore.shared
+            : LiveRoomStore.shared
+    }
+    @StateObject private var roomService = RoomService(store: GamesRoomApp.makeScreenshotStore())
+    #else
     @StateObject private var roomService = RoomService(store: LiveRoomStore.shared)
+    #endif
     @StateObject private var casinoService = CasinoService()
     @StateObject private var scoringService = ScoringService()
 

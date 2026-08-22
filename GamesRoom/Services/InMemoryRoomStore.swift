@@ -224,7 +224,14 @@ actor InMemoryRoomStore: RoomStore {
             venue: "The dining room",
             hostNote: "Bring your own chips. Snacks on me.",
             maxSeats: 6,
-            startedAt: nil,
+            // V0.92 — screenshot mode flips startedAt to "30 min
+            // ago" so the room surfaces the .inPlay casino state
+            // (chip counts, action chips, deposit escrow banner).
+            // Production runs (no screenshot arg) stay on `nil`
+            // (the pre-V0.92 pre-start state).
+            startedAt: CommandLine.arguments.contains("-screenshots-bypass-auth")
+                ? Date().addingTimeInterval(-1_800)
+                : nil,
             settledAt: nil,
             sessionId: nil,
             hostFinalized: false

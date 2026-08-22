@@ -53,6 +53,17 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .rooms
     @State private var isRestoringSession = true
 
+    #if DEBUG
+    /// V0.92 — screenshot mode initial-tab selection. Read from
+    /// `-screenshots-tab=rooms|settings`; falls back to `.rooms`.
+    private static var screenshotInitialTab: AppTab {
+        if let arg = CommandLine.arguments.first(where: { $0.hasPrefix("-screenshots-tab=") }) {
+            return arg == "-screenshots-tab=settings" ? .settings : .rooms
+        }
+        return .rooms
+    }
+    #endif
+
     var body: some View {
         Group {
             if isRestoringSession {
@@ -60,6 +71,11 @@ struct ContentView: View {
                     .ignoresSafeArea()
                     .overlay(ProgressView())
             } else {
+                #if DEBUG
+                let initialTab = Self.screenshotInitialTab
+                #else
+                let initialTab = AppTab.rooms
+                #endif
                 TabView(selection: $selectedTab) {
                     NavigationStack {
                         RoomPage()
@@ -78,12 +94,28 @@ struct ContentView: View {
                     .tag(AppTab.settings)
                 }
                 .tint(Theme.Palette.accent)
+                #if DEBUG
+                .onAppear { selectedTab = initialTab }
+                #endif
                 .sheet(isPresented: signInBinding) {
                     SignInView(authService: auth)
                 }
             }
         }
         .task {
+            #if DEBUG
+            // V0.92 screenshot bypass: when launched with
+            // `-screenshots-bypass-auth`, skip the real Supabase auth
+            // check and load a stubbed currentUser so screenshots can
+            // capture in-app surfaces (rooms list, room detail,
+            // casino, settings) without going through Apple Sign-In.
+            // Production builds (Release) never see this branch.
+            if CommandLine.arguments.contains("-screenshots-bypass-auth") {
+                auth.injectStubUserForScreenshots()
+                isRestoringSession = false
+                return
+            }
+            #endif
             await auth.loadCurrentUser()
             isRestoringSession = false
         }
