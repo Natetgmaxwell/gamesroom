@@ -108,6 +108,13 @@ alter table public.rooms
   add constraint rooms_seat_deposit_trigger_check
   check (seat_deposit_trigger in ('escrow', 'off'));
 
+-- 082 shipped the column with default 'prompt'; the rename above
+-- carried it through, so any INSERT that omits the column (e.g. the
+-- pre-082 create_room RPC) wrote 'prompt' and violated the new
+-- CHECK. Reset the default to the canonical V0.85 mode.
+alter table public.rooms
+  alter column seat_deposit_trigger set default 'escrow';
+
 -- Rename the surviving bounds constraints so the catalog reads
 -- consistently (values unchanged).
 alter table public.rooms drop constraint if exists rooms_no_show_tax_amount_range;
