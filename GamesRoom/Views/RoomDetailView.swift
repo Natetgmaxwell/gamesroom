@@ -1789,7 +1789,20 @@ private struct BriefingSlot: View {
                     // deposit and records attendance itself. The
                     // member wants their chips back, so no nagging
                     // is ever needed.
-                    if let deposit = heldDeposit, deposit.status == .held, let onCheckIn {
+                    //
+                    // V0.91 amend — gate on `seatDepositTrigger ==
+                    // .escrow` as well. When the host flips
+                    // deposits off mid-event, an existing held row
+                    // stays in `seat_deposits.status = 'held'` (we
+                    // never auto-return on a toggle), but the
+                    // reclaim UI must disappear — the room is no
+                    // longer running the escrow, the "I'm here" tap
+                    // has nothing to return, and a stuck button on
+                    // a claimed seat is naked debt.
+                    if let deposit = heldDeposit,
+                       deposit.status == .held,
+                       room.seatDepositTrigger == .escrow,
+                       let onCheckIn {
                         Text("Tap when you walk in — your deposit comes straight back.")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
