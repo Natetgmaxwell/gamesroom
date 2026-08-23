@@ -1079,7 +1079,23 @@ struct RoomDetailView: View {
 
     private func loadActiveIfNeeded(force: Bool = false) async {
         if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            await roomService.loadActiveEvent(roomId: room.id, force: force)
+            let event = await roomService.loadActiveEvent(
+                roomId: room.id, force: force
+            )
+            // V0.91 — late-opt-in catch-up on room-open. When the
+            // local user is opted in to this room and an active
+            // event exists, schedule the on-create push for it if
+            // the dispatcher has no pending request for the same
+            // (eventId, kind, userId) identifier. Covers the case
+            // where the realtime INSERT was missed (device
+            // suspended, offline at creation moment) AND the case
+            // where the user just opted in and is now opening the
+            // room for the first time since.
+            if event != nil {
+                await roomService.scheduleActiveEventOnCreateIfMissing(
+                    roomId: room.id
+                )
+            }
         }
     }
 

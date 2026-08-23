@@ -24,6 +24,16 @@
 //      (eventId, cadence, userId) identifiers mean a duplicate
 //      insert delivery overwrites instead of stacking.
 //
+//  V0.91 — late-opt-in catch-up lives in `RoomService`
+//  (`setNotificationsEnabled` write path), NOT here. A realtime
+//  UPDATE stream on `room_memberships` would also catch the
+//  `false→true` flip, but the only writer of that flag is the
+//  same user's own `set_notifications_enabled` RPC, which already
+//  lands on this device first via the local write path. Skipping
+//  the realtime stream keeps us off `room_memberships` in the
+//  publication and avoids a REPLICA IDENTITY FULL migration that
+//  would slow every UPDATE to that hot table.
+//
 //  Deliberately NOT covered (accepted gaps, documented):
 //   - Offline members miss the realtime moment entirely. The
 //     briefing slot still renders in-app on next open. Full

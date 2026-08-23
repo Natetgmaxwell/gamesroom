@@ -1492,6 +1492,61 @@ final class RoomService: ObservableObject {
         // trio for the room so the previously-scheduled pushes
         // reflect the new opt-in immediately.
         await cancelRoomCadence(roomId: roomId)
+        // V0.91 — late-opt-in catch-up. When the member flips
+        // notifications on, schedule the on-create push for the
+        // room's active event so they receive the briefing they
+        // missed while opted out. Skipped on opt-out (nothing to
+        // catch up on) and on rooms with no active event.
+        // Idempotent against the realtime INSERT path: the
+        // dispatcher's stable (eventId, kind, userId) identifier
+        // means a duplicate scheduling call overwrites instead of
+        // stacking.
+        if enabled {
+            await scheduleActiveEventOnCreateIfMissing(roomId: roomId)
+        }
+    }
+
+    /// V0.91 — schedule the on-create briefing push for the
+    /// room's currently-active event when the local user is opted
+    /// in and the dispatcher has no pending request for the same
+    /// (eventId, kind, userId) identifier. Two call sites:
+    /// 1. `setNotificationsEnabled(_, enabled: true)` — the
+    ///    late-opt-in case: member flips notifications on after
+    ///    the realtime INSERT window closed.
+    /// 2. `RoomDetailView.loadActiveIfNeeded` — the room-open
+    ///    case: covers device-suspended / offline-at-creation
+    ///    misses AND the same late-opt-in flow when the user
+    ///    reopens the room rather than hitting the settings
+    ///    toggle.
+    /// Both paths are idempotent: the dispatcher dedupes by
+    /// identifier, so whichever fires first wins, and the loser is
+    /// a no-op overwrite.
+    func scheduleActiveEventOnCreateIfMissing(roomId: UUID) async {
+        guard let room = rooms.first(where: { $0.id == roomId }) else { return }
+        guard room.notificationsEnabled else { return }
+        guard let event = await loadActiveEvent(roomId: roomId) else { return }
+        let callerId = await SupabaseClientProvider.currentSession()?.user.id
+        guard let callerId else { return }
+        if await NotificationDispatcher.shared.hasPendingOnCreate(
+            eventId: event.id, userId: callerId
+        ) {
+            return
+        }
+        let callerName = membersByRoom[roomId]?
+            .first(where: { $0.userId == callerId })?.displayName
+        await NotificationDispatcher.shared.scheduleBriefingTrio(
+            eventId: event.id,
+            eventName: event.name,
+            playedAt: event.playedAt,
+            mascotName: room.mascotName,
+            perMemberCadence: [callerId: .unclaimed],
+            memberNameById: [callerId: callerName ?? "friend"],
+            optedInMemberIds: [callerId],
+            mutedMemberIds: [],
+            hostNote: nil,
+            mascotPersonality: room.mascotPersonality,
+            mascotIdeology: room.mascotPoliticalIdeology
+        )
     }
 
     /// V0.54 — flips the calling member's per-event mute flag.
