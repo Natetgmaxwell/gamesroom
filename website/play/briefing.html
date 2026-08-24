@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Games Room — Bring the night in your room's voice.</title>
-  <meta name="description" content="Type your room. Pick a voice. Send the briefing. Free, no signup — a Games Room lead-magnet that turns your pre-event message into the thing your group chat screenshots.">
+  <meta name="description" content="Type the room. The app writes the briefing in the voice you pick, so you don't have to send it. Free, no signup.">
   <meta property="og:title" content="Games Room — Bring the night in your room's voice.">
-  <meta property="og:description" content="Type your room. Pick a voice. Send the briefing. Free, no signup.">
+  <meta property="og:description" content="Type the room. The app writes the briefing. You don't have to send it.">
   <meta property="og:image" content="/icon-120.png">
   <meta property="og:image:alt" content="The Games Room mark: a warm table seen from above, four seats waiting, in dark grey and gold.">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
-  <link rel="stylesheet" href="/style.css?v=72">
+  <link rel="stylesheet" href="/style.css?v=79">
 </head>
 <body class="page-briefing">
   <header class="site-header">
@@ -26,7 +26,6 @@
         <a href="/how-it-works">How it works</a>
         <a href="/features">Features</a>
         <a href="/play/briefing" aria-current="page">Briefing</a>
-        <a href="/play/mascot">Voice sampler</a>
         <a href="/privacy">Privacy</a>
       </nav>
     </div>
@@ -36,59 +35,52 @@
     <section class="hero briefing-hero fullbleed">
       <div class="hero-inner">
         <div class="hero-copy">
-          <span class="beta"><span class="dot"></span> Tool A · Briefing</span>
           <h1>Bring the night in your room's voice.</h1>
-          <p class="sub-head">Type the details. Pick the voice. Send the briefing.</p>
-          <p class="lead">Twenty-five voices in the room. Three briefings each. One pre-event message that sounds like your group chat — but better.</p>
-          <a class="cta" href="#briefing-form" id="briefing-cta">Start the briefing <span class="arrow">→</span></a>
+          <p class="sub-head">Real tables. Real friends.</p>
+          <p class="lead">One tap. Sample room, sample voice. The briefing renders.</p>
         </div>
       </div>
     </section>
 
     <section class="shell briefing-shell" id="briefing-form">
-      <p class="kicker">The form</p>
-      <h2>Type the room.</h2>
-      <p class="muted">Five fields. One minute. No signup before the first briefing renders.</p>
-
-      <form id="briefing-form-el" class="briefing-form" novalidate>
-        <div class="field">
-          <label for="bf-room">Room name</label>
-          <input id="bf-room" type="text" name="room" required autocomplete="off" placeholder="Friday poker">
-        </div>
-        <div class="field">
-          <label for="bf-event">Event</label>
-          <input id="bf-event" type="text" name="event" required autocomplete="off" placeholder="Poker">
-        </div>
-        <div class="field field-wide">
-          <label for="bf-time-venue">Time + venue</label>
-          <input id="bf-time-venue" type="text" name="time-venue" autocomplete="off" placeholder="Friday 7:30pm, my place">
-          <p class="field-help muted">One line. "Friday 7:30pm, my place." The briefing splits it.</p>
-        </div>
-        <div class="field field-narrow">
-          <label for="bf-seats">Seats left</label>
-          <input id="bf-seats" type="number" name="seats" min="0" max="99" value="2" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label for="bf-mascot">Mascot name</label>
-          <input id="bf-mascot" type="text" name="mascot" required autocomplete="off" value="Marlow" placeholder="Marlow">
+      <form id="briefing-form-el" class="briefing-form" novalidate onsubmit="return false">
+        <div class="cta-row">
+          <button type="button" class="cta cta-primary" id="bf-surprise">Surprise me <span class="arrow">→</span></button>
+          <p class="cta-help">Fills the form, picks a voice, renders the briefing. Or fill it yourself below.</p>
         </div>
 
-        <fieldset class="voice-picker" aria-labelledby="voice-picker-label">
-          <legend id="voice-picker-label">Pick the voice</legend>
-          <p class="muted voice-picker-help">Twenty-five rooms in one grid. The voice you pick is the one your group chat hears.</p>
-          <div class="voice-carousel" id="voice-carousel" aria-label="Mascot voice carousel"></div>
-          <p class="muted voice-carousel-help">Use ← → to step through the voices.</p>
-        </fieldset>
+        <div class="form-fields">
+          <div class="field">
+            <label for="bf-room">Room</label>
+            <input id="bf-room" type="text" name="room" required autocomplete="off" placeholder="Friday poker">
+          </div>
+          <div class="field">
+            <label for="bf-event">Event</label>
+            <input id="bf-event" type="text" name="event" required autocomplete="off" placeholder="Poker">
+          </div>
+          <div class="field field-wide">
+            <label for="bf-time-venue">When + where</label>
+            <input id="bf-time-venue" type="text" name="time-venue" autocomplete="off" placeholder="Friday 7:30pm, my place">
+          </div>
+          <div class="field field-seats">
+            <label for="bf-seats">Seats left: <span id="bf-seats-val">2</span></label>
+            <input id="bf-seats" type="range" name="seats" min="0" max="8" value="2">
+          </div>
+          <div class="field">
+            <label for="bf-mascot">Mascot name</label>
+            <input id="bf-mascot" type="text" name="mascot" required autocomplete="off" value="Marlow" placeholder="Marlow">
+          </div>
+        </div>
 
-        <button type="submit" class="cta cta-form" id="briefing-generate">Write the briefing <span class="arrow">→</span></button>
+        <div class="voice-picker" role="group" aria-labelledby="voice-picker-label">
+          <span id="voice-picker-label" class="voice-picker-label">Voice</span>
+          <div class="voice-strip" id="voice-strip" aria-label="Mascot voice"></div>
+          <p class="voice-preview" id="voice-preview"></p>
+        </div>
       </form>
     </section>
 
     <section class="shell briefing-output" id="briefing-output" hidden aria-live="polite">
-      <p class="kicker">The output</p>
-      <h2>Three briefings. Pick the moment.</h2>
-      <p class="muted">Pre-event, 48 hours out, morning of. Screenshot the first one — it is sized for the group chat.</p>
-
       <div class="briefing-card-stack">
         <article class="briefing-card" data-kind="briefingOnCreate" aria-labelledby="briefing-create-label">
           <header class="briefing-card-head">
@@ -133,30 +125,25 @@
           Download first card as PNG
         </button>
       </div>
-      <p class="muted briefing-output-note">First card is sized to an IG story (1080 × 1920). Screenshot it, send it, watch the group chat notice.</p>
-    </section>
+      <p class="muted briefing-output-note">Sized for the group chat. Tap to download.</p>
 
-    <section class="shell briefing-shell briefing-capture">
-      <p class="kicker">Stay in the loop</p>
-      <h2>Drop your email. We'll tell you when Games Room hits the App Store.</h2>
-      <p class="muted">One email, when the room opens. No newsletter. No drip.</p>
-      <form id="lead-form" class="lead-form" novalidate>
-        <label class="visually-hidden" for="lead-email">Your email</label>
-        <input
-          id="lead-email"
-          name="email"
-          type="email"
-          required
-          autocomplete="email"
-          placeholder="you@yourplace.com"
-          class="lead-input"
-        >
-        <button type="submit" class="lead-submit">Save this room</button>
-      </form>
-      <p id="lead-status" class="lead-status" role="status" aria-live="polite"></p>
-      <p class="muted lead-secondary">
-        Or: <a href="/play/mascot">sample the voices</a> &nbsp;·&nbsp; <a href="/features">see what the app does</a>.
-      </p>
+      <div class="lead-inline">
+        <p>When the App Store opens, we'll tell you.</p>
+        <form id="lead-form" class="lead-inline-form" novalidate>
+          <label class="visually-hidden" for="lead-email">Your email</label>
+          <input
+            id="lead-email"
+            name="email"
+            type="email"
+            required
+            autocomplete="email"
+            placeholder="you@yourplace.com"
+            class="lead-inline-input"
+          >
+          <button type="submit" class="lead-inline-submit">Tell me</button>
+        </form>
+        <p id="lead-status" class="lead-inline-status" role="status" aria-live="polite"></p>
+      </div>
     </section>
   </main>
 
@@ -166,15 +153,14 @@
       <a href="/">Home</a>
       <a href="/how-it-works">How it works</a>
       <a href="/features">Features</a>
-      <a href="/play/mascot">Voice sampler</a>
       <a href="/privacy">Privacy</a>
       <a href="/support">Support</a>
       <a href="/privacy">Privacy policy</a>
     </nav>
   </footer>
 
-  <script src="/voices.js" defer></script>
+  <script src="/voices.js?v=4" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
-  <script src="/play/briefing.js" defer></script>
+  <script src="/play/briefing.js?v=4" defer></script>
 </body>
 </html>

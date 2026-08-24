@@ -17,7 +17,6 @@
   var PERSONALITY_LABEL = V.PERSONALITY_LABEL;
   var IDEOLOGY_LABEL    = V.IDEOLOGY_LABEL;
   var IDEOLOGY_HEAD     = V.IDEOLOGY_HEAD;
-  var VOICE_HINT        = V.VOICE_HINT;
   var MATRIX            = V.MATRIX;
   var interpolate       = V.interpolate;
   var dropEmptySentences = V.dropEmptySentences;
@@ -29,58 +28,131 @@
     { kind: "briefingMorning",  tag: "Morning of",    bodyId: "briefing-morning-body", labelId: "briefing-morning-label" }
   ];
 
-  // Selected voice pair (one of the 25 cells).
-  var selectedPersonality = "snarky";
-  var selectedIdeology    = "trickster";
+  // Selected voice pair (one of the 25 cells). Default = friendly · centrist,
+  // the warmest cell in the matrix (per V0.38 §6 line 153): the lowest-friction
+  // first impression for a host deciding whether to keep scrolling.
+  var selectedPersonality = "friendly";
+  var selectedIdeology    = "centrist";
 
-  // ── 1. Render the 25-cell voice carousel ─────────────────────────────
-  // The grid is a single horizontal strip; voice cards keep the chip
-  // shape from Tool C so hosts recognise the picker. The host scrolls
-  // / arrow-keys through, picks one, and the generate button reads the
-  // selection. Default selected = "snarky · trickster".
-  function renderCarousel() {
-    var carousel = document.getElementById("voice-carousel");
-    if (!carousel) return;
+  // Eight coherent sample rooms — values fit together so one Surprise me
+  // click yields a believable demo, not a random mismatch. Track the last
+  // picked index so repeated clicks cycle to a different sample.
+  var RANDOM_SAMPLES = [
+    {
+      room:      "Friday poker",
+      event:     "Poker",
+      timeVenue: "Friday 7:30pm, my place",
+      seats:     "2",
+      mascot:    "Marlow",
+      voice:     { personality: "snarky", ideology: "trickster" }
+    },
+    {
+      room:      "Sunday CAH",
+      event:     "Cards Against Humanity",
+      timeVenue: "Sunday 8pm, Sam's place",
+      seats:     "3",
+      mascot:    "Maeve",
+      voice:     { personality: "friendly", ideology: "centrist" }
+    },
+    {
+      room:      "Tuesday chess",
+      event:     "Chess",
+      timeVenue: "Tuesday 7pm, the studio",
+      seats:     "1",
+      mascot:    "Bo",
+      voice:     { personality: "professional", ideology: "order" }
+    },
+    {
+      room:      "Monopoly Wednesdays",
+      event:     "Monopoly Deal",
+      timeVenue: "Wednesday 7:30pm, my place",
+      seats:     "4",
+      mascot:    "Juno",
+      voice:     { personality: "unhinged", ideology: "trickster" }
+    },
+    {
+      room:      "The poker room",
+      event:     "Poker",
+      timeVenue: "Saturday 8pm, my place",
+      seats:     "2",
+      mascot:    "Riley",
+      voice:     { personality: "sarcastic", ideology: "anarchist" }
+    },
+    {
+      room:      "Card night",
+      event:     "Poker",
+      timeVenue: "Friday 8pm, Maeve's place",
+      seats:     "3",
+      mascot:    "Kit",
+      voice:     { personality: "friendly", ideology: "centrist" }
+    },
+    {
+      room:      "Saturday chess",
+      event:     "Chess",
+      timeVenue: "Saturday 2pm, the library cafe",
+      seats:     "2",
+      mascot:    "Ash",
+      voice:     { personality: "professional", ideology: "apocalypse" }
+    },
+    {
+      room:      "Game night",
+      event:     "Cards Against Humanity",
+      timeVenue: "Friday 9pm, my place",
+      seats:     "5",
+      mascot:    "Quinn",
+      voice:     { personality: "snarky", ideology: "apocalypse" }
+    }
+  ];
+  var lastSurpriseIdx = -1;
+
+  // ── 1. Render the 25-cell voice strip ────────────────────────────────
+  // Single horizontal row of chip-style buttons. No preview sentences on
+  // the chips themselves (cognitive stall). One live preview sentence lives
+  // in #voice-preview below the strip and updates on click + form input.
+  function renderVoiceStrip() {
+    var strip = document.getElementById("voice-strip");
+    if (!strip) return;
     var html = "";
     for (var p = 0; p < PERSONALITIES.length; p++) {
       var personality = PERSONALITIES[p];
       for (var i = 0; i < IDEOLOGIES.length; i++) {
         var ideology = IDEOLOGIES[i];
-        var template = MATRIX.briefingOnCreate[personality][ideology];
-        var preview = interpolate(template, {
-          mascot: "Marlow",
-          event: "Friday poker",
-          time: "7:30pm",
-          venue: ", my place",
-          seats_left: "2"
-        });
-        // Sentence-drop to keep previews tidy when time/seats are empty.
-        preview = dropEmptySentences(preview);
-        var hint = VOICE_HINT[personality + "|" + ideology] || "";
         var isSelected = (personality === selectedPersonality && ideology === selectedIdeology);
         html +=
-          '<button type="button" class="voice-carousel-card' + (isSelected ? " is-selected" : "") + '" ' +
+          '<button type="button" class="voice-chip' + (isSelected ? " is-selected" : "") + '" ' +
           'data-personality="' + personality + '" data-ideology="' + ideology + '" ' +
           'aria-pressed="' + (isSelected ? "true" : "false") + '" ' +
-          'aria-label="' + PERSONALITY_LABEL[personality] + " · " + IDEOLOGY_HEAD[ideology] +
-          ' voice. Preview: ' + preview.replace(/"/g, "") + '">' +
-          '<span class="voice-carousel-pair">' + PERSONALITY_LABEL[personality] +
-          ' <span class="voice-carousel-dot">·</span> ' + IDEOLOGY_HEAD[ideology] + '</span>' +
-          '<span class="voice-carousel-preview">' + escapeHtml(preview) + '</span>' +
-          '<span class="voice-carousel-hint">' + escapeHtml(hint) + '</span>' +
+          'title="' + PERSONALITY_LABEL[personality] + ' · ' + IDEOLOGY_HEAD[ideology] + '">' +
+          PERSONALITY_LABEL[personality] +
+          ' <span class="voice-chip-dot">·</span> ' +
+          IDEOLOGY_HEAD[ideology] +
           '</button>';
       }
     }
-    carousel.innerHTML = html;
+    strip.innerHTML = html;
+  }
+
+  // Render the single live preview sentence for the selected voice, using
+  // the current form values so it updates as the user types.
+  function renderVoicePreview() {
+    var previewEl = document.getElementById("voice-preview");
+    if (!previewEl) return;
+    var vars = varsFromForm();
+    var template = MATRIX.briefingOnCreate[selectedPersonality][selectedIdeology];
+    var rendered = interpolate(template, vars);
+    rendered = dropEmptySentences(rendered);
+    var first = (rendered.split(". ")[0] || "").trim();
+    if (first && !/[.!?]$/.test(first)) first += ".";
+    previewEl.textContent = first;
   }
 
   // ── 2. Voice selection ───────────────────────────────────────────────
   function pickVoice(personality, ideology) {
     selectedPersonality = personality;
     selectedIdeology    = ideology;
-    var cards = document.querySelectorAll(".voice-carousel-card");
-    for (var i = 0; i < cards.length; i++) {
-      var c = cards[i];
+    var chips = document.querySelectorAll(".voice-chip");
+    for (var i = 0; i < chips.length; i++) {
+      var c = chips[i];
       var matches =
         c.getAttribute("data-personality") === personality &&
         c.getAttribute("data-ideology")    === ideology;
@@ -93,6 +165,41 @@
         c.setAttribute("aria-pressed", "false");
       }
     }
+    renderVoicePreview();
+    // Re-render the briefing cards IF the output is already visible — picking
+    // a different voice after Surprise me should update the cards live.
+    var output = document.getElementById("briefing-output");
+    if (output && !output.hasAttribute("hidden")) {
+      renderOutput(false);
+    }
+  }
+
+  // ── 2.5. Surprise me — full-form fill + voice pick + auto-render ─────
+  function surpriseMe() {
+    var idx;
+    do {
+      idx = Math.floor(Math.random() * RANDOM_SAMPLES.length);
+    } while (RANDOM_SAMPLES.length > 1 && idx === lastSurpriseIdx);
+    lastSurpriseIdx = idx;
+    var s = RANDOM_SAMPLES[idx];
+
+    var room      = document.getElementById("bf-room");
+    var event     = document.getElementById("bf-event");
+    var timeVenue = document.getElementById("bf-time-venue");
+    var seats     = document.getElementById("bf-seats");
+    var mascot    = document.getElementById("bf-mascot");
+    if (room)      room.value      = s.room;
+    if (event)     event.value     = s.event;
+    if (timeVenue) timeVenue.value = s.timeVenue;
+    if (seats) {
+      seats.value = s.seats;
+      var seatsVal = document.getElementById("bf-seats-val");
+      if (seatsVal) seatsVal.textContent = s.seats;
+    }
+    if (mascot)    mascot.value    = s.mascot;
+
+    pickVoice(s.voice.personality, s.voice.ideology);
+    renderOutput(true);
   }
 
   // ── 3. Parse "Friday 7:30pm, my place" into time + venue ─────────────
@@ -161,7 +268,7 @@
   }
 
   // ── 5. Render the 3 briefing cards ──────────────────────────────────
-  function renderOutput() {
+  function renderOutput(shouldScroll) {
     var vars = varsFromForm();
     for (var k = 0; k < KINDS.length; k++) {
       var cfg = KINDS[k];
@@ -183,7 +290,12 @@
     var output = document.getElementById("briefing-output");
     if (output) {
       output.removeAttribute("hidden");
-      output.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Scroll only on the initial reveal (Surprise me). On subsequent edits
+      // the page must NOT jump — the user is mid-edit, expects an in-place
+      // update.
+      if (shouldScroll) {
+        output.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     }
   }
 
@@ -334,50 +446,59 @@
     return Promise.resolve({ ok: true, mocked: true });
   }
 
-  // ── 9. Tiny HTML escape ─────────────────────────────────────────────
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  // ── 10. Wire up ─────────────────────────────────────────────────────
+  // ── 9. Wire up ──────────────────────────────────────────────────────
   function wire() {
-    // Carousel clicks
-    var carousel = document.getElementById("voice-carousel");
-    if (carousel) {
-      carousel.addEventListener("click", function (ev) {
-        var card = ev.target.closest && ev.target.closest(".voice-carousel-card");
-        if (!card) return;
-        var p = card.getAttribute("data-personality");
-        var i = card.getAttribute("data-ideology");
+    // Voice strip clicks
+    var strip = document.getElementById("voice-strip");
+    if (strip) {
+      strip.addEventListener("click", function (ev) {
+        var chip = ev.target.closest && ev.target.closest(".voice-chip");
+        if (!chip) return;
+        var p = chip.getAttribute("data-personality");
+        var i = chip.getAttribute("data-ideology");
         if (p && i) pickVoice(p, i);
       });
     }
 
-    // Form submit → render output
-    var form = document.getElementById("briefing-form-el");
-    if (form) {
-      form.addEventListener("submit", function (ev) {
-        ev.preventDefault();
-        var room  = (document.getElementById("bf-room").value || "").trim();
-        var event = (document.getElementById("bf-event").value || "").trim();
-        var mascot = (document.getElementById("bf-mascot").value || "").trim();
-        if (!room || !event || !mascot) {
-          // Bring focus to the first empty field.
-          var targets = ["bf-room", "bf-event", "bf-mascot"];
-          for (var i = 0; i < targets.length; i++) {
-            var el = document.getElementById(targets[i]);
-            if (el && !el.value.trim()) { el.focus(); break; }
-          }
-          return;
-        }
-        renderOutput();
+    // Surprise me — the page's primary CTA. Sits at the top of the form,
+    // fills all 5 fields with one coherent sample room, picks the matching
+    // voice, and auto-renders the briefing. One click = full demo. No repeat
+    // picks in a row.
+    var surpriseBtn = document.getElementById("bf-surprise");
+    if (surpriseBtn) {
+      surpriseBtn.addEventListener("click", function () {
+        if (window.console && console.log) console.log("[briefing] surpriseMe fired");
+        surpriseMe();
       });
+    } else if (window.console && console.warn) {
+      console.warn("[briefing] #bf-surprise button not found in DOM");
     }
+
+    // Seats slider — live value display next to the label.
+    var seatsInput = document.getElementById("bf-seats");
+    var seatsVal   = document.getElementById("bf-seats-val");
+    if (seatsInput && seatsVal) {
+      var syncSeats = function () { seatsVal.textContent = seatsInput.value; };
+      seatsInput.addEventListener("input", syncSeats);
+      syncSeats();
+    }
+
+    // Form-field changes refresh the live voice preview. Once the briefing
+    // output is visible (i.e. the user has pressed Surprise me at least once),
+    // also re-render the cards live — every edit updates the briefing in place,
+    // no further clicks needed. Until then, the output section is hidden so
+    // the guard short-circuits and we don't render blank cards on every keystroke.
+    ["bf-room", "bf-event", "bf-time-venue", "bf-mascot", "bf-seats"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("input", function () {
+        renderVoicePreview();
+        var output = document.getElementById("briefing-output");
+        if (output && !output.hasAttribute("hidden")) {
+          renderOutput(false);
+        }
+      });
+    });
 
     // Copy + download
     var copyBtn = document.getElementById("briefing-copy");
@@ -385,7 +506,7 @@
     var dlBtn = document.getElementById("briefing-download");
     if (dlBtn) dlBtn.addEventListener("click", downloadAsPng);
 
-    // Email form
+    // Email form (lead-inline, mounted inside the output section).
     var leadForm = document.getElementById("lead-form");
     if (leadForm) {
       var input = leadForm.querySelector('input[name="email"]');
@@ -406,34 +527,43 @@
       });
     }
 
-    // Arrow keys step the carousel.
-    var carouselEl = document.getElementById("voice-carousel");
-    if (carouselEl) {
-      carouselEl.addEventListener("keydown", function (ev) {
+    // Arrow keys step the voice strip (chip focus stays inside the strip).
+    var stripEl = document.getElementById("voice-strip");
+    if (stripEl) {
+      stripEl.addEventListener("keydown", function (ev) {
         if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
         ev.preventDefault();
-        var cards = carouselEl.querySelectorAll(".voice-carousel-card");
+        var chips = stripEl.querySelectorAll(".voice-chip");
         var currentIdx = -1;
-        for (var i = 0; i < cards.length; i++) {
-          if (cards[i].classList.contains("is-selected")) { currentIdx = i; break; }
+        for (var i = 0; i < chips.length; i++) {
+          if (chips[i].classList.contains("is-selected")) { currentIdx = i; break; }
         }
         if (currentIdx === -1) currentIdx = 0;
         var dir = ev.key === "ArrowRight" ? 1 : -1;
-        var nextIdx = (currentIdx + dir + cards.length) % cards.length;
-        var nextCard = cards[nextIdx];
-        if (nextCard) {
-          var p = nextCard.getAttribute("data-personality");
-          var i = nextCard.getAttribute("data-ideology");
+        var nextIdx = (currentIdx + dir + chips.length) % chips.length;
+        var nextChip = chips[nextIdx];
+        if (nextChip) {
+          var p = nextChip.getAttribute("data-personality");
+          var i = nextChip.getAttribute("data-ideology");
           pickVoice(p, i);
-          nextCard.focus();
+          nextChip.focus();
         }
       });
     }
   }
 
   function boot() {
-    renderCarousel();
+    if (window.console && console.log) console.log("[briefing] boot");
+    renderVoiceStrip();
     wire();
+    renderVoicePreview();
+    // Scroll the default-selected chip into view so the user sees it on first
+    // paint instead of having to swipe right to find it.
+    var selectedChip = document.querySelector(".voice-chip.is-selected");
+    if (selectedChip && typeof selectedChip.scrollIntoView === "function") {
+      // Suppress the scroll animation on initial render — it's noise.
+      selectedChip.scrollIntoView({ block: "nearest", inline: "center" });
+    }
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);
