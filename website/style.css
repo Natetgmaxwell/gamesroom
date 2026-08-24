@@ -891,3 +891,357 @@ a:focus-visible {
   .hero-icon { width: 150px; height: 150px; border-radius: 34px; }
   .features { column-gap: 3rem; }
 }
+
+/* ── Mascot Voice Sampler (page-mascot) ────────────────────────────── */
+/* Token reuse only — no new colors. The accent is brass #B08D57; the
+   grid stays in surface + hairline so 25 captions don't read as noise. */
+
+.page-mascot .mascot-hero { padding-top: 2rem; padding-bottom: 1rem; }
+.page-mascot .mascot-hero .hero-inner {
+  display: block;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  text-align: center;
+  padding: 0 var(--gutter);
+}
+.page-mascot .mascot-hero h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 2.2rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.5rem;
+}
+.page-mascot .mascot-hero .sub-head {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-style: italic;
+  font-size: 1.2rem;
+  color: var(--accent);
+  margin-bottom: 1rem;
+}
+.page-mascot .mascot-hero .lead {
+  max-width: 56ch;
+  margin: 0 auto 1.5rem;
+  color: var(--text-dim);
+}
+@media (min-width: 768px) {
+  .page-mascot .mascot-hero { text-align: left; }
+  .page-mascot .mascot-hero .hero-inner { text-align: left; }
+  .page-mascot .mascot-hero h1 { font-size: 2.8rem; }
+}
+
+/* Voice axes (the column header strip above the grid) */
+.voice-axes {
+  margin: 0 0 0.5rem;
+}
+.voice-axis-cols {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.voice-axis-cols span {
+  text-align: center;
+  padding: 0.4rem 0;
+}
+/* On mobile (2-column grid) hide the axis headers — the cell labels
+   ("professional · order") already convey the pair. */
+@media (max-width: 767px) {
+  .voice-axes { display: none; }
+}
+
+/* Grid of 25 cells — compact, scannable, one tap = modal.
+   Mobile-first 2 columns for the body so each caption is readable;
+   switches to 5 columns at >=768 to honor the 5x5 matrix. */
+.voice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+  margin: 0.5rem 0 1.25rem;
+}
+@media (min-width: 768px) {
+  .voice-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.5rem;
+  }
+}
+
+.voice-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  min-height: 130px;
+  transition: border-color 0.2s ease, transform 0.2s var(--ease-spring),
+    box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.voice-cell:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.voice-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.voice-cell-pair {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.voice-cell-dot { color: var(--text-dim); margin: 0 0.25rem; }
+.voice-cell-caption {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+.voice-cell-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.voice-grid-foot {
+  text-align: center;
+  margin-top: 1.5rem;
+  margin-bottom: 0;
+}
+
+/* Lead capture (shared between page and modal) */
+.mascot-capture { padding-top: 1rem; padding-bottom: 3rem; }
+.mascot-capture h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.6rem;
+  line-height: 1.25;
+  margin-bottom: 0.75rem;
+}
+.lead-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: stretch;
+  margin: 1.25rem 0 0.5rem;
+}
+.lead-form-modal { margin-top: 0.75rem; }
+.lead-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.lead-input::placeholder { color: var(--text-dim); }
+.lead-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.lead-input:disabled { opacity: 0.55; cursor: not-allowed; }
+.lead-submit {
+  background: var(--accent);
+  color: #0A0A0B;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 0.75rem 1.25rem;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s ease, transform 0.15s var(--ease-spring),
+    box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.lead-submit:hover {
+  background: #c19a63;
+  box-shadow: 0 6px 18px rgba(176, 141, 87, 0.32);
+}
+.lead-submit:active { transform: scale(0.97); }
+.lead-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+.lead-submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.lead-status {
+  margin: 0.5rem 0 0;
+  min-height: 1.4em;
+  font-size: 13px;
+  color: var(--accent);
+}
+.lead-status:empty { margin: 0; }
+.lead-secondary { margin-top: 1.25rem; }
+.lead-secondary a { border-bottom: 1px solid rgba(176, 141, 87, 0.35); }
+
+/* Visually-hidden helper for screen-reader-only labels */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Modal */
+.voice-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gutter);
+}
+.voice-modal[hidden] { display: none; }
+.voice-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 11, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.voice-modal-panel {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 2 * var(--gutter));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 1.5rem 1.5rem 1.75rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(176, 141, 87, 0.08);
+  animation: modal-rise 0.25s var(--ease-spring);
+}
+@keyframes modal-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-modal-panel { animation: none; }
+}
+
+.voice-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.voice-modal-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.4rem;
+  margin: 0 0 0.25rem;
+  line-height: 1.2;
+}
+.voice-modal-sub { margin: 0; }
+.voice-modal-close {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+.voice-modal-close:hover { border-color: var(--accent); color: var(--accent); }
+.voice-modal-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.voice-modal-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+  margin-top: 1rem;
+}
+.voice-modal-section:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+.voice-modal-cta { padding-bottom: 0; }
+
+.voice-modal-label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+.voice-modal-room {
+  border-radius: var(--radius);
+  width: 100%;
+}
+.voice-modal-help { margin: 0.5rem 0 0; }
+
+.voice-kinds {
+  list-style: none;
+  display: grid;
+  gap: 0.85rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.voice-kind {
+  margin: 0;
+  padding: 0;
+}
+.voice-kind-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.voice-kind-caption {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 15.5px;
+  line-height: 1.45;
+  color: var(--text);
+  margin: 0;
+}
+
+/* Lock body scroll when modal is open */
+body.has-modal-open { overflow: hidden; }
