@@ -1079,7 +1079,23 @@ struct RoomDetailView: View {
 
     private func loadActiveIfNeeded(force: Bool = false) async {
         if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            await roomService.loadActiveEvent(roomId: room.id, force: force)
+            let event = await roomService.loadActiveEvent(
+                roomId: room.id, force: force
+            )
+            // V0.91 — late-opt-in catch-up on room-open. When the
+            // local user is opted in to this room and an active
+            // event exists, schedule the on-create push for it if
+            // the dispatcher has no pending request for the same
+            // (eventId, kind, userId) identifier. Covers the case
+            // where the realtime INSERT was missed (device
+            // suspended, offline at creation moment) AND the case
+            // where the user just opted in and is now opening the
+            // room for the first time since.
+            if event != nil {
+                await roomService.scheduleActiveEventOnCreateIfMissing(
+                    roomId: room.id
+                )
+            }
         }
     }
 
@@ -1773,7 +1789,20 @@ private struct BriefingSlot: View {
                     // deposit and records attendance itself. The
                     // member wants their chips back, so no nagging
                     // is ever needed.
-                    if let deposit = heldDeposit, deposit.status == .held, let onCheckIn {
+                    //
+                    // V0.91 amend — gate on `seatDepositTrigger ==
+                    // .escrow` as well. When the host flips
+                    // deposits off mid-event, an existing held row
+                    // stays in `seat_deposits.status = 'held'` (we
+                    // never auto-return on a toggle), but the
+                    // reclaim UI must disappear — the room is no
+                    // longer running the escrow, the "I'm here" tap
+                    // has nothing to return, and a stuck button on
+                    // a claimed seat is naked debt.
+                    if let deposit = heldDeposit,
+                       deposit.status == .held,
+                       room.seatDepositTrigger == .escrow,
+                       let onCheckIn {
                         Text("Tap when you walk in — your deposit comes straight back.")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))

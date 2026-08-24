@@ -305,7 +305,18 @@ final class NotificationDispatcher {
         }
     }
 
-    /// Cancel every pending notification request associated with one
+    /// True when the user already has a pending on-create push
+    /// scheduled for `eventId`. Used to skip duplicate scheduling
+    /// across the realtime INSERT path and the late-opt-in
+    /// catch-up path. Mirrors `identifier(...)`'s format.
+    func hasPendingOnCreate(eventId: UUID, userId: UUID) async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let prefix = "\(eventId.uuidString)-on_create-\(userId.uuidString)"
+        return pending.contains { $0.identifier.hasPrefix(prefix) }
+    }
+
+    /// Cancel every pending notifications requests associated with one
     /// event. Sweeps by event-id prefix so we don't need to know
     /// which RSVP states were scheduled.
     func cancelBriefingTrio(eventId: UUID) async {
