@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Games Room — Hear the room before you join it.</title>
+  <meta name="description" content="Sample every mascot voice in Games Room. Pick the voice, drop your email, and we'll tell you when the app hits the App Store.">
+  <meta property="og:title" content="Games Room — Hear the room before you join it.">
+  <meta property="og:description" content="Sample every mascot voice in Games Room. Pick the voice, drop your email, and we'll tell you when the app hits the App Store.">
+  <meta property="og:image" content="/icon-120.png">
+  <meta property="og:image:alt" content="The Games Room mark: a warm table seen from above, four seats waiting, in dark grey and gold.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/icon-120.png">
+  <link rel="stylesheet" href="/style.css?v=72">
+</head>
+<body class="page-mascot">
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <img class="brand-mark" src="/icon-120.png" alt="" aria-hidden="true">
+        <span class="wordmark">Games Room</span>
+        <div class="pips" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/how-it-works">How it works</a>
+        <a href="/features">Features</a>
+        <a href="/notifications">Notifications</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mascot-main">
+    <section class="hero mascot-hero fullbleed">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <span class="beta"><span class="dot"></span> Sampler</span>
+          <h1>Hear the room before you join it.</h1>
+          <p class="sub-head">Pick the voice. Bring the night.</p>
+          <p class="lead">Every Games Room mascot is a personality and a politics. Twenty-five of them. Sample them, pick the one that sounds like your room, and tell us when the App Store launch is worth a tap from you.</p>
+          <a class="cta" href="#voices" id="mascot-cta">Sample the voices <span class="arrow">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="shell mascot-shell" id="voices">
+      <p class="kicker">Twenty-five voices, one grid</p>
+      <p class="mission-line">Five personalities. Five politics. Tap any cell to hear it talk.</p>
+      <p class="muted">Each cell shows the briefing caption (the moment the room opens). Tap for the full set: the briefing, the recap, the live footer, the standings.</p>
+
+      <div class="voice-axes" aria-hidden="true">
+        <div class="voice-axis-cols">
+          <span>order</span>
+          <span>centrist</span>
+          <span>trickster</span>
+          <span>anarchist</span>
+          <span>apocalypse</span>
+        </div>
+      </div>
+
+      <div class="voice-grid" id="voice-grid" aria-label="Mascot voice grid (5 personalities by 5 politics)"></div>
+
+      <p class="muted voice-grid-foot">All twenty-five cells. Each one is a different room. Pick the one that sounds like yours.</p>
+    </section>
+
+    <section class="shell mascot-shell mascot-capture">
+      <p class="kicker">Save the voice</p>
+      <h2>Drop your email. We'll tell you when Games Room hits the App Store.</h2>
+      <p class="muted">One email, when the room opens. No newsletter. No drip. No follow-ups unless you ask.</p>
+      <form id="lead-form" class="lead-form" novalidate>
+        <label class="visually-hidden" for="lead-email">Your email</label>
+        <input
+          id="lead-email"
+          name="email"
+          type="email"
+          required
+          autocomplete="email"
+          placeholder="you@yourplace.com"
+          class="lead-input"
+        >
+        <button type="submit" class="lead-submit">Save this voice</button>
+      </form>
+      <p id="lead-status" class="lead-status" role="status" aria-live="polite"></p>
+      <p class="muted lead-secondary">
+        Or skip ahead: <a href="/features">see what the app does</a> &nbsp;·&nbsp; <a href="/how-it-works">read how a season works</a>.
+      </p>
+    </section>
+  </main>
+
+  <!-- Modal — voice detail with 4 kinds + room-name re-render + email capture -->
+  <div
+    class="voice-modal"
+    id="voice-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="voice-modal-title"
+    aria-describedby="voice-modal-sub"
+    hidden
+  >
+    <div class="voice-modal-backdrop" data-close-modal aria-hidden="true"></div>
+    <div class="voice-modal-panel" role="document">
+      <header class="voice-modal-head">
+        <div>
+          <h2 id="voice-modal-title" class="voice-modal-title">personality · ideology</h2>
+          <p id="voice-modal-sub" class="voice-modal-sub muted">25 voices total. Tap one to hear it talk.</p>
+        </div>
+        <button type="button" class="voice-modal-close" data-close-modal aria-label="Close">
+          <span aria-hidden="true">×</span>
+        </button>
+      </header>
+
+      <section class="voice-modal-section">
+        <label class="voice-modal-label" for="room-name-input">Your room</label>
+        <input
+          id="room-name-input"
+          type="text"
+          class="lead-input voice-modal-room"
+          placeholder="the poker room"
+          value="the poker room"
+        >
+        <p class="muted voice-modal-help">Type your room's name. The four captions below rewrite themselves with your room.</p>
+      </section>
+
+      <section class="voice-modal-section">
+        <p class="kicker">The voice, in four moments</p>
+        <ul class="voice-kinds" id="voice-modal-body"></ul>
+      </section>
+
+      <section class="voice-modal-section voice-modal-cta">
+        <p class="kicker">Make this your room's voice</p>
+        <p class="voice-modal-crosslink">
+          Use it now: <a href="/play/briefing">write tonight's briefing in this voice</a>
+        </p>
+        <form id="lead-form-modal" class="lead-form lead-form-modal" novalidate>
+          <label class="visually-hidden" for="lead-email-modal">Your email</label>
+          <input
+            id="lead-email-modal"
+            name="email"
+            type="email"
+            required
+            autocomplete="email"
+            placeholder="you@yourplace.com"
+            class="lead-input"
+          >
+          <button type="submit" class="lead-submit">Drop your email</button>
+        </form>
+        <p id="lead-status-modal" class="lead-status" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <p class="footer-mascot">"Pull up a seat. The night keeps itself."</p>
+    <nav aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/how-it-works">How it works</a>
+      <a href="/features">Features</a>
+      <a href="/notifications">Notifications</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy policy</a>
+    </nav>
+  </footer>
+
+  <script src="/voices.js" defer></script>
+  <script src="/mascot.js" defer></script>
+</body>
+</html>

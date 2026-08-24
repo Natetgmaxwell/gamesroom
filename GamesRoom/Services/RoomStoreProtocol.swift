@@ -23,18 +23,19 @@ protocol RoomStore: Sendable {
     /// Creates a new room with the calling user as the host.
     /// Mirrors the `create_room(p_name, p_mascot_name,
     /// p_mascot_personality, p_mascot_political_ideology,
-    /// p_join_starting_bonus, p_mascot_api_key,
-    /// p_blacklisted_user_ids)` RPC (migration 022). Returns the
-    /// new room id; the caller should refresh the rooms list so the
-    /// hero/empty state re-renders.
+    /// p_join_starting_bonus, p_mascot_api_key)` RPC (migration
+    /// 022, simplified in V0.94 — the per-room blacklist parameter
+    /// was removed in V0.94; per-event hidden members is the new
+    /// mechanism, on the events table).
+    /// Returns the new room id; the caller should refresh the
+    /// rooms list so the hero/empty state re-renders.
     func createRoom(
         name: String,
         mascotName: String,
         mascotPersonality: MascotPersonality,
         mascotPoliticalIdeology: MascotPoliticalIdeology,
         joinStartingBonus: Int,
-        mascotApiKey: String?,
-        blacklistedUserIds: [UUID]
+        mascotApiKey: String?
     ) async throws -> UUID
 
     /// Mints a fresh 6-character join code for a room the caller
@@ -135,7 +136,10 @@ protocol RoomStore: Sendable {
     /// `packSlug` is one of the four hardcoded V0.8 packs
     /// (`casino`, `cards_against_humanity`, `monopoly_deal`,
     /// `pluto_chess`).
-    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String) async throws -> UUID
+    /// `hiddenFromUserIds` is the V0.94 per-event hidden-members
+    /// list — members on it don't see the event or receive its
+    /// briefing push. Empty by default.
+    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String, hiddenFromUserIds: [UUID]) async throws -> UUID
 
     /// Any room member may edit the event's pre-play note + venue
     /// while the event is still in the future. Empty strings clear

@@ -251,8 +251,7 @@ final class RoomService: ObservableObject {
         mascotPersonality: MascotPersonality,
         mascotPoliticalIdeology: MascotPoliticalIdeology,
         joinStartingBonus: Int = 200,
-        mascotApiKey: String? = nil,
-        blacklistedUserIds: [UUID] = []
+        mascotApiKey: String? = nil
     ) async throws -> UUID {
         let newId = try await store.createRoom(
             name: name,
@@ -261,7 +260,6 @@ final class RoomService: ObservableObject {
             mascotPoliticalIdeology: mascotPoliticalIdeology,
             joinStartingBonus: joinStartingBonus,
             mascotApiKey: mascotApiKey,
-            blacklistedUserIds: blacklistedUserIds
         )
         self.lastError = nil
         await refresh()
@@ -715,13 +713,17 @@ final class RoomService: ObservableObject {
     /// 3×3 cadence × response-state matrix fires once the event
     /// row is durable on the server, with the current member's RSVP
     /// defaulted to `.unclaimed` (the dispatcher handles the rest).
+    /// `hiddenFromUserIds` is the V0.94 per-event hidden list —
+    /// members on it don't see the event or receive the briefing
+    /// push.
     @discardableResult
-    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String) async throws -> UUID {
+    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String, hiddenFromUserIds: [UUID] = []) async throws -> UUID {
         let newId = try await store.addEvent(
             roomId: roomId,
             name: name,
             playedAt: playedAt,
-            packSlug: packSlug
+            packSlug: packSlug,
+            hiddenFromUserIds: hiddenFromUserIds
         )
         self.lastError = nil
         cacheTimestamps.removeValue(forKey: "activeEvent:\(roomId.uuidString)")
@@ -1527,6 +1529,15 @@ final class RoomService: ObservableObject {
         guard let event = await loadActiveEvent(roomId: roomId) else { return }
         let callerId = await SupabaseClientProvider.currentSession()?.user.id
         guard let callerId else { return }
+        // V0.94 — per-event hidden list. The Event decoded from
+        // the server (migration 060 returns the column when
+        // present) carries the list. The server already filters
+        // get_active_event so a hidden member gets nil from the
+        // load above — this guard is belt-and-braces in case the
+        // load is cache-warm with a non-filtered row.
+        if let hidden = event.hiddenFromUserIds, hidden.contains(callerId) {
+            return
+        }
         if await NotificationDispatcher.shared.hasPendingOnCreate(
             eventId: event.id, userId: callerId
         ) {

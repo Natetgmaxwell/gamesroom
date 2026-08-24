@@ -143,6 +143,16 @@ final class RealtimeEventService {
             let callerId = try? await SupabaseClientProvider.shared.auth.session.user.id
         else { return }
 
+        // V0.94 — per-event hidden members. The realtime payload
+        // carries the column server-side, so we can short-circuit
+        // before any push scheduling. Pre-V0.94 events decode
+        // with the field absent (stringValue = nil) and we fall
+        // through to schedule.
+        if let hidden = action.record["hidden_from_user_ids"]?.arrayValue,
+           hidden.contains(where: { $0.stringValue == callerId.uuidString }) {
+            return
+        }
+
         // Schedule the briefing trio for THIS device's user only —
         // one cadence entry (the local user, .unclaimed). The
         // host's own addEvent path already scheduled the host's.

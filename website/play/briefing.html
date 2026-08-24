@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Games Room — Bring the night in your room's voice.</title>
+  <meta name="description" content="Type your room. Pick a voice. Send the briefing. Free, no signup — a Games Room lead-magnet that turns your pre-event message into the thing your group chat screenshots.">
+  <meta property="og:title" content="Games Room — Bring the night in your room's voice.">
+  <meta property="og:description" content="Type your room. Pick a voice. Send the briefing. Free, no signup.">
+  <meta property="og:image" content="/icon-120.png">
+  <meta property="og:image:alt" content="The Games Room mark: a warm table seen from above, four seats waiting, in dark grey and gold.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/icon-120.png">
+  <link rel="stylesheet" href="/style.css?v=72">
+</head>
+<body class="page-briefing">
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <img class="brand-mark" src="/icon-120.png" alt="" aria-hidden="true">
+        <span class="wordmark">Games Room</span>
+        <div class="pips" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/how-it-works">How it works</a>
+        <a href="/features">Features</a>
+        <a href="/play/briefing" aria-current="page">Briefing</a>
+        <a href="/play/mascot">Voice sampler</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="briefing-main">
+    <section class="hero briefing-hero fullbleed">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <span class="beta"><span class="dot"></span> Tool A · Briefing</span>
+          <h1>Bring the night in your room's voice.</h1>
+          <p class="sub-head">Type the details. Pick the voice. Send the briefing.</p>
+          <p class="lead">Twenty-five voices in the room. Three briefings each. One pre-event message that sounds like your group chat — but better.</p>
+          <a class="cta" href="#briefing-form" id="briefing-cta">Start the briefing <span class="arrow">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="shell briefing-shell" id="briefing-form">
+      <p class="kicker">The form</p>
+      <h2>Type the room.</h2>
+      <p class="muted">Five fields. One minute. No signup before the first briefing renders.</p>
+
+      <form id="briefing-form-el" class="briefing-form" novalidate>
+        <div class="field">
+          <label for="bf-room">Room name</label>
+          <input id="bf-room" type="text" name="room" required autocomplete="off" placeholder="Friday poker">
+        </div>
+        <div class="field">
+          <label for="bf-event">Event</label>
+          <input id="bf-event" type="text" name="event" required autocomplete="off" placeholder="Poker">
+        </div>
+        <div class="field field-wide">
+          <label for="bf-time-venue">Time + venue</label>
+          <input id="bf-time-venue" type="text" name="time-venue" autocomplete="off" placeholder="Friday 7:30pm, my place">
+          <p class="field-help muted">One line. "Friday 7:30pm, my place." The briefing splits it.</p>
+        </div>
+        <div class="field field-narrow">
+          <label for="bf-seats">Seats left</label>
+          <input id="bf-seats" type="number" name="seats" min="0" max="99" value="2" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label for="bf-mascot">Mascot name</label>
+          <input id="bf-mascot" type="text" name="mascot" required autocomplete="off" value="Marlow" placeholder="Marlow">
+        </div>
+
+        <fieldset class="voice-picker" aria-labelledby="voice-picker-label">
+          <legend id="voice-picker-label">Pick the voice</legend>
+          <p class="muted voice-picker-help">Twenty-five rooms in one grid. The voice you pick is the one your group chat hears.</p>
+          <div class="voice-carousel" id="voice-carousel" aria-label="Mascot voice carousel"></div>
+          <p class="muted voice-carousel-help">Use ← → to step through the voices.</p>
+        </fieldset>
+
+        <button type="submit" class="cta cta-form" id="briefing-generate">Write the briefing <span class="arrow">→</span></button>
+      </form>
+    </section>
+
+    <section class="shell briefing-output" id="briefing-output" hidden aria-live="polite">
+      <p class="kicker">The output</p>
+      <h2>Three briefings. Pick the moment.</h2>
+      <p class="muted">Pre-event, 48 hours out, morning of. Screenshot the first one — it is sized for the group chat.</p>
+
+      <div class="briefing-card-stack">
+        <article class="briefing-card" data-kind="briefingOnCreate" aria-labelledby="briefing-create-label">
+          <header class="briefing-card-head">
+            <span class="briefing-card-tag">Pre-event</span>
+            <span class="briefing-card-room" id="briefing-output-room-pre"></span>
+          </header>
+          <p class="briefing-card-body" id="briefing-create-body"></p>
+          <footer class="briefing-card-foot">
+            <span class="briefing-card-mark">Games Room</span>
+          </footer>
+        </article>
+
+        <article class="briefing-card" data-kind="briefing48h" aria-labelledby="briefing-48h-label">
+          <header class="briefing-card-head">
+            <span class="briefing-card-tag">Two days out</span>
+            <span class="briefing-card-room" id="briefing-output-room-48"></span>
+          </header>
+          <p class="briefing-card-body" id="briefing-48h-body"></p>
+          <footer class="briefing-card-foot">
+            <span class="briefing-card-mark">Games Room</span>
+          </footer>
+        </article>
+
+        <article class="briefing-card" data-kind="briefingMorning" aria-labelledby="briefing-morning-label">
+          <header class="briefing-card-head">
+            <span class="briefing-card-tag">Morning of</span>
+            <span class="briefing-card-room" id="briefing-output-room-morning"></span>
+          </header>
+          <p class="briefing-card-body" id="briefing-morning-body"></p>
+          <footer class="briefing-card-foot">
+            <span class="briefing-card-mark">Games Room</span>
+          </footer>
+        </article>
+      </div>
+
+      <div class="briefing-ctas">
+        <button type="button" class="cta cta-secondary" id="briefing-copy">
+          <span class="cta-label">Copy as text</span>
+          <span class="cta-status" id="briefing-copy-status" role="status" aria-live="polite"></span>
+        </button>
+        <button type="button" class="cta cta-tertiary" id="briefing-download">
+          Download first card as PNG
+        </button>
+      </div>
+      <p class="muted briefing-output-note">First card is sized to an IG story (1080 × 1920). Screenshot it, send it, watch the group chat notice.</p>
+    </section>
+
+    <section class="shell briefing-shell briefing-capture">
+      <p class="kicker">Stay in the loop</p>
+      <h2>Drop your email. We'll tell you when Games Room hits the App Store.</h2>
+      <p class="muted">One email, when the room opens. No newsletter. No drip.</p>
+      <form id="lead-form" class="lead-form" novalidate>
+        <label class="visually-hidden" for="lead-email">Your email</label>
+        <input
+          id="lead-email"
+          name="email"
+          type="email"
+          required
+          autocomplete="email"
+          placeholder="you@yourplace.com"
+          class="lead-input"
+        >
+        <button type="submit" class="lead-submit">Save this room</button>
+      </form>
+      <p id="lead-status" class="lead-status" role="status" aria-live="polite"></p>
+      <p class="muted lead-secondary">
+        Or: <a href="/play/mascot">sample the voices</a> &nbsp;·&nbsp; <a href="/features">see what the app does</a>.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p class="footer-mascot">"Pull up a seat. The night keeps itself."</p>
+    <nav aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/how-it-works">How it works</a>
+      <a href="/features">Features</a>
+      <a href="/play/mascot">Voice sampler</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy policy</a>
+    </nav>
+  </footer>
+
+  <script src="/voices.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+  <script src="/briefing.js" defer></script>
+</body>
+</html>

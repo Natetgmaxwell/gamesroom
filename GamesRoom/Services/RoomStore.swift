@@ -64,7 +64,19 @@ struct CreateRoomParams: Encodable, Sendable {
     let p_mascot_political_ideology: String
     let p_join_starting_bonus: String
     let p_mascot_api_key: String
-    let p_blacklisted_user_ids: [String]
+    // V0.94 — p_blacklisted_user_ids removed. Per-event hidden
+    // members on the events table replaces it.
+}
+
+struct AddEventParams: Encodable, Sendable {
+    let p_room_id: String
+    let p_name: String
+    let p_played_at: String
+    let p_pack_slug: String
+    /// V0.94 — per-event hidden members. The live RPC accepts a
+    /// `uuid[]` and the encoder emits it as a JSON array. An empty
+    /// array is the "no hidden members" state.
+    let p_hidden_from_user_ids: [String]
 }
 
 struct UpdateRoomPacksParams: Encodable, Sendable {
@@ -161,20 +173,19 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
 
     /// The live RPC is `create_room(p_name, p_mascot_name,
     /// p_mascot_personality, p_mascot_political_ideology,
-    /// p_join_starting_bonus, p_mascot_api_key,
-    /// p_blacklisted_user_ids)` (migration 022). The server
-    /// resolves the host check via the caller's auth context,
-    /// inserts the row, fires the `handle_new_room` trigger that
-    /// adds the caller as a host member, and returns the new room
-    /// id.
+    /// p_join_starting_bonus, p_mascot_api_key)` (migration 022,
+    /// simplified in V0.94 — p_blacklisted_user_ids removed).
+    /// The server resolves the host check via the caller's auth
+    /// context, inserts the row, fires the `handle_new_room`
+    /// trigger that adds the caller as a host member, and returns
+    /// the new room id.
     func createRoom(
         name: String,
         mascotName: String,
         mascotPersonality: MascotPersonality,
         mascotPoliticalIdeology: MascotPoliticalIdeology,
         joinStartingBonus: Int,
-        mascotApiKey: String?,
-        blacklistedUserIds: [UUID]
+        mascotApiKey: String?
     ) async throws -> UUID {
         let id: UUID = try await SupabaseClientProvider.shared
             .rpc("create_room", params: CreateRoomParams(
@@ -183,8 +194,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 p_mascot_personality: mascotPersonality.rawValue,
                 p_mascot_political_ideology: mascotPoliticalIdeology.rawValue,
                 p_join_starting_bonus: String(joinStartingBonus),
-                p_mascot_api_key: mascotApiKey ?? "",
-                p_blacklisted_user_ids: blacklistedUserIds.map(\.uuidString)
+                p_mascot_api_key: mascotApiKey ?? ""
             ))
             .execute()
             .value
@@ -704,18 +714,22 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     // MARK: Event create
 
     /// The live RPC is `create_event(p_room_id, p_name, p_played_at,
-    /// p_pack_slug)` (migration 006 + V0.8 pack-slug extension). The
-    /// server creates the event row and returns the new id.
-    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String) async throws -> UUID {
+    /// p_pack_slug, p_hidden_from_user_ids)` (migration 006 wrapper
+    /// around add_event; V0.94 added the 5th arg). The server
+    /// creates the event row and returns the new id. The hidden list
+    /// is the per-event "members who don't see this" filter — see
+    /// migration 090.
+    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String, hiddenFromUserIds: [UUID]) async throws -> UUID {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let id: UUID = try await SupabaseClientProvider.shared
-            .rpc("create_event", params: [
-                "p_room_id": roomId.uuidString,
-                "p_name": name,
-                "p_played_at": formatter.string(from: playedAt),
-                "p_pack_slug": packSlug
-            ])
+            .rpc("create_event", params: AddEventParams(
+                p_room_id: roomId.uuidString,
+                p_name: name,
+                p_played_at: formatter.string(from: playedAt),
+                p_pack_slug: packSlug,
+                p_hidden_from_user_ids: hiddenFromUserIds.map(\.uuidString)
+            ))
             .execute()
             .value
         return id
