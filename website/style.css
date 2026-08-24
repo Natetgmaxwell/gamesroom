@@ -957,17 +957,20 @@ a:focus-visible {
 
 /* Grid of 25 cells — compact, scannable, one tap = modal.
    Mobile-first 2 columns for the body so each caption is readable;
-   switches to 5 columns at >=768 to honor the 5x5 matrix. */
+   switches to 5 columns at >=768 to honor the 5x5 matrix.
+   Reserve vertical space at first paint to avoid CLS while JS hydrates. */
 .voice-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
   margin: 0.5rem 0 1.25rem;
+  min-height: 1900px; /* 13 rows × ~145px cell + gaps (mobile 2-col) */
 }
 @media (min-width: 768px) {
   .voice-grid {
     grid-template-columns: repeat(5, 1fr);
     gap: 0.5rem;
+    min-height: 780px; /* 5 rows × ~145px cell + gaps (desktop 5-col) */
   }
 }
 
@@ -1021,21 +1024,39 @@ a:focus-visible {
   line-height: 1.35;
 }
 
-.voice-grid-foot {
+/* Inline lead capture — lives under the grid, no kicker or h2. */
+.lead-inline {
+  max-width: 520px;
+  margin: 2.5rem auto 1.5rem;
+  padding: 1.25rem 0 0;
+  border-top: 1px solid var(--hairline);
   text-align: center;
-  margin-top: 1.5rem;
-  margin-bottom: 0;
+}
+.lead-inline p {
+  margin: 0 0 0.85rem;
+  color: var(--text);
+}
+.lead-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: stretch;
+  justify-content: center;
+  margin: 0 0 0.5rem;
+}
+.lead-inline-form .lead-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 320px;
+}
+.lead-inline-form .lead-submit {
+  flex: 0 0 auto;
+}
+@media (max-width: 480px) {
+  .lead-inline-form { flex-direction: column; align-items: stretch; }
+  .lead-inline-form .lead-input { max-width: none; }
 }
 
-/* Lead capture (shared between page and modal) */
-.mascot-capture { padding-top: 1rem; padding-bottom: 3rem; }
-.mascot-capture h2 {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 1.6rem;
-  line-height: 1.25;
-  margin-bottom: 0.75rem;
-}
 .lead-form {
   display: flex;
   flex-wrap: wrap;
@@ -1043,7 +1064,6 @@ a:focus-visible {
   align-items: stretch;
   margin: 1.25rem 0 0.5rem;
 }
-.lead-form-modal { margin-top: 0.75rem; }
 .lead-input {
   flex: 1 1 220px;
   min-width: 0;
@@ -1141,7 +1161,7 @@ a:focus-visible {
   max-height: calc(100vh - 2 * var(--gutter));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 1.5rem 1.5rem 1.75rem;
+  padding: 1.5rem 1.5rem 1.5rem;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55),
     0 0 0 1px rgba(176, 141, 87, 0.08);
   animation: modal-rise 0.25s var(--ease-spring);
@@ -1165,10 +1185,9 @@ a:focus-visible {
   font-family: var(--font-display);
   font-weight: 400;
   font-size: 1.4rem;
-  margin: 0 0 0.25rem;
+  margin: 0;
   line-height: 1.2;
 }
-.voice-modal-sub { margin: 0; }
 .voice-modal-close {
   background: transparent;
   border: 1px solid var(--hairline);
@@ -1197,7 +1216,32 @@ a:focus-visible {
   margin-top: 1rem;
 }
 .voice-modal-section:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
-.voice-modal-cta { padding-bottom: 0; }
+.voice-modal-cta {
+  text-align: center;
+  padding-bottom: 0;
+}
+.voice-modal-crosslink {
+  display: inline-block;
+  background: var(--accent);
+  color: #0A0A0B;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 0.75rem 1.5rem;
+  border-radius: 999px;
+  font-family: inherit;
+  transition: background 0.2s ease, transform 0.15s var(--ease-spring),
+    box-shadow 0.2s ease;
+}
+.voice-modal-crosslink:hover {
+  background: #c19a63;
+  box-shadow: 0 6px 18px rgba(176, 141, 87, 0.32);
+}
+.voice-modal-crosslink:active { transform: scale(0.97); }
+.voice-modal-crosslink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 
 .voice-modal-label {
   display: block;
@@ -1285,12 +1329,6 @@ body.has-modal-open { overflow: hidden; }
   .page-briefing .briefing-hero h1 { font-size: 2.8rem; }
 }
 
-.cta-form {
-  display: inline-flex;
-  margin-top: 1.5rem;
-  font-size: 16px;
-  padding: 1rem 1.75rem;
-}
 .cta-secondary {
   background: transparent;
   color: var(--accent);
@@ -1316,16 +1354,20 @@ body.has-modal-open { overflow: hidden; }
 }
 .cta-label { display: inline; }
 
-/* Form layout — 5 fields, two-column on desktop, single on mobile. */
+/* Form layout — 5 fields, two-column on desktop, single on mobile.
+   minmax(0, 1fr) prevents the 1fr track from expanding to its intrinsic
+   min-content width when a field's contents (e.g. the no-wrap Surprise
+   me button) are wider than the column. Without minmax(0,...) the grid
+   track balloons to ~3900px on a 375px viewport and blows out the form. */
 .briefing-form {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   margin: 1.5rem 0 0;
 }
 @media (min-width: 768px) {
   .briefing-form {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1rem 1.25rem;
     align-items: start;
   }
@@ -1538,6 +1580,250 @@ body.has-modal-open { overflow: hidden; }
 }
 .briefing-ctas .cta { display: inline-flex; align-items: center; }
 .briefing-output-note { margin-top: 0.5rem; }
+
+/* Tool A v4 — single primary CTA (Surprise me) at the top of the form,
+   live re-render on every edit. The CTA sits in its own cta-row, full-width,
+   above the 5 fields. */
+
+/* CTA row — holds the primary CTA + its help line. Spans the full briefing
+   grid, sits as the first visual stop after the hero. */
+.cta-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.cta-help {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-style: italic;
+  max-width: 56ch;
+}
+
+/* The 5 fields sit in their own grid wrapper so they keep the existing
+   2-col desktop layout independent of the cta-row / voice-picker siblings
+   in the parent form grid. */
+.form-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+@media (min-width: 768px) {
+  .form-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem 1.25rem;
+    align-items: start;
+  }
+  .form-fields .field-wide { grid-column: 1 / -1; }
+}
+
+/* The form's primary CTA — slightly more prominent than the briefing-output
+   secondary CTAs (Copy / Download). Same amber base, a notch more weight so
+   it reads as the page's one CTA. */
+.cta-primary {
+  font-size: 17px;
+  padding: 1rem 1.85rem;
+  box-shadow: 0 10px 28px rgba(176, 141, 87, 0.34);
+}
+.cta-primary:hover { box-shadow: 0 14px 36px rgba(176, 141, 87, 0.42); }
+
+/* Surprise me — the page's primary CTA. Filled amber, larger than the ghost
+   default from v3, with a subtle first-paint pulse to draw the eye on load.
+   Reduced-motion users see a static button with no animation. */
+#bf-surprise {
+  padding: 0.85rem 1.4rem;
+  font-size: 15px;
+  animation: surprise-pulse 2.2s ease-in-out 1;
+}
+@keyframes surprise-pulse {
+  0%   { box-shadow: 0 10px 28px rgba(176, 141, 87, 0.34); }
+  35%  { box-shadow: 0 12px 38px rgba(176, 141, 87, 0.58); }
+  100% { box-shadow: 0 10px 28px rgba(176, 141, 87, 0.34); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #bf-surprise { animation: none; }
+}
+
+/* Seats slider — brand-coloured track + thumb. */
+.field-seats input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  margin: 0.4rem 0 0;
+  cursor: pointer;
+}
+.field-seats input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--hairline);
+  border-radius: 999px;
+}
+.field-seats input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: var(--hairline);
+  border-radius: 999px;
+}
+.field-seats input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.field-seats input[type="range"]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.field-seats input[type="range"]:focus-visible { outline: none; }
+.field-seats input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-wash); }
+.field-seats input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent-wash); }
+
+/* Voice picker — single horizontal strip of 25 chips. */
+.voice-picker {
+  margin: 1.5rem 0 0;
+  padding: 1rem 0 0.25rem;
+  border: 0;
+}
+.voice-picker-label {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.6rem;
+  color: var(--text);
+  font-weight: 500;
+}
+.voice-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.15rem 0 0.6rem;
+  margin: 0 -0.25rem;
+  scrollbar-width: thin;
+}
+.voice-strip::-webkit-scrollbar { height: 6px; }
+.voice-strip::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 3px; }
+.voice-chip {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.15s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+}
+.voice-chip:hover { border-color: var(--accent); }
+.voice-chip:active { transform: scale(0.97); }
+.voice-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.voice-chip.is-selected {
+  background: var(--accent);
+  color: #0A0A0B;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.voice-chip-dot { opacity: 0.55; padding: 0 0.05em; }
+.voice-chip.is-selected .voice-chip-dot { opacity: 0.7; }
+
+/* Live preview — one sentence below the strip, updates on click + input. */
+.voice-preview {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  min-height: 1.45em;
+}
+
+/* Inline lead capture (mounted inside the briefing output section). */
+.lead-inline {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--hairline);
+}
+.lead-inline > p:first-child {
+  margin: 0 0 0.75rem;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+.lead-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+.lead-inline-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.lead-inline-input::placeholder { color: var(--text-dim); }
+.lead-inline-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+.lead-inline-input:disabled { opacity: 0.55; cursor: not-allowed; }
+.lead-inline-submit {
+  background: var(--accent);
+  color: #0A0A0B;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 0.7rem 1.25rem;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.18s ease, transform 0.15s var(--ease-spring),
+    box-shadow 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.lead-inline-submit:hover {
+  background: #c19a63;
+  box-shadow: 0 6px 18px rgba(176, 141, 87, 0.32);
+}
+.lead-inline-submit:active { transform: scale(0.97); }
+.lead-inline-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+.lead-inline-submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.lead-inline-status {
+  margin: 0.6rem 0 0;
+  min-height: 1.4em;
+  font-size: 13px;
+  color: var(--accent);
+}
+.lead-inline-status:empty { margin: 0; }
 
 /* Capture footer (email form on the page) */
 .briefing-capture { padding-top: 1.5rem; padding-bottom: 3rem; }
