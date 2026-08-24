@@ -1689,7 +1689,7 @@ runner.runAsync("InMemoryRoomStore.seasonHistory is empty for a fresh room") {
     let id = try await store.createRoom(
         name: "Fresh", mascotName: "M", mascotPersonality: .friendly,
         mascotPoliticalIdeology: .centrist, joinStartingBonus: 200,
-        mascotApiKey: nil, blacklistedUserIds: []
+        mascotApiKey: nil
     )
     let history = try await store.fetchSeasonHistory(roomId: id)
     runner.assertEqual(history.count, 0)

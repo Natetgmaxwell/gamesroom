@@ -533,8 +533,7 @@ actor InMemoryRoomStore: RoomStore {
         mascotPersonality: MascotPersonality,
         mascotPoliticalIdeology: MascotPoliticalIdeology,
         joinStartingBonus: Int,
-        mascotApiKey: String?,
-        blacklistedUserIds: [UUID]
+        mascotApiKey: String?
     ) async throws -> UUID {
         let ownerId = currentSyntheticMemberId()
         let newRoom = Room(
@@ -559,7 +558,9 @@ actor InMemoryRoomStore: RoomStore {
             memberInviteQuota: 3
         )
         rooms.insert(newRoom, at: 0)
-        _ = blacklistedUserIds // in-memory; blacklist is server-only
+        // V0.94 — blacklistedUserIds parameter removed from
+        // createRoom. Per-event hidden members (events.hidden_from_user_ids)
+        // replaces the per-room mechanism. No in-memory state needed.
         return newRoom.id
     }
 
@@ -1083,7 +1084,7 @@ actor InMemoryRoomStore: RoomStore {
 
     // MARK: Event create
 
-    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String) async throws -> UUID {
+    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String, hiddenFromUserIds: [UUID]) async throws -> UUID {
         let new = Event(
             id: UUID(),
             roomId: roomId,
@@ -1096,7 +1097,15 @@ actor InMemoryRoomStore: RoomStore {
             startedAt: nil,
             settledAt: nil,
             sessionId: nil,
-            hostFinalized: false
+            hostFinalized: false,
+            // V0.94 — events.hiddenFromUserIds is honored by
+            // get_active_event / get_briefing_summary / get_event_rsvps
+            // in the live DB. The in-memory store doesn't replicate
+            // the gate (the in-memory store is for tests, where
+            // filtering isn't load-bearing), but the field is
+            // present on the Event model for the iOS read path to
+            // mirror. We pass it through below.
+            hiddenFromUserIds: hiddenFromUserIds
         )
         events[roomId] = new
         briefings[new.id] = BriefingSummary(

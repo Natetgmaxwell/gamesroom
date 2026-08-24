@@ -79,6 +79,17 @@ struct Event: Identifiable, Codable, Hashable {
     /// contract.
     let eventCalendarIdentifier: String?
 
+    /// V0.94 — host-supplied list of members who do not see this
+    /// event and do not receive its briefing push. Server-side
+    /// honored in `get_active_event` (returns nothing for hidden
+    /// callers), `get_briefing_summary` (returns 0 rows), and
+    /// `get_event_rsvps` (returns 0 rows). The iOS read path uses
+    /// this to short-circuit realtime push scheduling: members
+    /// on this list are skipped at the `NotificationDispatcher`
+    /// fan-out. `nil` when the server didn't return the column
+    /// (legacy events from before V0.94) — treat as empty.
+    let hiddenFromUserIds: [UUID]?
+
     /// Sentinel UUID used when the active-event RPC omits `room_id`
     /// (migration 012) — `gen_random_uuid()` never produces all-zeros,
     /// so this cannot collide with a real room. Migration 060 returns
@@ -102,6 +113,7 @@ struct Event: Identifiable, Codable, Hashable {
         case packSlug = "pack_slug"
         case hostFinalized = "host_finalized"
         case eventCalendarIdentifier = "event_calendar_identifier"
+        case hiddenFromUserIds = "hidden_from_user_ids"
     }
 
     init(
@@ -118,7 +130,8 @@ struct Event: Identifiable, Codable, Hashable {
         sessionId: UUID? = nil,
         packSlug: String = "casino",
         hostFinalized: Bool = false,
-        eventCalendarIdentifier: String? = nil
+        eventCalendarIdentifier: String? = nil,
+        hiddenFromUserIds: [UUID]? = nil
     ) {
         self.id = id
         self.roomId = roomId
@@ -134,6 +147,7 @@ struct Event: Identifiable, Codable, Hashable {
         self.packSlug = packSlug
         self.hostFinalized = hostFinalized
         self.eventCalendarIdentifier = eventCalendarIdentifier
+        self.hiddenFromUserIds = hiddenFromUserIds
     }
 
     init(from decoder: Decoder) throws {
@@ -159,6 +173,10 @@ struct Event: Identifiable, Codable, Hashable {
         // rows from before the column existed decode as nil (the
         // event was never written to any calendar).
         eventCalendarIdentifier = try c.decodeIfPresent(String.self, forKey: .eventCalendarIdentifier)
+        // V0.94 — per-event hidden list. Nil when the column
+        // doesn't exist on the server (pre-V0.94 live DB) or
+        // when the row is from before the migration.
+        hiddenFromUserIds = try c.decodeIfPresent([UUID].self, forKey: .hiddenFromUserIds)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -181,5 +199,12 @@ struct Event: Identifiable, Codable, Hashable {
         try c.encode(packSlug, forKey: .packSlug)
         try c.encode(hostFinalized, forKey: .hostFinalized)
         try c.encodeIfPresent(eventCalendarIdentifier, forKey: .eventCalendarIdentifier)
+        // V0.94 — only encode when the server returned the column.
+        // Pre-V0.94 events never carry the field; we omit rather
+        // than emit an empty array, which the server would treat
+        // as "no hidden members" and we'd lose the original
+        // "unknown" semantics. For the V0.94+ case the server
+        // always returns the column.
+        try c.encodeIfPresent(hiddenFromUserIds, forKey: .hiddenFromUserIds)
     }
 }
