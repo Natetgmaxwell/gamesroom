@@ -73,13 +73,42 @@ struct RoomPage: View {
 
     #if DEBUG
     /// V0.92 — initial-screen selector. When launched with
-    /// `-screenshots-screen=room-detail`, push the first seeded
-    /// room onto the iPhone NavigationStack on first appearance.
-    /// Other values: nil = default rooms list.
+    /// `-screenshots-screen=<key>`, push the appropriate room
+    /// (or none) onto the iPhone NavigationStack on first
+    /// appearance. Other values: nil = default rooms list.
+    ///
+    /// V0.97+ screenshot set keys:
+    ///   briefing  — push the first room (the seeded `.upcoming`
+    ///               BriefingSlot target).
+    ///   witness   — push the first room (`.tonightEvent` capture).
+    ///   settled   — push the first room (`.justSettled` capture).
+    ///   awards    — push the first room (Felt Faction, whose
+    ///               `.ended` season triggers the AwardsCard).
+    ///   empty     — leave the rooms list (used by the empty-state
+    ///               Create-room capture).
+    ///   pack-detail — historical V0.92 alias kept for the
+    ///               integration tests; treated like room-detail.
     private static var screenshotInitialRoomPush: Bool {
-        CommandLine.arguments.contains("-screenshots-screen=room-detail") ||
-        CommandLine.arguments.contains("-screenshots-screen=casino") ||
-        CommandLine.arguments.contains("-screenshots-screen=pack-detail")
+        let screen = Self.screenshotScreenArg()
+        switch screen {
+        case "briefing", "witness", "settled", "awards",
+             "room-detail", "casino", "pack-detail":
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// V0.97+ — reads `-screenshots-screen=<key>` from
+    /// `CommandLine.arguments`. Returns the trimmed key, or nil
+    /// when the flag is absent. Centralised so the production
+    /// boot path doesn't re-parse the arg list.
+    private static func screenshotScreenArg() -> String? {
+        guard let raw = CommandLine.arguments.first(where: { $0.hasPrefix("-screenshots-screen=") }) else {
+            return nil
+        }
+        let key = String(raw.dropFirst("-screenshots-screen=".count))
+        return key.isEmpty ? nil : key
     }
     #endif
 
@@ -135,10 +164,18 @@ struct RoomPage: View {
             // the iPhone NavigationStack so the room-detail surface
             // is the first thing on screen when the screenshot
             // fires. Production tap path is unaffected.
+            // V0.97+ — also drives the iPad split-view's
+            // `selectedRoom` binding so the iPad capture set
+            // renders the same room-detail state without
+            // requiring a tap on the sidebar.
             if Self.screenshotInitialRoomPush,
-               roomsPath.isEmpty,
                let first = roomService.rooms.first {
-                roomsPath = [first]
+                if roomsPath.isEmpty {
+                    roomsPath = [first]
+                }
+                if selectedRoom == nil {
+                    selectedRoom = first
+                }
             }
             #endif
         }

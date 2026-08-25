@@ -511,6 +511,125 @@ actor InMemoryRoomStore: RoomStore {
                 ]
             )
         ]
+
+        // V0.97+ — screenshot state seed. The screenshot bypass
+        // (`-screenshots-bypass-auth` plus `-screenshots-state=<key>`)
+        // drives the App Store Connect shot set. Each key flips one
+        // V0State-machine branch into a known-stable config so
+        // captures are reproducible without touching real data.
+        //
+        // Keys:
+        //   briefing  — `playedAt = +2d`, `startedAt = nil` →
+        //                `.upcoming` (BriefingSlot). Seat grid +
+        //                "Claim seat" CTA visible.
+        //   witness   — `playedAt = 30 min ago`, `startedAt = 30
+        //                min ago`, `settledAt = nil`, no working
+        //                hand → `.tonightEvent` (WitnessSlot, the
+        //                existing V0.92 capture target).
+        //   settled   — `playedAt = 3h ago`, `startedAt = 3h ago`,
+        //                `settledAt = 30 min ago` →
+        //                `.justSettled` (CeremonialCard). Hosted
+        //                chapter line seeded for the host pick.
+        //   awards    — Felt Faction surfaces its `.ended` season
+        //                by being pushed first; its AwardsCard
+        //                uses the season-awards seed already in
+        //                this init.
+        //   empty     — empty rooms list → RoomPage empty state
+        //                (Create-room hero CTA).
+        guard CommandLine.arguments.contains("-screenshots-bypass-auth"),
+              let screenState = Self.screenshotStateArg() else {
+            return
+        }
+
+        func rebuildCarwoolaEvent(
+            playedAt: Date,
+            startedAt: Date?,
+            settledAt: Date?
+        ) -> Event {
+            Event(
+                id: carwoolaEvent.id,
+                roomId: carwoola.id,
+                name: carwoolaEvent.name,
+                playedAt: playedAt,
+                createdAt: carwoolaEvent.createdAt,
+                venue: carwoolaEvent.venue,
+                hostNote: carwoolaEvent.hostNote,
+                maxSeats: carwoolaEvent.maxSeats,
+                startedAt: startedAt,
+                settledAt: settledAt,
+                sessionId: carwoolaEvent.sessionId,
+                packSlug: carwoolaEvent.packSlug,
+                hostFinalized: false,
+                eventCalendarIdentifier: nil,
+                hiddenFromUserIds: []
+            )
+        }
+
+        switch screenState {
+        case "briefing":
+            // Pre-play future-dated, no startedAt → `.upcoming`.
+            events[carwoola.id] = rebuildCarwoolaEvent(
+                playedAt: Date().addingTimeInterval(86_400 * 2),
+                startedAt: nil,
+                settledAt: nil
+            )
+
+        case "witness":
+            // Just-started live, no working hand → `.tonightEvent`.
+            events[carwoola.id] = rebuildCarwoolaEvent(
+                playedAt: Date().addingTimeInterval(-1_800),
+                startedAt: Date().addingTimeInterval(-1_800),
+                settledAt: nil
+            )
+
+        case "settled":
+            // Settled within last 24h → `.justSettled`. Seed a
+            // chapter line so the CeremonialCard's display-serif
+            // voice renders with content.
+            let e = rebuildCarwoolaEvent(
+                playedAt: Date().addingTimeInterval(-10_800),
+                startedAt: Date().addingTimeInterval(-10_800),
+                settledAt: Date().addingTimeInterval(-1_800)
+            )
+            events[carwoola.id] = e
+            chapterLines[e.id] = ChapterLine(
+                id: UUID(),
+                roomId: carwoola.id,
+                sessionId: e.id,
+                title: "Borat held the table",
+                nextEpisodeTeaser: "Next: Saturday suits tourney",
+                writtenAt: Date().addingTimeInterval(-1_800)
+            )
+
+        case "awards":
+            // Move Felt Faction to the front so the screenshot
+            // push lands on the ended-season room. Mirror
+            // carwoola's leaderboard into felt so the state
+            // machine doesn't fall through to `.loading`.
+            rooms = [felt, carwoola, pluto]
+            leaderboards[felt.id] = leaderboards[carwoola.id]
+
+        case "empty":
+            rooms = []
+
+        default:
+            // Leave the V0.92 default: startedAt = -30 min,
+            // playedAt = +2d. Resolves to `.upcoming` per the
+            // current state machine.
+            break
+        }
+    }
+
+    /// V0.97+ — reads `-screenshots-state=<key>` from
+    /// `CommandLine.arguments`. Returns the trimmed key, or nil
+    /// when the flag is absent. Centralised so the production
+    /// boot path doesn't re-parse the arg list.
+    private static func screenshotStateArg() -> String? {
+        guard let raw = CommandLine.arguments.first(where: { $0.hasPrefix("-screenshots-state=") }) else {
+            return nil
+        }
+        let key = String(raw.dropFirst("-screenshots-state=".count))
+        return key.isEmpty ? nil : key
     }
 
     // MARK: Rooms list
