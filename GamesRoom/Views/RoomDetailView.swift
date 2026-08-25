@@ -2486,34 +2486,12 @@ private struct CeremonialCard: View {
                 )
             }
 
-            Spacer().frame(height: 32)
-
-            HStack {
-                Text("Next session:")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                Text(event.playedAt.addingTimeInterval(86_400 * 7), format: .dateTime.weekday().day().month())
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
-            }
-
-            Spacer().frame(height: 24)
-
-            HStack(spacing: 6) {
-                Image(systemName: Theme.Icon.arrowDown)
-                    .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent.opacity(0.7))
-                Text("Standings below")
-                    .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent.opacity(0.7))
-            }
-            .accessibilityLabel(Text("Standings continue below"))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
         // Bottom safe-area: clears the iOS tab bar (~49pt) plus the
         // home-indicator inset (~31pt on iPhone 6.9). Without this
-        // the "Standings below" hint gets clipped behind the tab bar.
+        // the Tonight's Star block gets clipped behind the tab bar.
         .padding(.bottom, 80)
         // M2.5 — state-driven hero wash. The CeremonialCard
         // (.justSettled) is always the active slot in its V0State,
