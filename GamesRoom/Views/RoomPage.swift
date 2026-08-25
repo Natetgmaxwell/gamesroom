@@ -216,14 +216,30 @@ struct RoomPage: View {
     #endif
 
     /// iPhone path — the pre-W2.8 NavigationStack, byte-identical.
+    /// V0.97+ screenshot bypass — also used on iPad when
+    /// `-screenshots-ipad-column` is set, in which case the content
+    /// is wrapped in `.contentColumn()` so the iPhone-shaped column
+    /// (maxWidth 560pt) renders centered with the black iPad margin
+    /// on both sides — matching the App Store Connect spec's
+    /// "iPhone column rendered centered with the black iPad margin"
+    /// requirement exactly. Without the wrap, the iPad stack view
+    /// fills the full iPad width (which a reviewer can still read,
+    /// but doesn't match the spec's column treatment).
     private var stackView: some View {
-        NavigationStack(path: $roomsPath) {
+        let column = NavigationStack(path: $roomsPath) {
             content
                 .background(Theme.Palette.background.ignoresSafeArea())
                 .navigationTitle("Rooms")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar { toolbarContent }
         }
+        #if DEBUG
+        if isPad && Self.screenshotIpadColumnMode {
+            // Wrap in iPhone-shaped column with black iPad margin.
+            return AnyView(column.contentColumn())
+        }
+        #endif
+        return AnyView(column)
     }
 
     /// iPad path — room list as sidebar, detail pane on the right.
