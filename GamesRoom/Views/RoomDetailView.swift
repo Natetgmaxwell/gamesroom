@@ -2659,8 +2659,8 @@ private struct MemberNotePromptSection: View {
 
 /// V0.84 C2 — host-only inline picker for Tonight's Star. Member
 /// menu + category chips row + custom text field (visible only
-/// when `.custom`, required) + Save. Mascot-styled header "The
-/// host calls it — not a vote." lives in the body header line.
+/// when `.custom`, required) + Save. No body header line — the
+/// category chips row is the picker's first affordance.
 private struct HostTonightStarPickerSection: View {
     let members: [Member]
     let currentCard: TonightStarCard?
@@ -2671,9 +2671,6 @@ private struct HostTonightStarPickerSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("The host calls it — not a vote.")
-                .font(Theme.Typography.body.italic())
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
             HStack(spacing: 8) {
                 ForEach(TonightStarOverrideCategory.allCases, id: \.self) { cat in
                     Button(action: { selectedCategory = cat }) {
