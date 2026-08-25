@@ -2106,11 +2106,12 @@ private struct WitnessSlot: View {
         case done(String)
     }
 
-    /// M1.1 — header copy differentiates `.tonightEvent`
-    /// (play-just-started, "started N min ago") from `.inPlay`
-    /// (mid-game, "phones face-down"). The same `WitnessSlot`
-    /// component renders both — only the eyebrow + caption
-    /// change.
+    /// M1.1 — header title differentiates `.tonightEvent`
+    /// ("The night has started") from `.inPlay`
+    /// ("The game is on"). The same `WitnessSlot`
+    /// component renders both — only the title changes.
+    /// V0.92 — header caption (the explanatory sentence
+    /// below the title) removed; the CTA does the work.
     enum HeaderMode { case inPlay, tonightEvent, settleRound }
 
     let event: Event
@@ -2159,14 +2160,9 @@ private struct WitnessSlot: View {
                 Image(systemName: Theme.Icon.circleHexagongridFill)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(headerTitle)
-                        .font(Theme.Typography.title.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.primaryText)
-                    Text(headerCaption)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                }
+                Text(headerTitle)
+                    .font(Theme.Typography.title.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
                 Spacer()
             }
 
@@ -2381,17 +2377,6 @@ private struct WitnessSlot: View {
         case .inPlay:       return "The game is on"
         case .tonightEvent: return "The night has started"
         case .settleRound:  return "Count what's on the table"
-        }
-    }
-
-    private var headerCaption: String {
-        switch headerMode {
-        case .inPlay:
-            return "Phones face-down. Stay in the room."
-        case .tonightEvent:
-            return "The host just kicked off. Move your first chips when you're ready."
-        case .settleRound:
-            return "The host has finalised. Settle your stack before you leave the room."
         }
     }
 }
