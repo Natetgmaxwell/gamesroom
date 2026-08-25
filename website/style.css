@@ -85,7 +85,7 @@ body {
 .reveal.is-visible { opacity: 1; transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
-  .hero-inner > *, .mascot { animation: none; }
+  .hero-inner > * { animation: none; }
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
 
@@ -197,13 +197,12 @@ main.support {
   justify-items: center;
   align-items: center;
 }
-/* Hero entrance: icon → H1 → mascot, fast and sequenced (≤650ms total) */
-.hero-inner > *, .mascot {
+/* Hero entrance: icon → H1 → CTA, fast and sequenced (≤650ms total) */
+.hero-inner > * {
   animation: hero-rise 0.4s var(--ease-spring) both;
 }
 .hero-inner > *:nth-child(1) { animation-delay: 0.05s; }  /* icon */
 .hero-inner > *:nth-child(2) { animation-delay: 0.15s; }  /* H1 + lead */
-.mascot { animation-delay: 0.25s; }                        /* mascot */
 /* Preserve the ambient float on the hero icon: rise first, then float */
 .hero-icon {
   animation: hero-rise 0.4s var(--ease-spring) both,
@@ -255,44 +254,6 @@ h1 em { font-style: italic; color: var(--accent); }
   background: var(--accent);
   animation: dot-pulse 2s ease-in-out infinite;
 }
-
-/* ── Mascot says ──────────────────────────────────── */
-.mascot {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  max-width: 460px;
-  margin: 0 auto;
-  padding: 0.75rem 1rem;
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  text-align: left;
-  width: 100%;
-}
-.mascot-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  box-shadow: 0 0 0 1px var(--hairline);
-}
-.mascot .tag { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.25rem; }
-.mascot .line {
-  font-size: 15px;
-  color: var(--text);
-  min-height: 1.5em;
-}
-.mascot .line .caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  background: var(--accent);
-  margin-left: 2px;
-  vertical-align: -0.15em;
-  animation: caret-blink 0.9s steps(1) infinite;
-}
-.mascot .line.fading { transition: opacity 0.4s ease; opacity: 0; }
 
 /* ── Full-bleed statements (B1, B2) ───────────────── */
 .statement {
@@ -803,7 +764,6 @@ a:focus-visible {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.8); }
 }
-@keyframes caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 @keyframes hero-rise {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: none; }
@@ -834,7 +794,6 @@ a:focus-visible {
   }
   .hero-icon { margin: 0; }
   .hero-copy { max-width: 60ch; }
-  .mascot { margin: 0; }
   .features { grid-template-columns: repeat(2, 1fr); }
   .features .col-full { grid-column: 1 / -1; }
   .personas { grid-template-columns: repeat(3, 1fr); }

@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
   <!-- Bump the ?v= query on /style.css with every website deploy (cache-busting; HTML is no-cache). -->
-  <link rel="stylesheet" href="/style.css?v=81">
+  <link rel="stylesheet" href="/style.css?v=82">
 </head>
 <body>
   <header class="site-header">
@@ -43,14 +43,6 @@
           <p class="sub-head">Real tables. Real friends. No feed.</p>
           <p class="lead">You bring the people. Games Room handles the rest.</p>
           <a class="cta cta-primary" href="/play/briefing">Try it <span class="arrow">→</span></a>
-        </div>
-      </div>
-
-      <div class="mascot" aria-live="polite">
-        <img class="mascot-mark" src="/icon-120.png" alt="" aria-hidden="true">
-        <div>
-          <div class="tag">The table says</div>
-          <div class="line" id="mascot-line"><span id="mascot-text"></span><span class="caret" aria-hidden="true"></span></div>
         </div>
       </div>
     </section>
@@ -159,56 +151,6 @@
   </footer>
 
   <script>
-    // ── Mascot line: typewriter cycling through one-liners ──
-    (function () {
-      // Respect reduced motion: show the first line statically, skip the loop.
-      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        var el0 = document.getElementById("mascot-text");
-        if (el0) el0.textContent = "The chips count themselves. You just sit.";
-        return;
-      }
-      var lines = [
-        "The chips count themselves. You just sit.",
-        "Four seats. One table. All of you.",
-        "Quiet during play, chatty between nights.",
-        "Seasons end. Rivalries outlast them.",
-        "No ads, no tracking, just the night.",
-        "The deposit is the promise. The night is the payoff.",
-        "You bring the chips. It brings the memory.",
-        "Three taps. The night is on.",
-        "The RSVPs chase themselves. You just host.",
-        "Your seat's held. Just walk in.",
-        "The ledger remembers. You don't have to.",
-        "Quiet at the table. Chatty in the recap.",
-        "The season ends. The story doesn't.",
-        "No feed. Just the table.",
-        "The night plans itself. You just show up."
-      ];
-      var el = document.getElementById("mascot-text");
-      var li = 0, ci = 0, deleting = false, started = false;
-      function tick() {
-        var current = lines[li];
-        if (!deleting) {
-          ci++;
-          el.textContent = current.slice(0, ci);
-          if (ci === current.length) {
-            deleting = true;
-            return setTimeout(tick, 2400);
-          }
-        } else {
-          ci--;
-          el.textContent = current.slice(0, ci);
-          if (ci === 0) {
-            deleting = false;
-            li = (li + 1) % lines.length;
-            return setTimeout(tick, 500);
-          }
-        }
-        setTimeout(tick, deleting ? 28 : 45);
-      }
-      setTimeout(function () { tick(); }, 900);
-    })();
-
     // ── Scroll-triggered reveal ──
     (function () {
       var items = document.querySelectorAll(".reveal");
