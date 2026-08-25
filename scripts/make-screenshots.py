@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-V0.97+ App Store screenshot generator.
+V0.97+ App Store screenshot generator — dual-set pipeline.
 
-Reads raw simulator screenshots (iPhone 17 Pro Max sim,
-1320x2868, and iPad Pro 13" M5 sim, 2064x2752) and writes
-captioned PNGs at every required size under
-games-room/screenshots/iphone-6.9/, /iphone-6.5/,
-/iphone-5.5/, and /ipad-13/.
+Reads raw simulator screenshots (iPhone 17 Pro Max sim, 1320x2868,
+and iPad Pro 13" M5 sim, 2064x2752) and writes TWO parallel output
+sets to every required size:
+
+  screenshots/<size>/<NN>-<surface>.png       — captioned working
+                                                 artifact (orchestrator
+                                                 + reviewer use)
+  screenshots/upload/<size>/<NN>-<surface>.png — caption-strip-stripped
+                                                 upload set for App
+                                                 Store Connect
 
 Apple's iOS 26/27 SDK App Store Connect requirements:
   - 6.9" iPhone (iPhone 17 Pro Max class): 1290 x 2796 px
@@ -14,18 +19,23 @@ Apple's iOS 26/27 SDK App Store Connect requirements:
   - 5.5" iPhone (iPhone 8 Plus class):    1242 x 2208 px
   - 13"  iPad  (iPad Pro 13" M5 class):   2064 x 2752 px
 
-The iPhone source is 1320x2868, slightly larger than the
-6.9" target — we crop the bottom (home indicator) area.
-The iPad source is captured at the exact 13" spec size, so
-the iPad path is a 1:1 resize + caption strip on top.
+App Store Connect REJECTS screenshots with baked-in overlays (the
+brand-background caption strip is technically an overlay). The dual
+set keeps the captioned PNGs as our working artifact (orchestrator +
+reviewers can read which surface is which) and emits a clean,
+caption-free upload set ready for ASC drag-and-drop.
+
+The iPhone source is 1320x2868, slightly larger than the 6.9" target —
+we crop the bottom (home indicator) area. The iPad source is captured
+at the exact 13" spec size, so the iPad path is a 1:1 resize.
 
 The six source surfaces (per app-store-metadata.md):
-  01-create-room    — onboarding hero / empty rooms list
-  02-briefing-slot  — seat grid + Claim seat / Can't make it
-  03-witness-slot   — Casino pack's at-play witness screen
-  04-ceremonial-card — post-play chapter title + delta
-  05-awards-card    — season-end Privacy-aware awards
-  06-settings-sheet — App settings sheet
+  01-create-room     — onboarding hero / empty rooms list
+  02-briefing-slot   — seat grid + Claim seat / Can't make it
+  03-witness-slot    — Casino pack's at-play witness screen
+  04-ceremonial-card — post-play chapter title + delta (MEMBER view)
+  05-awards-card     — season-end Privacy-aware awards
+  06-settings-sheet  — App settings sheet
 """
 from PIL import Image, ImageDraw, ImageFont  # type: ignore[attr-defined]
 import os
@@ -39,7 +49,11 @@ OUT_DIRS = {
     "iphone-5.5": os.path.join(ROOT, "screenshots", "iphone-5.5"),
     "ipad-13":    os.path.join(ROOT, "screenshots", "ipad-13"),
 }
-for d in OUT_DIRS.values():
+UPLOAD_DIRS = {
+    key: os.path.join(ROOT, "screenshots", "upload", key)
+    for key in OUT_DIRS
+}
+for d in list(OUT_DIRS.values()) + list(UPLOAD_DIRS.values()):
     os.makedirs(d, exist_ok=True)
 
 # Target dimensions
@@ -70,9 +84,6 @@ BACKGROUND = (10, 10, 11)           # Theme.Palette.background ≈ #0A0A0B
 CAPTION_TEXT = (240, 230, 210)      # warm parchment
 
 # Source → caption + filename stem. Six sources per device class.
-# Reads from the input root (default: $REPO/.worktrees/captures/
-# when run by the screenshot pipeline; falls back to a sibling
-# `raw/` folder next to `screenshots/` for one-off regeneration).
 IPHONE_RAW = os.environ.get(
     "IPHONE_RAW",
     os.path.join(ROOT, "screenshots", "raw", "iphone")
@@ -141,31 +152,25 @@ def find_font(size):
     return ImageFont.load_default()
 
 
-def render_one(src_path: str, caption: str, stem: str, target_key: str) -> None:
+def resize_to_target(src_path: str, tw: int, th: int) -> Image.Image:
+    """Resize `src_path` to exactly (tw, th) preserving aspect by
+    cropping from the bottom (the iPhone source has a slight extra
+    home-indicator row we trim). Returns an RGB PIL.Image."""
     img = Image.open(src_path).convert("RGB")
     src_w, src_h = img.size
-    tw, th = TARGETS[target_key]
-    cap_h = int(round(th * CAPTION_FRAC[target_key]))
-
-    # Resize preserving aspect so width matches target. iPhone source
-    # (1320x2868) is slightly wider than 6.9" target — we resize to
-    # the target width and crop from the bottom. iPad source (2064x2752)
-    # is the exact target — we still resize for safety but expect a
-    # near-1:1.
     scale = tw / src_w
     new_h = int(round(src_h * scale))
     resized = img.resize((tw, new_h), Image.LANCZOS)
     if new_h < th:
-        # Source shorter than target — pad with background colour.
         canvas = Image.new("RGB", (tw, th), BACKGROUND)
         canvas.paste(resized, (0, 0))
-        base = canvas
-    else:
-        base = resized.crop((0, 0, tw, th))
+        return canvas
+    return resized.crop((0, 0, tw, th))
 
-    # Add the caption strip at the top with the caption text.
-    out = Image.new("RGB", (tw, th), BACKGROUND)
-    draw = ImageDraw.Draw(out)
+
+def make_caption_strip(tw: int, cap_h: int, caption: str) -> Image.Image:
+    """Render the brand-background caption strip on its own image.
+    Used only by the captioned (working artifact) set."""
     strip = Image.new("RGB", (tw, cap_h), BACKGROUND)
     sdraw = ImageDraw.Draw(strip)
     font_size = int(cap_h * 0.42)
@@ -186,30 +191,54 @@ def render_one(src_path: str, caption: str, stem: str, target_key: str) -> None:
         font=font,
         fill=CAPTION_TEXT,
     )
-    out.paste(strip, (0, 0))
-    # Paste the screenshot below the strip.
-    out.paste(base.crop((0, cap_h, tw, th)), (0, cap_h))
+    return strip
 
-    out_path = os.path.join(OUT_DIRS[target_key], f"{stem}.png")
-    out.save(out_path, "PNG", optimize=True)
-    print(f"  wrote {out_path}  {out.size}")
+
+def render_captioned(base: Image.Image, caption: str, target_key: str) -> Image.Image:
+    """Working artifact: paste the caption strip on top of the
+    resized capture. Goes to screenshots/<size>/<NN>-<surface>.png."""
+    tw, th = base.size
+    cap_h = int(round(th * CAPTION_FRAC[target_key]))
+    strip = make_caption_strip(tw, cap_h, caption)
+    out = Image.new("RGB", (tw, th), BACKGROUND)
+    out.paste(strip, (0, 0))
+    out.paste(base.crop((0, cap_h, tw, th)), (0, cap_h))
+    return out
+
+
+def render_one(target_key: str, entry: dict) -> None:
+    """Render both the captioned working artifact and the clean
+    upload set for one surface at one target size."""
+    src = (entry["ipad_src"]
+           if target_key == "ipad-13"
+           else entry["iphone_src"])
+    if not os.path.exists(src):
+        print(f"missing source for {target_key}: {src}", file=sys.stderr)
+        sys.exit(1)
+    tw, th = TARGETS[target_key]
+    base = resize_to_target(src, tw, th)
+
+    # 1. Captioned working artifact → screenshots/<size>/<stem>.png
+    captioned = render_captioned(base, entry["caption"], target_key)
+    captioned_path = os.path.join(OUT_DIRS[target_key], f"{entry['stem']}.png")
+    captioned.save(captioned_path, "PNG", optimize=True)
+    print(f"  captioned {captioned_path}  {captioned.size}")
+
+    # 2. Clean upload set → screenshots/upload/<size>/<stem>.png
+    # No caption strip, no overlays, exact (tw, th). RGB only —
+    # App Store Connect rejects alpha-channel screenshots.
+    upload = Image.new("RGB", (tw, th), BACKGROUND)
+    upload.paste(base, (0, 0))
+    upload_path = os.path.join(UPLOAD_DIRS[target_key], f"{entry['stem']}.png")
+    upload.save(upload_path, "PNG", optimize=True)
+    print(f"  upload    {upload_path}  {upload.size}")
 
 
 def main() -> int:
     for entry in SOURCES:
-        for target_key in TARGETS:
-            src = (entry["ipad_src"]
-                   if target_key == "ipad-13"
-                   else entry["iphone_src"])
-            if not os.path.exists(src):
-                print(f"missing source for {target_key}: {src}", file=sys.stderr)
-                return 1
         print(f"rendering {entry['stem']}")
         for target_key in TARGETS:
-            src = (entry["ipad_src"]
-                   if target_key == "ipad-13"
-                   else entry["iphone_src"])
-            render_one(src, entry["caption"], entry["stem"], target_key)
+            render_one(target_key, entry)
     return 0
 
 
