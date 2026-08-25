@@ -618,7 +618,7 @@ actor InMemoryRoomStore: RoomStore {
                 roomId: carwoola.id,
                 sessionId: e.id,
                 title: "Borat held the table",
-                nextEpisodeTeaser: "Next: Saturday suits tourney",
+                nextEpisodeTeaser: "Saturday suits tourney",
                 writtenAt: Date().addingTimeInterval(-1_800)
             )
 

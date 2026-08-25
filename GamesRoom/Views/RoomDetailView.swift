@@ -2441,7 +2441,7 @@ private struct CeremonialCard: View {
     @State private var memberNoteDraft: String = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 64) {
+        VStack(alignment: .leading, spacing: 24) {
             Text(chapterLine?.title ?? event.name)
                 .font(Theme.Typography.display)
                 .foregroundStyle(Theme.Palette.primaryText)
@@ -2546,6 +2546,10 @@ private struct CeremonialCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
+        // Bottom safe-area: clears the iOS tab bar (~49pt) plus the
+        // home-indicator inset (~31pt on iPhone 6.9). Without this
+        // the "Standings below" hint gets clipped behind the tab bar.
+        .padding(.bottom, 80)
         // M2.5 — state-driven hero wash. The CeremonialCard
         // (.justSettled) is always the active slot in its V0State,
         // so .hero is correct here. The hard-coded `.hero` on
@@ -2581,8 +2585,8 @@ private struct TonightStarSection: View {
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText)
             Text(categoryLine)
-                .font(Theme.Typography.body.italic())
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.75))
             if let custom = card.customText, !custom.isEmpty {
                 Text("“\(custom)”")
                     .font(Theme.Typography.body)

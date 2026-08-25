@@ -2589,15 +2589,15 @@ enum MascotEngine {
     ) -> String {
         switch category {
         case .bestPlay:
-            return "\(winnerName) played the night's best hand. The host saw it; the table knows."
+            return "\(winnerName) played the hand of the night."
         case .goodSport:
-            return "\(winnerName) lost every pot and kept the table laughing. That's the Good Sport."
+            return "\(winnerName) lost every pot and still had the table laughing."
         case .heldTheRoom:
-            return "\(winnerName) held the room together — runner, dealer, settler of side bets."
+            return "\(winnerName) ran the table all night. Cards, side bets, the chaos."
         case .showedUp:
-            return "\(winnerName) showed up and slotted straight in. The table's better for it."
+            return "\(winnerName) showed up and slotted right in. The table's better for it."
         case .custom:
-            return "\(winnerName) — the host's own call."
+            return "\(winnerName). The host's call."
         }
     }
 }
