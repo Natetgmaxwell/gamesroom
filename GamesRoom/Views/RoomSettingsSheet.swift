@@ -985,6 +985,11 @@ struct RoomSettingsOperationsSheet: View {
 /// the host sees role + display name without leaving settings.
 /// W1.6 — hosts can assign a team label per member (F-MVP-05
 /// V2-full, migration 049); members see the roster read-only.
+/// V0.91 — hosts can promote a member to host or demote a host
+/// to member (multi-host; ≥1 host always). The promote/demote
+/// action lives in a context menu on each row the host can
+/// manage; the caller's own row and member rows (when the
+/// caller isn't a host) have no menu.
 struct RoomSettingsMembersSheet: View {
     let room: Room
 
@@ -992,6 +997,21 @@ struct RoomSettingsMembersSheet: View {
 
     @State private var roster: [Member] = []
     @State private var isRosterLoading: Bool = false
+    /// Caller's auth id — needed so the row for "you" can hide
+    /// the manage menu. Fetched once via `SupabaseClientProvider`
+    /// in `.task`; nil while pending (renders the manage menu
+    /// optimistically for both rows, then hides the self-row's
+    /// menu once the id arrives).
+    @State private var currentUserId: UUID?
+    /// V0.91 — pending role-change awaiting the host's confirm.
+    /// Identifies the row + action so the confirmation alert can
+    /// render the right copy and the confirm button can fire the
+    /// right RPC call.
+    @State private var pendingChange: PendingRoleChange?
+    /// Transient inline error (e.g. last_host on a single-host
+    /// room). Drives an alert at the sheet level so the message
+    /// has somewhere to render.
+    @State private var transferError: String?
 
     private var isHost: Bool {
         room.userRole == .host
@@ -1023,6 +1043,11 @@ struct RoomSettingsMembersSheet: View {
                     Text("Team labels group members on the leaderboard for the season. Leave blank to clear.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    if let selfRow = roster.first(where: { $0.userId == currentUserId }), selfRow.role == .host {
+                        Text("To leave the room, ask another host to demote you.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
                 }
             }
         }
@@ -1034,12 +1059,56 @@ struct RoomSettingsMembersSheet: View {
             isRosterLoading = true
             defer { isRosterLoading = false }
             roster = await roomService.loadRoomMembers(roomId: room.id)
+            // Resolve the caller id once so the self-row hides
+            // its manage menu. The session lookup is local + fast;
+            // we don't refetch on every render.
+            if currentUserId == nil {
+                currentUserId = await SupabaseClientProvider.currentSession()?.user.id
+            }
+        }
+        // V0.91 — confirm-before-mutate alerts. SwiftUI's `.alert`
+        // lives at the body level (not per-row) because a context
+        // menu's `Button` cannot own a confirmation dialog — the
+        // dialog must be promoted to the sheet so it survives the
+        // menu's dismissal. The pending payload identifies which
+        // row + action the alert is for.
+        .alert(
+            pendingChange?.confirmTitle ?? "",
+            isPresented: Binding(
+                get: { pendingChange != nil },
+                set: { if !$0 { pendingChange = nil } }
+            ),
+            presenting: pendingChange
+        ) { change in
+            Button(change.confirmButtonTitle, role: .destructive) {
+                Task { await applyPendingChange(change) }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingChange = nil
+            }
+        } message: { change in
+            Text(change.confirmMessage)
+        }
+        .alert(
+            "Couldn't change the role",
+            isPresented: Binding(
+                get: { transferError != nil },
+                set: { if !$0 { transferError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(transferError ?? "")
         }
     }
 
     @ViewBuilder
     private func memberRow(_ member: Member) -> some View {
-        if isHost && member.role != .host {
+        let isSelf = member.userId == currentUserId
+        if isHost && member.role != .host && !isSelf {
+            // Member row (host viewing a non-host member): editable
+            // Team label + (new in V0.91) a context menu for
+            // promote-to-host.
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(member.displayName)
@@ -1060,7 +1129,69 @@ struct RoomSettingsMembersSheet: View {
                         Task { await commitTeam(member) }
                     }
             }
+            .contextMenu {
+                Button {
+                    pendingChange = PendingRoleChange(
+                        member: member,
+                        action: .promote
+                    )
+                } label: {
+                    Label("Make host", systemImage: "person.badge.shield.checkmark.fill")
+                }
+            }
+        } else if isHost && member.role == .host && !isSelf {
+            // Host row (host viewing another host): static display
+            // + a context menu for demote-to-member.
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(member.displayName)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Text("Host")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.accent)
+                }
+                Spacer()
+                TextField("Team", text: teamBinding(for: member))
+                    .font(Theme.Typography.caption)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 120)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    .onSubmit {
+                        Task { await commitTeam(member) }
+                    }
+            }
+            .contextMenu {
+                Button(role: .destructive) {
+                    pendingChange = PendingRoleChange(
+                        member: member,
+                        action: .demote
+                    )
+                } label: {
+                    Label("Demote to member", systemImage: "person.fill.xmark")
+                }
+            }
+        } else if isSelf && member.role == .host {
+            // Caller's own row, when the caller is the host.
+            // Display name + "Host (you)" with no menu — per the
+            // spec, hosts can't self-promote or self-demote. The
+            // leave-room affordance lives below the roster (see
+            // the footer note in the host section).
+            HStack {
+                Text(member.displayName)
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Spacer()
+                Text("Host (you)")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.accent)
+            }
         } else {
+            // Either: member viewing the room, OR caller is a
+            // host viewing a member whose role lookup raced
+            // (`isHost && member.role != .host && isSelf` is a
+            // contradiction; this branch covers the rest).
             HStack {
                 Text(member.displayName)
                     .font(Theme.Typography.body)
@@ -1106,6 +1237,60 @@ struct RoomSettingsMembersSheet: View {
             // Service already populated lastError; the field keeps
             // the local value so the host can retry.
             _ = error
+        }
+    }
+
+    /// V0.91 — fire the confirmed role change. On success the
+    /// roster cache is already updated by `RoomService.transferHostRole`
+    /// (replaced with the authoritative server-side set), so the
+    /// row re-renders immediately. On error we surface the message
+    /// via the sheet-level alert so the user sees the reason
+    /// (`lastHost` is the canonical case).
+    private func applyPendingChange(_ change: PendingRoleChange) async {
+        pendingChange = nil
+        do {
+            let rows = try await roomService.transferHostRole(
+                roomId: room.id,
+                targetUserId: change.member.userId,
+                action: change.action
+            )
+            roster = rows
+        } catch let error as HostRoleTransferError {
+            transferError = error.errorDescription
+        } catch {
+            transferError = error.localizedDescription
+        }
+    }
+}
+
+/// V0.91 — payload that drives the role-change confirmation alert.
+/// Identifies which member the action targets and which direction
+/// (promote/demote) the alert copy is for.
+private struct PendingRoleChange: Identifiable {
+    let id = UUID()
+    let member: Member
+    let action: HostRoleAction
+
+    var confirmTitle: String {
+        switch action {
+        case .promote: return "Make \(member.displayName) host?"
+        case .demote: return "Demote \(member.displayName)?"
+        }
+    }
+
+    var confirmMessage: String {
+        switch action {
+        case .promote:
+            return "You'll both have host powers. You can demote them later."
+        case .demote:
+            return "They'll lose host tools. The room will still have you."
+        }
+    }
+
+    var confirmButtonTitle: String {
+        switch action {
+        case .promote: return "Make host"
+        case .demote: return "Demote"
         }
     }
 }

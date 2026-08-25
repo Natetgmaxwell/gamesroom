@@ -11,7 +11,10 @@
 
 ## 1. What this is
 
-An invite-only iOS app for **in-person games nights**. One host per room,
+An invite-only iOS app for **in-person games nights**. ≥1 host per room
+(V0.91 — multi-host is allowed; the original creator is the first host,
+any host can promote another member to host, any host can demote a host
+back to member as long as ≥1 host remains),
 a small fixed group (8–12), physically present at the table. The app plans
 the night, runs a credit ledger, and stays quiet during play. Not a games
 app — a platform for people to plan and run in-person games nights.
@@ -51,7 +54,11 @@ carries all of them.
 2. **Continuity engine, not wipe-at-midnight.** The ledger compounds
    within a season so competitive friendship has an arc — "like an arc in
    a TV show that completed over multiple episodes."
-3. **Two roles only — Host and Member.** No tiers. Host scores alone and
+3. **Two role states — Host and Member; multi-host is allowed (V0.91).**
+   No tiers, no `.cohost` / `.moderator` middle ground. The original
+   creator is the first host; any host can promote another member to
+   host, and any host can demote a host back to member as long as
+   ≥1 host remains. A room is never hostless. Host scores alone and
    can also play.
 4. **One CTA per state.** The dominant action is the single source of
    truth.

@@ -330,6 +330,30 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .value
     }
 
+    /// V0.91 — the live RPC `transfer_host_role(p_room_id,
+    /// p_target_user_id, p_action)` (migration 091) flips a member
+    /// between `host` and `member`. Multi-host is allowed; demoting
+    /// the last host fails server-side with `last_host`.
+    /// Throws on non-host caller (`not_authorized`), unknown target
+    /// (`not_found`), or invalid action (`invalid_action`).
+    /// Returns the full room roster so the iOS client can rebuild
+    /// its members cache from a single round-trip.
+    func transferHostRole(
+        roomId: UUID,
+        targetUserId: UUID,
+        action: HostRoleAction
+    ) async throws -> [Member] {
+        let rows: [Member] = try await SupabaseClientProvider.shared
+            .rpc("transfer_host_role", params: [
+                "p_room_id": roomId.uuidString,
+                "p_target_user_id": targetUserId.uuidString,
+                "p_action": action.rawValue
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
     /// The live RPC `get_event_rounds(p_event_id)` (migration 049)
     /// returns the per-round submissions for one event, oldest round
     /// first. Room scope derives from the event (F-IDENT-01).

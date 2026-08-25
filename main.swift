@@ -1581,7 +1581,8 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents stamps stale events, lea
     // window) gets closed.
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Stale Night",
-        playedAt: Date().addingTimeInterval(-3 * 86_400), packSlug: "casino"
+        playedAt: Date().addingTimeInterval(-3 * 86_400), packSlug: "casino",
+        hiddenFromUserIds: []
     )
     let closed = try await store.autoCloseStaleEvents(roomId: hosted.id)
     runner.assertEqual(closed, 1, file: #file, line: #line)
@@ -1594,7 +1595,8 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents stamps stale events, lea
     // untouched.
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Fresh Night",
-        playedAt: Date().addingTimeInterval(-2 * 3600), packSlug: "casino"
+        playedAt: Date().addingTimeInterval(-2 * 3600), packSlug: "casino",
+        hiddenFromUserIds: []
     )
     let freshClosed = try await store.autoCloseStaleEvents(roomId: hosted.id)
     runner.assertEqual(freshClosed, 0, file: #file, line: #line)
@@ -1627,7 +1629,8 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents honors the room's autoCl
     )
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Two Hours Old",
-        playedAt: Date().addingTimeInterval(-2 * 3600), packSlug: "casino"
+        playedAt: Date().addingTimeInterval(-2 * 3600), packSlug: "casino",
+        hiddenFromUserIds: []
     )
     let closed = try await store.autoCloseStaleEvents(roomId: hosted.id)
     runner.assertEqual(closed, 1, file: #file, line: #line)
@@ -4415,7 +4418,8 @@ runner.runAsync("V0.86: InMemoryRoomStore.addEvent stores event and fetchActiveE
         roomId: hosted.id,
         name: "Friday Night",
         playedAt: Date().addingTimeInterval(86_400),
-        packSlug: "casino"
+        packSlug: "casino",
+        hiddenFromUserIds: []
     )
     let fetched = try await store.fetchActiveEvent(roomId: hosted.id)
     runner.assertEqual(fetched?.id, eventId)
@@ -4433,7 +4437,8 @@ runner.runAsync("V0.86: reportCalendarIdentifier persists the EKEvent id on the 
         roomId: hosted.id,
         name: "Friday Night",
         playedAt: Date().addingTimeInterval(86_400),
-        packSlug: "casino"
+        packSlug: "casino",
+        hiddenFromUserIds: []
     )
     let ekId = "X-EK-12345-ABCDE"
     try await store.reportCalendarIdentifier(eventId: eventId, identifier: ekId)
@@ -4449,7 +4454,8 @@ runner.runAsync("V0.86: reportCalendarIdentifier is idempotent (second call over
         roomId: hosted.id,
         name: "Friday Night",
         playedAt: Date().addingTimeInterval(86_400),
-        packSlug: "casino"
+        packSlug: "casino",
+        hiddenFromUserIds: []
     )
     try await store.reportCalendarIdentifier(eventId: eventId, identifier: "OLD")
     try await store.reportCalendarIdentifier(eventId: eventId, identifier: "NEW")
@@ -4526,6 +4532,153 @@ runner.runAsync("V0.86: updateRoom signature drops calendarAutoAddHost — compi
     )
     let reread = try await store.fetchRooms().first { $0.id == hosted.id }
     runner.assertTrue(reread != nil)
+}
+
+// MARK: - V0.91 Host promotion + multi-host
+
+runner.runAsync("V0.91 transferHostRole promotes a member to host") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    // Seed: lazy-fetch the synthetic 3-row roster so the store
+    // knows the member UUIDs (the synthetic Alex + Sam use fixed
+    // UUIDs so the test can target them).
+    let roster = try await store.fetchRoomMembers(roomId: room.id)
+    let member = try roster.first(where: { $0.role == .member }).orFail(testName: "seeded member")
+    let updated = try await store.transferHostRole(
+        roomId: room.id,
+        targetUserId: member.userId,
+        action: .promote
+    )
+    let promoted = try updated.first(where: { $0.userId == member.userId }).orFail(testName: "promoted member")
+    runner.assertEqual(promoted.role, .host)
+}
+
+runner.runAsync("V0.91 transferHostRole demotes a non-last host to member") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    let roster = try await store.fetchRoomMembers(roomId: room.id)
+    // First promote a member to create a second host.
+    let member = try roster.first(where: { $0.role == .member }).orFail(testName: "seeded member")
+    let afterPromote = try await store.transferHostRole(
+        roomId: room.id,
+        targetUserId: member.userId,
+        action: .promote
+    )
+    let nowHost = try afterPromote.first(where: { $0.userId == member.userId }).orFail(testName: "promoted")
+    runner.assertEqual(nowHost.role, .host)
+    // Now demote the new host back to member.
+    let afterDemote = try await store.transferHostRole(
+        roomId: room.id,
+        targetUserId: member.userId,
+        action: .demote
+    )
+    let nowMember = try afterDemote.first(where: { $0.userId == member.userId }).orFail(testName: "demoted")
+    runner.assertEqual(nowMember.role, .member)
+}
+
+runner.runAsync("V0.91 transferHostRole refuses to demote the last host") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    let roster = try await store.fetchRoomMembers(roomId: room.id)
+    // The synthetic roster has exactly 1 host (the room creator).
+    let originalHost = try roster.first(where: { $0.role == .host }).orFail(testName: "seeded host")
+    do {
+        _ = try await store.transferHostRole(
+            roomId: room.id,
+            targetUserId: originalHost.userId,
+            action: .demote
+        )
+        runner.assertTrue(false, "demoting the last host should throw")
+    } catch let error as HostRoleTransferError {
+        runner.assertTrue(
+            error == .lastHost,
+            "expected lastHost, got \(error)"
+        )
+        // And the roster should be unchanged.
+        let after = try await store.fetchRoomMembers(roomId: room.id)
+        let stillHost = try after.first(where: { $0.userId == originalHost.userId }).orFail(testName: "still host")
+        runner.assertEqual(stillHost.role, .host)
+    }
+}
+
+runner.runAsync("V0.91 transferHostRole promotes + then the new host can also promote") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    let roster = try await store.fetchRoomMembers(roomId: room.id)
+    let members = roster.filter { $0.role == .member }
+    guard members.count == 2 else {
+        runner.assertTrue(false, "synthetic roster expected 2 members, got \(members.count)")
+        return
+    }
+    // Promote one.
+    _ = try await store.transferHostRole(
+        roomId: room.id,
+        targetUserId: members[0].userId,
+        action: .promote
+    )
+    // Promote the second via the second host (the original creator)
+    // — should succeed because we have 2 hosts now.
+    let after = try await store.transferHostRole(
+        roomId: room.id,
+        targetUserId: members[1].userId,
+        action: .promote
+    )
+    let hostCount = after.filter { $0.role == .host }.count
+    runner.assertEqual(hostCount, 3)
+    runner.assertTrue(hostCount == 3, "should be 3 hosts after both promotes")
+}
+
+runner.runAsync("V0.91 transferHostRole throws notFound for an unknown target") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    _ = try await store.fetchRoomMembers(roomId: room.id)
+    let stranger = UUID()
+    do {
+        _ = try await store.transferHostRole(
+            roomId: room.id,
+            targetUserId: stranger,
+            action: .promote
+        )
+        runner.assertTrue(false, "unknown target should throw")
+    } catch let error as HostRoleTransferError {
+        switch error {
+        case .notFound: runner.assertTrue(true, "expected notFound")
+        default: runner.assertTrue(false, "expected notFound, got \(error)")
+        }
+    }
+}
+
+runner.runAsync("V0.91 transferHostRole is idempotent on already-target role") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    let roster = try await store.fetchRoomMembers(roomId: room.id)
+    let host = try roster.first(where: { $0.role == .host }).orFail(testName: "seeded host")
+    // Promote an already-host — should be a no-op (no exception).
+    let after = try await store.transferHostRole(
+        roomId: room.id,
+        targetUserId: host.userId,
+        action: .promote
+    )
+    let stillHost = try after.first(where: { $0.userId == host.userId }).orFail(testName: "still host")
+    runner.assertEqual(stillHost.role, .host)
+}
+
+private extension Optional {
+    /// Helper for tests: surface a clear failure (with the test
+    /// name) instead of crashing with `!` when the optional is
+    /// unexpectedly nil.
+    func orFail(testName: String) throws -> Wrapped {
+        switch self {
+        case .some(let value):
+            return value
+        case .none:
+            throw NSError(
+                domain: "TestRunner",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "\(testName): expected non-nil"]
+            )
+        }
+    }
 }
 
 // MARK: - Summary

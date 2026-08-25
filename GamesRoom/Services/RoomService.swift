@@ -575,6 +575,79 @@ final class RoomService: ObservableObject {
         }
     }
 
+    /// V0.91 — host-only. Promotes a member to host or demotes a
+    /// host back to member via the `transfer_host_role` RPC
+    /// (migration 091). Multi-host is allowed; a room must always
+    /// have ≥1 host, so demoting the last host fails server-side.
+    ///
+    /// On success: replaces the cached roster with the RPC's
+    /// returned set so the calling view (the Members section in
+    /// `RoomSettingsSheet`) re-renders without a refetch. If the
+    /// caller's own role changed (they were demoted by another
+    /// host), the rooms cache is refreshed so `Room.userRole`
+    /// re-evaluates host gates on the next read.
+    ///
+    /// On error: maps the live RPC's exception messages
+    /// (`last_host`, `not_authorized`, `not_found`,
+    /// `invalid_action`) into typed `HostRoleTransferError` cases
+    /// the view can surface inline. `lastError` is set so any
+    /// existing error banner surfaces the message.
+    func transferHostRole(
+        roomId: UUID,
+        targetUserId: UUID,
+        action: HostRoleAction
+    ) async throws -> [Member] {
+        let rows: [Member]
+        do {
+            rows = try await store.transferHostRole(
+                roomId: roomId,
+                targetUserId: targetUserId,
+                action: action
+            )
+        } catch {
+            // Map the live RPC's error strings to typed cases so
+            // the view can branch. The Postgres `RAISE EXCEPTION`
+            // message is the prefix before the first colon; the
+            // rest is human detail that `errorDescription` covers.
+            let message = error.localizedDescription.lowercased()
+            if message.contains("last_host") {
+                self.lastError = HostRoleTransferError.lastHost.errorDescription
+                throw HostRoleTransferError.lastHost
+            }
+            if message.contains("not_authorized") {
+                self.lastError = HostRoleTransferError.notAuthorized.errorDescription
+                throw HostRoleTransferError.notAuthorized
+            }
+            if message.contains("not_found") {
+                let detail = HostRoleTransferError.notFound("target is not a member of this room")
+                self.lastError = detail.errorDescription
+                throw detail
+            }
+            if message.contains("invalid_action") {
+                self.lastError = "Couldn't change the role. Try again."
+                throw error
+            }
+            // In-memory preview errors are already typed; rethrow.
+            if error is HostRoleTransferError { throw error }
+            self.lastError = error.localizedDescription
+            throw error
+        }
+        // Success: rebuild the cache from the authoritative roster.
+        self.membersByRoom[roomId] = rows
+        cacheTimestamps.removeValue(forKey: "roomMembers:\(roomId.uuidString)")
+        self.lastError = nil
+        // If the caller's own role changed (e.g. another host
+        // demoted them), the rooms cache must refresh so host-only
+        // gates re-evaluate on the next read. Skip the refresh when
+        // the caller is unchanged — promote paths and demote-others
+        // shouldn't trigger an unrelated refetch.
+        if let caller = await SupabaseClientProvider.currentSession()?.user.id,
+           caller == targetUserId {
+            await refresh()
+        }
+        return rows
+    }
+
     /// Loads the per-round breakdown for one event into the cache.
     /// Returns the cached value (possibly empty). Called from
     /// `RoomDetailView` when the leaderboard's per-round section

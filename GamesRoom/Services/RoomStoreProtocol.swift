@@ -88,6 +88,27 @@ protocol RoomStore: Sendable {
     /// (migration 049).
     func setMemberTeam(roomId: UUID, memberId: UUID, team: String?) async throws
 
+    /// V0.91 — host-only. Promotes a member to host or demotes a
+    /// host back to member. Multi-host is allowed; a room must
+    /// always have at least one host, so demoting the last host
+    /// fails server-side with `last_host`.
+    ///
+    /// `action` is one of `.promote` / `.demote`. The caller must
+    /// already be a host in `roomId`; otherwise the RPC raises
+    /// `not_authorized`. The target must already be a member of
+    /// `roomId`; otherwise the RPC raises `not_found`.
+    ///
+    /// Returns the full room roster so the iOS client can rebuild
+    /// the members cache from a single round-trip.
+    ///
+    /// Server side: `transfer_host_role(p_room_id, p_target_user_id,
+    /// p_action)` (migration 091).
+    func transferHostRole(
+        roomId: UUID,
+        targetUserId: UUID,
+        action: HostRoleAction
+    ) async throws -> [Member]
+
     /// The per-round submissions for one event, oldest round first.
     /// Room scope derives from the event (F-IDENT-01).
     ///
@@ -462,4 +483,39 @@ protocol RoomStore: Sendable {
     /// Server side: `mark_member_notes_consumed(p_room_id,
     /// p_note_ids uuid[])` (migration 083).
     func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async throws
+}
+
+/// V0.91 — the role-change action the host applies to a room
+/// member via `transferHostRole(roomId:targetUserId:action:)`.
+/// `rawValue` is the `p_action` string passed to the
+/// `transfer_host_role` RPC (migration 091).
+enum HostRoleAction: String {
+    case promote
+    case demote
+}
+
+/// V0.91 — synthetic errors the in-memory store raises so the
+/// iOS UI can exercise the same error paths in previews as in
+/// production. Live errors come through as `NSError` from the
+/// Supabase client (Postgres raises `RAISE EXCEPTION ... USING
+/// ERRCODE = ...`; the client surfaces them with the message in
+/// `localizedDescription`). The service-side mapping in
+/// `RoomService.transferHostRole` parses those strings; this enum
+/// is the in-memory-only counterpart that throws typed errors
+/// directly so callers can pattern-match on them.
+enum HostRoleTransferError: Error, LocalizedError, Equatable {
+    case lastHost
+    case notAuthorized
+    case notFound(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .lastHost:
+            return "A room must always have at least one host."
+        case .notAuthorized:
+            return "You're not a host in this room."
+        case .notFound(let detail):
+            return detail
+        }
+    }
 }

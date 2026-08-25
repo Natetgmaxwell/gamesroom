@@ -59,6 +59,14 @@ actor InMemoryRoomStore: RoomStore {
     /// rendered on the ceremonial card.
     private var chapterLines: [UUID: ChapterLine]
 
+    /// V0.91 — map of `roomId → mutable roster` backing
+    /// `fetchRoomMembers` + `transferHostRole`. Lazy: the first
+    /// `fetchRoomMembers` call seeds the room from the synthetic
+    /// 3-row roster; `transferHostRole` mutates a single row's
+    /// `role`. Previews use this so the role-change flow renders
+    /// against stateful data without a backend.
+    private var membersByRoom: [UUID: [Member]]
+
     /// Map of `roomId → enabled pack slugs`. M4. Empty when a
     /// room has no pack overrides — callers fall back to the
     /// global `PackRegistry.shared.allPacks` per the V0.8 brief.
@@ -452,6 +460,10 @@ actor InMemoryRoomStore: RoomStore {
         ]
         self.roomSystemEvents = [:]
         self.chapterLines = [:]
+        // V0.91 — mutable roster backing `transferHostRole`. The
+        // seed is empty; `fetchRoomMembers` lazily fills each room
+        // with the synthetic 3-row roster on first read.
+        self.membersByRoom = [:]
         // V0.84 C2 + C5 — seed one host_pick tonight-star card on
         // the first event and one unconsumed member note on the
         // first room so previews exercise the new ceremonial-card
@@ -810,9 +822,15 @@ actor InMemoryRoomStore: RoomStore {
     /// roster surface renders without Supabase. The host is always
     /// row 0 (matches the live `get_room_members` ordering: host
     /// first, then alphabetical). Used by `RoomService.fetchRoomMembers`.
+    /// V0.91 — lazily seeds `membersByRoom` from this synthetic
+    /// roster on first read; subsequent reads (and
+    /// `transferHostRole`) hit the mutable cache.
     func fetchRoomMembers(roomId: UUID) async throws -> [Member] {
         guard let room = rooms.first(where: { $0.id == roomId }) else {
             return []
+        }
+        if let cached = membersByRoom[roomId] {
+            return cached
         }
         // V0.54 — the synthetic current member's per-room opt-in is
         // stored off-band (the in-memory store has no real auth
@@ -820,7 +838,7 @@ actor InMemoryRoomStore: RoomStore {
         // `notificationsEnabled = false` so the opt-in filter
         // reflects quiet-by-default out of the gate; the test only
         // checks the field is decodable.
-        return [
+        let seeded: [Member] = [
             Member(
                 id: "\(room.id.uuidString):\(room.createdBy.uuidString)",
                 roomId: room.id,
@@ -833,7 +851,7 @@ actor InMemoryRoomStore: RoomStore {
             Member(
                 id: "\(room.id.uuidString):synthetic-member-2",
                 roomId: room.id,
-                userId: UUID(),
+                userId: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
                 role: .member,
                 joinedAt: room.createdAt.addingTimeInterval(86_400 * 7),
                 displayName: "Alex",
@@ -842,13 +860,15 @@ actor InMemoryRoomStore: RoomStore {
             Member(
                 id: "\(room.id.uuidString):synthetic-member-3",
                 roomId: room.id,
-                userId: UUID(),
+                userId: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
                 role: .member,
                 joinedAt: room.createdAt.addingTimeInterval(86_400 * 14),
                 displayName: "Sam",
                 notificationsEnabled: false
             )
         ]
+        membersByRoom[roomId] = seeded
+        return seeded
     }
 
     // MARK: Active event
@@ -894,6 +914,70 @@ actor InMemoryRoomStore: RoomStore {
         _ = roomId
         _ = memberId
         _ = team
+    }
+
+    /// V0.91 — in-memory mirror of `transfer_host_role` (migration
+    /// 091). The function is non-async on the network side, so the
+    /// in-memory mirror is just the role flip + last-host guard.
+    /// Promotes a `.member` to `.host`, demotes a `.host` to
+    /// `.member`. Demoting the last host throws a synthetic error
+    /// matching the live RPC's `last_host` so the iOS UI exercises
+    /// the same error path in previews as in production. Idempotent
+    /// on a target that's already in the requested role (no-op).
+    func transferHostRole(
+        roomId: UUID,
+        targetUserId: UUID,
+        action: HostRoleAction
+    ) async throws -> [Member] {
+        // Ensure the room is seeded so we have a roster to mutate.
+        _ = try await fetchRoomMembers(roomId: roomId)
+        guard var roster = membersByRoom[roomId] else {
+            throw HostRoleTransferError.notFound("room has no roster")
+        }
+        guard let idx = roster.firstIndex(where: { $0.userId == targetUserId }) else {
+            throw HostRoleTransferError.notFound("target is not a member of this room")
+        }
+        let target = roster[idx]
+        switch action {
+        case .promote:
+            if target.role == .host { return roster }  // idempotent
+            roster[idx] = Member(
+                id: target.id,
+                roomId: target.roomId,
+                userId: target.userId,
+                role: .host,
+                joinedAt: target.joinedAt,
+                lastSeenAt: target.lastSeenAt,
+                displayName: target.displayName,
+                socialPreference: target.socialPreference,
+                team: target.team,
+                notificationsEnabled: target.notificationsEnabled,
+                inviteTier: target.inviteTier,
+                invitedBy: target.invitedBy
+            )
+        case .demote:
+            if target.role == .member { return roster }  // idempotent
+            let hostCount = roster.filter { $0.role == .host }.count
+            if hostCount <= 1 {
+                throw HostRoleTransferError.lastHost
+            }
+            roster[idx] = Member(
+                id: target.id,
+                roomId: target.roomId,
+                userId: target.userId,
+                role: .member,
+                joinedAt: target.joinedAt,
+                lastSeenAt: target.lastSeenAt,
+                displayName: target.displayName,
+                socialPreference: target.socialPreference,
+                team: target.team,
+                notificationsEnabled: target.notificationsEnabled,
+                inviteTier: target.inviteTier,
+                invitedBy: target.invitedBy
+            )
+        }
+        membersByRoom[roomId] = roster
+        return roster
     }
 
     /// In-memory mirror of `get_event_rounds` (migration 049).
