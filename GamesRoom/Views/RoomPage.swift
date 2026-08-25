@@ -188,9 +188,32 @@ struct RoomPage: View {
 
     /// W2.8 — iPad renders a split view (room list sidebar + detail
     /// pane); iPhone keeps the single-column push navigation.
+    ///
+    /// V0.97+ screenshot bypass — when launched with
+    /// `-screenshots-ipad-column`, force the iPhone stack view even on
+    /// iPad so the screenshot pipeline can capture the iPhone-column-
+    /// centered layout the App Store Connect spec requires. Without
+    /// this flag the iPad split-view ships and the captures show a
+    /// stretched two-pane, an App Store Connect rejection trigger.
+    /// Production builds never see this branch (compile-gated under
+    /// `#if DEBUG`); see `screenshotIpadColumnMode`.
     private var isPad: Bool {
-        UIDevice.current.userInterfaceIdiom == .pad
+        #if DEBUG
+        if Self.screenshotIpadColumnMode { return false }
+        #endif
+        return UIDevice.current.userInterfaceIdiom == .pad
     }
+
+    #if DEBUG
+    /// V0.97+ screenshot bypass — `-screenshots-ipad-column` forces the
+    /// iPhone stack view on iPad so the iPhone-column-centered capture
+    /// renders at iPad size with the black margin the App Store Connect
+    /// spec calls for. Production (Release) builds never see this
+    /// branch.
+    private static var screenshotIpadColumnMode: Bool {
+        CommandLine.arguments.contains("-screenshots-ipad-column")
+    }
+    #endif
 
     /// iPhone path — the pre-W2.8 NavigationStack, byte-identical.
     private var stackView: some View {

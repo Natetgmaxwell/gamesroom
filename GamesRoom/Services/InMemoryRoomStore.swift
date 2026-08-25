@@ -154,6 +154,27 @@ actor InMemoryRoomStore: RoomStore {
     private var tierTwoJoinsByRoom: [UUID: [UUID]]
 
     init() {
+        // V0.97+ screenshot bypass — `-screenshots-as-member` flips
+        // carwoola (the seeded BriefingSlot target room) to
+        // `userRole = .member` so the screenshot pipeline can capture
+        // a non-host member's view of the ceremonial card. Without
+        // this, `isHost` resolves true (the seed is `userRole: .host`)
+        // and the V0.84 C2 host picker — Best play / Good sport /
+        // Held the room / Showed up / Custom pills + member picker +
+        // "Save the call" CTA — renders on the `.justSettled`
+        // capture, which is what surface #4 (Ceremonial card) is NOT
+        // supposed to show. The picker itself is host-only (gated on
+        // `isHost && onTonightStarPick` in RoomDetailView); this
+        // arg is the screenshot-side mirror so the capture mirrors
+        // production for a signed-in member. Compile-gated under
+        // `#if DEBUG`; production (Release) builds always seed the
+        // host role.
+        let screenshotAsMember: Bool
+        #if DEBUG
+        screenshotAsMember = CommandLine.arguments.contains("-screenshots-as-member")
+        #else
+        screenshotAsMember = false
+        #endif
         let carwoola = Room(
             id: UUID(),
             name: "Carwoola Crew",
@@ -166,7 +187,7 @@ actor InMemoryRoomStore: RoomStore {
             isLive: true,
             nextEventDescription: "Tonight 8pm",
             joinStartingBonus: 200,
-            userRole: .host,
+            userRole: screenshotAsMember ? .member : .host,
             briefing48hEnabled: true,
             calendarAutoAdd: false,
             socialPreferencesEnabled: true,
