@@ -39,8 +39,23 @@ struct Room: Identifiable, Codable, Hashable {
     let createdAt: Date
     let updatedAt: Date
 
-    /// Whether the room is currently broadcasting. Drives the
-    /// Rooms-list dot indicator.
+    /// DEPRECATED: live state is derived from `RoomService.activeEventByRoom[room.id] != nil`, not from this stored field.
+    ///
+    /// The field was originally seeded at room-creation time
+    /// (`InMemoryRoomStore` seeded Carwoola Crew with `isLive: true`
+    /// permanently) and never updated by the live-event lifecycle,
+    /// so the Continue hero pill on `RoomPage.swift` read "Live now"
+    /// forever regardless of whether an event was active. The amber-
+    /// dot row indicator and the Continue hero pill now both drive
+    /// off the active-event cache.
+    ///
+    /// The field stays in place because the Swift decoder/encoder
+    /// round-trip must keep working, and the Postgres column has not
+    /// been migrated out. Removing it is a separate migration task
+    /// (drop `rooms.is_live` column + update the Supabase RPCs +
+    /// delete the field from this model + update every reader). Do
+    /// not read from this field for UI display; read from
+    /// `RoomService.activeEventByRoom`.
     let isLive: Bool
 
     /// One-line teaser shown on the room card in the list. Host-set;

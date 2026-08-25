@@ -480,11 +480,20 @@ struct RoomPage: View {
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText)
 
+            // Live state is derived from the active-event cache, NOT
+            // from the stored Room.isLive field. The stored field
+            // mirrors the room-creation seed and never updates; the
+            // amber-dot row indicator above (RoomPage.swift:363-368)
+            // and this pill both drive off
+            // `roomService.activeEventByRoom[room.id] != nil` so they
+            // flip together when a host kicks off / settles an event.
+            let hasActiveEvent = roomService.activeEventByRoom[room.id] != nil
+
             HStack(spacing: 8) {
                 Circle()
-                    .fill(room.isLive ? Theme.Palette.accent : Theme.Palette.hairline)
+                    .fill(hasActiveEvent ? Theme.Palette.accent : Theme.Palette.hairline)
                     .frame(width: 8, height: 8)
-                Text(room.isLive ? "Live now" : "Last opened")
+                Text(hasActiveEvent ? "Live now" : "Last opened")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 Spacer(minLength: 8)
