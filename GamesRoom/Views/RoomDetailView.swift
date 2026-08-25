@@ -405,26 +405,6 @@ struct RoomDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
                 activeSlot
                     .frame(maxWidth: .infinity)
-                // V0.84 C1 — host-only pre-loaded opening lines per
-                // claimed RSVP. Pre-night only (playedAt > now); the
-                // member never sees this surface. Reads from cached
-                // members + RSVPs + leaderboard (all already loaded
-                // by `refresh`); recomputed when the cache changes
-                // so a new RSVP or fresh leaderboard row appears
-                // without a manual pull-to-refresh.
-                if isHost,
-                   let event = activeEvent,
-                   event.playedAt > Date() {
-                    HostOpenersSection(
-                        eventId: event.id,
-                        mascotName: liveRoom.mascotName,
-                        members: roomService.cachedMembers(roomId: room.id),
-                        rsvps: roomService.cachedEventRSVPs(eventId: event.id),
-                        leaderboard: leaderboard,
-                        now: Date()
-                    )
-                    .sectionCard(.standard)
-                }
                 // V0.79 — one-time notification opt-in prompt. Shows
                 // once per room (per device) while opt-in is off;
                 // after any answer it lives in Room settings only.
@@ -3111,78 +3091,6 @@ private struct HostWithdrawalsSection: View {
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Dispensed \(txn.memberDisplayName)'s \(abs(txn.amountPoints)) points"))
         }
-    }
-}
-
-// MARK: - Host openers section (V0.84 C1)
-
-/// V0.84 C1 — host-only pre-loaded opening line per attending member.
-/// Rendered directly under `activeSlot` (see `RoomDetailView.scrollBody`),
-/// gated on `isHost` so the member never sees it. The body of each row
-/// is mascot-framed by the view; `HostOpenerSuggestion.line` carries
-/// the per-member body only. One row per CLAIMED RSVP; declined and
-/// unclaimed members are excluded, but every claimed seat gets
-/// exactly one opener (a stale-cache member falls back to a name-only
-/// row via `HostOpenerDerivation.fallbackMember`).
-private struct HostOpenersSection: View {
-    let eventId: UUID
-    let mascotName: String
-    let members: [Member]
-    let rsvps: [EventRSVP]
-    let leaderboard: [LeaderboardEntry]
-    let now: Date
-
-    private var suggestions: [HostOpenerSuggestion] {
-        HostOpenerDerivation.suggestions(
-            eventId: eventId,
-            members: members,
-            rsvps: rsvps,
-            leaderboard: leaderboard,
-            now: now
-        )
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            HStack(spacing: 8) {
-                Image(systemName: Theme.Icon.bubbleLeftAndBubbleRightFill)
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Openers for tonight")
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.primaryText)
-            }
-            if suggestions.isEmpty {
-                Text("No one has claimed a seat yet.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(suggestions.enumerated()), id: \.element.id) { idx, suggestion in
-                        row(suggestion)
-                        if idx != suggestions.count - 1 {
-                            Divider()
-                                .overlay(Theme.Palette.hairline)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func row(_ suggestion: HostOpenerSuggestion) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("\(mascotName) suggests:")
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Palette.accent)
-            Text(suggestion.line)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText)
-        }
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(mascotName) suggests for \(suggestion.displayName): \(suggestion.line)"))
     }
 }
 

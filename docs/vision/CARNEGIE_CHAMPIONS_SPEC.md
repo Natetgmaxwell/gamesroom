@@ -215,6 +215,11 @@ pattern).
   built). If not built, this feature builds the minimal version: a
   `member_social_preferences` table (member_id, room_id, preferences_json,
   host_opener_suggestion) — host + system see it, member does not broadcast.
+
+> **V0.92 revert:** C1 (host opener suggestion) was deleted wholesale
+> per user direction — view section (`HostOpenersSection`),
+> model/derivation (`HostOpenerSuggestion.swift`), and the test block
+> in `main.swift` are all gone. Spec kept here as audit trail.
 - Host iPad: at session-finalize-prep, render one opener per attending
   member, derived from social preferences + chair-card history.
 - **Zero new tables if the preferences surface exists; one new table if not.**

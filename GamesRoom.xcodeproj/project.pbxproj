@@ -23,7 +23,6 @@
 		AAAAAAAA0000000000000016 /* RoomStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040C /* RoomStore.swift */; };
 		AAAAAAAA0000000000000017 /* RoomPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040D /* RoomPage.swift */; };
 		AAAAAAAA000000000000011A /* RoomNotificationPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA00000000000004AF /* RoomNotificationPrefs.swift */; };
-		AAAAAAAA000000000000011B /* HostOpenerSuggestion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA00000000000004B0 /* HostOpenerSuggestion.swift */; };
 		AAAAAAAA0000000000000018 /* RoomDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040E /* RoomDetailView.swift */; };
 		AAAAAAAA0000000000000019 /* AddEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000040F /* AddEventSheet.swift */; };
 		AAAAAAAA000000000000001A /* RoomSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000410 /* RoomSettingsSheet.swift */; };
@@ -180,7 +179,6 @@
 		AAAAAAAA000000000000040C /* RoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStore.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040D /* RoomPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPage.swift; sourceTree = "<group>"; };
 		AAAAAAAA00000000000004AF /* RoomNotificationPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomNotificationPrefs.swift; sourceTree = "<group>"; };
-		AAAAAAAA00000000000004B0 /* HostOpenerSuggestion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostOpenerSuggestion.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040E /* RoomDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomDetailView.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000040F /* AddEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEventSheet.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000410 /* RoomSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSettingsSheet.swift; sourceTree = "<group>"; };
@@ -417,7 +415,6 @@
 				BBBBBBBB0000000000000450 /* SeatDeposit.swift */,
 				AAAAAAAA0000000000000489 /* WorkingHand.swift */,
 				AAAAAAAA00000000000004AA /* EventTransaction.swift */,
-				AAAAAAAA00000000000004B0 /* HostOpenerSuggestion.swift */,
 				AAAAAAAA00000000000004AC /* AnyJSON.swift */,
 				AAAAAAAA000000000000048A /* SeasonStatCard.swift */,
 				AAAAAAAA000000000000048C /* RoomGraphSummary.swift */,
@@ -799,7 +796,6 @@
 				AAAAAAAA0000000000000498 /* ScanSettleResult.swift in Sources */,
 				AAAAAAAA000000000000049C /* MascotVoiceService.swift in Sources */,
 				AAAAAAAA0000000000000500 /* TonightStarPick.swift in Sources */,
-				AAAAAAAA000000000000011B /* HostOpenerSuggestion.swift in Sources */,
 				AAAAAAAA0000000000000502 /* ArrivalCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
