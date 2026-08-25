@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
   <!-- Bump the ?v= query on /style.css with every website deploy (cache-busting; HTML is no-cache). -->
-  <link rel="stylesheet" href="/style.css?v=79">
+  <link rel="stylesheet" href="/style.css?v=81">
 </head>
 <body>
   <header class="site-header">
@@ -26,6 +26,7 @@
         <a href="/" aria-current="page">Home</a>
         <a href="/how-it-works">How it works</a>
         <a href="/features">Features</a>
+        <a href="/play/briefing">Try it</a>
         <a href="/notifications">Notifications</a>
         <a href="/privacy">Privacy</a>
       </nav>
@@ -40,7 +41,8 @@
           <span class="beta"><span class="dot"></span> Beta</span>
           <h1>Plans the night. Gets out of the way.</h1>
           <p class="sub-head">Real tables. Real friends. No feed.</p>
-          <p class="lead">You bring the people. Games Room plans the night, keeps the scores, and stays quiet during play.</p>
+          <p class="lead">You bring the people. Games Room handles the rest.</p>
+          <a class="cta cta-primary" href="/play/briefing">Try it <span class="arrow">→</span></a>
         </div>
       </div>
 
@@ -62,19 +64,7 @@
     </section>
 
     <section class="shell reveal">
-      <p class="kicker">What Games Room does</p>
       <p class="mission-line">Plan the night. Hold the seats. Keep the scores. Get out of the way.</p>
-      <ul>
-        <li>The host: three taps, no chasing.</li>
-        <li>The member: your seat's claimed, just walk in.</li>
-        <li>The quiet member: knows the story before the door.</li>
-      </ul>
-      <p class="muted">The app is in beta and under active development. Things will shift as we find what works.</p>
-    </section>
-
-    <section class="shell reveal">
-      <h2 class="section-head">Who this is for</h2>
-      <p class="muted lead-in">Every room has three kinds of person in it.</p>
       <div class="personas">
         <div class="card">
           <span class="person-tag">The host</span>
@@ -152,11 +142,6 @@
 
     <div class="shell">
       <p class="muted trust">No ads. No analytics. No third-party SDKs. Sign in with Apple; we never see your email.</p>
-      <div class="cta-wrap reveal">
-        <a class="cta" href="#" id="cta">Coming soon <span class="arrow">→</span></a>
-        <span class="confetti" aria-hidden="true"></span>
-        <span class="coming-soon">Games Room is in <strong>beta</strong>. App Store launch is on the way.</span>
-      </div>
     </div>
   </main>
 
@@ -261,47 +246,6 @@
         pips[i].classList.add("lit");
         i = (i + 1) % pips.length;
       }, 550);
-    })();
-
-    // ── Confetti burst on CTA hover (ties to seat-claim confetti) ──
-    (function () {
-      var wrap = document.querySelector(".cta-wrap");
-      var host = document.querySelector(".confetti");
-      if (!wrap) return;
-      var COLORS = ["#B08D57", "#c19a63", "#F4EFE6", "#8a6d43"];
-      function spawn() {
-        host.innerHTML = "";
-        for (var k = 0; k < 16; k++) {
-          var s = document.createElement("i");
-          var ang = Math.random() * Math.PI * 2;
-          var dist = 50 + Math.random() * 80;
-          s.style.setProperty("--dx", Math.cos(ang) * dist + "px");
-          s.style.setProperty("--dy", Math.sin(ang) * dist + "px");
-          s.style.setProperty("--rot", (Math.random() * 540 - 270) + "deg");
-          s.style.left = "0px";
-          s.style.top = "0px";
-          s.style.background = COLORS[k % COLORS.length];
-          s.style.animationDelay = (k * 0.015) + "s";
-          host.appendChild(s);
-        }
-      }
-      wrap.addEventListener("mouseenter", spawn);
-    })();
-
-    // ── CTA: magnetic hover + press scale ──
-    (function () {
-      var cta = document.getElementById("cta");
-      if (!cta) return;
-      var max = 10;
-      cta.addEventListener("mousemove", function (e) {
-        var r = cta.getBoundingClientRect();
-        var dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
-        var dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
-        cta.style.transform = "translate(" + dx * max + "px, " + dy * max + "px)";
-      });
-      cta.addEventListener("mouseleave", function () { cta.style.transform = ""; });
-      cta.addEventListener("mousedown", function () { cta.style.transform = "scale(0.95)"; });
-      cta.addEventListener("mouseup", function () { cta.style.transform = ""; });
     })();
   </script>
 </body>
