@@ -1783,7 +1783,7 @@ private struct BriefingSlot: View {
                        deposit.status == .held,
                        room.seatDepositTrigger == .escrow,
                        let onCheckIn {
-                        Text("Tap when you walk in — your deposit comes straight back.")
+                        Text("Tap when you walk in.")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         Button(action: onCheckIn) {
@@ -3647,7 +3647,7 @@ private struct CAHConfigSheet: View {
                 } header: {
                     Text("Points per card")
                 } footer: {
-                    Text("The default points a won black card is worth in this room; the host can still adjust per round when scoring. The pack default is \(PackRegistry.shared.winPoints(for: pack.slug)).")
+                    Text("The default points a won black card is worth. The host can still adjust per round when scoring.")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -3725,7 +3725,7 @@ private struct MemberRosterReadOnly: View {
             inviteSection
             let members = roomService.cachedMembers(roomId: room.id)
             if members.isEmpty {
-                Text("No members yet — share your join code to get the table set.")
+                Text("No members yet. Share your join code to get the table set.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     .padding(.vertical, Theme.Layout.cardInset)

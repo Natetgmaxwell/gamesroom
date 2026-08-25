@@ -109,7 +109,7 @@ struct MemberCalendarSettingsSheet: View {
                 } header: {
                     Text("Calendar")
                 } footer: {
-                    Text("First time you turn this on, iOS will ask to allow Games Room to add events. Denied? Open Settings → Games Room → Calendars.")
+                    Text("iOS will ask to allow calendar access. To change it later: Settings → Games Room → Calendars.")
                 }
 
                 Section {
@@ -241,7 +241,7 @@ struct CalendarVoiceLineRow: View {
                 .foregroundStyle(Theme.Palette.accent)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 6) {
-                Text("Games Room can add events to your calendar. Tap to allow.")
+                Text("Add Games Room events to your calendar.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText)
                 Button {

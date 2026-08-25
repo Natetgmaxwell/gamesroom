@@ -122,7 +122,7 @@ struct CAHCardScanSheet: View {
                 Text("Point at your stack of black cards")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
-                Text("Hold steady, then tap the shutter.")
+                Text("Tap the shutter.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 

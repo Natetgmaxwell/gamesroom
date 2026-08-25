@@ -51,7 +51,7 @@ struct EditEventSheet: View {
                 } header: {
                     Text("Note")
                 } footer: {
-                    Text("A short note for the table — venue quirks, what to bring, house rules. \(note.count)/280")
+                    Text("Venue quirks, what to bring, house rules. \(note.count)/280")
                 }
 
                 Section {

@@ -92,7 +92,7 @@ struct CreateRoomSheet: View {
                 } header: {
                     Text("Operations")
                 } footer: {
-                    Text("Points each new member starts with. You can edit later from Room Settings.")
+                    Text("Points each new member starts with. Edit anytime in Room Settings.")
                 }
 
                 if let errorMessage {

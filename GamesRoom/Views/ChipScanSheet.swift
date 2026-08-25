@@ -143,13 +143,13 @@ struct ChipScanSheet: View {
             .frame(maxHeight: .infinity)
 
             VStack(spacing: 8) {
-                Text("Settling your Casino hand — you brought \(withdrawn) pts. Scan what's left on the table.")
+                Text("You brought \(withdrawn) pts. Scan what's left on the table.")
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent)
                 Text("Point at your chip stack")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
-                Text("Hold steady, then tap the shutter.")
+                Text("Tap the shutter.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 

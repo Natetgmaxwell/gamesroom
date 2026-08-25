@@ -48,7 +48,7 @@ struct ArrivalCard: View {
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText)
             }
-            Text("Held deposits waiting on a check-in. You decide what comes back.")
+            Text("Held deposits waiting on a check-in.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             VStack(spacing: 0) {

@@ -715,7 +715,7 @@ struct RoomSettingsSocialSheet: View {
                                          : Theme.Palette.primaryText.opacity(0.45))
                 }
             } footer: {
-                Text("A short note visible only to hosts — venue quirks, recurring house rules, who's hosting next.")
+                Text("Visible only to hosts. Venue quirks, house rules, who's hosting next.")
             }
         }
         .scrollContentBackground(.hidden)
@@ -823,7 +823,7 @@ struct RoomSettingsOperationsSheet: View {
             } header: {
                 Text("Seat deposit")
             } footer: {
-                Text("Escrow holds each member's deposit from claim until they tap I'm here. A no-show is yours to call at session start — forfeit it and the deposit is gone, or hand it back.")
+                Text("Held from claim until 'I'm here'. A no-show is yours to call — forfeit or return.")
             }
 
             Section("Features") {

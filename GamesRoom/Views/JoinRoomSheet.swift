@@ -66,7 +66,7 @@ struct JoinRoomSheet: View {
                 } header: {
                     Text("Code")
                 } footer: {
-                    Text("Ask the host for the six-character code from their Room Settings. Codes are case-insensitive and look like ABC23F.")
+                    Text("Six-character code from the host. Example: ABC23F.")
                 }
 
                 if let errorMessage {

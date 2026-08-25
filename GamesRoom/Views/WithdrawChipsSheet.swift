@@ -78,7 +78,7 @@ struct WithdrawChipsSheet: View {
                     } header: {
                         Text("Withdraw")
                     } footer: {
-                        Text("You'll bring \(amount) pts of chips to the table. Your balance covers both the bank and the table — scan your stack whenever you want to settle up: wins are added, losses deducted.")
+                        Text("Bring \(amount) pts to the table. Wins are added, losses are deducted when you scan your stack.")
                     }
                 }
 
