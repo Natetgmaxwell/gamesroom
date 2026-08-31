@@ -1551,19 +1551,29 @@ runner.run("ScoreSnapshot.shouldPersist accepts empty when nothing yet") {
     runner.assertTrue(ScoreSnapshot.shouldPersist(incoming, existing: nil))
 }
 
-runner.run("LiveActivityRule ends during play when running") {
+runner.run("LiveActivityRule updates during play when running") {
     let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: true)
+    runner.assertEqual(action, .startOrUpdate)
+}
+
+runner.run("LiveActivityRule starts during play when not running") {
+    let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: false)
+    runner.assertEqual(action, .startOrUpdate)
+}
+
+runner.run("LiveActivityRule ends during play when the line is empty") {
+    let action = LiveActivityRule.action(isLive: true, hasLine: false, isRunning: true)
     runner.assertEqual(action, .end)
 }
 
-runner.run("LiveActivityRule stays quiet during play when not running") {
-    let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: false)
-    runner.assertEqual(action, .none)
+runner.run("LiveActivityRule ends outside play when running") {
+    let action = LiveActivityRule.action(isLive: false, hasLine: true, isRunning: true)
+    runner.assertEqual(action, .end)
 }
 
-runner.run("LiveActivityRule surfaces outside play with a line") {
+runner.run("LiveActivityRule no-ops outside play when not running") {
     let action = LiveActivityRule.action(isLive: false, hasLine: true, isRunning: false)
-    runner.assertEqual(action, .startOrUpdate)
+    runner.assertEqual(action, .none)
 }
 
 runner.run("LiveActivityRule no-ops outside play without a line") {
@@ -4291,6 +4301,183 @@ private extension Optional {
             )
         }
     }
+}
+
+// MARK: - V0.94 mascot face engine
+//
+// 4 cases per the V0.94 spec §"Per-task definition of done":
+//   1. 5 × 11 × 6 = 330-cell matrix returns a non-nil FaceParameters
+//      with sane numeric ranges for every cell.
+//   2. The 5 personality mouth specs are pairwise distinct.
+//   3. The 11 ideology brow specs are pairwise distinct.
+//   4. RoomStateInputs.resolve maps a handful of canonical inputs
+//      to the expected RoomState flavour (the same flavour the
+//      MascotEngine footer uses — see the engine's Voice column).
+
+runner.run("V0.94 mascot face 5x11x6 matrix returns sane FaceParameters") {
+    let personalities = MascotPersonality.allCases
+    let ideologies = MascotPoliticalIdeology.allCases
+    let states = RoomState.allCases
+    runner.assertEqual(personalities.count, 5)
+    runner.assertEqual(ideologies.count, 11)
+    runner.assertEqual(states.count, 6)
+
+    var cells = 0
+    for personality in personalities {
+        for ideology in ideologies {
+            for state in states {
+                let fp = MascotFaceEngine.compute(
+                    personality: personality,
+                    ideology: ideology,
+                    state: state
+                )
+                cells += 1
+                // Personality + ideology round-trip through the spec tables.
+                runner.assertEqual(fp.personality, personality)
+                runner.assertEqual(fp.ideology, ideology)
+                runner.assertEqual(fp.state, state)
+                // Mouth family + numeric knobs land in sane ranges.
+                runner.assertTrue(fp.personalitySpec.mouth.width > 0, "mouth width > 0")
+                runner.assertTrue(fp.personalitySpec.mouth.amp > 0, "mouth amp > 0")
+                runner.assertTrue(fp.personalitySpec.eyes.pupil > 0, "pupil > 0")
+                runner.assertTrue(fp.personalitySpec.blush >= 0 && fp.personalitySpec.blush <= 1, "blush in 0…1")
+                runner.assertTrue(fp.ideologySpec.brows.opacity >= 0 && fp.ideologySpec.brows.opacity <= 1, "brow opacity in 0…1")
+                runner.assertTrue(fp.ideologySpec.brows.weight > 0, "brow weight > 0")
+                // Emotion intensity is bounded 0…1.
+                runner.assertTrue(fp.emotion.intensity >= 0 && fp.emotion.intensity <= 1, "intensity in 0…1")
+                // Mouth amplitude is clamped at 1.9 by the engine.
+                runner.assertTrue(fp.mouthAmplitude <= 1.9, "mouth amp clamped at 1.9")
+                // Eye Y is in the locked geometry band (96 ± a few).
+                runner.assertTrue(fp.eyeY >= 93 && fp.eyeY <= 97, "eyeY near 96")
+                // Brow Y is in the locked geometry band (72 ± a few).
+                runner.assertTrue(fp.browY >= 69 && fp.browY <= 72, "browY near 72")
+                // Mouth baseline is locked at 142.
+                runner.assertEqual(fp.mouthY, 142.0)
+            }
+        }
+    }
+    runner.assertEqual(cells, 5 * 11 * 6)
+}
+
+runner.run("V0.94 mascot face 5 personality mouths are pairwise distinct") {
+    let specs = MascotPersonality.allCases.map { p in
+        MascotFaceEngine.personalitySpec(for: p).mouth
+    }
+    for i in 0..<specs.count {
+        for j in (i + 1)..<specs.count {
+            runner.assertFalse(
+                specs[i] == specs[j],
+                "personality mouths \(i) and \(j) must differ"
+            )
+        }
+    }
+}
+
+runner.run("V0.94 mascot face 11 ideology brows are pairwise distinct") {
+    let specs = MascotPoliticalIdeology.allCases.map { i in
+        MascotFaceEngine.ideologySpec(for: i).brows
+    }
+    runner.assertEqual(specs.count, 11)
+    for i in 0..<specs.count {
+        for j in (i + 1)..<specs.count {
+            runner.assertFalse(
+                specs[i] == specs[j],
+                "ideology brows \(i) and \(j) must differ"
+            )
+        }
+    }
+}
+
+runner.run("V0.94 RoomStateInputs.resolve matches MascotEngine footer flavours") {
+    // 1. openDispute always wins → controversy
+    let disputeInputs = RoomStateInputs(
+        activeEvent: nil,
+        activeEventSettled: false,
+        hostFinalized: false,
+        withdrawnAmount: 0,
+        leaderMargin: 0,
+        lastRoundFlippedLeader: false,
+        consecutiveWins: 0,
+        openDispute: true,
+        lastSessionDaysAgo: 5
+    )
+    runner.assertEqual(RoomStateInputs.resolve(disputeInputs), .controversy)
+
+    // 2. Live event + last round flipped leader → comeback
+    let comebackInputs = RoomStateInputs(
+        activeEvent: RoomStateInputs.ActiveEventSnapshot(
+            playedAt: Date(timeIntervalSinceNow: -600),
+            settledAt: nil
+        ),
+        activeEventSettled: false,
+        hostFinalized: false,
+        withdrawnAmount: 50,
+        leaderMargin: 5,
+        lastRoundFlippedLeader: true,
+        consecutiveWins: 1,
+        openDispute: false,
+        lastSessionDaysAgo: 0
+    )
+    runner.assertEqual(RoomStateInputs.resolve(comebackInputs), .comeback)
+
+    // 3. Live event, no dispute, no comeback → playing
+    let playingInputs = RoomStateInputs(
+        activeEvent: RoomStateInputs.ActiveEventSnapshot(
+            playedAt: Date(timeIntervalSinceNow: -120),
+            settledAt: nil
+        ),
+        activeEventSettled: false,
+        hostFinalized: false,
+        withdrawnAmount: 0,
+        leaderMargin: 5,
+        lastRoundFlippedLeader: false,
+        consecutiveWins: 1,
+        openDispute: false,
+        lastSessionDaysAgo: 0
+    )
+    runner.assertEqual(RoomStateInputs.resolve(playingInputs), .playing)
+
+    // 4. No active event, leader margin huge → blowout
+    let blowoutInputs = RoomStateInputs(
+        activeEvent: nil,
+        activeEventSettled: false,
+        hostFinalized: false,
+        withdrawnAmount: 0,
+        leaderMargin: 120,
+        lastRoundFlippedLeader: false,
+        consecutiveWins: 1,
+        openDispute: false,
+        lastSessionDaysAgo: 1
+    )
+    runner.assertEqual(RoomStateInputs.resolve(blowoutInputs), .blowout)
+
+    // 5. No active event, leader streak → streak
+    let streakInputs = RoomStateInputs(
+        activeEvent: nil,
+        activeEventSettled: false,
+        hostFinalized: false,
+        withdrawnAmount: 0,
+        leaderMargin: 0,
+        lastRoundFlippedLeader: false,
+        consecutiveWins: 4,
+        openDispute: false,
+        lastSessionDaysAgo: 1
+    )
+    runner.assertEqual(RoomStateInputs.resolve(streakInputs), .streak)
+
+    // 6. No data → idle
+    let idleInputs = RoomStateInputs(
+        activeEvent: nil,
+        activeEventSettled: false,
+        hostFinalized: false,
+        withdrawnAmount: 0,
+        leaderMargin: 0,
+        lastRoundFlippedLeader: false,
+        consecutiveWins: 0,
+        openDispute: false,
+        lastSessionDaysAgo: nil
+    )
+    runner.assertEqual(RoomStateInputs.resolve(idleInputs), .idle)
 }
 
 // MARK: - Summary

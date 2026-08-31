@@ -36,7 +36,7 @@ struct CreateRoomSheet: View {
     @EnvironmentObject private var roomService: RoomService
 
     @State private var name: String = ""
-    @State private var mascotName: String = "Felty"
+    @State private var mascotName: String = "Tally"
     @State private var mascotPersonality: MascotPersonality = .professional
     @State private var mascotIdeology: MascotPoliticalIdeology = .order
     @State private var joinStartingBonus: Int = 200
@@ -64,7 +64,7 @@ struct CreateRoomSheet: View {
                     TextField(
                         "Mascot name",
                         text: $mascotName,
-                        prompt: Text("Felty")
+                        prompt: Text("Tally")
                     )
                     Picker("Personality", selection: $mascotPersonality) {
                         ForEach(MascotPersonality.allCases, id: \.self) { p in
@@ -147,7 +147,7 @@ struct CreateRoomSheet: View {
         do {
             _ = try await roomService.createRoom(
                 name: resolvedName,
-                mascotName: resolvedMascot.isEmpty ? "Felty" : resolvedMascot,
+                mascotName: resolvedMascot.isEmpty ? "Tally" : resolvedMascot,
                 mascotPersonality: mascotPersonality,
                 mascotPoliticalIdeology: mascotIdeology,
                 joinStartingBonus: joinStartingBonus
