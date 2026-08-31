@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AAAAAAAA0000000000000A700 /* MascotFaceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000B700 /* MascotFaceEngine.swift */; };
+		AAAAAAAA0000000000000A701 /* MascotFaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000B701 /* MascotFaceView.swift */; };
+		AAAAAAAA0000000000000A702 /* MascotConfigSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000B702 /* MascotConfigSection.swift */; };
+
 		AAAAAAAA000000000000000A /* GamesRoomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000400 /* GamesRoomApp.swift */; };
 		AAAAAAAA000000000000000B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000401 /* ContentView.swift */; };
 		AAAAAAAA000000000000000C /* Auth/SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000402 /* Auth/SignInView.swift */; };
@@ -162,6 +166,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AAAAAAAA0000000000000B700 /* MascotFaceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotFaceEngine.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000B701 /* MascotFaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotFaceView.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000B702 /* MascotConfigSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotConfigSection.swift; sourceTree = "<group>"; };
+
 		AAAAAAAA0000000000000207 /* TrajectorySparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrajectorySparkline.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000400 /* GamesRoomApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomApp.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000401 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -427,6 +435,7 @@
 		AAAAAAAA00000000000000FA /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				AAAAAAAA0000000000000B700 /* MascotFaceEngine.swift */,
 				AAAAAAAA0000000000000406 /* SupabaseClient.swift */,
 				AAAAAAAA0000000000000407 /* AuthService.swift */,
 				AAAAAAAA0000000000000408 /* RoomService.swift */,
@@ -459,6 +468,7 @@
 		AAAAAAAA00000000000000FB /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				AAAAAAAA0000000000000B701 /* MascotFaceView.swift */,
 				AAAAAAAA000000000000044A /* PackDetailView.swift */,
 				AAAAAAAA0000000000000458 /* PackStoreView.swift */,
 				AAAAAAAA000000000000045C /* EditEventSheet.swift */,
@@ -488,6 +498,7 @@
 		AAAAAAAA00000000000000FC /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				AAAAAAAA0000000000000B702 /* MascotConfigSection.swift */,
 				AAAAAAAA0000000000000411 /* LeaderboardRow.swift */,
 				AAAAAAAA0000000000000412 /* MascotBubble.swift */,
 				AAAAAAAA0000000000000413 /* SeatGridView.swift */,
@@ -690,6 +701,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+AAAAAAAA0000000000000A700 /* MascotFaceEngine.swift in Sources */,
+AAAAAAAA0000000000000A701 /* MascotFaceView.swift in Sources */,
+AAAAAAAA0000000000000A702 /* MascotConfigSection.swift in Sources */,
 				AAAAAAAA000000000000000A /* GamesRoomApp.swift in Sources */,
 				AAAAAAAA000000000000000B /* ContentView.swift in Sources */,
 				AAAAAAAA000000000000000C /* Auth/SignInView.swift in Sources */,
