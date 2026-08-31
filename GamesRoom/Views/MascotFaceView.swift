@@ -23,6 +23,11 @@
 //       warm-dark on amber: matches the JS reference's `INK` value
 //       (`#2A2118`). Pulled out as a `Color` constant on the view
 //       so a future dark-amber skin can override it.
+//    5. V0.94 B — at avatar sizes (`size < MascotFaceEngine.
+//       avatarSizeThreshold`) the brow curve deltas widen by the
+//       engine's pinned factor (see `MascotFaceEngine.
+//       browCurveScale(forRenderSize:)`). The renderer reads the
+//       scale per-call; it does no branching on its own.
 //
 //  Pairing:
 //
@@ -220,11 +225,21 @@ struct MascotFaceView: View {
         let I = p.ideologySpec
         let ink = Self.inkColour
 
+        // V0.94 B — at avatar sizes (`size < MascotFaceEngine.
+        // avatarSizeThreshold`) widen the brow curve deltas by the
+        // engine's pinned factor (see `MascotFaceEngine.
+        // browCurveAvatarScale`). The renderer asks the engine per
+        // call; no branching here. Multiplied against the `curve /
+        // inner / outer` deltas — the brow `weight` is unaffected
+        // (line thickness reads independently of the curve
+        // amplitude at avatar sizes).
+        let s = MascotFaceEngine.browCurveScale(forRenderSize: size)
+
         let oX: CGFloat = 58
         let iX: CGFloat = 90
-        let iy = p.browY - I.brows.inner
-        let oy = p.browY - I.brows.outer
-        let cY = (iy + oy) / 2 - I.brows.curve
+        let iy = p.browY - I.brows.inner * s
+        let oy = p.browY - I.brows.outer * s
+        let cY = (iy + oy) / 2 - I.brows.curve * s
         let w = I.brows.weight
 
         // Left brow (mirror to right by reflecting x around 110).
@@ -604,6 +619,41 @@ struct MascotFaceView: View {
         MascotFaceView(parameters: MascotFaceEngine.compute(
             personality: .sarcastic, ideology: .conservative, state: .streak
         ))
+    }
+    .padding()
+    .background(Theme.Palette.background)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Avatar size — brow widened x1.3") {
+    // V0.94 B — at avatar sizes the brow calligraphy widens. The
+    // first preview chip is the 36pt footer size; the renderer
+    // applies the engine's pinned factor automatically.
+    HStack(spacing: 16) {
+        MascotFaceView(
+            parameters: MascotFaceEngine.compute(
+                personality: .unhinged,
+                ideology: .anarchist,
+                state: .controversy
+            ),
+            size: 36
+        )
+        MascotFaceView(
+            parameters: MascotFaceEngine.compute(
+                personality: .friendly,
+                ideology: .communist,
+                state: .comeback
+            ),
+            size: 40
+        )
+        MascotFaceView(
+            parameters: MascotFaceEngine.compute(
+                personality: .snarky,
+                ideology: .trickster,
+                state: .blowout
+            ),
+            size: 64
+        )
     }
     .padding()
     .background(Theme.Palette.background)

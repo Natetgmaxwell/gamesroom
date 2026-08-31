@@ -311,6 +311,29 @@ struct FaceParameters: Equatable {
 /// I/O, holds no state, and never throws.
 enum MascotFaceEngine {
 
+    // MARK: - Avatar-size brow multiplier (V0.94 B)
+
+    /// V0.94 B — the render size below which the brow calligraphy
+    /// widens. Per the spec: "at avatar sizes <80pt, widen brow
+    /// curve deltas x1.3". Footer chips (36pt) and briefing
+    /// headers (40pt) fall under this bar; ceremonial and host
+    /// config sizes (≥80pt) do not. One constant — the renderer
+    /// asks `browCurveScale(forRenderSize:)` whether to scale.
+    static let avatarSizeThreshold: CGFloat = 80
+    /// V0.94 B — the widen factor at avatar sizes. Spec pinned.
+    /// The renderer multiplies brow `curve / inner / outer` deltas
+    /// by this when the render size is below `avatarSizeThreshold`.
+    static let browCurveAvatarScale: Double = 1.3
+
+    /// V0.94 B — the multiplier the renderer applies to brow
+    /// `curve / inner / outer` deltas for the given render size.
+    /// `1.0` at or above the avatar threshold (the default); the
+    /// pinned `browCurveAvatarScale` below it. Pure helper so the
+    /// View does no branching on its own.
+    static func browCurveScale(forRenderSize size: CGFloat) -> Double {
+        size < avatarSizeThreshold ? browCurveAvatarScale : 1.0
+    }
+
     /// Resolve `(personality, ideology, state)` to a `FaceParameters`.
     /// Pure, total, deterministic. The entry point the unit tests
     /// hit for the 5 × 11 × 6 = 330-cell matrix sweep.

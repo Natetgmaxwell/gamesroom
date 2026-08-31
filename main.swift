@@ -4480,6 +4480,76 @@ runner.run("V0.94 RoomStateInputs.resolve matches MascotEngine footer flavours")
     runner.assertEqual(RoomStateInputs.resolve(idleInputs), .idle)
 }
 
+
+// MARK: - V0.94 B mascot face async surfaces
+//
+// Slice B — the avatar-size brow multiplier + the wiring hooks the
+// async surfaces need to render `MascotFaceView` beside the mascot
+// voice. Constants and the helper live on `MascotFaceEngine` (one
+// constant per spec: threshold + scale).
+
+runner.run("V0.94 B avatarSizeThreshold is 80pt per spec") {
+    runner.assertEqual(MascotFaceEngine.avatarSizeThreshold, 80.0)
+}
+
+runner.run("V0.94 B browCurveAvatarScale is 1.3 per spec") {
+    runner.assertEqual(MascotFaceEngine.browCurveAvatarScale, 1.3)
+}
+
+runner.run("V0.94 B browCurveScale returns 1.0 at or above the avatar threshold") {
+    // Exactly at the threshold — no widening.
+    runner.assertEqual(MascotFaceEngine.browCurveScale(forRenderSize: 80), 1.0)
+    // One point above — no widening.
+    runner.assertEqual(MascotFaceEngine.browCurveScale(forRenderSize: 81), 1.0)
+    // A typical ceremonial size — no widening.
+    runner.assertEqual(MascotFaceEngine.browCurveScale(forRenderSize: 96), 1.0)
+    // A large preview size — no widening.
+    runner.assertEqual(MascotFaceEngine.browCurveScale(forRenderSize: 220), 1.0)
+}
+
+runner.run("V0.94 B browCurveScale returns the pinned avatar scale below the threshold") {
+    // Just below the threshold — widening kicks in.
+    runner.assertEqual(MascotFaceEngine.browCurveScale(forRenderSize: 79), 1.3)
+    // Footer chip size — widening.
+    runner.assertEqual(MascotFaceEngine.browCurveScale(forRenderSize: 36), 1.3)
+    // Briefing header size — widening.
+    runner.assertEqual(MascotFaceEngine.browCurveScale(forRenderSize: 40), 1.3)
+    // Edge: zero / very small sizes — still widening.
+    runner.assertEqual(MascotFaceEngine.browCurveScale(forRenderSize: 0), 1.3)
+}
+
+runner.run("V0.94 B mascot face 5x11x6 matrix still produces sane parameters after slice B changes") {
+    // Regression — confirm the engine change (constant + helper) did
+    // not perturb the resolved `FaceParameters` for any cell. The
+    // renderer multiplies by `browCurveScale`; the engine still
+    // returns identical specs.
+    let personalities = MascotPersonality.allCases
+    let ideologies = MascotPoliticalIdeology.allCases
+    let states = RoomState.allCases
+    for personality in personalities {
+        for ideology in ideologies {
+            for state in states {
+                let fp = MascotFaceEngine.compute(
+                    personality: personality,
+                    ideology: ideology,
+                    state: state
+                )
+                // Locked geometry still holds.
+                runner.assertEqual(fp.mouthY, 142.0)
+                runner.assertTrue(fp.eyeY >= 93 && fp.eyeY <= 97, "eyeY near 96")
+                runner.assertTrue(fp.browY >= 69 && fp.browY <= 72, "browY near 72")
+                // Brow deltas still land in the spec's signed range.
+                runner.assertTrue(fp.ideologySpec.brows.inner >= -13 && fp.ideologySpec.brows.inner <= 4,
+                                  "brow inner in spec range")
+                runner.assertTrue(fp.ideologySpec.brows.outer >= 0 && fp.ideologySpec.brows.outer <= 10,
+                                  "brow outer in spec range")
+                runner.assertTrue(fp.ideologySpec.brows.curve >= -8 && fp.ideologySpec.brows.curve <= 4.5,
+                                  "brow curve in spec range")
+            }
+        }
+    }
+}
+
 // MARK: - V0.94 slice C — host mascot configurator
 //
 // 2 cases covering the values the "Reset to default Tally" button in
