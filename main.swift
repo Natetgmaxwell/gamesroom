@@ -1551,14 +1551,14 @@ runner.run("ScoreSnapshot.shouldPersist accepts empty when nothing yet") {
     runner.assertTrue(ScoreSnapshot.shouldPersist(incoming, existing: nil))
 }
 
-runner.run("LiveActivityRule updates during play when running") {
+runner.run("LiveActivityRule ends during play when running") {
     let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: true)
-    runner.assertEqual(action, .startOrUpdate)
+    runner.assertEqual(action, .end)
 }
 
-runner.run("LiveActivityRule starts during play when not running") {
+runner.run("LiveActivityRule stays quiet during play when not running") {
     let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: false)
-    runner.assertEqual(action, .startOrUpdate)
+    runner.assertEqual(action, .none)
 }
 
 runner.run("LiveActivityRule ends during play when the line is empty") {
@@ -1566,14 +1566,14 @@ runner.run("LiveActivityRule ends during play when the line is empty") {
     runner.assertEqual(action, .end)
 }
 
-runner.run("LiveActivityRule ends outside play when running") {
+runner.run("LiveActivityRule surfaces outside play when running") {
     let action = LiveActivityRule.action(isLive: false, hasLine: true, isRunning: true)
-    runner.assertEqual(action, .end)
+    runner.assertEqual(action, .startOrUpdate)
 }
 
-runner.run("LiveActivityRule no-ops outside play when not running") {
+runner.run("LiveActivityRule surfaces outside play with a line") {
     let action = LiveActivityRule.action(isLive: false, hasLine: true, isRunning: false)
-    runner.assertEqual(action, .none)
+    runner.assertEqual(action, .startOrUpdate)
 }
 
 runner.run("LiveActivityRule no-ops outside play without a line") {
