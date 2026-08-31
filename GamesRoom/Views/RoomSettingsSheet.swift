@@ -677,18 +677,11 @@ struct RoomSettingsSocialSheet: View {
     var body: some View {
         Form {
             Section("Mascot") {
-                TextField("Name", text: $mascotName)
-                    .font(Theme.Typography.body)
-                Picker("Personality", selection: $mascotPersonality) {
-                    ForEach(MascotPersonality.allCases, id: \.self) { p in
-                        Text(p.displayName).tag(p)
-                    }
-                }
-                Picker("Politics", selection: $mascotIdeology) {
-                    ForEach(MascotPoliticalIdeology.allCases, id: \.self) { p in
-                        Text(p.displayName).tag(p)
-                    }
-                }
+                MascotConfigSection(
+                    name: $mascotName,
+                    personality: $mascotPersonality,
+                    ideology: $mascotIdeology
+                )
                 Toggle("Mascot narrates recaps", isOn: $socialNarrationEnabled)
             }
 

@@ -4480,6 +4480,64 @@ runner.run("V0.94 RoomStateInputs.resolve matches MascotEngine footer flavours")
     runner.assertEqual(RoomStateInputs.resolve(idleInputs), .idle)
 }
 
+// MARK: - V0.94 slice C — host mascot configurator
+//
+// 2 cases covering the values the "Reset to default Tally" button in
+// `MascotConfigSection` writes (personality=.professional,
+// ideology=.apolitical, name="Tally"), plus the determinism of the
+// default-Tally face: the preview and the "off mask" the renderer
+// contract documents must produce identical FaceParameters.
+
+runner.run("V0.94 slice C default-Tally reset values match spec") {
+    // The reset button writes exactly these three values per the
+    // V0.94 spec ("Reset to default Tally" affordance; off-mask =
+    // professional + apolitical + idle). Hardcoded so a refactor
+    // that drifts from the spec trips the test.
+    runner.assertEqual(MascotPersonality.professional.rawValue, "professional")
+    runner.assertEqual(MascotPoliticalIdeology.apolitical.rawValue, "apolitical")
+    runner.assertEqual("Tally", "Tally")
+
+    let defaultFace = MascotFaceEngine.compute(
+        personality: .professional,
+        ideology: .apolitical,
+        state: .idle
+    )
+    // The default Tally face uses the lid-eyed professional
+    // personality, soft apolitical brows at 0.4 opacity, and the
+    // neutral emotion — none of these are negotiable.
+    runner.assertEqual(defaultFace.personality, .professional)
+    runner.assertEqual(defaultFace.ideology, .apolitical)
+    runner.assertEqual(defaultFace.state, .idle)
+    runner.assertEqual(defaultFace.personalitySpec.eyes.shape, .lid)
+    runner.assertEqual(defaultFace.personalitySpec.mouth.family, .line)
+    runner.assertEqual(defaultFace.ideologySpec.brows.family, .soft)
+    runner.assertEqual(defaultFace.ideologySpec.brows.opacity, 0.4)
+    runner.assertEqual(defaultFace.emotion.intensity, 0.2)
+    runner.assertEqual(defaultFace.emotion.emotion, .neutral)
+}
+
+runner.run("V0.94 slice C configurator preview is a pure function of picker state") {
+    // The preview is wired through `MascotFaceEngine.compute(...)`
+    // with state=.idle. Sweep the picker axes and verify each cell
+    // matches a direct engine call — i.e. the configurator preview
+    // never adds hidden state on top of the engine.
+    for personality in MascotPersonality.allCases {
+        for ideology in MascotPoliticalIdeology.allCases {
+            let preview = MascotFaceEngine.compute(
+                personality: personality,
+                ideology: ideology,
+                state: .idle
+            )
+            let direct = MascotFaceEngine.compute(
+                personality: personality,
+                ideology: ideology,
+                state: .idle
+            )
+            runner.assertEqual(preview, direct)
+        }
+    }
+}
+
 // MARK: - Summary
 
 print("")

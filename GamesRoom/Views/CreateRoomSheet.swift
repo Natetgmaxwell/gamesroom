@@ -61,25 +61,11 @@ struct CreateRoomSheet: View {
                 }
 
                 Section {
-                    TextField(
-                        "Mascot name",
-                        text: $mascotName,
-                        prompt: Text("Tally")
+                    MascotConfigSection(
+                        name: $mascotName,
+                        personality: $mascotPersonality,
+                        ideology: $mascotIdeology
                     )
-                    Picker("Personality", selection: $mascotPersonality) {
-                        ForEach(MascotPersonality.allCases, id: \.self) { p in
-                            Text(p.displayName).tag(p)
-                        }
-                    }
-                    Picker("Politics", selection: $mascotIdeology) {
-                        ForEach(MascotPoliticalIdeology.allCases, id: \.self) { p in
-                            Text(p.displayName).tag(p)
-                        }
-                    }
-                } header: {
-                    Text("Mascot")
-                } footer: {
-                    Text("The mascot narrates recaps and surfaces briefings.")
                 }
 
                 Section {
