@@ -154,6 +154,111 @@ struct RoomSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                hubSections
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.Palette.background)
+            .navigationTitle("Room settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    // V0.81 — autosave means there is nothing to
+                    // cancel; Done dismisses after any pending write
+                    // has flushed.
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                }
+            }
+            // V0.81 — autosave bumpers. Every persisted field
+            // restarts the debounce. Attached at the hub so edits
+            // made inside the sub-sheets (hoisted bindings) fire
+            // the same path.
+            .onChange(of: mascotName) { _, _ in bumpDraft() }
+            .onChange(of: mascotPersonality) { _, _ in bumpDraft() }
+            .onChange(of: mascotIdeology) { _, _ in bumpDraft() }
+            .onChange(of: socialNarrationEnabled) { _, _ in bumpDraft() }
+            .onChange(of: hostJournal) { _, _ in bumpDraft() }
+            .onChange(of: maxSeats) { _, _ in bumpDraft() }
+            .onChange(of: memberInviteQuota) { _, _ in bumpDraft() }
+            .onChange(of: joinStartingBonus) { _, _ in bumpDraft() }
+            .onChange(of: briefing48hEnabled) { _, _ in bumpDraft() }
+            .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
+            .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositTrigger) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositGraceMinutes) { _, _ in bumpDraft() }
+            .onChange(of: seasonSubtitle) { _, newValue in
+                if newValue != seededSeasonSubtitle { bumpDraft() }
+            }
+            // V0.9 Wave 2 Slice 2.1 - pack how-to body.
+            .sheet(item: Binding<AnyPackType?>(
+                get: { packDetailType.map(AnyPackType.init) },
+                set: { packDetailType = $0?.type }
+            )) { wrapped in
+                PackDetailView(
+                    pack: wrapped.type,
+                    onDismiss: { packDetailType = nil }
+                )
+            }
+        }
+        // V0.81 — autosave debounce + flush live on the
+        // NavigationStack, not the Form: pushing into a sub-sheet
+        // disappears the Form (cancelling a `.task` attached
+        // there), but the stack survives the push.
+        .task(id: draft) {
+            guard draft > 0 else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            await writeAll()
+        }
+        .onDisappear {
+            // Flush on dismiss so a swipe-away never loses the
+            // last edit. If a write was mid-flight, await it and
+            // retry when it failed or an edit landed while it was
+            // in flight (that edit wasn't captured).
+            // (Bumping `draft` here would not work: `.task(id:)`
+            // is cancelled as the view disappears.)
+            if let writeTask {
+                let inFlight = writeTask
+                Task {
+                    await inFlight.value
+                    if needsRetry {
+                        await writeAll()
+                    }
+                }
+            } else if draft > 0 {
+                Task { await writeAll() }
+            }
+        }
+        .task {
+            // W2.6 — seed the subtitle field from the current
+            // season once the environment object is available.
+            // Remember what we seeded so the bumper doesn't treat
+            // the seed as an edit (spurious write on open).
+            if seasonSubtitle.isEmpty {
+                seededSeasonSubtitle = roomService.cachedCurrentSeason(roomId: room.id)?.subtitle ?? ""
+                seasonSubtitle = seededSeasonSubtitle
+            }
+        }
+        .tint(Theme.Palette.accent)
+        // V0.86 — member-facing calendar surface. The toggle is
+        // per-USER; this sheet is the place where the
+        // CalendarService.requestAccess() prompt fires (the
+        // BriefingSlot mascot voice line accompanies the system
+        // prompt on first launch).
+        .sheet(isPresented: $showCalendarSettings) {
+            MemberCalendarSettingsSheet(room: room)
+                .environmentObject(roomService)
+        }
+    }
+
+    // V0.95 — type-check timeout fix. The Form body grew past
+    // the SwiftUI type-checker's expression budget (error pointed
+    // at the toolbar). Content extracted verbatim into a
+    // @ViewBuilder sub-expression; each is type-checked
+    // independently, keeping the exponential inference scoped.
+    @ViewBuilder
+    private var hubSections: some View {
                 // V0.79 — member-visible notification preferences.
                 // All roles: the host is a member too. The section
                 // owns the durable opt-in + per-event mute controls
@@ -393,102 +498,8 @@ struct RoomSettingsSheet: View {
                 } message: {
                     Text("All join codes for this room expire immediately. This cannot be undone.")
                 }
-            }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Palette.background)
-            .navigationTitle("Room settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    // V0.81 — autosave means there is nothing to
-                    // cancel; Done dismisses after any pending write
-                    // has flushed.
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                }
-            }
-            // V0.81 — autosave bumpers. Every persisted field
-            // restarts the debounce. Attached at the hub so edits
-            // made inside the sub-sheets (hoisted bindings) fire
-            // the same path.
-            .onChange(of: mascotName) { _, _ in bumpDraft() }
-            .onChange(of: mascotPersonality) { _, _ in bumpDraft() }
-            .onChange(of: mascotIdeology) { _, _ in bumpDraft() }
-            .onChange(of: socialNarrationEnabled) { _, _ in bumpDraft() }
-            .onChange(of: hostJournal) { _, _ in bumpDraft() }
-            .onChange(of: maxSeats) { _, _ in bumpDraft() }
-            .onChange(of: memberInviteQuota) { _, _ in bumpDraft() }
-            .onChange(of: joinStartingBonus) { _, _ in bumpDraft() }
-            .onChange(of: briefing48hEnabled) { _, _ in bumpDraft() }
-            .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
-            .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositTrigger) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositGraceMinutes) { _, _ in bumpDraft() }
-            .onChange(of: seasonSubtitle) { _, newValue in
-                if newValue != seededSeasonSubtitle { bumpDraft() }
-            }
-            // V0.9 Wave 2 Slice 2.1 - pack how-to body.
-            .sheet(item: Binding<AnyPackType?>(
-                get: { packDetailType.map(AnyPackType.init) },
-                set: { packDetailType = $0?.type }
-            )) { wrapped in
-                PackDetailView(
-                    pack: wrapped.type,
-                    onDismiss: { packDetailType = nil }
-                )
-            }
-        }
-        // V0.81 — autosave debounce + flush live on the
-        // NavigationStack, not the Form: pushing into a sub-sheet
-        // disappears the Form (cancelling a `.task` attached
-        // there), but the stack survives the push.
-        .task(id: draft) {
-            guard draft > 0 else { return }
-            try? await Task.sleep(for: .milliseconds(600))
-            guard !Task.isCancelled else { return }
-            await writeAll()
-        }
-        .onDisappear {
-            // Flush on dismiss so a swipe-away never loses the
-            // last edit. If a write was mid-flight, await it and
-            // retry when it failed or an edit landed while it was
-            // in flight (that edit wasn't captured).
-            // (Bumping `draft` here would not work: `.task(id:)`
-            // is cancelled as the view disappears.)
-            if let writeTask {
-                let inFlight = writeTask
-                Task {
-                    await inFlight.value
-                    if needsRetry {
-                        await writeAll()
-                    }
-                }
-            } else if draft > 0 {
-                Task { await writeAll() }
-            }
-        }
-        .task {
-            // W2.6 — seed the subtitle field from the current
-            // season once the environment object is available.
-            // Remember what we seeded so the bumper doesn't treat
-            // the seed as an edit (spurious write on open).
-            if seasonSubtitle.isEmpty {
-                seededSeasonSubtitle = roomService.cachedCurrentSeason(roomId: room.id)?.subtitle ?? ""
-                seasonSubtitle = seededSeasonSubtitle
-            }
-        }
-        .tint(Theme.Palette.accent)
-        // V0.86 — member-facing calendar surface. The toggle is
-        // per-USER; this sheet is the place where the
-        // CalendarService.requestAccess() prompt fires (the
-        // BriefingSlot mascot voice line accompanies the system
-        // prompt on first launch).
-        .sheet(isPresented: $showCalendarSettings) {
-            MemberCalendarSettingsSheet(room: room)
-                .environmentObject(roomService)
-        }
     }
+
 
     /// Visual row inside the hub. Shared shape; sub-sheets own
     /// the body of the form.
