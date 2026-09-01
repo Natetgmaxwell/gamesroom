@@ -152,54 +152,13 @@ struct RoomSettingsSheet: View {
     }
 
     var body: some View {
+        hubNavigation
+    }
+
+    /// V0.95b — NavigationStack + the stack-level modifiers.
+    private var hubNavigation: some View {
         NavigationStack {
-            Form {
-                hubSections
-            }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Palette.background)
-            .navigationTitle("Room settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    // V0.81 — autosave means there is nothing to
-                    // cancel; Done dismisses after any pending write
-                    // has flushed.
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                }
-            }
-            // V0.81 — autosave bumpers. Every persisted field
-            // restarts the debounce. Attached at the hub so edits
-            // made inside the sub-sheets (hoisted bindings) fire
-            // the same path.
-            .onChange(of: mascotName) { _, _ in bumpDraft() }
-            .onChange(of: mascotPersonality) { _, _ in bumpDraft() }
-            .onChange(of: mascotIdeology) { _, _ in bumpDraft() }
-            .onChange(of: socialNarrationEnabled) { _, _ in bumpDraft() }
-            .onChange(of: hostJournal) { _, _ in bumpDraft() }
-            .onChange(of: maxSeats) { _, _ in bumpDraft() }
-            .onChange(of: memberInviteQuota) { _, _ in bumpDraft() }
-            .onChange(of: joinStartingBonus) { _, _ in bumpDraft() }
-            .onChange(of: briefing48hEnabled) { _, _ in bumpDraft() }
-            .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
-            .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositTrigger) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositGraceMinutes) { _, _ in bumpDraft() }
-            .onChange(of: seasonSubtitle) { _, newValue in
-                if newValue != seededSeasonSubtitle { bumpDraft() }
-            }
-            // V0.9 Wave 2 Slice 2.1 - pack how-to body.
-            .sheet(item: Binding<AnyPackType?>(
-                get: { packDetailType.map(AnyPackType.init) },
-                set: { packDetailType = $0?.type }
-            )) { wrapped in
-                PackDetailView(
-                    pack: wrapped.type,
-                    onDismiss: { packDetailType = nil }
-                )
-            }
+            hubForm
         }
         // V0.81 — autosave debounce + flush live on the
         // NavigationStack, not the Form: pushing into a sub-sheet
@@ -252,13 +211,91 @@ struct RoomSettingsSheet: View {
         }
     }
 
-    // V0.95 — type-check timeout fix. The Form body grew past
-    // the SwiftUI type-checker's expression budget (error pointed
-    // at the toolbar). Content extracted verbatim into a
-    // @ViewBuilder sub-expression; each is type-checked
-    // independently, keeping the exponential inference scoped.
+    /// V0.95b — the Form plus its full modifier chain, as ONE
+    /// separate type-check unit (Xcode 26.5 SDK budget).
+    /// V0.95b — Form + chrome. Separate type-check unit.
+    private var formChrome: some View {
+        Form {
+            hubSections
+        }
+            .scrollContentBackground(.hidden)
+            .background(Theme.Palette.background)
+            .navigationTitle("Room settings")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// V0.95b — toolbar + autosave bumpers + sheets, layered on
+    /// formChrome. Splitting the chain keeps each unit inside the
+    /// Xcode 26.5 SDK's type-check budget.
+    /// V0.95b — toolbar, as its own type-check unit.
+    private var toolbarLayer: some View {
+        formChrome
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    // V0.81 — autosave means there is nothing to
+                    // cancel; Done dismisses after any pending write
+                    // has flushed.
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                }
+            }
+            // V0.81 — autosave bumpers. Every persisted field
+            // restarts the debounce. Attached at the hub so edits
+            // made inside the sub-sheets (hoisted bindings) fire
+    }
+
+    /// V0.95b — autosave bumpers (every persisted field restarts
+    /// the debounce), as its own type-check unit.
+    private var bumpersLayer: some View {
+        toolbarLayer
+            // the same path.
+            .onChange(of: mascotName) { _, _ in bumpDraft() }
+            .onChange(of: mascotPersonality) { _, _ in bumpDraft() }
+            .onChange(of: mascotIdeology) { _, _ in bumpDraft() }
+            .onChange(of: socialNarrationEnabled) { _, _ in bumpDraft() }
+            .onChange(of: hostJournal) { _, _ in bumpDraft() }
+            .onChange(of: maxSeats) { _, _ in bumpDraft() }
+            .onChange(of: memberInviteQuota) { _, _ in bumpDraft() }
+            .onChange(of: joinStartingBonus) { _, _ in bumpDraft() }
+            .onChange(of: briefing48hEnabled) { _, _ in bumpDraft() }
+            .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
+            .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositTrigger) { _, _ in bumpDraft() }
+            .onChange(of: seatDepositGraceMinutes) { _, _ in bumpDraft() }
+            .onChange(of: seasonSubtitle) { _, newValue in
+                if newValue != seededSeasonSubtitle { bumpDraft() }
+            }
+    }
+
+    private var hubForm: some View {
+        bumpersLayer
+            // V0.9 Wave 2 Slice 2.1 - pack how-to body.
+            .sheet(item: Binding<AnyPackType?>(
+                get: { packDetailType.map(AnyPackType.init) },
+                set: { packDetailType = $0?.type }
+            )) { wrapped in
+                PackDetailView(
+                    pack: wrapped.type,
+                    onDismiss: { packDetailType = nil }
+                )
+            }
+    }
+
+
     @ViewBuilder
     private var hubSections: some View {
+        notifAndCalendarSections
+        navLinkSection
+        statusAndSeasonSections
+    }
+
+
+    // V0.95b — hubSections split further: Xcode 26.6 (iOS 26.5 SDK)
+    // still blows the type-checker budget on the whole hub. Three
+    // independent @ViewBuilder units, composed below.
+    @ViewBuilder
+    private var notifAndCalendarSections: some View {
                 // V0.79 — member-visible notification preferences.
                 // All roles: the host is a member too. The section
                 // owns the durable opt-in + per-event mute controls
@@ -297,6 +334,10 @@ struct RoomSettingsSheet: View {
                 }
                 .buttonStyle(.plain)
 
+    }
+
+    @ViewBuilder
+    private var navLinkSection: some View {
                 Section {
                     NavigationLink {
                         RoomSettingsSocialSheet(
@@ -378,6 +419,10 @@ struct RoomSettingsSheet: View {
                     }
                 }
 
+    }
+
+    @ViewBuilder
+    private var statusAndSeasonSections: some View {
                 // V0.81 — autosave status. Replaces the manual
                 // Save button: edits write themselves after a
                 // 600ms pause; this row only reports state.
