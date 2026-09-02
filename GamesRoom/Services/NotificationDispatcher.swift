@@ -134,7 +134,10 @@ final class NotificationDispatcher {
         mutedMemberIds: Set<UUID> = [],
         hostNote: String? = nil,
         mascotPersonality: MascotPersonality = .friendly,
-        mascotIdeology: MascotPoliticalIdeology = .centrist
+        mascotIdeology: MascotPoliticalIdeology = .centrist,
+        /// V0.95 D — the room-state the mascot's face renders against
+        /// in the notification attachment. `nil` = no face attached.
+        mascotState: RoomState? = nil
     ) async {
         guard await requestAuthorizationIfNeeded() else { return }
         let center = UNUserNotificationCenter.current()
@@ -177,6 +180,18 @@ final class NotificationDispatcher {
         // Schedule per member. We don't bail early on a single
         // failure — each request is independent and `add` swallows
         // errors per-request.
+
+        // V0.95 D — render the mascot's face ONCE for the whole
+        // fan-out: every member of this room sees the same character
+        // in the same room state, so one attachment serves all.
+        var faceAttachment: UNNotificationAttachment?
+        if let mascotState {
+            faceAttachment = await MascotNotificationAttachment.attachment(
+                personality: mascotPersonality,
+                ideology: mascotIdeology,
+                state: mascotState
+            )
+        }
 
         for (memberId, state) in perMemberCadence {
 
@@ -246,7 +261,8 @@ final class NotificationDispatcher {
                 body: onCreateBodyText,
                 kindRaw: NotificationKindRaw.onCreate,
                 eventId: eventId,
-                fireAt: onCreateFireAt
+                fireAt: onCreateFireAt,
+                attachment: faceAttachment
             )
 
             // Declined is terminal for T-48h and morning-of.
@@ -274,7 +290,8 @@ final class NotificationDispatcher {
                     body: body,
                     kindRaw: NotificationKindRaw.t48h,
                     eventId: eventId,
-                    fireAt: t48FireAt
+                    fireAt: t48FireAt,
+                    attachment: faceAttachment
                 )
             }
 
@@ -299,7 +316,8 @@ final class NotificationDispatcher {
                     body: body,
                     kindRaw: NotificationKindRaw.morningOf,
                     eventId: eventId,
-                    fireAt: morningFireAt
+                    fireAt: morningFireAt,
+                    attachment: faceAttachment
                 )
             }
         }
@@ -512,7 +530,8 @@ final class NotificationDispatcher {
         body: String,
         kindRaw: NotificationKindRaw,
         eventId: UUID,
-        fireAt: Date
+        fireAt: Date,
+        attachment: UNNotificationAttachment? = nil
     ) async {
         // 2026-09-02 dedupe guard — two paths can schedule the same
         // (event, kind, user) notification on one device: the host's
@@ -539,6 +558,12 @@ final class NotificationDispatcher {
             "kind": kindRaw.rawValue,
             "event_id": eventId.uuidString
         ]
+        // V0.95 D — the mascot's face rides on the push (lock-screen
+        // thumbnail + expanded banner image). Attachment failure is
+        // non-fatal: the notification ships text-only.
+        if let attachment {
+            content.attachments = [attachment]
+        }
 
         let components = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute, .second],

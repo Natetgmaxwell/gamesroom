@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AAAAAAAA0000000000000A700 /* MascotFaceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000B700 /* MascotFaceEngine.swift */; };
+		AAAAAAAA0000000000000A960 /* MascotNotificationAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000B960 /* MascotNotificationAttachment.swift */; };
 		AAAAAAAA0000000000000A701 /* MascotFaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000B701 /* MascotFaceView.swift */; };
 		AAAAAAAA0000000000000A702 /* MascotConfigSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000B702 /* MascotConfigSection.swift */; };
 
@@ -167,6 +168,7 @@
 
 /* Begin PBXFileReference section */
 		AAAAAAAA0000000000000B700 /* MascotFaceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotFaceEngine.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000B960 /* MascotNotificationAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotNotificationAttachment.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000B701 /* MascotFaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotFaceView.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000B702 /* MascotConfigSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotConfigSection.swift; sourceTree = "<group>"; };
 
@@ -436,6 +438,7 @@
 			isa = PBXGroup;
 			children = (
 				AAAAAAAA0000000000000B700 /* MascotFaceEngine.swift */,
+				AAAAAAAA0000000000000B960 /* MascotNotificationAttachment.swift */,
 				AAAAAAAA0000000000000406 /* SupabaseClient.swift */,
 				AAAAAAAA0000000000000407 /* AuthService.swift */,
 				AAAAAAAA0000000000000408 /* RoomService.swift */,
@@ -702,6 +705,7 @@
 			buildActionMask = 2147483647;
 			files = (
 AAAAAAAA0000000000000A700 /* MascotFaceEngine.swift in Sources */,
+AAAAAAAA0000000000000A960 /* MascotNotificationAttachment.swift in Sources */,
 AAAAAAAA0000000000000A701 /* MascotFaceView.swift in Sources */,
 AAAAAAAA0000000000000A702 /* MascotConfigSection.swift in Sources */,
 				AAAAAAAA000000000000000A /* GamesRoomApp.swift in Sources */,

@@ -771,7 +771,8 @@ final class RoomService: ObservableObject {
                 mutedMemberIds: mutedMemberIds,
                 hostNote: event.hostNote,
                 mascotPersonality: room?.mascotPersonality ?? .friendly,
-                mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist
+                mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist,
+                mascotState: .idle
             )
         }
         return row
@@ -1629,7 +1630,8 @@ final class RoomService: ObservableObject {
             mutedMemberIds: [],
             hostNote: nil,
             mascotPersonality: room.mascotPersonality,
-            mascotIdeology: room.mascotPoliticalIdeology
+            mascotIdeology: room.mascotPoliticalIdeology,
+                mascotState: .idle
         )
     }
 

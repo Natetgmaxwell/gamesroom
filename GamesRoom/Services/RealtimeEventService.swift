@@ -169,7 +169,8 @@ final class RealtimeEventService {
             mutedMemberIds: [],
             hostNote: nil,
             mascotPersonality: room.mascotPersonality,
-            mascotIdeology: room.mascotPoliticalIdeology
+            mascotIdeology: room.mascotPoliticalIdeology,
+            mascotState: .idle
         )
     }
 
