@@ -681,7 +681,7 @@ struct RoomDetailView: View {
                     isHost: isHost,
                     isHero: true,
                     onEdit: { editEvent = event },
-                    room: room,
+                    room: liveRoom,
                     unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
                     onMarkNotesConsumed: isHost
                         ? { ids in
@@ -704,7 +704,7 @@ struct RoomDetailView: View {
                     isHost: isHost,
                     isHero: true,
                     onEdit: { editEvent = event },
-                    room: room,
+                    room: liveRoom,
                     unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
                     onMarkNotesConsumed: isHost
                         ? { ids in
@@ -1798,9 +1798,15 @@ private struct BriefingSlot: View {
                     // longer running the escrow, the "I'm here" tap
                     // has nothing to return, and a stuck button on
                     // a claimed seat is naked debt.
-                    if let deposit = heldDeposit,
+                    // 2026-09-02 fix — check-in is a PHYSICAL arrival action:
+                    // the button exists only once the event has actually
+                    // started (playedAt <= now). Before that a claimed seat
+                    // shows only "Release my seat" — you can't walk in two
+                    // days early.
+                       if let deposit = heldDeposit,
                        deposit.status == .held,
                        room.seatDepositTrigger == .escrow,
+                       event.playedAt <= Date(),
                        let onCheckIn {
                         Text("Tap when you walk in — your deposit comes straight back.")
                             .font(Theme.Typography.caption)
