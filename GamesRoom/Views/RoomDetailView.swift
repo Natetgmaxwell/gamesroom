@@ -644,8 +644,8 @@ struct RoomDetailView: View {
             ),
             awards: publicAwards,
             mascotLine: season.ordinal.isMultiple(of: 2)
-                ? "The deposit is the promise. The night is the payoff."
-                : "You bring the chips. It brings the memory."
+                ? "Season \(season.ordinal) is closed. Thanks for showing up."
+                : "Season \(season.ordinal) is in the book."
         )
     }
 
@@ -826,28 +826,17 @@ struct RoomDetailView: View {
             // opted-in members; the AwardsCard renders the drowning row
             // through DrowningBadge when it appears.
             case .seasonClose(let season, let awards):
-                VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-                    // V0.94 B — render the Good Sport ceremonial moment
-                    // above the awards card when the closed season
-                    // declared one. Voice-only per the Good Sport
-                    // principle: the row in AwardsCard below still
-                    // names the recipient; this view adds the room's
-                    // voice honouring the steadier play.
-                    if let goodSport = awards.first(where: { $0.awardType == .goodSport }) {
-                        GoodSportCeremonyView(room: room, award: goodSport)
+                AwardsCard(
+                    season: season,
+                    awards: awards,
+                    currentUserId: authService.currentUser?.id,
+                    isHost: room.userRole == .host,
+                    currentUserOptedIn: room.memberDrowningOptIn,
+                    statCard: currentUserStatCard(season: season, awards: awards),
+                    onToggleDrowningOptIn: { newValue in
+                        Task { await setDrowningOptIn(newValue) }
                     }
-                    AwardsCard(
-                        season: season,
-                        awards: awards,
-                        currentUserId: authService.currentUser?.id,
-                        isHost: room.userRole == .host,
-                        currentUserOptedIn: room.memberDrowningOptIn,
-                        statCard: currentUserStatCard(season: season, awards: awards),
-                        onToggleDrowningOptIn: { newValue in
-                            Task { await setDrowningOptIn(newValue) }
-                        }
-                    )
-                }
+                )
             case .settleRound(let event):
                 let isCAH = event.packSlug == "cards_against_humanity"
                 WitnessSlot(
@@ -897,7 +886,6 @@ struct RoomDetailView: View {
                 CeremonialCard(
                     event: event,
                     chapterLine: roomService.cachedEventChapterLine(eventId: event.id),
-                    room: room,
                     tonightStarCard: roomService.cachedTonightStarCard(eventId: event.id),
                     hostPickMembers: roomService.cachedMembers(roomId: room.id),
                     isHost: isHost,
@@ -988,14 +976,14 @@ struct RoomDetailView: View {
         ScoreSnapshotStore.write(
             roomName: room.name,
             leaderboardLine: topLine,
-            isLive: activeEvent?.playedAt ?? .distantFuture <= Date()
+            isLive: (activeEvent?.playedAt ?? .distantFuture) <= Date() && activeEvent?.settledAt == nil
         )
-        // W2.3 — drive the Live Activity per the vision lifecycle
-        // (surface pre-play/post-settle, never during play).
+        // V0.98 — drive the Live Activity only while the event is
+        // in progress (starts at play, ends at settle).
         ScoreLiveActivityDriver.apply(
             roomName: room.name,
             leaderboardLine: topLine,
-            isLive: activeEvent?.playedAt ?? .distantFuture <= Date()
+            isLive: (activeEvent?.playedAt ?? .distantFuture) <= Date() && activeEvent?.settledAt == nil
         )
     }
 
@@ -1640,74 +1628,8 @@ private struct BriefingSlot: View {
         self.onCheckIn = onCheckIn
     }
 
-    // MARK: - V0.94 B mascot voice line header
-
-    /// V0.94 B — the briefing surface gets a mascot voice line
-    /// header (`face + voice line header`). Pure synchronous template
-    /// path — no LLM cost on every render. The 25-voice matrix still
-    /// flavours the body, so the mascot's personality × ideology
-    /// stays in charge.
-    private var briefingVoiceLine: String {
-        let context = MascotEngine.RoomContext(
-            activeEventTitle: event.name,
-            lastEventDaysAgo: nil,
-            memberCount: rsvps.count,
-            memberNames: rsvps.map(\.displayName),
-            memberName: nil,
-            recentWinnerNames: [],
-            leaderName: nil,
-            callerRank: nil,
-            eventCount: nil,
-            withdrawnAmount: nil,
-            lastWinnerDelta: nil,
-            seasonDaysLeft: nil
-        )
-        let claimed = rsvps.filter { $0.state == .claimed }.count
-        let seatsLeft = max(0, event.maxSeats - claimed)
-        return MascotEngine.generateVoice(
-            mascotName: room.mascotName,
-            roomName: room.name,
-            personality: room.mascotPersonality,
-            ideology: room.mascotPoliticalIdeology,
-            kind: .briefingOnCreate,
-            context: context,
-            eventDate: event.playedAt,
-            eventVenue: event.venue,
-            hostNote: event.hostNote,
-            seatsLeft: seatsLeft,
-            seatsClaimed: claimed
-        )
-    }
-
-    /// V0.94 B — the briefing face. Upcoming events have no live
-    /// data plane yet; the face wears the neutral idle expression
-    /// (per V0.94 spec invariant #4 — voice and face agree on the
-    /// visible state; "no event yet" maps to `.idle`).
-    private var briefingFace: FaceParameters {
-        MascotFaceEngine.compute(
-            personality: room.mascotPersonality,
-            ideology: room.mascotPoliticalIdeology,
-            state: .idle
-        )
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            // V0.94 B — mascot face + voice line header sits above
-            // the event name. 40pt is an avatar size (`<
-            // MascotFaceEngine.avatarSizeThreshold`); the renderer
-            // applies the brow-widening multiplier so the
-            // calligraphy reads at small scale.
-            HStack(alignment: .top, spacing: 10) {
-                MascotFaceView(parameters: briefingFace, size: 40)
-                    .padding(.top, 2)
-                Text(briefingVoiceLine)
-                    .font(Theme.Typography.caption.italic())
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
             Text(event.name)
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText)
@@ -2444,11 +2366,6 @@ private struct WitnessSlot: View {
 private struct CeremonialCard: View {
     let event: Event
     let chapterLine: ChapterLine?
-    /// V0.94 B — the room (and therefore the mascot's personality +
-    /// ideology) drives the ceremonial face. The parent passes it
-    /// in; the card never re-derives it from a service call, so the
-    /// face stays consistent with the room's footer voice.
-    let room: Room
     /// V0.84 C2 — Tonight's Star card for this event (host pick or
     /// chip-swing fallback). `nil` when no winner either way —
     /// the section is hidden in that case (matches the 067 empty
@@ -2515,7 +2432,7 @@ private struct CeremonialCard: View {
             // `tonightStarCard == nil` (no host pick AND no
             // chip-swing winner — matches the 067 empty case).
             if let card = tonightStarCard {
-                TonightStarSection(card: card, faceParameters: ceremonialFace)
+                TonightStarSection(card: card)
             }
 
             // V0.84 C5 — one-line drop prompt. Member-only, gated on
@@ -2584,23 +2501,6 @@ private struct CeremonialCard: View {
         // drives the wash via `isHero`.
         .sectionCard(.hero)
     }
-
-    // MARK: - V0.94 B mascot face
-
-    /// V0.94 B — the ceremonial face. Post-play is the celebration
-    /// moment; the `.delight` emotion (full intensity 1.0, brow
-    /// raised 3, eyeDy +1) reads as the room's joy. Voice and face
-    /// agree on this state via the same `MascotEngine.footerKind`
-    /// mapping the footer caption uses (`.postPlayRecap` ⇒
-    /// `.comeback`; the ceremonial card is one step later in the
-    /// arc, so the face wears delight).
-    private var ceremonialFace: FaceParameters {
-        MascotFaceEngine.compute(
-            personality: room.mascotPersonality,
-            ideology: room.mascotPoliticalIdeology,
-            state: .delight
-        )
-    }
 }
 
 // MARK: - Tonight's Star section (V0.84 C2)
@@ -2613,11 +2513,6 @@ private struct CeremonialCard: View {
 /// (not inside) the mascot line, per the spec.
 private struct TonightStarSection: View {
     let card: TonightStarCard
-    /// V0.94 B — the mascot face parameters the section renders
-    /// beside the category line. The parent (CeremonialCard) passes
-    /// the room's personality × ideology × `.delight` (post-play
-    /// celebration emotion).
-    let faceParameters: FaceParameters
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -2632,23 +2527,13 @@ private struct TonightStarSection: View {
             Text(card.memberDisplayName)
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText)
-            // V0.94 B — mascot face beside the category line. The
-            // category line is the voice (already there); the face
-            // joins it for the ceremonial moment. 40pt keeps the
-            // pair compact under the winner's name.
-            HStack(alignment: .top, spacing: 10) {
-                MascotFaceView(parameters: faceParameters, size: 40)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(categoryLine)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.75))
-                    if let custom = card.customText, !custom.isEmpty {
-                        Text("“\(custom)”")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
-                    }
-                }
+            Text(categoryLine)
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.75))
+            if let custom = card.customText, !custom.isEmpty {
+                Text("“\(custom)”")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
             }
         }
         .accessibilityElement(children: .combine)
@@ -2846,80 +2731,6 @@ private struct ShareableImage: Transferable {
         DataRepresentation(exportedContentType: .png) { item in
             item.image.pngData() ?? Data()
         }
-    }
-}
-
-/// V0.94 B — ceremonial goodSport moment. Renders above the awards
-/// card when the closed season declared a Good Sport, with the
-/// room's mascot voice + face. Voice-only per the Good Sport
-/// principle: never a leaderboard position, never a scored metric —
-/// the mascot honours the table.
-private struct GoodSportCeremonyView: View {
-    let room: Room
-    let award: SeasonAward
-
-    /// V0.94 B — the mascot voice line for the Good Sport. Pure
-    /// synchronous template path — no LLM cost on render.
-    private var voiceLine: String {
-        let context = MascotEngine.RoomContext(
-            activeEventTitle: nil,
-            lastEventDaysAgo: nil,
-            memberCount: 0,
-            memberNames: [],
-            memberName: nil,
-            recentWinnerNames: [],
-            leaderName: nil,
-            callerRank: nil,
-            eventCount: nil,
-            withdrawnAmount: nil,
-            lastWinnerDelta: nil,
-            seasonDaysLeft: nil
-        )
-        return MascotEngine.generateVoice(
-            mascotName: room.mascotName,
-            roomName: room.name,
-            personality: room.mascotPersonality,
-            ideology: room.mascotPoliticalIdeology,
-            kind: .goodSport,
-            context: context
-        ).replacingOccurrences(of: "{winner}", with: award.recipientDisplayName)
-    }
-
-    /// V0.94 B — the ceremonial face. The Good Sport moment is a
-    /// celebration of the room's steadier play; the `.delight`
-    /// emotion (full intensity, brow raised, smile curve) reads
-    /// as the room's joy.
-    private var faceParameters: FaceParameters {
-        MascotFaceEngine.compute(
-            personality: room.mascotPersonality,
-            ideology: room.mascotPoliticalIdeology,
-            state: .delight
-        )
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "hand.thumbsup.fill")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Good Sport")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
-            }
-            HStack(alignment: .top, spacing: 10) {
-                MascotFaceView(parameters: faceParameters, size: 40)
-                    .padding(.top, 2)
-                Text(voiceLine)
-                    .font(Theme.Typography.body.italic())
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.75))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Layout.cardInset)
-        .sectionCard(.standard)
     }
 }
 
@@ -4461,13 +4272,26 @@ private struct MascotFooterCaption: View {
         )
     }
     var body: some View {
-        // V0.94 B — mascot face beside the room footer caption.
-        // 36pt is an avatar size (`< MascotFaceEngine.avatarSizeThreshold`)
-        // so the renderer applies the brow-widening multiplier; the
-        // chip reads as a small inline presence, not a header.
+        // V0.95 C — give the voice a face. The footer caption is
+        // Tally's line; the face beside it is Tally's expression,
+        // computed from the SAME room-state resolution the caption
+        // flavour comes from (V0.94 hard invariant #2: voice and
+        // face agree). Async surface only — the footer is the
+        // sanctioned placement per the V0.94 spec; never rendered
+        // inside an in-play control surface.
         HStack(alignment: .top, spacing: 10) {
-            MascotFaceView(parameters: faceParameters, size: 36)
-                .padding(.top, 2)
+            MascotFaceView(
+                parameters: MascotFaceEngine.compute(
+                    personality: room.mascotPersonality,
+                    ideology: room.mascotPoliticalIdeology,
+                    state: resolvedRoomState
+                ),
+                size: Self.faceSize
+            )
+            .accessibilityLabel(Text(
+                "\(room.mascotName) the mascot, \(resolvedRoomState.rawValue) room state"
+            ))
+
             Text(caption)
                 .font(Theme.Typography.caption.italic())
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
@@ -4477,23 +4301,112 @@ private struct MascotFooterCaption: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.top, Theme.Layout.sectionSpacing)
+        // V0.70 — the mascot "speaks" when its caption changes.
+        // `.id(caption)` forces SwiftUI to treat each new line
+        // as a different view so the transition fires; the
+        // attached fade animation drives the cross-fade. The face
+        // participates in the same transition (whole unit fades),
+        // which also covers the room-state changes that drive it.
         .id(caption)
         .transition(.opacity.combined(with: .offset(y: 4)))
         .animation(Theme.Motion.fade, value: caption)
-        .padding(.top, Theme.Layout.sectionSpacing)
-            // V0.81 — kick the LLM task whenever the snapshot the
-            // caption depends on changes. The id collapses to the
-            // same string for a given (kind, members, leaderboard,
-            // withdrawn) tuple, so SwiftUI only re-fires the task
-            // when something actually shifts — not on every parent
-            // re-render. Resetting `llmCaption` to nil first means
-            // the template re-appears during the in-flight gap, so
-            // the View is never blank between two LLM lines.
-            .task(id: footerTaskKey) {
-                llmCaption = nil
-                await refreshLLMCaption()
-            }
+        // V0.81 — kick the LLM task whenever the snapshot the
+        // caption depends on changes. The id collapses to the
+        // same string for a given (kind, members, leaderboard,
+        // withdrawn) tuple, so SwiftUI only re-fires the task
+        // when something actually shifts — not on every parent
+        // re-render.
+        //
+        // V0.95 — no nil-reset: the previous LLM caption stays
+        // visible while the new one generates, and swaps in-place
+        // only when it differs (cross-fade above). A nil reset
+        // here caused a template-flash on every state tick —
+        // reads as flicker during live events.
+        .task(id: footerTaskKey) {
+            await refreshLLMCaption()
+        }
     }
+    /// V0.95 C — footer face render size. Small enough to sit
+    /// beside a wrapping caption without dominating the column;
+    /// large enough (≥ avatar threshold) that the brow
+    /// calligraphy reads without the avatar-scale widening.
+    private static let faceSize: CGFloat = 48
+
+    /// V0.95 C — the `RoomState` the footer face renders against.
+    /// Derived from the same live data the caption's `footerKind`
+    /// uses (active event, leaderboard, working hand), plus the
+    /// event rounds for comeback/streak flavour. Mirrors
+    /// `MascotFaceEngine`'s resolver ordering. Pure; recomputed on
+    /// re-render — the engine is total + deterministic, so this is
+    /// cheap. Voice and face agree because both read this one
+    /// resolution of the room.
+    private var resolvedRoomState: RoomState {
+        // Dispute surface doesn't reach the footer's data plane;
+        // nothing here can open one. Documented non-input.
+        let openDispute = false
+
+        let rounds = activeEvent.map {
+            roomService.cachedEventRounds(eventId: $0.id)
+        } ?? []
+
+        // Newest-first by roundIndex (monotonic per event), same
+        // walk `MascotEngine.recentWinners` uses.
+        let sortedRounds = rounds.sorted { $0.roundIndex > $1.roundIndex }
+        func roundWinner(_ round: EventRound) -> UUID? {
+            for entry in round.entries {
+                if case let .bool(isWinner)? = entry.meta["winner"], isWinner {
+                    return entry.memberId
+                }
+            }
+            return nil
+        }
+        let lastWinner = sortedRounds.first.flatMap(roundWinner)
+        let previousWinner = sortedRounds.dropFirst().first.flatMap(roundWinner)
+        let lastRoundFlippedLeader: Bool
+        if let last = lastWinner, let previous = previousWinner {
+            lastRoundFlippedLeader = last != previous
+        } else {
+            lastRoundFlippedLeader = false
+        }
+
+        // Consecutive wins: the count of most-recent rounds all won
+        // by the same member (streak flavour fires at ≥ 3).
+        var consecutiveWins = 0
+        if let streakOwner = lastWinner {
+            for round in sortedRounds {
+                if roundWinner(round) == streakOwner {
+                    consecutiveWins += 1
+                } else {
+                    break
+                }
+            }
+        }
+
+        // Leader margin from the season scoreboard (RPC already
+        // sorts by season score DESC).
+        let scores = leaderboard.map { Int($0.seasonScore) }
+        let leaderMargin = scores.count >= 2 ? scores[0] - scores[1] : (scores.count == 1 ? scores[0] : 0)
+
+        let lastSessionDaysAgo = daysSinceLastPlay
+
+        return RoomStateInputs.resolve(
+            RoomStateInputs(
+                activeEvent: activeEvent.map {
+                    .init(playedAt: $0.playedAt, settledAt: $0.settledAt)
+                },
+                activeEventSettled: activeEvent?.settledAt != nil,
+                hostFinalized: activeEvent?.hostFinalized ?? false,
+                withdrawnAmount: withdrawnAmount,
+                leaderMargin: leaderMargin,
+                lastRoundFlippedLeader: lastRoundFlippedLeader,
+                consecutiveWins: consecutiveWins,
+                openDispute: openDispute,
+                lastSessionDaysAgo: lastSessionDaysAgo
+            )
+        )
+    }
+
     /// Stable id that changes only when the inputs the LLM call
     /// depends on change. Used to gate `.task(id:)` so SwiftUI
     /// cancels + restarts the LLM call exactly when the footer
@@ -4508,51 +4421,6 @@ private struct MascotFooterCaption: View {
     /// keeps narrating in the OLD voice.
     private var footerTaskKey: String {
         "\(footerKind.rawValue)|\(room.mascotPersonality.rawValue)|\(room.mascotPoliticalIdeology.rawValue)|\(members.count)|\(leaderboard.count)|\(withdrawnAmount)|\(room.id)"
-    }
-
-    // MARK: - V0.94 B mascot face
-
-    /// V0.94 B — the `RoomState` the footer face renders against.
-    /// Mirrors `MascotFaceEngine.footerKind` → the same flavour
-    /// `MascotEngine.generateVoice` resolves to. Voice and face
-    /// share a single mapping (the V0.94 spec's invariant #4).
-    ///
-    /// The `MascotEngine.footerKind` flavours split finer than
-    /// `RoomState` (twelve kinds, six states); we collapse
-    /// play-window kinds onto `.playing` and pre/post windows onto
-    /// `.idle`, matching the voice's "the room is/isn't in play"
-    /// binary at face resolution.
-    private var faceRoomState: RoomState {
-        switch footerKind {
-        case .inPlay, .inPlayWithWithdrawal, .settleRound:
-            return .playing
-        case .postPlayRecap:
-            return .comeback
-        case .briefing48h, .briefingMorning, .briefingOnCreate,
-             .roomWelcome, .standings, .roomStale, .seasonClose:
-            return .idle
-        case .tonightEvent:
-            // The witness slot — game is live, the room is watching
-            // it start. Face wears the focused, intent-on-play look.
-            return .playing
-        case .goodSport, .tonightStar:
-            // Ceremonial flavours honour the table. These don't
-            // surface on the footer (they live on the ceremonial
-            // card) but the mapping is here for completeness if a
-            // future surface pairs voice + face for them.
-            return .delight
-        }
-    }
-
-    /// V0.94 B — the `FaceParameters` the footer face draws. Pure;
-    /// recomputed when the view re-renders. The renderer is a thin
-    /// vector consumer of this struct.
-    private var faceParameters: FaceParameters {
-        MascotFaceEngine.compute(
-            personality: room.mascotPersonality,
-            ideology: room.mascotPoliticalIdeology,
-            state: faceRoomState
-        )
     }
 }
 
