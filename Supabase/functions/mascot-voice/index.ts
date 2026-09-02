@@ -129,7 +129,10 @@ function buildPrompt(room: Record<string, unknown>, ctx: Record<string, unknown>
   if (gloss) lines.push(`Ideology tone: ${gloss}`);
   if (ctx.event_title) lines.push(`Event: ${ctx.event_title}`);
   if (ctx.member_count !== undefined) lines.push(`Members: ${ctx.member_count}`);
-  if (ctx.leader) lines.push(`Leader: ${ctx.leader}`);
+  if (ctx.leader) {
+    lines.push(`Leader: ${ctx.leader}${ctx.leader_score !== undefined ? ` (${ctx.leader_score} season points)` : ""}`);
+  }
+  if (ctx.standings_note) lines.push(`Standings note: ${ctx.standings_note}`);
   if (ctx.recent_winner) lines.push(`Recent winner: ${ctx.recent_winner}`);
   if (ctx.caller_rank) lines.push(`Caller rank: ${ctx.caller_rank}`);
   if (ctx.working_hand) lines.push(`Working hand: ${ctx.working_hand}`);
@@ -318,17 +321,33 @@ Deno.serve(async (req: Request) => {
     .order("season_score", { ascending: false })
     .limit(10);
   if (leaderboard && leaderboard.length > 0) {
-    const nonHost = leaderboard.filter((r: { role?: string }) => r.role !== "host");
-    if (nonHost.length > 0) {
-      // Resolve the leader's display name from public.users.
-      const { data: leaderUser } = await serviceClient
-        .from("users")
-        .select("display_name")
-        .eq("id", nonHost[0].user_id)
-        .maybeSingle();
-      if (leaderUser?.display_name) ctx.leader = leaderUser.display_name;
+    // 2026-09-02 fix — leader is the top of the ACTUAL standings
+    // (season_score DESC, host included: the room page ranks the host
+    // too, so a host-led table previously crowned the #2 member as
+    // "leader"). Also pass the top score so the model can't call a
+    // 0-point member "sits comfortably at the front".
+    const top = leaderboard[0];
+    const { data: leaderUser } = await serviceClient
+      .from("users")
+      .select("display_name")
+      .eq("id", top.user_id)
+      .maybeSingle();
+    if (leaderUser?.display_name) {
+      ctx.leader = leaderUser.display_name;
+      ctx.leader_score = top.season_score ?? 0;
+      if ((top.season_score ?? 0) <= 0) {
+        ctx.standings_note = "Every member is still on zero for the season or the leader has no points yet — describe the table as level/unplayed, not as anyone leading comfortably.";
+      } else {
+        const second = leaderboard[1];
+        const margin = second ? (top.season_score ?? 0) - (second.season_score ?? 0) : top.season_score ?? 0;
+        ctx.standings_note = margin >= 30
+          ? "The leader is far ahead — a blowout margin is fair to describe."
+          : "The table is close — do not overstate the leader's dominance.";
+      }
     }
-    const idx = nonHost.findIndex((r) => r.user_id === memberId);
+    // Caller rank mirrors the full standings order (host included),
+    // matching what the room page shows.
+    const idx = leaderboard.findIndex((r) => r.user_id === memberId);
     if (idx !== -1) ctx.caller_rank = idx + 1;
   }
 

@@ -314,12 +314,15 @@ enum MascotEngine {
         return names
     }
 
-    /// First non-host entry's display name, or `nil` if the
-    /// leaderboard is empty or the only rows are hosts. The RPC
-    /// already sorts by `season_score DESC` so `.first` is
+    /// The standings leader's display name — the top row of the
+    /// leaderboard, host included. The room page's standings panel
+    /// ranks hosts with everyone else, so the voice must agree with
+    /// what's on screen (2026-09-02 fix: the old host-skip crowned
+    /// the #2 member as "leader" whenever the host held the top
+    /// spot). The RPC sorts by `season_score DESC` so `.first` is
     /// authoritative.
     static func leaderName(leaderboard: [LeaderboardEntry]) -> String? {
-        leaderboard.first(where: { !$0.isHost })?.displayName
+        leaderboard.first?.displayName
     }
 
     /// 1-based rank of `currentUserId` among non-host entries,
