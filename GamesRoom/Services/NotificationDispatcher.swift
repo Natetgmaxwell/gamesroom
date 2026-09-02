@@ -514,6 +514,23 @@ final class NotificationDispatcher {
         eventId: UUID,
         fireAt: Date
     ) async {
+        // 2026-09-02 dedupe guard — two paths can schedule the same
+        // (event, kind, user) notification on one device: the host's
+        // addEvent fan-out AND the realtime INSERT echo (both call
+        // `scheduleBriefingTrio`). Same identifier among PENDING
+        // requests replaces silently, but if the first copy already
+        // DELIVERED (the on-create push fires 1s after scheduling),
+        // re-adding the same identifier delivers a second banner.
+        // Skip when the id is pending OR already delivered.
+        let pending = await center.pendingNotificationRequests()
+        if pending.contains(where: { $0.identifier == identifier }) {
+            return
+        }
+        let delivered = await center.deliveredNotifications()
+        if delivered.contains(where: { $0.request.identifier == identifier }) {
+            return
+        }
+
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
