@@ -153,7 +153,13 @@ final class NotificationDispatcher {
         // notification cycle as the actual creation moment.
         let onCreateFireAt = now.addingTimeInterval(1)
 
-        let t48FireAt = playedAt.addingTimeInterval(-48 * 3600)
+        // V0.95 F — the 2-Hour Cocktail Party reminder cadence
+        // (Nick Gray; gbrain: inbox/obsidian-cards/cocktail-parties):
+        // three touches — the week before, 3-4 days before, and the
+        // morning of. T-48h becomes T-84h (3.5 days) and a T-168h
+        // week-before reminder joins the trio.
+        let t168FireAt = playedAt.addingTimeInterval(-168 * 3600)
+        let t48FireAt = playedAt.addingTimeInterval(-84 * 3600)
 
         // Morning-of: 09:00 local time on the calendar day of
         // playedAt. If 09:00 already passed today, fall back to the
@@ -268,7 +274,35 @@ final class NotificationDispatcher {
             // Declined is terminal for T-48h and morning-of.
             if state == .declined { continue }
 
-            // T-48h push — claim or reminder variant.
+            // Week-before reminder (cocktail-party cadence touch #1).
+            if t168FireAt > now {
+                let (title, body) = t48Body(
+                    mascotName: mascotName,
+                    eventName: eventName,
+                    playedAt: playedAt,
+                    state: state,
+                    memberName: memberName,
+                    hostNote: hostNote,
+                    personality: mascotPersonality,
+                    ideology: mascotIdeology,
+                    memberCount: perMemberCadence.count
+                )
+                await schedule(
+                    center: center,
+                    identifier: identifier(
+                        eventId: eventId, kind: .t168h, userId: memberId
+                    ),
+                    title: title,
+                    body: body,
+                    kindRaw: NotificationKindRaw.t168h,
+                    eventId: eventId,
+                    fireAt: t168FireAt,
+                    attachment: faceAttachment
+                )
+            }
+
+            // 3-4-days-before reminder (cadence touch #2; same body
+            // builder as the old T-48h logistics nudge).
             if t48FireAt > now {
                 let (title, body) = t48Body(
                     mascotName: mascotName,
@@ -502,6 +536,7 @@ final class NotificationDispatcher {
 
     private enum CadenceKind: String {
         case onCreate = "on_create"
+        case t168h = "t168h"
         case t48h = "t48h"
         case morningOf = "morning_of"
     }
@@ -510,6 +545,7 @@ final class NotificationDispatcher {
     /// to branch on (e.g. a tap that deep-links into the briefing).
     private enum NotificationKindRaw: String {
         case onCreate = "on_create"
+        case t168h = "t168h"
         case t48h = "t48h"
         case morningOf = "morning_of"
         case catchUp = "catch_up"

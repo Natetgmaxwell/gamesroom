@@ -1551,14 +1551,18 @@ runner.run("ScoreSnapshot.shouldPersist accepts empty when nothing yet") {
     runner.assertTrue(ScoreSnapshot.shouldPersist(incoming, existing: nil))
 }
 
-runner.run("LiveActivityRule ends during play when running") {
+// 2026-09-02 — active-only Live Activity (Nathan's reversal of the
+// briefing/ceremonial surface). The activity shows scores ONLY while
+// an event is live; no active event ends it.
+
+runner.run("LiveActivityRule refreshes during play when running") {
     let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: true)
-    runner.assertEqual(action, .end)
+    runner.assertEqual(action, .startOrUpdate)
 }
 
-runner.run("LiveActivityRule stays quiet during play when not running") {
+runner.run("LiveActivityRule starts during play when not running") {
     let action = LiveActivityRule.action(isLive: true, hasLine: true, isRunning: false)
-    runner.assertEqual(action, .none)
+    runner.assertEqual(action, .startOrUpdate)
 }
 
 runner.run("LiveActivityRule ends during play when the line is empty") {
@@ -1566,14 +1570,19 @@ runner.run("LiveActivityRule ends during play when the line is empty") {
     runner.assertEqual(action, .end)
 }
 
-runner.run("LiveActivityRule surfaces outside play when running") {
-    let action = LiveActivityRule.action(isLive: false, hasLine: true, isRunning: true)
-    runner.assertEqual(action, .startOrUpdate)
+runner.run("LiveActivityRule no-ops empty line during play when not running") {
+    let action = LiveActivityRule.action(isLive: true, hasLine: false, isRunning: false)
+    runner.assertEqual(action, .none)
 }
 
-runner.run("LiveActivityRule surfaces outside play with a line") {
+runner.run("LiveActivityRule ends when the event is over and it is running") {
+    let action = LiveActivityRule.action(isLive: false, hasLine: true, isRunning: true)
+    runner.assertEqual(action, .end)
+}
+
+runner.run("LiveActivityRule no-ops after the event when not running") {
     let action = LiveActivityRule.action(isLive: false, hasLine: true, isRunning: false)
-    runner.assertEqual(action, .startOrUpdate)
+    runner.assertEqual(action, .none)
 }
 
 runner.run("LiveActivityRule no-ops outside play without a line") {
@@ -2145,24 +2154,24 @@ runner.run("MascotEngine.recentWinners ignores non-winner entries") {
     runner.assertEqual(names, [])
 }
 
-runner.run("MascotEngine.leaderName returns first non-host displayName") {
+runner.run("MascotEngine.leaderName returns the standings top including hosts") {
     let leaderboard = [
         makeLeaderboardRow(userId: UUID(), displayName: "Host", role: "host", seasonScore: 999),
         makeLeaderboardRow(userId: UUID(), displayName: "Alice", seasonScore: 500),
         makeLeaderboardRow(userId: UUID(), displayName: "Bob", seasonScore: 400)
     ]
-    runner.assertEqual(MascotEngine.leaderName(leaderboard: leaderboard), "Alice")
+    runner.assertEqual(MascotEngine.leaderName(leaderboard: leaderboard), "Host")
 }
 
 runner.run("MascotEngine.leaderName returns nil when leaderboard is empty") {
     runner.assertNil(MascotEngine.leaderName(leaderboard: []))
 }
 
-runner.run("MascotEngine.leaderName returns nil when only hosts are present") {
+runner.run("MascotEngine.leaderName returns the host when only hosts are present") {
     let leaderboard = [
         makeLeaderboardRow(userId: UUID(), displayName: "Host", role: "host", seasonScore: 999)
     ]
-    runner.assertNil(MascotEngine.leaderName(leaderboard: leaderboard))
+    runner.assertEqual(MascotEngine.leaderName(leaderboard: leaderboard), "Host")
 }
 
 runner.run("MascotEngine.callerRank returns 1-based rank among non-host entries") {
@@ -2408,7 +2417,7 @@ runner.run("MascotEngine.generateVoice renders .standings substituting leader an
             callerRank: 1
         )
     )
-    runner.assertTrue(body.contains("Alice"), "leader name substituted")
+    runner.assertTrue(body.contains("Host"), "leader name substituted")
     runner.assertTrue(body.contains("#1"), "caller rank substituted")
 }
 

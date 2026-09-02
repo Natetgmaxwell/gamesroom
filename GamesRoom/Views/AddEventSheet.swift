@@ -138,14 +138,15 @@ struct AddEventSheet: View {
 
     // MARK: - Defaults
 
-    /// The default `playedAt` — tomorrow at 19:00 local time. Mirrors
-    /// the v0.7.1 default; the host almost always schedules evening
-    /// games, and 19:00 is the round hour that reads cleanly in the
-    /// briefing card and the push body.
+    /// The default `playedAt` — three weeks out at 19:00 local.
+    /// V0.95 F adopts the 2-Hour Cocktail Party planning rule
+    /// (Nick Gray): parties work when planned ~3 weeks ahead — long
+    /// enough for calendars, short enough to stay real. The host can
+    /// still pick any date; this is the starting suggestion.
     static func defaultPlayedAt() -> Date {
         let calendar = Calendar.current
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-        return calendar.date(bySettingHour: 19, minute: 0, second: 0, of: tomorrow) ?? tomorrow
+        let threeWeeks = calendar.date(byAdding: .day, value: 21, to: Date()) ?? Date()
+        return calendar.date(bySettingHour: 19, minute: 0, second: 0, of: threeWeeks) ?? threeWeeks
     }
 
     /// The default event name — "<weekday d MMM · ha> session" —

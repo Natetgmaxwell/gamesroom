@@ -176,6 +176,15 @@ struct RoomDetailView: View {
         return enabled.contains(CardsAgainstHumanityPack.slug)
     }
 
+    /// V0.95 E — casino-pack mirror of `roomHasCAHPack`. Drives the
+    /// secondary "Withdraw casino chips" CTA on CAH events so both
+    /// withdraw paths exist during any active night.
+    private var roomHasCasinoPack: Bool {
+        let enabled = roomService.cachedRoomPacks(roomId: room.id)
+        if enabled.isEmpty { return true }
+        return enabled.contains("casino")
+    }
+
     // MARK: Service-backed state
 
     /// Cached active event for this room. Driven by
@@ -784,7 +793,11 @@ struct RoomDetailView: View {
                     // still top up. Casino only (CAH has no chip
                     // withdrawal concept); member AND host (host-can-play
                     // lock 2026-07-09).
-                    onWithdrawMore: isCAH
+                    // V0.95 E — casino withdraw is available on CAH
+                    // nights too (when the room runs the casino pack):
+                    // both withdraw paths exist during any active
+                    // event, per the keep-them-at-the-table rule.
+                    onWithdrawMore: (isCAH && !roomHasCasinoPack)
                         ? nil
                         : { Task { await openWithdraw(event: event) } }
                 )
@@ -817,6 +830,12 @@ struct RoomDetailView: View {
                     // settle CAH cards.
                     onCAHSettle: roomHasCAHPack
                         ? { cahScanEvent = event }
+                        : nil,
+                    // V0.95 E — secondary "Withdraw casino chips" on
+                    // CAH nights (room runs the casino pack): both
+                    // withdraw paths live during any active event.
+                    onWithdrawMore: roomHasCasinoPack
+                        ? { Task { await openWithdraw(event: event) } }
                         : nil
                 )
 

@@ -37,9 +37,13 @@ struct ScoreSnapshot: Codable {
     }
 }
 
-/// The vision lifecycle rule for the Live Activity score surface:
-/// surface for pre-play briefing and post-settle ceremonial, never
-/// during play ("No Live Activity during play").
+/// The Live Activity lifecycle rule — 2026-09-02 product reversal
+/// (Nathan): the score activity surfaces ONLY while an event is
+/// active (started, not settled). No active event = no Live
+/// Activity; the phone stays out of the room. The old
+/// "briefing + ceremonial" surface kept the score pinned on the
+/// lock screen between nights, which pulled members back into the
+/// app exactly when they should be present at the table.
 enum LiveActivityRule {
     enum Action: Equatable {
         case startOrUpdate
@@ -49,11 +53,12 @@ enum LiveActivityRule {
 
     static func action(isLive: Bool, hasLine: Bool, isRunning: Bool) -> Action {
         if isLive {
-            return isRunning ? .end : .none
+            // Active event: surface + keep the line fresh. An empty
+            // line has nothing worth showing — end a running activity,
+            // no-op when none exists.
+            return hasLine ? .startOrUpdate : (isRunning ? .end : .none)
         }
-        if hasLine {
-            return .startOrUpdate
-        }
-        return .none
+        // No active event: end whatever is running, schedule nothing.
+        return isRunning ? .end : .none
     }
 }
