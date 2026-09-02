@@ -266,6 +266,10 @@ Deno.serve(async (req: Request) => {
 
   if (event) {
     ctx.event_title = event.name;
+    // 2026-09-02 fix — give the model the real date so it never invents
+    // "before Wednesday" for an event that already happened.
+    ctx.event_played_at = event.played_at;
+    if (event.settled_at) ctx.event_settled_at = event.settled_at;
   }
 
   let eventMessageType: string | null = null;
@@ -273,12 +277,25 @@ Deno.serve(async (req: Request) => {
     const now = Date.now();
     const playedAt = new Date(event.played_at).getTime();
     const settledAt = event.settled_at ? new Date(event.settled_at).getTime() : null;
+    // 2026-09-02 fix — the previous else-branch classified EVERY event
+    // that wasn't live or fresh-settled as "New event just created. Prompt
+    // members to claim their seat." A week-old settled event (latest by
+    // played_at DESC, as this footer path picks) landed there and the LLM
+    // wrote stale claim nudges for a night long gone (Felt Faction bug).
     if (settledAt && now - settledAt < 86_400_000) {
       eventMessageType = "Post-play recap. The event has concluded.";
-    } else if (playedAt <= now && !settledAt) {
+    } else if (settledAt) {
+      // Settled more than 24h ago: the room is between nights. No claim
+      // nudge — the event is over.
+      eventMessageType = "The room is between nights. Speak to the standings and the leaderboard. Do not prompt anyone to claim a seat.";
+    } else if (playedAt <= now) {
       eventMessageType = "The night has started. The event is live.";
+    } else if (playedAt - now < 7 * 86_400_000) {
+      // Genuinely upcoming (within a week): a claim prompt is honest.
+      const days = Math.max(0, Math.ceil((playedAt - now) / 86_400_000));
+      eventMessageType = `New upcoming event in about ${days} day${days === 1 ? "" : "s"}. Prompt members to claim their seat.`;
     } else {
-      eventMessageType = "New event just created. Prompt members to claim their seat.";
+      eventMessageType = "The next scheduled event is more than a week away. Speak to the standings. Do not pressure immediate claims.";
     }
   } else {
     eventMessageType = "Room has no events yet. Welcome the members.";
