@@ -966,6 +966,17 @@ struct RoomSettingsOperationsSheet: View {
         .background(Theme.Palette.background)
         .navigationTitle("Operations")
         .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            "Couldn't update packs",
+            isPresented: Binding(
+                get: { toggleError != nil },
+                set: { if !$0 { toggleError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(toggleError ?? "")
+        }
         .task {
             guard !packsLoaded else { return }
             let slugs = await roomService.loadRoomPacks(roomId: roomId)
@@ -989,6 +1000,10 @@ struct RoomSettingsOperationsSheet: View {
     /// Toggle a pack on/off for this room. Persists immediately via
     /// `RoomService.updateRoomPacks` so the change is durable even if
     /// the host navigates away without hitting Save.
+    /// V0.98 — failures surface instead of silently reverting (the
+    /// created_by-guard bug class failed invisibly here for weeks).
+    @State private var toggleError: String?
+
     private func togglePack(_ slug: String, isOn: Bool) async {
         if isOn {
             enabledPackSlugs.insert(slug)
@@ -1000,13 +1015,16 @@ struct RoomSettingsOperationsSheet: View {
             .filter { enabledPackSlugs.contains($0) }
         do {
             try await roomService.updateRoomPacks(roomId: roomId, slugs: slugs)
+            toggleError = nil
         } catch {
-            // Revert the local toggle on failure
+            // Revert the local toggle on failure — and TELL the host
+            // (silent revert looked like "settings don't save").
             if isOn {
                 enabledPackSlugs.remove(slug)
             } else {
                 enabledPackSlugs.insert(slug)
             }
+            toggleError = (error as NSError).localizedDescription
         }
     }
 
