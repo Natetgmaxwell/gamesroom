@@ -227,8 +227,8 @@ comment on function public.remove_room_member(uuid, uuid) is
 --    and points_balance resets to the room's join_starting_bonus.
 --    season_score, team, history untouched.
 -- =================================================================
-create or replace function public.redeem_join_code(code text)
-returns table(room_id uuid, room_name text)
+create or replace function public.redeem_join_code(p_code text)
+returns table(room_id uuid, room_name text, status text, tier integer, invited_by uuid)
 language plpgsql
 security definer
 set search_path = ''
@@ -239,20 +239,45 @@ declare
   v_user_id uuid := auth.uid();
   v_bonus integer;
   v_existing_status text;
+  -- 076 lineage (preserved so the invite-reward + tier logic keeps
+  -- working — the 093 rewrite must not silently drop it).
+  v_invitee uuid;
+  v_generator uuid;
+  v_tier int;
+  v_status text;
 begin
   if v_user_id is null then
     raise exception 'Not authenticated' using errcode = '42501';
   end if;
 
-  -- Find an unredeemed code.
-  select jc.room_id into v_room_id
+  -- Find an unredeemed code. 068/076 lineage: pull invitee_user_id
+  -- + generated_by so tier derivation and the invite reward survive.
+  select jc.room_id, jc.invitee_user_id, jc.generated_by
+    into v_room_id, v_invitee, v_generator
   from public.join_codes jc
-  where jc.code = upper(redeem_join_code.code)
+  where jc.code = upper(p_code)
     and jc.redeemed_at is null
   for update;
 
   if v_room_id is null then
     raise exception 'Code not found or already redeemed' using errcode = 'P0002';
+  end if;
+
+  -- Tier-3 scoping (068): an invitee-scoped code is rejected for
+  -- anyone other than the intended invitee.
+  if v_invitee is not null and v_invitee <> v_user_id then
+    raise exception 'Code not found or already redeemed' using errcode = 'P0002';
+  end if;
+
+  -- Tier derivation (076): invitee-scoped → 3, host/creator or
+  -- unattributed → 1, member-generated → 2.
+  if v_invitee is not null then
+    v_tier := 3;
+  elsif v_generator is null
+     or v_generator = (select created_by from public.rooms where id = v_room_id) then
+    v_tier := 1;
+  else
+    v_tier := 2;
   end if;
 
   -- Existing-membership branch (D6 + 018 lineage).
@@ -263,7 +288,8 @@ begin
   if v_existing_status = 'active' then
     -- Already an active member: idempotent, return the room.
     select r.name into v_room_name from public.rooms r where r.id = v_room_id;
-    return query select v_room_id, v_room_name;
+    v_status := 'already_member';
+    return query select v_room_id, v_room_name, v_status, v_tier, v_generator;
     return;
   elsif v_existing_status = 'kicked' then
     -- V0.98 — reactivation. Fresh code = implicit approval (D6).
@@ -281,31 +307,58 @@ begin
     where room_id = v_room_id
       and user_id = v_user_id;
 
-    -- The redeemed code is consumed as normal — the host must
-    -- generate a fresh code per rejoin (single-use unchanged).
-    update public.join_codes jc
-      set redeemed_at = now(), redeemed_by = v_user_id
-      where jc.code = upper(redeem_join_code.code);
+    v_status := 'joined';
 
-    return query select v_room_id, v_room_name;
-    return;
+    -- Invite reward (076 lineage): a rejoin counts as a fresh join
+    -- through this generator's code, so the inviter is credited
+    -- again — same self-invite guard as 076.
+    if v_generator is not null and v_generator <> v_user_id then
+      update public.room_memberships m
+         set points_balance = m.points_balance + 50
+       where m.room_id = v_room_id and m.user_id = v_generator;
+
+      insert into public.transactions (
+        room_id, member_id, kind, amount_points, meta, created_by
+      ) values (
+        v_room_id, v_generator, 'invite_reward', 50,
+        jsonb_build_object('invitee', v_user_id, 'code', upper(p_code)),
+        v_user_id
+      );
+    end if;
+  else
+    -- No prior row: new member. Look up the per-room join starting
+    -- bonus and insert.
+    select r.name, r.join_starting_bonus
+      into v_room_name, v_bonus
+    from public.rooms r
+    where r.id = v_room_id;
+
+    insert into public.room_memberships (room_id, user_id, role, points_balance, membership_status, invited_by, invite_tier)
+    values (v_room_id, v_user_id, 'member', v_bonus, 'active', v_generator, v_tier);
+    v_status := 'joined';
+
+    -- Invite reward (076 lineage), first join only.
+    if v_generator is not null and v_generator <> v_user_id then
+      update public.room_memberships m
+         set points_balance = m.points_balance + 50
+       where m.room_id = v_room_id and m.user_id = v_generator;
+
+      insert into public.transactions (
+        room_id, member_id, kind, amount_points, meta, created_by
+      ) values (
+        v_room_id, v_generator, 'invite_reward', 50,
+        jsonb_build_object('invitee', v_user_id, 'code', upper(p_code)),
+        v_user_id
+      );
+    end if;
   end if;
-
-  -- No prior row: new member. Look up the per-room join starting
-  -- bonus and insert.
-  select r.name, r.join_starting_bonus
-    into v_room_name, v_bonus
-  from public.rooms r
-  where r.id = v_room_id;
-
-  insert into public.room_memberships (room_id, user_id, role, points_balance, membership_status)
-    values (v_room_id, v_user_id, 'member', v_bonus, 'active');
 
   update public.join_codes jc
     set redeemed_at = now(), redeemed_by = v_user_id
-    where jc.code = upper(redeem_join_code.code);
+    where jc.code = upper(p_code);
 
-  return query select v_room_id, v_room_name;
+  select r.name into v_room_name from public.rooms r where r.id = v_room_id;
+  return query select v_room_id, v_room_name, v_status, v_tier, v_generator;
 end;
 $$;
 
