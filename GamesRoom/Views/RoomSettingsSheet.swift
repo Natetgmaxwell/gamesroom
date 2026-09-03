@@ -1089,9 +1089,6 @@ struct RoomSettingsMembersSheet: View {
             }
             if isHost {
                 Section {
-                    Text("Team labels group members on the leaderboard for the season. Leave blank to clear.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     if let selfRow = roster.first(where: { $0.userId == currentUserId }), selfRow.role == .host {
                         Text("To leave the room, ask another host to demote you.")
                             .font(Theme.Typography.caption)
@@ -1155,9 +1152,11 @@ struct RoomSettingsMembersSheet: View {
     private func memberRow(_ member: Member) -> some View {
         let isSelf = member.userId == currentUserId
         if isHost && member.role != .host && !isSelf {
-            // Member row (host viewing a non-host member): editable
-            // Team label + (new in V0.91) a context menu for
-            // promote-to-host.
+            // Member row (host viewing a non-host member): V0.91
+            // promoted a context menu for promote-to-host; V0.98
+            // upgrades to a visible trailing "···" menu button and
+            // removes the Team field (D4 — team input dropped, the
+            // column + RPC stay).
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(member.displayName)
@@ -1168,15 +1167,6 @@ struct RoomSettingsMembersSheet: View {
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
                 Spacer()
-                TextField("Team", text: teamBinding(for: member))
-                    .font(Theme.Typography.caption)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 120)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
-                    .onSubmit {
-                        Task { await commitTeam(member) }
-                    }
             }
             .contextMenu {
                 Button {
@@ -1190,7 +1180,8 @@ struct RoomSettingsMembersSheet: View {
             }
         } else if isHost && member.role == .host && !isSelf {
             // Host row (host viewing another host): static display
-            // + a context menu for demote-to-member.
+            // + a context menu for demote-to-member. V0.98 drops
+            // the Team field (D4 — see member-row comment).
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(member.displayName)
@@ -1201,15 +1192,6 @@ struct RoomSettingsMembersSheet: View {
                         .foregroundStyle(Theme.Palette.accent)
                 }
                 Spacer()
-                TextField("Team", text: teamBinding(for: member))
-                    .font(Theme.Typography.caption)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 120)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
-                    .onSubmit {
-                        Task { await commitTeam(member) }
-                    }
             }
             .contextMenu {
                 Button(role: .destructive) {
@@ -1252,40 +1234,6 @@ struct RoomSettingsMembersSheet: View {
                                      ? Theme.Palette.accent
                                      : Theme.Palette.primaryText.opacity(0.55))
             }
-        }
-    }
-
-    /// Local editable copy of the member's team label. The roster
-    /// cache is the source of truth; the field commits on submit.
-    private func teamBinding(for member: Member) -> Binding<String> {
-        Binding(
-            get: { member.team ?? "" },
-            set: { newValue in
-                if let idx = roster.firstIndex(where: { $0.userId == member.userId }) {
-                    roster[idx] = Member(
-                        id: roster[idx].id,
-                        roomId: roster[idx].roomId,
-                        userId: roster[idx].userId,
-                        role: roster[idx].role,
-                        joinedAt: roster[idx].joinedAt,
-                        lastSeenAt: roster[idx].lastSeenAt,
-                        displayName: roster[idx].displayName,
-                        socialPreference: roster[idx].socialPreference,
-                        team: newValue.isEmpty ? nil : newValue
-                    )
-                }
-            }
-        )
-    }
-
-    private func commitTeam(_ member: Member) async {
-        let team = member.team
-        do {
-            try await roomService.setMemberTeam(roomId: room.id, memberId: member.userId, team: team)
-        } catch {
-            // Service already populated lastError; the field keeps
-            // the local value so the host can retry.
-            _ = error
         }
     }
 
