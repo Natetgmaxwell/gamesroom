@@ -1153,7 +1153,8 @@ struct RoomSettingsMembersSheet: View {
         let isSelf = member.userId == currentUserId
         if isHost && member.role != .host && !isSelf {
             // Member row (host viewing a non-host member): name +
-            // role, plus (V0.91) a context menu for promote-to-host.
+            // role + a V0.98 visible "···" trailing menu with the
+            // actions the caller can take (promote, kick).
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(member.displayName)
@@ -1164,20 +1165,11 @@ struct RoomSettingsMembersSheet: View {
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
                 Spacer()
-            }
-            .contextMenu {
-                Button {
-                    pendingChange = PendingRoleChange(
-                        member: member,
-                        action: .promote
-                    )
-                } label: {
-                    Label("Make host", systemImage: "person.badge.shield.checkmark.fill")
-                }
+                rowMenu(for: member, role: .member)
             }
         } else if isHost && member.role == .host && !isSelf {
-            // Host row (host viewing another host): static display
-            // + a context menu for demote-to-member.
+            // Host row (host viewing another host): name + role
+            // + a V0.98 visible "···" trailing menu (demote).
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(member.displayName)
@@ -1188,16 +1180,7 @@ struct RoomSettingsMembersSheet: View {
                         .foregroundStyle(Theme.Palette.accent)
                 }
                 Spacer()
-            }
-            .contextMenu {
-                Button(role: .destructive) {
-                    pendingChange = PendingRoleChange(
-                        member: member,
-                        action: .demote
-                    )
-                } label: {
-                    Label("Demote to member", systemImage: "person.fill.xmark")
-                }
+                rowMenu(for: member, role: .host)
             }
         } else if isSelf && member.role == .host {
             // Caller's own row, when the caller is the host.
@@ -1231,6 +1214,56 @@ struct RoomSettingsMembersSheet: View {
                                      : Theme.Palette.primaryText.opacity(0.55))
             }
         }
+    }
+
+    /// V0.98 — visible trailing "···" menu on rows the caller can
+    /// manage. Replaces the V0.91 hidden context menu so the host
+    /// doesn't need a long-press to discover host tools. The menu
+    /// contents vary by the row's current role (member → promote /
+    /// kick; host → demote). Slice 3 will add "Remove from room" to
+    /// the member-row menu; the action enum already carries `.kick`.
+    @ViewBuilder
+    private func rowMenu(for member: Member, role: MemberRowRole) -> some View {
+        Menu {
+            switch role {
+            case .member:
+                Button {
+                    pendingChange = PendingRoleChange(
+                        member: member,
+                        action: .promote
+                    )
+                } label: {
+                    Label("Make host", systemImage: "person.badge.shield.checkmark.fill")
+                }
+            case .host:
+                Button(role: .destructive) {
+                    pendingChange = PendingRoleChange(
+                        member: member,
+                        action: .demote
+                    )
+                } label: {
+                    Label("Demote to member", systemImage: "person.fill.xmark")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.6))
+                .frame(width: 32, height: 32, alignment: .trailing)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Manage \(member.displayName)")
+    }
+
+    /// V0.98 — which set of manage-actions a row should expose in
+    /// its trailing menu. Tracks the row's *current* role, not the
+    /// caller's: a host row always shows demote, a member row always
+    /// shows promote (+ kick in slice 3), even if the caller is the
+    /// room host. Tells the menu which branch of the switch to
+    /// render without leaking the caller's role through the helper.
+    private enum MemberRowRole {
+        case member
+        case host
     }
 
     /// V0.91 — fire the confirmed role change. On success the
