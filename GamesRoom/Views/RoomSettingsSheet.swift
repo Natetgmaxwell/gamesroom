@@ -1152,11 +1152,12 @@ struct RoomSettingsMembersSheet: View {
     private func memberRow(_ member: Member) -> some View {
         let isSelf = member.userId == currentUserId
         if isHost && member.role != .host && !isSelf {
-            // Member row (host viewing a non-host member): V0.91
-            // promoted a context menu for promote-to-host; V0.98
-            // upgrades to a visible trailing "···" menu button and
-            // removes the Team field (D4 — team input dropped, the
-            // column + RPC stay).
+            // Member row (host viewing a non-host member): V0.98
+            // upgrades the V0.91 hidden context menu to a visible
+            // trailing "···" Menu button. The D4 team field is gone.
+            // The pendingChange confirm-alert pattern is preserved
+            // verbatim — the menu's Button cannot own the dialog,
+            // so the alert lives at the body level.
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(member.displayName)
@@ -1167,22 +1168,27 @@ struct RoomSettingsMembersSheet: View {
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
                 Spacer()
-            }
-            .contextMenu {
-                Button {
-                    pendingChange = PendingRoleChange(
-                        member: member,
-                        action: .promote
-                    )
+                Menu {
+                    Button {
+                        pendingChange = PendingRoleChange(
+                            member: member,
+                            action: .promote
+                        )
+                    } label: {
+                        Label("Make host", systemImage: "person.badge.shield.checkmark.fill")
+                    }
                 } label: {
-                    Label("Make host", systemImage: "person.badge.shield.checkmark.fill")
+                    Image(systemName: "ellipsis.circle")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
+                .accessibilityLabel("Manage \(member.displayName)")
             }
         } else if isHost && member.role == .host && !isSelf {
-            // Host row (host viewing another host): static display
-            // + a context menu for demote-to-member. V0.98 drops
-            // the Team field (D4 — see member-row comment).
-            HStack {
+            // Host row (host viewing another host): V0.98 visible
+            // "···" Menu button. Demote is destructive. Slice 3 adds
+            // "Remove from room" to this same menu.
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(member.displayName)
                         .font(Theme.Typography.body)
@@ -1192,16 +1198,21 @@ struct RoomSettingsMembersSheet: View {
                         .foregroundStyle(Theme.Palette.accent)
                 }
                 Spacer()
-            }
-            .contextMenu {
-                Button(role: .destructive) {
-                    pendingChange = PendingRoleChange(
-                        member: member,
-                        action: .demote
-                    )
+                Menu {
+                    Button(role: .destructive) {
+                        pendingChange = PendingRoleChange(
+                            member: member,
+                            action: .demote
+                        )
+                    } label: {
+                        Label("Demote to member", systemImage: "person.fill.xmark")
+                    }
                 } label: {
-                    Label("Demote to member", systemImage: "person.fill.xmark")
+                    Image(systemName: "ellipsis.circle")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
+                .accessibilityLabel("Manage \(member.displayName)")
             }
         } else if isSelf && member.role == .host {
             // Caller's own row, when the caller is the host.
