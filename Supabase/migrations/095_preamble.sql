@@ -1,0 +1,13 @@
+-- =================================================================
+-- 095 part 2 — per-function guard regeneration (GENERATED).
+-- Source: scripts/make_095_guards.py against the LIVE pg_proc bodies.
+-- Each function keeps its live signature/attributes; the only textual
+-- change is the host guard:
+--     <alias.>created_by = v_caller
+--   becomes
+--     (<alias.>created_by = v_caller OR public.is_room_host(<alias>.id, v_caller))
+-- (OR-shape, not replacement: preserves creator access during the
+-- transition window and makes the migration purely additive — no room
+-- loses access, hosts only gain it. A later cleanup can drop the
+-- created_by arm once every room's hosts are confirmed.)
+-- =================================================================
