@@ -648,6 +648,82 @@ final class RoomService: ObservableObject {
         return rows
     }
 
+    /// V0.98 — host removes a member from the room via the
+    /// `remove_room_member` RPC (migration 093). Status change,
+    /// never row delete (D1): the kicked row is preserved so the
+    /// ledger, season score, points balance, arcs and awards all
+    /// survive. The five guards surface as typed `HostKickError`
+    /// cases the view can render inline:
+    ///   - not_authorized: caller is not a host role in this room
+    ///   - not_found: target is not a member of this room
+    ///   - is_host: target is a host; demote first
+    ///   - is_self: target is the caller; use leave_room instead
+    ///   - activeDeposit: target has a held deposit on a live event
+    ///
+    /// On success: replaces the cached roster with the RPC's
+    /// returned set (active-only) and refreshes the rooms cache so
+    /// the kicked room vanishes from the caller's own list (D2).
+    /// `lastError` is cleared; on error it's populated with the
+    /// server message so the existing transferError alert path
+    /// can surface it.
+    func kickMember(
+        roomId: UUID,
+        targetUserId: UUID
+    ) async throws -> [Member] {
+        let rows: [Member]
+        do {
+            rows = try await store.kickMember(
+                roomId: roomId,
+                targetUserId: targetUserId
+            )
+        } catch {
+            // Map the live RPC's exception strings to typed cases.
+            // The Postgres `RAISE EXCEPTION` message is the prefix
+            // before the first colon; the rest is human detail that
+            // `errorDescription` covers.
+            let message = error.localizedDescription.lowercased()
+            if message.contains("not_authorized") {
+                self.lastError = HostKickError.notAuthorized.errorDescription
+                throw HostKickError.notAuthorized
+            }
+            if message.contains("not_found") {
+                let detail = HostKickError.notFound("target is not a member of this room")
+                self.lastError = detail.errorDescription
+                throw detail
+            }
+            if message.contains("is_host") {
+                self.lastError = HostKickError.isHost.errorDescription
+                throw HostKickError.isHost
+            }
+            if message.contains("is_self") {
+                self.lastError = HostKickError.isSelf.errorDescription
+                throw HostKickError.isSelf
+            }
+            if message.contains("active_deposit") {
+                // Server message is the human detail — "settle the
+                // night before removing this member" or similar.
+                let detail = HostKickError.activeDeposit(
+                    error.localizedDescription
+                )
+                self.lastError = detail.errorDescription
+                throw detail
+            }
+            // In-memory preview errors are already typed; rethrow.
+            if error is HostKickError { throw error }
+            self.lastError = error.localizedDescription
+            throw error
+        }
+        // Success: rebuild the cache from the authoritative active-
+        // only roster. Invalidate the rooms cache so the next
+        // get_my_rooms-style read pulls the kicked room out of the
+        // caller's own list (D2).
+        self.membersByRoom[roomId] = rows
+        cacheTimestamps.removeValue(forKey: "roomMembers:\(roomId.uuidString)")
+        self.lastError = nil
+        await refresh()
+        return rows
+    }
+
     /// Loads the per-round breakdown for one event into the cache.
     /// Returns the cached value (possibly empty). Called from
     /// `RoomDetailView` when the leaderboard's per-round section

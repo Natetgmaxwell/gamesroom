@@ -1220,8 +1220,9 @@ struct RoomSettingsMembersSheet: View {
     /// manage. Replaces the V0.91 hidden context menu so the host
     /// doesn't need a long-press to discover host tools. The menu
     /// contents vary by the row's current role (member → promote /
-    /// kick; host → demote). Slice 3 will add "Remove from room" to
-    /// the member-row menu; the action enum already carries `.kick`.
+    /// kick; host → demote). Member rows carry the destructive kick
+    /// entry; host rows don't (one tool per row — D5: demote first
+    /// before kick is even possible server-side).
     @ViewBuilder
     private func rowMenu(for member: Member, role: MemberRowRole) -> some View {
         Menu {
@@ -1234,6 +1235,14 @@ struct RoomSettingsMembersSheet: View {
                     )
                 } label: {
                     Label("Make host", systemImage: "person.badge.shield.checkmark.fill")
+                }
+                Button(role: .destructive) {
+                    pendingChange = PendingRoleChange(
+                        member: member,
+                        action: .kick
+                    )
+                } label: {
+                    Label("Remove from room", systemImage: "person.slash.fill")
                 }
             case .host:
                 Button(role: .destructive) {
@@ -1271,17 +1280,31 @@ struct RoomSettingsMembersSheet: View {
     /// (replaced with the authoritative server-side set), so the
     /// row re-renders immediately. On error we surface the message
     /// via the sheet-level alert so the user sees the reason
-    /// (`lastHost` is the canonical case).
+    /// (`lastHost` is the canonical case). V0.98 also routes the
+    /// `.kick` action through `RoomService.kickMember` so the same
+    /// `pendingChange` payload drives the destructive remove flow
+    /// with the same confirm-alert plumbing.
     private func applyPendingChange(_ change: PendingRoleChange) async {
         pendingChange = nil
         do {
-            let rows = try await roomService.transferHostRole(
-                roomId: room.id,
-                targetUserId: change.member.userId,
-                action: change.action
-            )
+            let rows: [Member]
+            switch change.action {
+            case .promote, .demote:
+                rows = try await roomService.transferHostRole(
+                    roomId: room.id,
+                    targetUserId: change.member.userId,
+                    action: change.action
+                )
+            case .kick:
+                rows = try await roomService.kickMember(
+                    roomId: room.id,
+                    targetUserId: change.member.userId
+                )
+            }
             roster = rows
         } catch let error as HostRoleTransferError {
+            transferError = error.errorDescription
+        } catch let error as HostKickError {
             transferError = error.errorDescription
         } catch {
             transferError = error.localizedDescription
@@ -1291,7 +1314,11 @@ struct RoomSettingsMembersSheet: View {
 
 /// V0.91 — payload that drives the role-change confirmation alert.
 /// Identifies which member the action targets and which direction
-/// (promote/demote) the alert copy is for.
+/// (promote/demote) the alert copy is for. V0.98 adds `.kick` so
+/// the same `pendingChange` confirm-alert plumbing carries the
+/// destructive remove-from-room action through the same sheet-level
+/// `.alert` modifier (the existing reason context menus were
+/// awkward).
 private struct PendingRoleChange: Identifiable {
     let id = UUID()
     let member: Member
@@ -1301,6 +1328,7 @@ private struct PendingRoleChange: Identifiable {
         switch action {
         case .promote: return "Make \(member.displayName) host?"
         case .demote: return "Demote \(member.displayName)?"
+        case .kick: return "Remove \(member.displayName) from the room?"
         }
     }
 
@@ -1310,6 +1338,8 @@ private struct PendingRoleChange: Identifiable {
             return "You'll both have host powers. You can demote them later."
         case .demote:
             return "They'll lose host tools. The room will still have you."
+        case .kick:
+            return "Their nights stay in the ledger. They can rejoin later with a new invite code."
         }
     }
 
@@ -1317,6 +1347,7 @@ private struct PendingRoleChange: Identifiable {
         switch action {
         case .promote: return "Make host"
         case .demote: return "Demote"
+        case .kick: return "Remove"
         }
     }
 }

@@ -109,6 +109,26 @@ protocol RoomStore: Sendable {
         action: HostRoleAction
     ) async throws -> [Member]
 
+    /// V0.98 — host removes a member from the room. Status change,
+    /// never row delete (D1): the kicked row is preserved so the
+    /// ledger, season score, points balance, arcs and awards all
+    /// survive. Caller must be an active host role (NOT
+    /// rooms.created_by — multi-host is inherited). Five guards
+    /// surfaced via `HostKickError`: not_authorized, not_found,
+    /// is_host, is_self, active_deposit. Held deposits on future
+    /// events are auto-refunded by the RPC; past/live events block
+    /// the kick until the host settles.
+    ///
+    /// Returns the active-only roster so iOS can rebuild the
+    /// members cache from a single round-trip.
+    ///
+    /// Server side: `remove_room_member(p_room_id, p_target_user_id)`
+    /// (migration 093).
+    func kickMember(
+        roomId: UUID,
+        targetUserId: UUID
+    ) async throws -> [Member]
+
     /// The per-round submissions for one event, oldest round first.
     /// Room scope derives from the event (F-IDENT-01).
     ///
@@ -485,13 +505,18 @@ protocol RoomStore: Sendable {
     func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async throws
 }
 
-/// V0.91 — the role-change action the host applies to a room
-/// member via `transferHostRole(roomId:targetUserId:action:)`.
-/// `rawValue` is the `p_action` string passed to the
-/// `transfer_host_role` RPC (migration 091).
+/// V0.91 — the action the host applies to a room member via
+/// `transferHostRole(roomId:targetUserId:action:)` or
+/// `kickMember(roomId:targetUserId:)`. `promote` and `demote` are
+/// the `p_action` string passed to the `transfer_host_role` RPC
+/// (migration 091). `.kick` is V0.98's destructive remove action
+/// — its own RPC, no string action, but lives here so the same
+/// `PendingRoleChange` payload can carry every per-row action the
+/// host can take.
 enum HostRoleAction: String {
     case promote
     case demote
+    case kick
 }
 
 /// V0.91 — synthetic errors the in-memory store raises so the
@@ -515,6 +540,38 @@ enum HostRoleTransferError: Error, LocalizedError, Equatable {
         case .notAuthorized:
             return "You're not a host in this room."
         case .notFound(let detail):
+            return detail
+        }
+    }
+}
+
+/// V0.98 — synthetic errors for the kick path. Mirrors the
+/// `HostRoleTransferError` shape: the live RPC raises `RAISE
+/// EXCEPTION` strings (`not_authorized`, `not_found`, `is_host`,
+/// `is_self`, `active_deposit`); the service-side mapping in
+/// `RoomService.kickMember` parses those into typed cases. The
+/// in-memory store raises them directly so previews exercise the
+/// same branches. The `activeDeposit` case carries the server's
+/// "settle the night" message verbatim so the host sees the
+/// reason.
+enum HostKickError: Error, LocalizedError, Equatable {
+    case notAuthorized
+    case notFound(String)
+    case isHost
+    case isSelf
+    case activeDeposit(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthorized:
+            return "You're not a host in this room."
+        case .notFound(let detail):
+            return detail
+        case .isHost:
+            return "Demote the target to member before removing them."
+        case .isSelf:
+            return "You can't remove yourself. Demote first, then ask another host to remove you."
+        case .activeDeposit(let detail):
             return detail
         }
     }

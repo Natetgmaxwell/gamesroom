@@ -357,6 +357,28 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         return rows
     }
 
+    /// V0.98 — the live RPC `remove_room_member(p_room_id,
+    /// p_target_user_id)` (migration 093) marks a member as kicked
+    /// (status change, not row delete — D1). The five guards live
+    /// in the function: not_authorized, not_found, is_host, is_self,
+    /// active_deposit. Held deposits on future events are
+    /// auto-refunded server-side; past/live events block the kick
+    /// until the host settles the night. Returns the active-only
+    /// roster so iOS rebuilds the cache from a single round-trip.
+    func kickMember(
+        roomId: UUID,
+        targetUserId: UUID
+    ) async throws -> [Member] {
+        let rows: [Member] = try await SupabaseClientProvider.shared
+            .rpc("remove_room_member", params: [
+                "p_room_id": roomId.uuidString,
+                "p_target_user_id": targetUserId.uuidString
+            ])
+            .execute()
+            .value
+        return rows
+    }
+
     /// The live RPC `get_event_rounds(p_event_id)` (migration 049)
     /// returns the per-round submissions for one event, oldest round
     /// first. Room scope derives from the event (F-IDENT-01).

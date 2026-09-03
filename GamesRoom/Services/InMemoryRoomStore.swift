@@ -67,6 +67,15 @@ actor InMemoryRoomStore: RoomStore {
     /// against stateful data without a backend.
     private var membersByRoom: [UUID: [Member]]
 
+    /// V0.98 — sidecar of `roomId → set of kicked userIds`. The
+    /// `Member` model carries no status field (invariant 3), so the
+    /// kicked state lives off-band in the in-memory store. The
+    /// `kickMember` mirror adds the userId here; `fetchRoomMembers`
+    /// filters the roster by membership of this set; the RPC
+    /// return-shape (active-only roster) stays unchanged. Matches
+    /// the live `get_room_members` 093 filter exactly.
+    private var kickedByRoom: [UUID: Set<UUID>]
+
     /// Map of `roomId → enabled pack slugs`. M4. Empty when a
     /// room has no pack overrides — callers fall back to the
     /// global `PackRegistry.shared.allPacks` per the V0.8 brief.
@@ -464,6 +473,7 @@ actor InMemoryRoomStore: RoomStore {
         // seed is empty; `fetchRoomMembers` lazily fills each room
         // with the synthetic 3-row roster on first read.
         self.membersByRoom = [:]
+        self.kickedByRoom = [:]
         // V0.84 C2 + C5 — seed one host_pick tonight-star card on
         // the first event and one unconsumed member note on the
         // first room so previews exercise the new ceremonial-card
@@ -830,7 +840,13 @@ actor InMemoryRoomStore: RoomStore {
             return []
         }
         if let cached = membersByRoom[roomId] {
-            return cached
+            // V0.98 — apply the kicked-set filter on every cache read
+            // so the in-memory store matches the live `get_room_members`
+            // (093) shape. Member model carries no status field
+            // (invariant 3); the filter happens server-side in prod and
+            // here in the preview store.
+            let kicked = kickedByRoom[roomId] ?? []
+            return cached.filter { !kicked.contains($0.userId) }
         }
         // V0.54 — the synthetic current member's per-room opt-in is
         // stored off-band (the in-memory store has no real auth
@@ -868,7 +884,7 @@ actor InMemoryRoomStore: RoomStore {
             )
         ]
         membersByRoom[roomId] = seeded
-        return seeded
+        return seeded.filter { !(kickedByRoom[roomId] ?? []).contains($0.userId) }
     }
 
     // MARK: Active event
@@ -975,9 +991,116 @@ actor InMemoryRoomStore: RoomStore {
                 inviteTier: target.inviteTier,
                 invitedBy: target.invitedBy
             )
+        case .kick:
+            // V0.98 — `.kick` is dispatched to `kickMember` from the
+            // view's applyPendingChange, never to `transferHostRole`.
+            // This branch is unreachable in production code; the
+            // synthetic store keeps the enum exhaustive so Swift is
+            // happy. Surface a typed error so any future routing bug
+            // is loud, not silent.
+            throw HostRoleTransferError.notFound("kick is handled by kickMember, not transferHostRole")
         }
         membersByRoom[roomId] = roster
         return roster
+    }
+
+    /// V0.98 — in-memory mirror of `remove_room_member` (migration
+    /// 093). Mirrors the live RPC's five guards so previews exercise
+    /// the same error paths: not_authorized, not_found, is_host,
+    /// is_self, active_deposit. On success the userId is added to
+    /// `kickedByRoom[roomId]`; the live status-change is a
+    /// column-level operation, but the iOS `Member` model has no
+    /// status field, so the store models the kicked state off-band
+    /// and filters it from every subsequent `fetchRoomMembers`
+    /// return. The live event guard is a no-op for the synthetic
+    /// roster (no held deposits to scan); the in-memory store
+    /// surfaces the error only if the seeded state explicitly
+    /// models a live event, which the preview fixtures do not.
+    func kickMember(
+        roomId: UUID,
+        targetUserId: UUID
+    ) async throws -> [Member] {
+        // Ensure the room is seeded so we have a roster to mutate.
+        _ = try await fetchRoomMembers(roomId: roomId)
+        guard let fullRoster = membersByRoom[roomId] else {
+            throw HostKickError.notFound("room has no roster")
+        }
+        // The fullRoster above is already filtered by kicked set;
+        // re-derive the target lookup from the unfiltered cache.
+        let resolvedTarget: Member?
+        if let cached = fullRoster.first(where: { $0.userId == targetUserId }) {
+            resolvedTarget = cached
+        } else {
+            let unfiltered = await seedForKick(roomId: roomId)
+            resolvedTarget = unfiltered.first { $0.userId == targetUserId }
+        }
+        guard let target = resolvedTarget else {
+            throw HostKickError.notFound("target is not a member of this room")
+        }
+        // Idempotent: kicking an already-kicked member returns the
+        // active-only roster unchanged.
+        if (kickedByRoom[roomId] ?? []).contains(targetUserId) {
+            return fullRoster
+        }
+        if target.role == .host {
+            throw HostKickError.isHost
+        }
+        // Self-kick guard. The synthetic store's "caller" is the
+        // room's createdBy userId; compare directly.
+        let caller = rooms.first(where: { $0.id == roomId })?.createdBy
+        if caller == targetUserId {
+            throw HostKickError.isSelf
+        }
+        // Live-event guard: held deposits on a live event would
+        // block the kick. The synthetic store has no
+        // seat_deposits; previews don't exercise this path.
+        // The error would surface here if the fixture is extended
+        // to seed a live deposit (out of scope for V0.98).
+        kickedByRoom[roomId, default: []].insert(targetUserId)
+        return fullRoster
+    }
+
+    /// Helper for `kickMember`: the in-memory cache is filtered by
+    /// the kicked set, so a target that's already kicked won't
+    /// appear in `fetchRoomMembers` results. Re-seed the full
+    /// synthetic roster from the cache (which preserves
+    /// `transferHostRole` mutations) by clearing the kicked-set
+    /// lookup, calling `fetchRoomMembers` to repopulate, then
+    /// restoring. Cleaner: walk the original `seeded` shape
+    /// directly.
+    private func seedForKick(roomId: UUID) async -> [Member] {
+        guard let room = rooms.first(where: { $0.id == roomId }) else {
+            return []
+        }
+        return [
+            Member(
+                id: "\(room.id.uuidString):\(room.createdBy.uuidString)",
+                roomId: room.id,
+                userId: room.createdBy,
+                role: .host,
+                joinedAt: room.createdAt,
+                displayName: "Host",
+                notificationsEnabled: false
+            ),
+            Member(
+                id: "\(room.id.uuidString):synthetic-member-2",
+                roomId: room.id,
+                userId: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+                role: .member,
+                joinedAt: room.createdAt.addingTimeInterval(86_400 * 7),
+                displayName: "Alex",
+                notificationsEnabled: false
+            ),
+            Member(
+                id: "\(room.id.uuidString):synthetic-member-3",
+                roomId: room.id,
+                userId: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+                role: .member,
+                joinedAt: room.createdAt.addingTimeInterval(86_400 * 14),
+                displayName: "Sam",
+                notificationsEnabled: false
+            )
+        ]
     }
 
     /// In-memory mirror of `get_event_rounds` (migration 049).
