@@ -791,12 +791,12 @@ final class RoomService: ObservableObject {
     /// members on it don't see the event or receive the briefing
     /// push.
     @discardableResult
-    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String, hiddenFromUserIds: [UUID] = []) async throws -> UUID {
+    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlugs: [String], hiddenFromUserIds: [UUID] = []) async throws -> UUID {
         let newId = try await store.addEvent(
             roomId: roomId,
             name: name,
             playedAt: playedAt,
-            packSlug: packSlug,
+            packSlugs: packSlugs,
             hiddenFromUserIds: hiddenFromUserIds
         )
         self.lastError = nil
@@ -821,7 +821,8 @@ final class RoomService: ObservableObject {
                     name: name,
                     playedAt: playedAt,
                     createdAt: Date(),
-                    packSlug: packSlug
+                    packSlugs: packSlugs,
+                    packSlug: packSlugs.first ?? "casino"
                 )
                 await CalendarService.shared.addEvent(
                     room: room,

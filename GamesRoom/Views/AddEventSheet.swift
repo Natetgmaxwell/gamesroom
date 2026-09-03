@@ -55,7 +55,10 @@ struct AddEventSheet: View {
 
     @State private var name: String = ""
     @State private var playedAt: Date = AddEventSheet.defaultPlayedAt()
-    @State private var packSlug: String = AddEventSheet.initialPackSlug
+    /// V0.95 G — multi-select packs. First entry is the primary pack
+    /// (drives the legacy pack_slug column + hero CTA flavour).
+    @State private var packSlugs: [String] = [AddEventSheet.initialPackSlug]
+
 
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
@@ -82,16 +85,37 @@ struct AddEventSheet: View {
                 }
 
                 Section {
-                    Picker("Pack", selection: $packSlug) {
-                        ForEach(availablePacks) { option in
-                            Text(option.displayName).tag(option.slug)
+                    ForEach(availablePacks) { option in
+                        Button {
+                            // V0.95 G — multi-select. Last tap wins the
+                            // primary slot (first in the array) so the
+                            // hero CTA flavour follows the host's most
+                            // recent intent. At least one pack must
+                            // stay selected.
+                            if let idx = packSlugs.firstIndex(of: option.slug) {
+                                guard packSlugs.count > 1 else { return }
+                                packSlugs.remove(at: idx)
+                            } else {
+                                packSlugs.insert(option.slug, at: 0)
+                            }
+                        } label: {
+                            HStack {
+                                Text(option.displayName)
+                                    .foregroundStyle(Theme.Palette.primaryText)
+                                Spacer()
+                                if packSlugs.contains(option.slug) {
+                                    Image(systemName: Theme.Icon.checkmarkCircleFill)
+                                        .foregroundStyle(Theme.Palette.accent)
+                                }
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
                     .tint(Theme.Palette.accent)
                 } header: {
                     Text("Pack")
                 } footer: {
-                    Text("Pick the pack this event will use.")
+                    Text("Pick every pack the night will run. The last one you tap is the headline pack.")
                 }
 
                 Section {
@@ -201,8 +225,12 @@ struct AddEventSheet: View {
         // server catalog." Refuse unknown slugs at the form layer
         // so the host sees a clear error before the network round-
         // trip.
-        guard PackRegistry.shared.isRegistered(slug: packSlug) else {
-            errorMessage = "Unknown pack: \(packSlug). Pick one of the registered packs."
+        for slug in packSlugs where !PackRegistry.shared.isRegistered(slug: slug) {
+            errorMessage = "Unknown pack: \(slug). Pick one of the registered packs."
+            return
+        }
+        guard !packSlugs.isEmpty else {
+            errorMessage = "Pick at least one pack."
             return
         }
 
@@ -211,7 +239,7 @@ struct AddEventSheet: View {
                 roomId: roomId,
                 name: resolvedEventName,
                 playedAt: playedAt,
-                packSlug: packSlug
+                packSlugs: packSlugs
             )
             onSaved(newEventId)
             dismiss()

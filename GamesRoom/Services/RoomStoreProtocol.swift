@@ -160,7 +160,7 @@ protocol RoomStore: Sendable {
     /// `hiddenFromUserIds` is the V0.94 per-event hidden-members
     /// list — members on it don't see the event or receive its
     /// briefing push. Empty by default.
-    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String, hiddenFromUserIds: [UUID]) async throws -> UUID
+    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlugs: [String], hiddenFromUserIds: [UUID]) async throws -> UUID
 
     /// Any room member may edit the event's pre-play note + venue
     /// while the event is still in the future. Empty strings clear

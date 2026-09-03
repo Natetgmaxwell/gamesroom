@@ -65,6 +65,9 @@ struct Event: Identifiable, Codable, Hashable {
     /// The pack this event uses (V0.8). Legacy events created before
     /// the pack-slug extension decode to the default "casino" pack.
     let packSlug: String
+    /// V0.95 G — every pack selected for this event. Empty/missing
+    /// (pre-092 rows) falls back to [packSlug] at decode.
+    let packSlugs: [String]
 
     /// `true` once the host has finalized. Drives the `Scan your
     /// chips` CTA visibility on the Witness Screen.
@@ -111,6 +114,7 @@ struct Event: Identifiable, Codable, Hashable {
         case settledAt = "settled_at"
         case sessionId = "session_id"
         case packSlug = "pack_slug"
+        case packSlugs = "pack_slugs"
         case hostFinalized = "host_finalized"
         case eventCalendarIdentifier = "event_calendar_identifier"
         case hiddenFromUserIds = "hidden_from_user_ids"
@@ -128,6 +132,7 @@ struct Event: Identifiable, Codable, Hashable {
         startedAt: Date? = nil,
         settledAt: Date? = nil,
         sessionId: UUID? = nil,
+        packSlugs: [String] = [],
         packSlug: String = "casino",
         hostFinalized: Bool = false,
         eventCalendarIdentifier: String? = nil,
@@ -145,6 +150,7 @@ struct Event: Identifiable, Codable, Hashable {
         self.settledAt = settledAt
         self.sessionId = sessionId
         self.packSlug = packSlug
+        self.packSlugs = packSlugs.isEmpty ? [packSlug] : packSlugs
         self.hostFinalized = hostFinalized
         self.eventCalendarIdentifier = eventCalendarIdentifier
         self.hiddenFromUserIds = hiddenFromUserIds
@@ -168,6 +174,7 @@ struct Event: Identifiable, Codable, Hashable {
         settledAt = try c.decodeIfPresent(Date.self, forKey: .settledAt)
         sessionId = try c.decodeIfPresent(UUID.self, forKey: .sessionId)
         packSlug = try c.decodeIfPresent(String.self, forKey: .packSlug) ?? "casino"
+        packSlugs = try c.decodeIfPresent([String].self, forKey: .packSlugs) ?? [packSlug]
         hostFinalized = try c.decodeIfPresent(Bool.self, forKey: .hostFinalized) ?? false
         // V0.86 — server-side identifier (migration 087). Legacy
         // rows from before the column existed decode as nil (the
@@ -197,6 +204,7 @@ struct Event: Identifiable, Codable, Hashable {
         try c.encodeIfPresent(settledAt, forKey: .settledAt)
         try c.encodeIfPresent(sessionId, forKey: .sessionId)
         try c.encode(packSlug, forKey: .packSlug)
+        try c.encode(packSlugs, forKey: .packSlugs)
         try c.encode(hostFinalized, forKey: .hostFinalized)
         try c.encodeIfPresent(eventCalendarIdentifier, forKey: .eventCalendarIdentifier)
         // V0.94 — only encode when the server returned the column.

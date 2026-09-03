@@ -1308,7 +1308,7 @@ actor InMemoryRoomStore: RoomStore {
 
     // MARK: Event create
 
-    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String, hiddenFromUserIds: [UUID]) async throws -> UUID {
+    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlugs: [String], hiddenFromUserIds: [UUID]) async throws -> UUID {
         let new = Event(
             id: UUID(),
             roomId: roomId,
@@ -1340,7 +1340,7 @@ actor InMemoryRoomStore: RoomStore {
             seatsDeclined: 0,
             seatsUnclaimed: new.maxSeats
         )
-        _ = packSlug // unused in-memory; the real store resolves the slug server-side
+        _ = packSlugs // unused in-memory; the real store resolves the slugs server-side
         return new.id
     }
 

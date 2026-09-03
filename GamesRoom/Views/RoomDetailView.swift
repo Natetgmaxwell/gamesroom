@@ -176,6 +176,25 @@ struct RoomDetailView: View {
         return enabled.contains(CardsAgainstHumanityPack.slug)
     }
 
+    /// V0.95 G — event-level pack gate. True when `slug` was selected
+    /// on THIS event (migration 092 pack_slugs; pre-092 events fall
+    /// back to the legacy single pack_slug at decode). Replaces the
+    /// room-level proxy for in-play surfaces: a pack the host didn't
+    /// pick for tonight doesn't exist tonight.
+    private func eventHas(_ slug: String) -> Bool {
+        guard let event = activeEvent else { return false }
+        return event.packSlugs.contains(slug)
+    }
+
+    /// V0.95 G — any single-winner card pack selected on the event
+    /// (Monopoly Deal et al). Gates the host score CTA.
+    private func eventHasSingleWinnerPack() -> Bool {
+        guard let event = activeEvent else { return false }
+        return event.packSlugs.contains {
+            PackRegistry.shared.definition(for: $0)?.scoringType == .singleWinner
+        }
+    }
+
     /// V0.95 E — casino-pack mirror of `roomHasCAHPack`. Drives the
     /// secondary "Withdraw casino chips" CTA on CAH events so both
     /// withdraw paths exist during any active night.
@@ -772,7 +791,7 @@ struct RoomDetailView: View {
                     // packs only. For casino/CAH the primary settle CTA
                     // already opens the same sheet, so the host-only
                     // button is redundant there.
-                    onScore: isHost && isSingleWinnerPack(event)
+                    onScore: isHost && eventHasSingleWinnerPack()
                         ? { Task { await openHostScore(event: event) } }
                         : nil,
                     isHero: true,
@@ -785,7 +804,7 @@ struct RoomDetailView: View {
                     // renders for every active event when the room
                     // has CAH installed, so a casino night can still
                     // settle CAH cards.
-                    onCAHSettle: roomHasCAHPack
+                    onCAHSettle: eventHas(CardsAgainstHumanityPack.slug)
                         ? { cahScanEvent = event }
                         : nil,
                     // V0.68 — "Withdraw more" secondary. The member has
@@ -797,7 +816,7 @@ struct RoomDetailView: View {
                     // nights too (when the room runs the casino pack):
                     // both withdraw paths exist during any active
                     // event, per the keep-them-at-the-table rule.
-                    onWithdrawMore: (isCAH && !roomHasCasinoPack)
+                    onWithdrawMore: (isCAH && !eventHas("casino"))
                         ? nil
                         : { Task { await openWithdraw(event: event) } }
                 )
@@ -818,7 +837,7 @@ struct RoomDetailView: View {
                     // V0.68 — "Score a round" gated to single-winner
                     // packs only (see `.inPlay`). No "Withdraw more"
                     // here — withdraw is already the primary CTA.
-                    onScore: isHost && isSingleWinnerPack(event)
+                    onScore: isHost && eventHasSingleWinnerPack()
                         ? { Task { await openHostScore(event: event) } }
                         : nil,
                     isHero: true,
@@ -828,13 +847,13 @@ struct RoomDetailView: View {
                     // renders for every active event when the room
                     // has CAH installed, so a casino night can still
                     // settle CAH cards.
-                    onCAHSettle: roomHasCAHPack
+                    onCAHSettle: eventHas(CardsAgainstHumanityPack.slug)
                         ? { cahScanEvent = event }
                         : nil,
                     // V0.95 E — secondary "Withdraw casino chips" on
                     // CAH nights (room runs the casino pack): both
                     // withdraw paths live during any active event.
-                    onWithdrawMore: roomHasCasinoPack
+                    onWithdrawMore: eventHas("casino")
                         ? { Task { await openWithdraw(event: event) } }
                         : nil
                 )
@@ -883,7 +902,7 @@ struct RoomDetailView: View {
                     // V0.68 — "Score a round" gated to single-winner
                     // packs only (see `.inPlay`). No "Withdraw more" —
                     // host has finalised, settlement in progress.
-                    onScore: isHost && isSingleWinnerPack(event)
+                    onScore: isHost && eventHasSingleWinnerPack()
                         ? { Task { await openHostScore(event: event) } }
                         : nil,
                     isHero: true,

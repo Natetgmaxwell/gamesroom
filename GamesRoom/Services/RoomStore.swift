@@ -72,7 +72,10 @@ struct AddEventParams: Encodable, Sendable {
     let p_room_id: String
     let p_name: String
     let p_played_at: String
-    let p_pack_slug: String
+    /// V0.95 G — multi-pack creation (migration 092): every selected
+    /// slug; the RPC writes one junction row per slug and keeps
+    /// `pack_slug` = the first for legacy reads.
+    let p_pack_slugs: [String]
     /// V0.94 — per-event hidden members. The live RPC accepts a
     /// `uuid[]` and the encoder emits it as a JSON array. An empty
     /// array is the "no hidden members" state.
@@ -743,7 +746,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// creates the event row and returns the new id. The hidden list
     /// is the per-event "members who don't see this" filter — see
     /// migration 090.
-    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlug: String, hiddenFromUserIds: [UUID]) async throws -> UUID {
+    func addEvent(roomId: UUID, name: String, playedAt: Date, packSlugs: [String], hiddenFromUserIds: [UUID]) async throws -> UUID {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let id: UUID = try await SupabaseClientProvider.shared
@@ -751,7 +754,7 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
                 p_room_id: roomId.uuidString,
                 p_name: name,
                 p_played_at: formatter.string(from: playedAt),
-                p_pack_slug: packSlug,
+                p_pack_slugs: packSlugs,
                 p_hidden_from_user_ids: hiddenFromUserIds.map(\.uuidString)
             ))
             .execute()

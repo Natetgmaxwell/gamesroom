@@ -1600,7 +1600,7 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents stamps stale events, lea
     // window) gets closed.
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Stale Night",
-        playedAt: Date().addingTimeInterval(-3 * 86_400), packSlug: "casino",
+        playedAt: Date().addingTimeInterval(-3 * 86_400), packSlugs: ["casino"],
         hiddenFromUserIds: []
     )
     let closed = try await store.autoCloseStaleEvents(roomId: hosted.id)
@@ -1614,7 +1614,7 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents stamps stale events, lea
     // untouched.
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Fresh Night",
-        playedAt: Date().addingTimeInterval(-2 * 3600), packSlug: "casino",
+        playedAt: Date().addingTimeInterval(-2 * 3600), packSlugs: ["casino"],
         hiddenFromUserIds: []
     )
     let freshClosed = try await store.autoCloseStaleEvents(roomId: hosted.id)
@@ -1648,7 +1648,7 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents honors the room's autoCl
     )
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Two Hours Old",
-        playedAt: Date().addingTimeInterval(-2 * 3600), packSlug: "casino",
+        playedAt: Date().addingTimeInterval(-2 * 3600), packSlugs: ["casino"],
         hiddenFromUserIds: []
     )
     let closed = try await store.autoCloseStaleEvents(roomId: hosted.id)
@@ -4049,7 +4049,7 @@ runner.runAsync("V0.86: InMemoryRoomStore.addEvent stores event and fetchActiveE
         roomId: hosted.id,
         name: "Friday Night",
         playedAt: Date().addingTimeInterval(86_400),
-        packSlug: "casino",
+        packSlugs: ["casino"],
         hiddenFromUserIds: []
     )
     let fetched = try await store.fetchActiveEvent(roomId: hosted.id)
@@ -4068,7 +4068,7 @@ runner.runAsync("V0.86: reportCalendarIdentifier persists the EKEvent id on the 
         roomId: hosted.id,
         name: "Friday Night",
         playedAt: Date().addingTimeInterval(86_400),
-        packSlug: "casino",
+        packSlugs: ["casino"],
         hiddenFromUserIds: []
     )
     let ekId = "X-EK-12345-ABCDE"
@@ -4085,7 +4085,7 @@ runner.runAsync("V0.86: reportCalendarIdentifier is idempotent (second call over
         roomId: hosted.id,
         name: "Friday Night",
         playedAt: Date().addingTimeInterval(86_400),
-        packSlug: "casino",
+        packSlugs: ["casino"],
         hiddenFromUserIds: []
     )
     try await store.reportCalendarIdentifier(eventId: eventId, identifier: "OLD")
