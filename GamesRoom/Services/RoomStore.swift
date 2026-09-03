@@ -524,14 +524,24 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     /// returns the room's enabled pack slugs. Returns an empty
     /// array when no overrides exist — callers fall back to the
     /// global `PackRegistry.shared.allPacks` per the V0.8 brief.
+    /// V0.98 fix: the RPC is `RETURNS TABLE(pack_slug text)`, so
+    /// PostgREST returns OBJECTS (`[{"pack_slug": "casino"}, …]`) —
+    /// decoding that as `[String]` always threw, `loadRoomPacks`'s
+    /// catch swallowed it to `[]`, and the Operations sheet's
+    /// empty-fallback rendered ALL packs on. Writes persisted; every
+    /// relaunch lied. Decode the actual row shape instead.
     func fetchRoomPacks(roomId: UUID) async throws -> [String] {
-        let rows: [String] = try await SupabaseClientProvider.shared
+        struct PackSlugRow: Decodable {
+            let packSlug: String
+            enum CodingKeys: String, CodingKey { case packSlug = "pack_slug" }
+        }
+        let rows: [PackSlugRow] = try await SupabaseClientProvider.shared
             .rpc("get_room_packs", params: [
                 "p_room_id": roomId.uuidString
             ])
             .execute()
             .value
-        return rows
+        return rows.map(\.packSlug)
     }
 
     /// The live RPC `update_room_packs(p_room_id, p_slugs text[])`
