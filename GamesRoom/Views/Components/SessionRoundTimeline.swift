@@ -56,7 +56,7 @@ struct SessionRoundTimeline: View {
                 .font(Theme.Typography.body.weight(.semibold))
                 .foregroundStyle(Theme.Palette.primaryText)
             Text("\(sortedRounds.count)")
-                .font(Theme.Typography.caption.monospacedDigit())
+                .font(Theme.Typography.monoCaption)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 .accessibilityLabel(Text("\(sortedRounds.count) rounds logged"))
         }
@@ -139,7 +139,7 @@ private struct SessionRoundTimelineRow: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
                     Text(deltaLabel(entry.pointsDelta))
-                        .font(Theme.Typography.caption.monospacedDigit())
+                        .font(Theme.Typography.monoCaption)
                         .foregroundStyle(deltaColor(entry.pointsDelta))
                 }
             }

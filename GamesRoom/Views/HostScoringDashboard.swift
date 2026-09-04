@@ -203,8 +203,7 @@ struct HostScoringDashboard: View {
             .accessibilityLabel(Text("Previous round"))
 
             Text("\(roundIndex)")
-                .font(Theme.Typography.title)
-                .monospacedDigit()
+                .font(Theme.Typography.monoSemiboldTitle)
                 .foregroundStyle(Theme.Palette.primaryText)
                 .frame(minWidth: 56)
 

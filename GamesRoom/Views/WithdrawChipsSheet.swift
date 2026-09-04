@@ -66,7 +66,7 @@ struct WithdrawChipsSheet: View {
                                 .foregroundStyle(Theme.Palette.primaryText)
                             Spacer()
                             Text("\(balance) pts")
-                                .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
+                                .font(Theme.Typography.monoSemibold)
                                 .foregroundStyle(Theme.Palette.accent)
                         }
                         Stepper(

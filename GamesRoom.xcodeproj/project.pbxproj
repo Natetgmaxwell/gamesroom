@@ -121,6 +121,8 @@
 		AAAAAAAA00000000000000ED /* RoomGraphSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048C /* RoomGraphSummary.swift */; };
 		AAAAAAAA000000000000048F /* Fraunces-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */; };
 		AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */; };
+		AAAAAAAA0000000000000900 /* MapleMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048G /* MapleMono-Regular.ttf */; };
+		AAAAAAAA0000000000000901 /* MapleMono-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048H /* MapleMono-SemiBold.ttf */; };
 		AAAAAAAA0000000000000701 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */; };
 		AAAAAAAA0000000000000703 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000702 /* PrivacyInfo.xcprivacy */; };
 		AAAAAAAA0000000000000705 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000704 /* PrivacyInfo.xcprivacy */; };
@@ -288,6 +290,8 @@
 		AAAAAAAA000000000000048C /* RoomGraphSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomGraphSummary.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Regular.ttf; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Italic.ttf; sourceTree = "<group>"; };
+		AAAAAAAA000000000000048G /* MapleMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = MapleMono-Regular.ttf; sourceTree = "<group>"; };
+		AAAAAAAA000000000000048H /* MapleMono-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = MapleMono-SemiBold.ttf; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000702 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000704 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -339,6 +343,8 @@
 				AAAAAAAA0000000000000443 /* GamesRoom.entitlements */,
 				AAAAAAAA000000000000048D /* Fraunces-Regular.ttf */,
 				AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */,
+				AAAAAAAA000000000000048G /* MapleMono-Regular.ttf */,
+				AAAAAAAA000000000000048H /* MapleMono-SemiBold.ttf */,
 				AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */,
 			);
 			path = GamesRoom;
@@ -644,6 +650,8 @@
 				AAAAAAAA00000000000000F0 /* Assets.xcassets in Resources */,
 				AAAAAAAA000000000000048F /* Fraunces-Regular.ttf in Resources */,
 				AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */,
+				AAAAAAAA0000000000000900 /* MapleMono-Regular.ttf in Resources */,
+				AAAAAAAA0000000000000901 /* MapleMono-SemiBold.ttf in Resources */,
 				AAAAAAAA0000000000000701 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

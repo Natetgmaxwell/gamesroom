@@ -47,6 +47,8 @@
 	<array>
 		<string>Fraunces-Regular.ttf</string>
 		<string>Fraunces-Italic.ttf</string>
+		<string>MapleMono-Regular.ttf</string>
+		<string>MapleMono-SemiBold.ttf</string>
 	</array>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>

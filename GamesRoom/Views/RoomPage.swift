@@ -528,7 +528,7 @@ struct RoomPage: View {
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             Spacer()
             Text("\(roomService.rooms.count)")
-                .font(Theme.Typography.footnote.monospacedDigit())
+                .font(Theme.Typography.monoFootnote)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.40))
         }
         .padding(.horizontal, Theme.Layout.edgePadding)

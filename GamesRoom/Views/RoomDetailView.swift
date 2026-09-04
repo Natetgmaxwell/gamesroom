@@ -2242,7 +2242,7 @@ private struct WitnessSlot: View {
                             .foregroundStyle(Theme.Palette.primaryText)
                         Spacer()
                         Text(s.visionAmountPoints >= 0 ? "+\(s.visionAmountPoints)" : "\(s.visionAmountPoints)")
-                            .font(Theme.Typography.body.monospacedDigit())
+                            .font(Theme.Typography.mono)
                             .foregroundStyle(s.visionAmountPoints >= 0 ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.55))
                     }
                     .padding(.vertical, 6)
@@ -3094,7 +3094,7 @@ private struct HostWithdrawalsSection: View {
             }
             Spacer()
             Text("\(abs(txn.amountPoints)) pts")
-                .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
+                .font(Theme.Typography.monoSemibold)
                 .foregroundStyle(Theme.Palette.accent)
             Button {
                 Haptics.light()
@@ -3196,7 +3196,7 @@ private struct RoundBreakdownSection: View {
                                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
                             Spacer()
                             Text(deltaText(entry.pointsDelta))
-                                .font(Theme.Typography.caption.weight(.semibold).monospacedDigit())
+                                .font(Theme.Typography.monoCaptionSemibold)
                                 .foregroundStyle(entry.pointsDelta >= 0
                                     ? Theme.Palette.accent
                                     : Theme.Palette.primaryText.opacity(0.6))
@@ -3279,7 +3279,7 @@ private struct SeasonHistorySection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 4) {
                     Text("\(row.callerTotal)")
-                        .font(Theme.Typography.title.monospacedDigit())
+                        .font(Theme.Typography.monoSemiboldTitle)
                         .foregroundStyle(Theme.Palette.primaryText)
                     deltaCluster(d)
                 }
@@ -3310,7 +3310,7 @@ private struct SeasonHistorySection: View {
                     .font(Theme.Typography.footnote.weight(.semibold))
             }
             Text(deltaLabel(d))
-                .font(Theme.Typography.caption.weight(.semibold).monospacedDigit())
+                .font(Theme.Typography.monoCaptionSemibold)
         }
         .foregroundStyle(color)
     }
@@ -3810,7 +3810,7 @@ private struct MemberRosterReadOnly: View {
             if let code = inviteCode {
                 HStack(spacing: Theme.Layout.gutter) {
                     Text(code)
-                        .font(Theme.Typography.body.monospaced().weight(.semibold))
+                        .font(Theme.Typography.monoSemibold)
                         .foregroundStyle(Theme.Palette.accent)
                     Spacer()
                     // V0.76 — native share sheet with a prefilled

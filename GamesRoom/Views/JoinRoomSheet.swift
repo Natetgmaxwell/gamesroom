@@ -50,7 +50,7 @@ struct JoinRoomSheet: View {
                     )
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled(true)
-                    .font(Theme.Typography.title.monospaced())
+                    .font(Theme.Typography.titleMono)
                     .onChange(of: code) { _, newValue in
                         // Hard-clamp to 6 chars + uppercase. Anything
                         // pasted with whitespace gets trimmed; the

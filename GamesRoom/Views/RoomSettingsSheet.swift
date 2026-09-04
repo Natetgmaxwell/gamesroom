@@ -758,7 +758,7 @@ struct RoomSettingsSocialSheet: View {
                     Text("Host journal")
                     Spacer()
                     Text("\(hostJournal.count)/280")
-                        .font(Theme.Typography.footnote.monospacedDigit())
+                        .font(Theme.Typography.monoFootnote)
                         .foregroundStyle(hostJournal.count >= 260
                                          ? Theme.Palette.accent
                                          : Theme.Palette.primaryText.opacity(0.45))
@@ -929,7 +929,7 @@ struct RoomSettingsOperationsSheet: View {
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     } else if let shareCode {
                         Text(shareCode)
-                            .font(Theme.Typography.title.monospaced())
+                            .font(Theme.Typography.titleMono)
                             .foregroundStyle(Theme.Palette.primaryText)
                             .tracking(2)
                     } else {

@@ -44,6 +44,25 @@ enum Theme {
         static let display = Font.custom("Fraunces", size: 28)
         /// Display italic — Fraunces italic, the "kept." / "compounds." moments.
         static let displayItalic = Font.custom("Fraunces", size: 28).italic()
+        /// Mono — Maple Mono, the numeric voice (V0.99): scores, timers,
+        /// join/pack codes, ledger deltas. Rounded terminals echo the
+        /// display serif's warmth; slash zero keeps codes unambiguous.
+        /// Static weights: regular + semibold are bundled (variable axis
+        /// is NOT used — UIFontWeight mapping for custom fonts is
+        /// unreliable, so weight via the dedicated SemiBold face).
+        static let mono = Font.custom("MapleMono-Regular", size: 17)
+        /// Mono semibold — hero numerals (live scores, timer emphasis).
+        static let monoSemibold = Font.custom("MapleMono-SemiBold", size: 17)
+        /// Mono at title size — join/invite code entry + display (22pt).
+        static let titleMono = Font.custom("MapleMono-Regular", size: 22)
+        /// Mono at title size, semibold — round index / hero counters (22pt).
+        static let monoSemiboldTitle = Font.custom("MapleMono-SemiBold", size: 22)
+        /// Mono at caption size — ledger deltas, timeline stamps (13pt).
+        static let monoCaption = Font.custom("MapleMono-Regular", size: 13)
+        /// Mono at caption size, semibold (13pt).
+        static let monoCaptionSemibold = Font.custom("MapleMono-SemiBold", size: 13)
+        /// Mono at footnote size — balances, deltas in tight rows (11pt).
+        static let monoFootnote = Font.custom("MapleMono-Regular", size: 11)
         /// Title — default family, room / section title (22pt).
         static let title = Font.system(size: 22, weight: .semibold, design: .default)
         /// Body — default family, the regular reading voice (17pt).

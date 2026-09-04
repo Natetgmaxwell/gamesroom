@@ -113,11 +113,11 @@ struct LeaderboardRow: View {
     private var scoreColumn: some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text("\(score)")
-                .font(Theme.Typography.body.monospacedDigit())
+                .font(Theme.Typography.mono)
                 .foregroundStyle(Theme.Palette.primaryText)
             HStack(spacing: 6) {
                 Text(deltaLabel)
-                    .font(Theme.Typography.footnote.monospacedDigit())
+                    .font(Theme.Typography.monoFootnote)
                     .foregroundStyle(deltaColor)
                 Text("·")
                     .font(Theme.Typography.footnote)
