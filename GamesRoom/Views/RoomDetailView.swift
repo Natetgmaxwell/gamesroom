@@ -3271,7 +3271,7 @@ private struct SeasonHistorySection: View {
                         .truncationMode(.tail)
                     if showCaption {
                         Text(dateRange(row))
-                            .font(Theme.Typography.caption)
+                            .font(Theme.Typography.monoFootnote)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                             .lineLimit(1)
                     }

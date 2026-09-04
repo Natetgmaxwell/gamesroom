@@ -382,7 +382,7 @@ struct RoomPage: View {
                                     }
                                     if let arc = seasonArcLine(for: room) {
                                         Text(arc)
-                                            .font(Theme.Typography.caption)
+                                            .font(Theme.Typography.monoFootnote)
                                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                                     }
                                 }
@@ -523,8 +523,9 @@ struct RoomPage: View {
 
     private func sectionHeader(_ title: String) -> some View {
         HStack {
-            Text(title)
-                .font(Theme.Typography.caption.weight(.semibold))
+            Text(title.uppercased())
+                .font(Theme.Typography.monoCaptionSemibold)
+                .tracking(1.2)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             Spacer()
             Text("\(roomService.rooms.count)")
