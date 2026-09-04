@@ -63,6 +63,9 @@ enum Theme {
         static let monoCaptionSemibold = Font.custom("MapleMono-SemiBold", size: 13)
         /// Mono at footnote size — balances, deltas in tight rows (11pt).
         static let monoFootnote = Font.custom("MapleMono-Regular", size: 11)
+        /// Mono italic — the conservative mascot's handwriting (V0.99c).
+        /// True cursive italic forms = taught-by-nuns letterform manners.
+        static let monoItalic = Font.custom("MapleMono-Italic", size: 13)
         /// Title — default family, room / section title (22pt).
         static let title = Font.system(size: 22, weight: .semibold, design: .default)
         /// Body — default family, the regular reading voice (17pt).

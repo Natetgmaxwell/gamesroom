@@ -4336,9 +4336,14 @@ private struct MascotFooterCaption: View {
                 "\(room.mascotName) the mascot, \(resolvedRoomState.rawValue) room state"
             ))
 
-            Text(caption)
-                .font(Theme.Typography.caption.italic())
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            Text(MascotTypography.transformedText(
+                caption,
+                for: room.mascotPoliticalIdeology
+            ))
+            .font(MascotTypography.caption(
+                for: room.mascotPoliticalIdeology
+            ).font)
+            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                 // 2026-08-10 feedback round — the caption was cut off at
                 // one line. The mascot comment is the room's voice; let
                 // it wrap so the whole comment is readable.

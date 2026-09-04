@@ -107,6 +107,7 @@
 		AAAAAAAA0000000000000459 /* PackStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000458 /* PackStoreView.swift */; };
 		AAAAAAAA000000000000045D /* EditEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000045C /* EditEventSheet.swift */; };
 		AAAAAAAA0000000000000801 /* Perf.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000802 /* Perf.swift */; };
+		AAAAAAAA0000000000000905 /* MascotTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000906 /* MascotTypography.swift */; };
 		BBBBBBBB0000000000000070 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBB0000000000000450 /* SeatDeposit.swift */; };
 		AAAAAAAA000000000000047F /* HostScoringDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000480 /* HostScoringDashboard.swift */; };
 		AAAAAAAA0000000000000482 /* SessionRoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000481 /* SessionRoundTimeline.swift */; };
@@ -123,6 +124,7 @@
 		AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */; };
 		AAAAAAAA0000000000000900 /* MapleMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048G /* MapleMono-Regular.ttf */; };
 		AAAAAAAA0000000000000901 /* MapleMono-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048H /* MapleMono-SemiBold.ttf */; };
+		AAAAAAAA0000000000000902 /* MapleMono-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA000000000000048I /* MapleMono-Italic.ttf */; };
 		AAAAAAAA0000000000000701 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */; };
 		AAAAAAAA0000000000000703 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000702 /* PrivacyInfo.xcprivacy */; };
 		AAAAAAAA0000000000000705 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA0000000000000704 /* PrivacyInfo.xcprivacy */; };
@@ -292,10 +294,12 @@
 		AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fraunces-Italic.ttf; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048G /* MapleMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = MapleMono-Regular.ttf; sourceTree = "<group>"; };
 		AAAAAAAA000000000000048H /* MapleMono-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = MapleMono-SemiBold.ttf; sourceTree = "<group>"; };
+		AAAAAAAA000000000000048I /* MapleMono-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = MapleMono-Italic.ttf; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000702 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000704 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = file; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000802 /* Perf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Perf.swift; sourceTree = "<group>"; };
+		AAAAAAAA0000000000000906 /* MascotTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotTypography.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000493 /* ScanSettleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleService.swift; sourceTree = "<group>"; };
 		AAAAAAAA0000000000000497 /* ScanSettleResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleResult.swift; sourceTree = "<group>"; };
 		AAAAAAAA000000000000049B /* MascotVoiceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotVoiceService.swift; sourceTree = "<group>"; };
@@ -345,6 +349,7 @@
 				AAAAAAAA000000000000048E /* Fraunces-Italic.ttf */,
 				AAAAAAAA000000000000048G /* MapleMono-Regular.ttf */,
 				AAAAAAAA000000000000048H /* MapleMono-SemiBold.ttf */,
+				AAAAAAAA000000000000048I /* MapleMono-Italic.ttf */,
 				AAAAAAAA0000000000000700 /* PrivacyInfo.xcprivacy */,
 			);
 			path = GamesRoom;
@@ -470,6 +475,7 @@
 			isa = PBXGroup;
 			children = (
 				AAAAAAAA0000000000000802 /* Perf.swift */,
+				AAAAAAAA0000000000000906 /* MascotTypography.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -652,6 +658,7 @@
 				AAAAAAAA0000000000000490 /* Fraunces-Italic.ttf in Resources */,
 				AAAAAAAA0000000000000900 /* MapleMono-Regular.ttf in Resources */,
 				AAAAAAAA0000000000000901 /* MapleMono-SemiBold.ttf in Resources */,
+				AAAAAAAA0000000000000902 /* MapleMono-Italic.ttf in Resources */,
 				AAAAAAAA0000000000000701 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -731,6 +738,7 @@ AAAAAAAA0000000000000A702 /* MascotConfigSection.swift in Sources */,
 				AAAAAAAA0000000000000119 /* RealtimeEventService.swift in Sources */,
 				AAAAAAAA0000000000000060 /* StorageKeys.swift in Sources */,
 				AAAAAAAA0000000000000801 /* Perf.swift in Sources */,
+				AAAAAAAA0000000000000905 /* MascotTypography.swift in Sources */,
 				AAAAAAAA0000000000000016 /* RoomStore.swift in Sources */,
 				AAAAAAAA0000000000000017 /* RoomPage.swift in Sources */,
 				AAAAAAAA000000000000011A /* RoomNotificationPrefs.swift in Sources */,
