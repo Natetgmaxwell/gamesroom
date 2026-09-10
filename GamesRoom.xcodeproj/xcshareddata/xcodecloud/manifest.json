@@ -1,0 +1,9 @@
+{
+  "id" : "4db0a688-da19-43ef-b9e2-56e5c367642c",
+  "targets" : [
+    {
+      "id" : "f41f93fa-8345-4cf4-ab74-5fbd01052ee5",
+      "name" : "GamesRoom"
+    }
+  ]
+}
