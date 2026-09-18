@@ -93,6 +93,31 @@ final class AuthService: ObservableObject {
         currentUser?.id
     }
 
+    /// V0.99 / App Review 5.1.1(v) — permanently delete the user's
+    /// account. The server-side `delete_my_account()` RPC removes the
+    /// auth row + every domain row (rooms hosted, ledger rows, RSVPs,
+    /// etc.) in one transaction; we then clear the local session and
+    /// the `@AppStorage` cache so the UI reverts to sign-in.
+    ///
+    /// Throws if the RPC fails. Network/transport errors are
+    /// surfaced to the caller so the Settings UI can show a banner
+    /// and offer to abort. The post-RPC sign-out is best-effort
+    /// (`try?`) because the local session is invalidated server-side
+    /// by the auth.users delete; signOut may fail with "session not
+    /// found" which is exactly what we want.
+    func deleteAccount() async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("delete_my_account")
+            .execute()
+
+        // Server-side delete invalidates the JWT. Clear local state
+        // so the next loadCurrentUser() returns nil and the root
+        // view flips to the sign-in surface.
+        UserDefaults.standard.removeObject(forKey: StorageKeys.lastViewedRoomId)
+        try? await SupabaseClientProvider.shared.auth.signOut()
+        self.currentUser = nil
+    }
+
     /// Preview initializer for SwiftUI #Preview blocks. Sets a
     /// fake currentUser so the views render with seeded data.
     static func preview() -> AuthService {
