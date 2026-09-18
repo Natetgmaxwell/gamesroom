@@ -258,8 +258,21 @@ struct RoomPage: View {
                         room: room,
                         allRooms: roomService.rooms,
                         onDismiss: { selectedRoom = nil },
-                        onSwitchRoom: { _ in }
+                        onSwitchRoom: { newRoom in selectedRoom = newRoom }
                     )
+                    // Belt-and-braces: if any future caller routes the
+                    // iPad detail via a value-push instead of selection,
+                    // the destination is in scope here. The current iPad
+                    // path uses `selectedRoom` directly (sidebar rows are
+                    // plain, .tag-driven) so this destination is dormant.
+                    .navigationDestination(for: Room.self) { room in
+                        RoomDetailView(
+                            room: room,
+                            allRooms: roomService.rooms,
+                            onDismiss: { selectedRoom = nil },
+                            onSwitchRoom: { newRoom in selectedRoom = newRoom }
+                        )
+                    }
                 } else {
                     Text("Select a room")
                         .font(Theme.Typography.body)
@@ -271,6 +284,24 @@ struct RoomPage: View {
 
     /// iPad sidebar — the rooms list as a platform-idiomatic
     /// sidebar List. Selection drives the detail pane.
+    ///
+    /// Fix v2 (replaces 2.1(a)'s NavigationLink+tag+hack):
+    /// rows are PLAIN content (no NavigationLink). List(selection:)
+    /// + .tag then owns taps natively — selection highlight,
+    /// keyboard navigation, and the `selectedRoom` write all
+    /// happen through the standard sidebar mechanism.
+    ///
+    /// Why not NavigationLink(value:): inside NavigationSplitView
+    /// on iPadOS, NavigationLink consumes the tap looking for a
+    /// navigationDestination(for: Room.self) in scope. The only
+    /// such destination lives in the iPhone-only path
+    /// (RoomPage.swift:423); on iPad no destination is in scope,
+    /// so the link ate the tap and `List(selection:)` never fired.
+    /// Hardware-confirmed on iPad Air M1 with build 11.
+    ///
+    /// `recordLastViewed` is wired via `.onChange(of: selectedRoom)`
+    /// on the page root — it fires once per real selection change
+    /// regardless of which row was tapped.
     private var sidebar: some View {
         Group {
             if roomService.isLoading && roomService.rooms.isEmpty {
@@ -287,39 +318,51 @@ struct RoomPage: View {
             } else {
                 List(selection: $selectedRoom) {
                     ForEach(roomService.rooms) { room in
-                        NavigationLink(value: room) {
-                            HStack(spacing: Theme.Layout.gutter) {
-                                if roomService.activeEventByRoom[room.id] != nil {
-                                    Circle()
-                                        .fill(Theme.Palette.accent)
-                                        .frame(width: 8, height: 8)
-                                        .accessibilityLabel(Text("Active session"))
-                                }
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(room.name)
-                                        .font(Theme.Typography.body.weight(.semibold))
-                                        .foregroundStyle(Theme.Palette.primaryText)
-                                    Text(socialProofCaption(for: room) ?? "Tap to open")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                                }
-                            }
-                        }
-                        // Fix 2.1(a): without .tag, List(selection:) never
-                        // writes selectedRoom on tap on iPad — the detail
-                        // pane stayed empty even though NavigationLink
-                        // value-based push would have worked on iPhone.
-                        // .tag(room) is what drives SelectionBinding<Room?>
-                        // from a row tap inside NavigationSplitView.
-                        .tag(room)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            recordLastViewed(room)
-                        })
+                        sidebarRow(for: room)
+                            .tag(room)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityLabel(Text(room.name))
+                            .accessibilityHint(Text("Opens \(room.name) in the detail pane"))
                     }
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
                 .background(Theme.Palette.background)
+            }
+        }
+        .onChange(of: selectedRoom) { _, newRoom in
+            // Records the last-viewed room id whenever the iPad
+            // sidebar selection changes (or the iPhone path's
+            // push-pop cycle changes it). Same `lastViewedRoomId`
+            // storage key as the iPhone tap path, so a user who
+            // alternates between iPhone and iPad sees a single
+            // canonical resume.
+            if let newRoom {
+                recordLastViewed(newRoom)
+            }
+        }
+    }
+
+    /// The visual content of one sidebar row. Plain HStack/VStack —
+    /// no NavigationLink, no button wrapper. The List's selection
+    /// binding owns the tap behavior.
+    @ViewBuilder
+    private func sidebarRow(for room: Room) -> some View {
+        HStack(spacing: Theme.Layout.gutter) {
+            if roomService.activeEventByRoom[room.id] != nil {
+                Circle()
+                    .fill(Theme.Palette.accent)
+                    .frame(width: 8, height: 8)
+                    .accessibilityLabel(Text("Active session"))
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(room.name)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Text(socialProofCaption(for: room) ?? "Tap to open")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
         }
     }
