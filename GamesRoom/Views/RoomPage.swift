@@ -124,6 +124,13 @@ struct RoomPage: View {
     /// code" CTA (P0.2 onboarding).
     @State private var showingJoinRoom: Bool = false
 
+    /// V0.100 — iPad-only entry point for the App Settings page.
+    /// On iPhone the Settings tab in `ContentView` is the path; on
+    /// iPad the sidebar + this toolbar gear replace the removed
+    /// Settings tab so the user has exactly one way to reach
+    /// Settings per form factor.
+    @State private var showingAppSettings: Bool = false
+
     /// Mirror of the persisted last-viewed room id, kept live so the
     /// hero card re-renders if the user switches rooms in another
     /// surface. Stored as a String because UUID is not directly
@@ -155,6 +162,16 @@ struct RoomPage: View {
         .sheet(isPresented: $showingJoinRoom) {
             JoinRoomSheet()
                 .environmentObject(roomService)
+        }
+        // V0.100 — iPad-only App Settings entry. The Settings tab
+        // in `ContentView` is gone on iPad (see ContentView.swift),
+        // so this sheet is the single Settings path on iPad.
+        // Gated on `isPad` so iPhone never double-presents — the
+        // Settings tab in ContentView handles iPhone.
+        .sheet(isPresented: $showingAppSettings) {
+            if isPad {
+                SettingsPage()
+            }
         }
         .task {
             await roomService.refresh()
@@ -701,6 +718,24 @@ struct RoomPage: View {
                 }
                 .accessibilityLabel(Text("Room settings"))
                 .accessibilityHint(Text("Opens settings for \(room.name)"))
+            }
+        }
+        // V0.100 — iPad-only App Settings entry. The Settings tab
+        // in `ContentView` was removed on iPad because the sidebar
+        // already owns room selection; this gear is the single
+        // remaining path to App Settings on iPad. iPhone keeps the
+        // Settings tab in ContentView, so this item is hidden on
+        // iPhone.
+        if isPad {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showingAppSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                .accessibilityLabel(Text("App settings"))
+                .accessibilityHint(Text("Opens the Games Room app settings"))
             }
         }
     }

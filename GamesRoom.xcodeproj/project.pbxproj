@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0062D70F939BB1B0FDBBA4FF /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47939175384A04B964906F8F /* Theme.swift */; };
 		043DEC26A20CF6977F21135A /* ConfettiBurst.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386BACE2BA5831CA8CBF0F3C /* ConfettiBurst.swift */; };
+		050BEBDD40916C58E72BA5CC /* iPadEmptyRoomContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27B2A99692D042DBDE8F5CE2 /* iPadEmptyRoomContentTests.swift */; };
 		079745DEFD2BD05EDB862309 /* SeasonStatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BE7058F0E76B549C110988 /* SeasonStatCard.swift */; };
 		07BAA891AC24C05A5433A994 /* MascotNotificationAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = F327B048A900D13F0C06FD47 /* MascotNotificationAttachment.swift */; };
 		0A12FC2D8286A53B5EFCAEAB /* MascotVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83789771BA606670CD85488 /* MascotVoiceService.swift */; };
@@ -87,6 +88,7 @@
 		A93BC5F68F89A4947EB89716 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3578CED0E938B93F73FC478B /* CalendarService.swift */; };
 		A986E4052EC8CD52F4A9A722 /* LeaderboardEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA4C8C5175CF1CDB1908BE2C /* LeaderboardEntry.swift */; };
 		A9D8C9DA35AC9F88BD747BF2 /* SeatDeposit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26FBA392D7B1961BC4516470 /* SeatDeposit.swift */; };
+		AC512CD596BA66CAEA3430B8 /* iPadNoRedundantTopNavTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF5C97BAFCB7924A8728FAC /* iPadNoRedundantTopNavTests.swift */; };
 		AD63590BD4E05117F6296178 /* PackDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65E30C5BB3638293DA1F25B /* PackDefinition.swift */; };
 		AEDE74079531C1DD4450DBF1 /* MapleMono-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DF121173E68AE59E683DBFB3 /* MapleMono-SemiBold.ttf */; };
 		B355C0C73B5B077C9CFA0E69 /* CatchUpMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B7D1D33BB9E98A7FA856FED /* CatchUpMessage.swift */; };
@@ -131,6 +133,7 @@
 		F46B2DE9B61FF1878C56431B /* MapleMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 46045DEAC9856F24DF857230 /* MapleMono-Regular.ttf */; };
 		F534BD450E57018711EC93E0 /* MascotEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBD65A9E04C5846DAA94757E /* MascotEngine.swift */; };
 		F639BC033FC4B64872E32B8C /* MascotTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CC62360006BC3217F0A1BB /* MascotTypography.swift */; };
+		F76C470CB4F2CB34926FCDD0 /* iPadSidebarRoomTapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14A563A8B026C6F8944FEFF /* iPadSidebarRoomTapTests.swift */; };
 		F99E513F8BCCF36DC32E63AE /* GamesRoomWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD2C5CD3D45EAE629FC725DD /* GamesRoomWidgets.swift */; };
 		FBE3AB83BA26F3A4DF1E0FAA /* HostScoreEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17B83BA81458C209476F6B1A /* HostScoreEntrySheet.swift */; };
 		FF430363296BAB8961DD44A7 /* PhotoHash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71B3DBFEEA8D1CC1F98EED35 /* PhotoHash.swift */; };
@@ -143,6 +146,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 10B37D813FBAE96ACBFEA21C;
 			remoteInfo = GamesRoomWidgets;
+		};
+		7EFC2985BF4531625EECDBD1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CA4758DB7CD3D8C34003E8D7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E178CF239C7E3AF188B39A2A;
+			remoteInfo = GamesRoom;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -186,6 +196,7 @@
 		25607FC68430408C8695DECA /* Fraunces-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fraunces-Regular.ttf"; sourceTree = "<group>"; };
 		268781F6521C043D2C829048 /* ScoreSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSnapshot.swift; sourceTree = "<group>"; };
 		26FBA392D7B1961BC4516470 /* SeatDeposit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatDeposit.swift; sourceTree = "<group>"; };
+		27B2A99692D042DBDE8F5CE2 /* iPadEmptyRoomContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadEmptyRoomContentTests.swift; sourceTree = "<group>"; };
 		2DD54CAA5753BF5D99C300CE /* MapleMono-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "MapleMono-Italic.ttf"; sourceTree = "<group>"; };
 		2E839248F868A1F3A71E657E /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		2E9EA4D5E78DB47B995F7D69 /* Season.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Season.swift; sourceTree = "<group>"; };
@@ -205,6 +216,7 @@
 		4C7EC92BA9B6DF9F7F54C0F6 /* GamesRoomWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamesRoomWatchApp.swift; sourceTree = "<group>"; };
 		51E44C15F28FFB8B59402E2B /* RoomDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomDetailView.swift; sourceTree = "<group>"; };
 		530A5C066F765A8614B1BD7F /* EditEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditEventSheet.swift; sourceTree = "<group>"; };
+		54876A8BE284A4B8CCB2CD2F /* GamesRoomUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = GamesRoomUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		571C654B854CCAE75FDD5330 /* ScanSettleResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleResult.swift; sourceTree = "<group>"; };
 		574C2F21AD024D6BCA56F743 /* StorageKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageKeys.swift; sourceTree = "<group>"; };
 		5A40EEB679034611EC1FAFDA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -213,6 +225,7 @@
 		5E6F4B6D4039A7D0882DC7B8 /* SeasonAward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonAward.swift; sourceTree = "<group>"; };
 		5ECB5C43D9481C6990EDEDCE /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		5EEBAD7E6C6F297D35AE7B03 /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
+		5FF5C97BAFCB7924A8728FAC /* iPadNoRedundantTopNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadNoRedundantTopNavTests.swift; sourceTree = "<group>"; };
 		653B6DBC86EC4BEDD0BDEDBE /* Event.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Event.swift; sourceTree = "<group>"; };
 		683977B0D2ACAE5513D5FCCF /* ScoreLiveActivityDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreLiveActivityDriver.swift; sourceTree = "<group>"; };
 		69C86BD5E3CBF8526F55F7DF /* ChipScanSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipScanSheet.swift; sourceTree = "<group>"; };
@@ -281,6 +294,7 @@
 		EAD72CD1026ADD5FDD6820D1 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		EBB9002BF0D43B4FA239097C /* InMemoryRoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryRoomStore.swift; sourceTree = "<group>"; };
 		ED40524E81C86251BD5471F3 /* MemberRSVP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRSVP.swift; sourceTree = "<group>"; };
+		F14A563A8B026C6F8944FEFF /* iPadSidebarRoomTapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadSidebarRoomTapTests.swift; sourceTree = "<group>"; };
 		F24840003109847AD0F18AE3 /* MascotBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotBubble.swift; sourceTree = "<group>"; };
 		F327B048A900D13F0C06FD47 /* MascotNotificationAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotNotificationAttachment.swift; sourceTree = "<group>"; };
 		F3EA01F31C76E0C50A6647EC /* Member.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Member.swift; sourceTree = "<group>"; };
@@ -328,6 +342,7 @@
 			isa = PBXGroup;
 			children = (
 				D955AB2DA7EE2F19A4A20D4F /* GamesRoom */,
+				7E270BEBF32D318DF146D3C4 /* GamesRoomUITests */,
 				140446E20800F2CFA369C71C /* GamesRoomWatch */,
 				8D66AF7016FED25D7B1FB1DC /* GamesRoomWidgets */,
 				C96E4AA3A0C0F3A1523BF241 /* Products */,
@@ -424,6 +439,16 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		7E270BEBF32D318DF146D3C4 /* GamesRoomUITests */ = {
+			isa = PBXGroup;
+			children = (
+				27B2A99692D042DBDE8F5CE2 /* iPadEmptyRoomContentTests.swift */,
+				5FF5C97BAFCB7924A8728FAC /* iPadNoRedundantTopNavTests.swift */,
+				F14A563A8B026C6F8944FEFF /* iPadSidebarRoomTapTests.swift */,
+			);
+			path = GamesRoomUITests;
+			sourceTree = "<group>";
+		};
 		8D66AF7016FED25D7B1FB1DC /* GamesRoomWidgets */ = {
 			isa = PBXGroup;
 			children = (
@@ -437,6 +462,7 @@
 			isa = PBXGroup;
 			children = (
 				415F13993070211B7BD7C7AE /* GamesRoom.app */,
+				54876A8BE284A4B8CCB2CD2F /* GamesRoomUITests.xctest */,
 				30E1F74C102CA5E1BC33BC46 /* GamesRoomWatch.app */,
 				AD8740CE6912936D8B472B31 /* GamesRoomWidgets.appex */,
 			);
@@ -588,6 +614,24 @@
 			productReference = 415F13993070211B7BD7C7AE /* GamesRoom.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F9F502C0EEF4B785D53C5A4E /* GamesRoomUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 84B184685015D13CA4E42CBD /* Build configuration list for PBXNativeTarget "GamesRoomUITests" */;
+			buildPhases = (
+				C27C749D77F99C2F282972DC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C972341520C9A5CD2F2BA28F /* PBXTargetDependency */,
+			);
+			name = GamesRoomUITests;
+			packageProductDependencies = (
+			);
+			productName = GamesRoomUITests;
+			productReference = 54876A8BE284A4B8CCB2CD2F /* GamesRoomUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -608,6 +652,11 @@
 					E178CF239C7E3AF188B39A2A = {
 						DevelopmentTeam = 37S7KT7W83;
 						ProvisioningStyle = Automatic;
+					};
+					F9F502C0EEF4B785D53C5A4E = {
+						DevelopmentTeam = 37S7KT7W83;
+						ProvisioningStyle = Automatic;
+						TestTargetID = E178CF239C7E3AF188B39A2A;
 					};
 				};
 			};
@@ -631,6 +680,7 @@
 				E178CF239C7E3AF188B39A2A /* GamesRoom */,
 				74B0F453CB62497911C203C3 /* GamesRoomWatch */,
 				10B37D813FBAE96ACBFEA21C /* GamesRoomWidgets */,
+				F9F502C0EEF4B785D53C5A4E /* GamesRoomUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -676,6 +726,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				E13BAE010D97AFCDA304CB0D /* GamesRoomWatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C27C749D77F99C2F282972DC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				050BEBDD40916C58E72BA5CC /* iPadEmptyRoomContentTests.swift in Sources */,
+				AC512CD596BA66CAEA3430B8 /* iPadNoRedundantTopNavTests.swift in Sources */,
+				F76C470CB4F2CB34926FCDD0 /* iPadSidebarRoomTapTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -814,6 +874,11 @@
 			target = 10B37D813FBAE96ACBFEA21C /* GamesRoomWidgets */;
 			targetProxy = 2BCB1CCCFE1D2C5902FA402C /* PBXContainerItemProxy */;
 		};
+		C972341520C9A5CD2F2BA28F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E178CF239C7E3AF188B39A2A /* GamesRoom */;
+			targetProxy = 7EFC2985BF4531625EECDBD1 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -896,7 +961,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 14;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 37S7KT7W83;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -927,6 +992,24 @@
 				WATCHOS_DEPLOYMENT_TARGET = 11.0;
 			};
 			name = Debug;
+		};
+		6DB20A821C762047C65B7CDF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gamesroom.app.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = GamesRoom;
+			};
+			name = Release;
 		};
 		738611C8F4D3F0426D346A28 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -964,7 +1047,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 14;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 37S7KT7W83;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -1027,6 +1110,24 @@
 			};
 			name = Release;
 		};
+		AAE6779AEA71A95EE00EB3BA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gamesroom.app.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = GamesRoom;
+			};
+			name = Debug;
+		};
 		D08836C720642B907E6350A3 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1065,6 +1166,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		84B184685015D13CA4E42CBD /* Build configuration list for PBXNativeTarget "GamesRoomUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAE6779AEA71A95EE00EB3BA /* Debug */,
+				6DB20A821C762047C65B7CDF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		94E414EAF436396F172B6B1E /* Build configuration list for PBXNativeTarget "GamesRoomWidgets" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

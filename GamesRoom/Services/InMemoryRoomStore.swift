@@ -253,6 +253,35 @@ actor InMemoryRoomStore: RoomStore {
             memberInviteQuota: 3
         )
 
+        // V0.100 — "Test Sandbox" room. Mirrors a freshly-created
+        // user room: NO events, NO season, NO leaderboard rows.
+        // This is the room the iPad empty-room content UI test
+        // taps to assert the state machine resolves past
+        // `.loading` to `.readStandings`. Without it, every
+        // seeded room carries at least a season (Felt / Pluto)
+        // or events + leaderboard (Carwoola) so the `.readStandings`
+        // branch was unreachable from the test harness.
+        let testSandbox = Room(
+            id: UUID(),
+            name: "Test Sandbox",
+            mascotName: "Tester",
+            mascotPersonality: .friendly,
+            mascotPoliticalIdeology: .centrist,
+            createdBy: UUID(),
+            createdAt: Date().addingTimeInterval(-3_600),
+            updatedAt: Date().addingTimeInterval(-3_600),
+            isLive: false,
+            nextEventDescription: nil,
+            joinStartingBonus: 200,
+            userRole: .host,
+            briefing48hEnabled: true,
+            calendarAutoAdd: false,
+            socialPreferencesEnabled: true,
+            socialNarrationEnabled: true,
+            maxSeats: 6,
+            memberInviteQuota: 3
+        )
+
         let carwoolaEvent = Event(
             id: UUID(),
             roomId: carwoola.id,
@@ -329,7 +358,7 @@ actor InMemoryRoomStore: RoomStore {
             )
         ]
 
-        self.rooms = [carwoola, pluto, felt]
+        self.rooms = [carwoola, pluto, felt, testSandbox]
         self.events = [carwoola.id: carwoolaEvent]
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
