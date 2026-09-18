@@ -305,6 +305,13 @@ struct RoomPage: View {
                                 }
                             }
                         }
+                        // Fix 2.1(a): without .tag, List(selection:) never
+                        // writes selectedRoom on tap on iPad — the detail
+                        // pane stayed empty even though NavigationLink
+                        // value-based push would have worked on iPhone.
+                        // .tag(room) is what drives SelectionBinding<Room?>
+                        // from a row tap inside NavigationSplitView.
+                        .tag(room)
                         .simultaneousGesture(TapGesture().onEnded {
                             recordLastViewed(room)
                         })
