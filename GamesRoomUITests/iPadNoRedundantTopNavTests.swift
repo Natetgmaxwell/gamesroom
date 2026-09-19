@@ -182,12 +182,15 @@ final class iPadNoRedundantTopNavTests: XCTestCase {
         // `RoomPage.toolbarContent`); the detail pane nav bar
         // must NOT carry a duplicate.
         //
-        // We scope the query to the detail nav bar
-        // (`plutoDetail.buttons[...]`) so the count distinguishes
-        // "a gear wired into the detail nav bar" from "a gear in
-        // the sidebar toolbar." A pre-fix build surfaces 1; the
-        // post-fix build surfaces 0.
-        let detailRoomSettingsButtons = plutoDetail.buttons["Room settings"]
+        // We use `.descendants(matching: .button)` to obtain an
+        // `XCUIElementQuery` (apples-to-apples count semantics
+        // against the scoped `XCUIElement` representing the
+        // detail nav bar). The filter is on the button label,
+        // which both RoomDetailView's gear and RoomPage's
+        // sidebar gear use identically.
+        let detailRoomSettingsButtons = plutoDetail
+            .descendants(matching: .button)
+            .matching(identifier: "Room settings")
         XCTAssertEqual(
             detailRoomSettingsButtons.count, 0,
             "iPad room-detail nav bar still hosts a 'Room settings' button. " +
@@ -199,17 +202,19 @@ final class iPadNoRedundantTopNavTests: XCTestCase {
         // `RoomSwitcherMenu` is a SwiftUI `Menu` whose label is
         // an HStack of the current room name + a chevron. The
         // menu surfaces as an `XCUIElement.ElementType.menu` in
-        // XCUITest queries. We look up `menus` scoped to the
-        // detail nav bar — pre-fix surfaces exactly one menu
-        // (the room-switcher); post-fix surfaces zero (the
-        // navigation title is a staticText, not a menu).
+        // XCUITest queries. We query `.descendants(matching:
+        // .menu)` scoped to the detail nav bar — pre-fix surfaces
+        // exactly one menu (the room-switcher); post-fix surfaces
+        // zero (the navigation title is a staticText, not a
+        // menu).
         //
-        // We avoid a label-based count because the navigation
+        // We avoid label-based counts because the navigation
         // TITLE on iOS is also labelled with the room name, and
         // counting `buttons[roomName]` is ambiguous between the
-        // title and the menu. Element-type queries are
-        // unambiguous.
-        let detailMenuSwitcherEntries = plutoDetail.menus
+        // title and the menu. Element-type queries via
+        // `.descendants(matching: .menu)` are unambiguous.
+        let detailMenuSwitcherEntries = plutoDetail
+            .descendants(matching: .menu)
         XCTAssertEqual(
             detailMenuSwitcherEntries.count, 0,
             "iPad room-detail nav bar still hosts a `RoomSwitcherMenu` " +
