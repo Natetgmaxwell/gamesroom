@@ -731,7 +731,12 @@ struct RoomPage: View {
                 Button {
                     showingAppSettings = true
                 } label: {
-                    Image(systemName: "gearshape")
+                    // V0.101 — person icon, not a gear: the trailing
+                    // toolbar already hosts a gear for Room Settings
+                    // (host-gated). Two identical gears in one bar
+                    // read as a bug; App Settings is an account-level
+                    // surface, so it gets the person glyph.
+                    Image(systemName: "person.crop.circle")
                         .foregroundStyle(Theme.Palette.primaryText)
                 }
                 .accessibilityLabel(Text("App settings"))
