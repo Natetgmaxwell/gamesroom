@@ -117,4 +117,117 @@ final class iPadNoRedundantTopNavTests: XCTestCase {
             "the settings sheet."
         )
     }
+
+    // MARK: - V0.101 — dedup duplicate Room settings gear + room switcher
+
+    /// Acceptance test for the V0.101 iPad room-dedup slice.
+    ///
+    /// User report (build 14):
+    ///   1. "the room settings button is duplicated in the ipados
+    ///      nav bar and on the room page. remove the one on the
+    ///      nav bar."
+    ///      ⇒ On iPad split-view the sidebar toolbar already hosts
+    ///        a `Room settings` gear (`RoomPage.toolbarContent`,
+    ///        topBarTrailing, host-gated). The detail pane's nav
+    ///        bar ALSO hosted one (`RoomDetailView`, topBarTrailing,
+    ///        always rendered). Both targets were simultaneously
+    ///        visible on iPad — duplicated chrome. Fix: hide the
+    ///        detail pane's gear on iPad (gated `if !isPad` in
+    ///        `RoomDetailView`). iPhone keeps both untouched.
+    ///   2. "the [switch] room UI element on the room page on ipados
+    ///      is now redundant as that capability is now in the nav
+    ///      bar on an ipad."
+    ///      ⇒ The iPad split-view's sidebar already owns room
+    ///        selection via `List(selection:)`. The detail pane's
+    ///        `RoomSwitcherMenu` (topBarLeading) was duplicate
+    ///        chrome. Fix: hide the in-room switcher on iPad
+    ///        (gated `if !isPad` in `RoomDetailView`). iPhone
+    ///        keeps the in-room switcher unchanged.
+    ///
+    /// This test proves both:
+    ///   (a) After tapping a sidebar row, the detail pane's nav
+    ///       bar area contains NO `Room settings` button and NO
+    ///       room switcher (the `RoomSwitcherMenu` Menu will not
+    ///       surface as a button on iPad).
+    ///   (b) The sidebar toolbar still hosts the single remaining
+    ///       `Room settings` entry — i.e., removing the duplicate
+    ///       didn't take the single path with it.
+    func test_iPadRoomDetailHasNoNavBarRoomSettingsOrRoomSwitcher() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-screenshots-bypass-auth"]
+        app.launch()
+
+        // Sidebar must populate.
+        let plutoRow = app.staticTexts["Pluto Chess Sundays"]
+        XCTAssertTrue(
+            plutoRow.waitForExistence(timeout: 10),
+            "Sidebar did not render — 'Pluto Chess Sundays' row never appeared. " +
+            "Bypass-auth or InMemoryRoomStore may be broken; check launch args."
+        )
+
+        // FIRST TAP — drive the detail pane so the in-room toolbar
+        // (where the duplicates used to live) renders.
+        plutoRow.tap()
+
+        let plutoDetail = app.navigationBars["Pluto Chess Sundays"]
+        XCTAssertTrue(
+            plutoDetail.waitForExistence(timeout: 5),
+            "Detail pane did not show 'Pluto Chess Sundays' after sidebar tap. " +
+            "The iPad sidebar tap regression is STILL present — selectedRoom " +
+            "was not driven by the row tap."
+        )
+
+        // (a) — the in-room `Room settings` button must NOT exist
+        // on iPad. The sidebar toolbar still owns it on iPad (see
+        // `RoomPage.toolbarContent`); the detail pane nav bar
+        // must NOT carry a duplicate.
+        //
+        // We scope the query to the detail nav bar
+        // (`plutoDetail.buttons[...]`) so the count distinguishes
+        // "a gear wired into the detail nav bar" from "a gear in
+        // the sidebar toolbar." A pre-fix build surfaces 1; the
+        // post-fix build surfaces 0.
+        let detailRoomSettingsButtons = plutoDetail.buttons["Room settings"]
+        XCTAssertEqual(
+            detailRoomSettingsButtons.count, 0,
+            "iPad room-detail nav bar still hosts a 'Room settings' button. " +
+            "V0.101 fix missing — `RoomDetailView`'s gear ToolbarItem was " +
+            "not gated on `if !isPad`."
+        )
+
+        // (a) — the in-room room switcher must NOT exist on iPad.
+        // `RoomSwitcherMenu` is a SwiftUI `Menu` whose label is
+        // an HStack of the current room name + a chevron. The
+        // menu surfaces as an `XCUIElement.ElementType.menu` in
+        // XCUITest queries. We look up `menus` scoped to the
+        // detail nav bar — pre-fix surfaces exactly one menu
+        // (the room-switcher); post-fix surfaces zero (the
+        // navigation title is a staticText, not a menu).
+        //
+        // We avoid a label-based count because the navigation
+        // TITLE on iOS is also labelled with the room name, and
+        // counting `buttons[roomName]` is ambiguous between the
+        // title and the menu. Element-type queries are
+        // unambiguous.
+        let detailMenuSwitcherEntries = plutoDetail.menus
+        XCTAssertEqual(
+            detailMenuSwitcherEntries.count, 0,
+            "iPad room-detail nav bar still hosts a `RoomSwitcherMenu` " +
+            "menu element. V0.101 fix missing — `RoomDetailView`'s " +
+            "`RoomSwitcherMenu` ToolbarItem was not gated on `if !isPad`."
+        )
+
+        // (b) — belt-and-braces: the sidebar toolbar must STILL
+        // expose the `Room settings` path (the single remaining
+        // way to reach room settings on iPad). The test user is
+        // seeded as `.host` for every room in InMemoryRoomStore,
+        // so the sidebar gear must remain reachable.
+        let sidebarGear = app.buttons["Room settings"].firstMatch
+        XCTAssertTrue(
+            sidebarGear.waitForExistence(timeout: 5),
+            "iPad sidebar toolbar 'Room settings' gear is missing entirely. " +
+            "The V0.101 fix may have removed both copies; the single " +
+            "remaining path on iPad is unreachable."
+        )
+    }
 }

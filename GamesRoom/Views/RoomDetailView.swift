@@ -57,6 +57,23 @@ struct RoomDetailView: View {
     /// toolbar gear (L6 spec). Mirrors `RoomPage.settingsRoom` for
     /// the standalone rooms-page gear icon.
     @State private var settingsRoom: Room?
+
+    /// V0.101 — iPad-only path. Mirrors `RoomPage.isPad` so the
+    /// in-room `Room settings` gear + the `RoomSwitcherMenu`
+    /// dropdown can be hidden on iPad without disturbing the
+    /// iPhone path. Both controls are iPad-redundant because
+    /// the iPad sidebar already (a) hosts a `Room settings` gear
+    /// in its own toolbar, and (b) owns room selection via
+    /// `List(selection:)`. On iPad the in-room nav bar shows
+    /// neither; on iPhone both stay exactly where V0.100 left
+    /// them. Gated on `UIDevice` (not `horizontalSizeClass`) to
+    /// match the rooms-page gate so a future multitasking split
+    /// at <50% keeps the iPhone-shaped toolbar inside the detail
+    /// pane without re-introducing the chrome split-screen users
+    /// already rejected.
+    private var isPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
     /// V0.79 — flips when the one-time notif prompt is answered so
     /// SwiftUI re-renders the card away (UserDefaults isn't observed).
     @State private var notifPromptDismissed: Bool = false
@@ -305,15 +322,23 @@ struct RoomDetailView: View {
             // §3.7, the dropdown is the canonical reachability
             // surface; the Rooms tab remains the bulk-management
             // view.
-            ToolbarItem(placement: .topBarLeading) {
-                if !allRooms.isEmpty {
-                    RoomSwitcherMenu(
-                        currentRoom: room,
-                        allRooms: allRooms,
-                        activeEventByRoom: roomService.activeEventByRoom,
-                        onSwitchRoom: onSwitchRoom,
-                        onCreateRoom: { showingCreateRoom = true }
-                    )
+            //
+            // V0.101 — hidden on iPad. The iPad sidebar already
+            // owns room selection via `List(selection:)`, so the
+            // dropdown duplicate was redundant chrome the user
+            // explicitly asked us to remove. iPhone keeps this
+            // unchanged.
+            if !isPad {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !allRooms.isEmpty {
+                        RoomSwitcherMenu(
+                            currentRoom: room,
+                            allRooms: allRooms,
+                            activeEventByRoom: roomService.activeEventByRoom,
+                            onSwitchRoom: onSwitchRoom,
+                            onCreateRoom: { showingCreateRoom = true }
+                        )
+                    }
                 }
             }
             if isHost {
@@ -331,15 +356,25 @@ struct RoomDetailView: View {
             // V0.79 — the gear is member-visible. The settings sheet
             // self-gates its host-only sections; members gain the
             // "My notifications" section (opt-in + per-event mute).
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    settingsRoom = liveRoom
-                } label: {
-                    Image(systemName: Theme.Icon.gearshape)
-                        .foregroundStyle(Theme.Palette.primaryText)
+            //
+            // V0.101 — hidden on iPad. On iPad the sidebar's
+            // own toolbar already hosts a `Room settings` gear
+            // (`RoomPage.toolbarContent`, the sidebar toolbar);
+            // keeping this duplicate on iPad split-view showed
+            // two room-settings targets simultaneously and the
+            // user explicitly asked us to remove the nav-bar
+            // one. iPhone keeps this unchanged.
+            if !isPad {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        settingsRoom = liveRoom
+                    } label: {
+                        Image(systemName: Theme.Icon.gearshape)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                    }
+                    .accessibilityLabel(Text("Room settings"))
+                    .accessibilityHint(Text("Opens settings for \(room.name)"))
                 }
-                .accessibilityLabel(Text("Room settings"))
-                .accessibilityHint(Text("Opens settings for \(room.name)"))
             }
         }
         .sheet(item: $settingsRoom) { presented in
