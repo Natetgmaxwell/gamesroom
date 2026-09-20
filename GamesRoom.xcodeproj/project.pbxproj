@@ -114,6 +114,7 @@
 		D40C934C4CC7EDFB62F1D6DB /* RedeemedRoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2407A799C49D3FE262AEEB6 /* RedeemedRoom.swift */; };
 		D54FF770F05B041248928236 /* Packs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A5EEAA62D312623C5BF5F5 /* Packs.swift */; };
 		D5A01D637D52C5BF8C30086D /* SessionScan.swift in Sources */ = {isa = PBXBuildFile; fileRef = B171347949985A339B0D3F84 /* SessionScan.swift */; };
+		D689A6A4AA0208A0AC2EAB41 /* iPadDisplayNameSaveWireTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 392AA7AB252E1B42A812C388 /* iPadDisplayNameSaveWireTests.swift */; };
 		D6A6A124710F80EF2276E365 /* SocialPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE2F7C46AD60606F92AE4BC5 /* SocialPreference.swift */; };
 		D6D47307B7FB8C8B2167E1A8 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAD72CD1026ADD5FDD6820D1 /* User.swift */; };
 		DD7F830772A2EED1713ED45C /* RoomGraphSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82237123FBAF9729F566347F /* RoomGraphSummary.swift */; };
@@ -207,6 +208,7 @@
 		36CDC197F61633AA51BA79DD /* MascotPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPersonality.swift; sourceTree = "<group>"; };
 		37D937307CF0336737DAAA9A /* AddEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEventSheet.swift; sourceTree = "<group>"; };
 		386BACE2BA5831CA8CBF0F3C /* ConfettiBurst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfettiBurst.swift; sourceTree = "<group>"; };
+		392AA7AB252E1B42A812C388 /* iPadDisplayNameSaveWireTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadDisplayNameSaveWireTests.swift; sourceTree = "<group>"; };
 		415F13993070211B7BD7C7AE /* GamesRoom.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GamesRoom.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42BE7058F0E76B549C110988 /* SeasonStatCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonStatCard.swift; sourceTree = "<group>"; };
 		442A25C4996717289E9B3FB1 /* VisionSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionSnapshot.swift; sourceTree = "<group>"; };
@@ -442,6 +444,7 @@
 		7E270BEBF32D318DF146D3C4 /* GamesRoomUITests */ = {
 			isa = PBXGroup;
 			children = (
+				392AA7AB252E1B42A812C388 /* iPadDisplayNameSaveWireTests.swift */,
 				27B2A99692D042DBDE8F5CE2 /* iPadEmptyRoomContentTests.swift */,
 				5FF5C97BAFCB7924A8728FAC /* iPadNoRedundantTopNavTests.swift */,
 				F14A563A8B026C6F8944FEFF /* iPadSidebarRoomTapTests.swift */,
@@ -733,6 +736,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D689A6A4AA0208A0AC2EAB41 /* iPadDisplayNameSaveWireTests.swift in Sources */,
 				050BEBDD40916C58E72BA5CC /* iPadEmptyRoomContentTests.swift in Sources */,
 				AC512CD596BA66CAEA3430B8 /* iPadNoRedundantTopNavTests.swift in Sources */,
 				F76C470CB4F2CB34926FCDD0 /* iPadSidebarRoomTapTests.swift in Sources */,

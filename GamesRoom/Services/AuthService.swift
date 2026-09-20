@@ -101,11 +101,117 @@ final class AuthService: ObservableObject {
         // absence of a throw. (Earlier bug class: decoding the body
         // via .single().value throws on empty / minimal responses —
         // see commits 3f2fbee and 2db1f4a.)
-        try await SupabaseClientProvider.shared
+        //
+        // V0.102 build 17 — capture the wire-level response (HTTP
+        // status + body length) so the regression test in
+        // `iPadDisplayNameSaveWireTests` can assert that an actual
+        // 2xx with a non-empty `representation` array was returned.
+        // A 200/204 with `[]` is the symptom of RLS USING dropping
+        // the row — the request "succeeded" but nothing was
+        // updated, and the iOS dashboard flips the local cache
+        // mirror to the new value while the server keeps the old
+        // one. That mismatch is exactly what the user reports as
+        // "Save won't save".
+        let response = try await SupabaseClientProvider.shared
             .from("users")
             .update(["display_name": trimmed])
             .eq("id", value: idFilter)
             .execute()
+
+        #if DEBUG
+        let bodyBytes = response.data.count
+        let status = response.status
+        let line = "[GamesRoom] updateDisplayName: PATCH /rest/v1/users?id=eq.\(idFilter) → \(status) (\(bodyBytes)B body)\n"
+        print(line, terminator: "")
+        // V0.102 — also write to a stable on-disk log under the app
+        // sandbox Documents so an XCUITest (or the orchestrator's
+        // wire-capture helper) can read it back without going through
+        // OSLog filtering or the xcresult stdout capture (which does
+        // not surface SUT `print()` output reliably under Xcode 27).
+        // File path is `/.../Documents/GamesRoom-wire.log`; the
+        // orchestrator's `grep "updateDisplayName: PATCH" /tmp/dd/.../
+        // GamesRoom-wire.log` is the post-run verifier.
+        if let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let url = dir.appendingPathComponent("GamesRoom-wire.log")
+            if let data = line.data(using: .utf8) {
+                if let handle = try? FileHandle(forWritingTo: url) {
+                    defer { try? handle.close() }
+                    try? handle.seekToEnd()
+                    try? handle.write(contentsOf: data)
+                } else {
+                    try? data.write(to: url)
+                }
+            }
+        }
+        #endif
+
+        // V0.102 build 17 — root fix for the iPad display-name
+        // save silent failure.
+        //
+        // Bug class (proven on the wire by the new
+        // `iPadDisplayNameSaveWireTests` XCUITest against this
+        // worktree): the screenshot-bypass stub user (and any user
+        // whose JWT does not match the row they are trying to
+        // update) sees the PATCH return `200 OK` with a `[]`
+        // representation body. PostgREST considers the call
+        // successful; the Supabase Swift client's `execute()` does
+        // not throw; the local cache gets mirrored to the new name;
+        // the iOS sheet dismisses; the user reads "saved". But the
+        // server row is unchanged, and on the next session refresh
+        // the old name reappears — which the user reports as
+        // "Save won't save".
+        //
+        // Wire-evidence (from the regression test's
+        // `GamesRoom-wire.log`, build 17):
+        //
+        //   [GamesRoom] updateDisplayName: PATCH
+        //     /rest/v1/users?id=eq.00000000-0000-0000-0000-000000000001
+        //     → 200 (2B body)
+        //
+        // …the `(2B body)` is the `[]` empty array. Pre-fix-17 the
+        // response was discarded entirely; the local-cache mirror
+        // ran unconditionally; the user got a silent no-op.
+        //
+        // The fix: read `response.data` and require a non-empty
+        // representation. A 2xx with empty body is a real failure
+        // (RLS dropped the row, or the row does not exist for the
+        // id we are filtering on) and must throw so the caller
+        // (`AppSettingsView.save`) can surface the alert the user
+        // reported was missing.
+        //
+        // Why a thrown error and not a silent retry / refetch:
+        // the iOS client cannot tell apart "RLS dropped the row
+        // because the JWT was wrong" from "the row does not exist"
+        // without a separate round-trip, and either case requires
+        // the user to take action (re-sign-in or contact support)
+        // that a silent retry would just delay. Surfacing the
+        // error is the only honest answer.
+        // Strip ASCII whitespace from `response.data` so a `[]\n` or
+        // `[ ]\n` representation body is still recognised as empty.
+        let whitespace: Set<UInt8> = [0x20, 0x0A, 0x09, 0x0D]
+        let trimmedBytes: [UInt8] = Array(response.data.filter { !whitespace.contains($0) })
+        let isEmptyRepresentation: Bool
+        if trimmedBytes.count == 2
+            && trimmedBytes[0] == UInt8(ascii: "[")
+            && trimmedBytes[1] == UInt8(ascii: "]")
+        {
+            isEmptyRepresentation = true
+        } else if trimmedBytes.isEmpty {
+            // Empty body at all — 204 No Content from PostgREST.
+            isEmptyRepresentation = true
+        } else {
+            isEmptyRepresentation = false
+        }
+        guard !isEmptyRepresentation else {
+            // Don't mirror to the local cache — the server did NOT
+            // persist the change. Throwing here lets
+            // `AppSettingsView.save` surface the alert the user
+            // reported was missing on iPad.
+            throw DisplayNameSaveError.notPersisted(
+                idFilter: idFilter,
+                httpStatus: response.status
+            )
+        }
 
         // Mirror the change in the local cache so the UI updates
         // without a network round-trip. User only has id + displayName
@@ -171,4 +277,28 @@ final class AuthService: ObservableObject {
         )
     }
     #endif
+}
+
+/// V0.102 — thrown by `AuthService.updateDisplayName` when the PATCH
+/// to `public.users` returns a 2xx with an empty representation
+/// array. PostgREST considers the call successful (and the Supabase
+/// Swift client's `execute()` does not throw on it), but no row was
+/// actually updated. Surfacing this lets `AppSettingsView.save`
+/// show the alert the user reported was missing on iPad
+/// ("Save won't save").
+///
+/// Localized description is the user-facing message the alert
+/// displays. The `idFilter` and `httpStatus` are kept for the
+/// regression test and for any future telemetry.
+struct DisplayNameSaveError: LocalizedError {
+    let idFilter: String
+    let httpStatus: Int
+
+    var errorDescription: String? {
+        "We couldn't save your display name (server returned status \(httpStatus) with no rows updated). Try signing out and back in, or contact support."
+    }
+
+    static func notPersisted(idFilter: String, httpStatus: Int) -> DisplayNameSaveError {
+        DisplayNameSaveError(idFilter: idFilter, httpStatus: httpStatus)
+    }
 }
