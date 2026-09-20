@@ -66,24 +66,55 @@ final class AuthService: ObservableObject {
     /// Updates the signed-in user's `display_name` in `public.users`.
     /// Used by the Settings → Display name field. The cached
     /// `currentUser` is updated in place so the UI reflects the new
-    /// name without a round-trip. Does not throw — failures bubble
-    /// up so the caller can surface a banner if the save fails.
+    /// name without a round-trip. Throws on transport / RLS failure
+    /// so the caller can surface a banner if the save fails.
+    ///
+    /// V0.101 — pull the JWT sub from the live auth session instead
+    /// of the cached `currentUser.id`. The cache is normally in sync,
+    /// but if a stale cache survives a server-side `update_user_id`
+    /// (or any future migration that reassigns ids), the cached id
+    /// no longer matches `request.jwt.claims.sub`, RLS USING drops
+    /// the row, and the PATCH returns success-with-zero-rows. The
+    /// user sees "saved" but the name on the server didn't change.
+    /// Reading the id straight from `auth.session.user.id` removes
+    /// that whole class of silent no-op. Failure mode is now a
+    /// thrown Supabase error, surfaced as an alert in AppSettingsView.
     func updateDisplayName(_ newName: String) async throws {
         guard let current = currentUser else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != current.displayName else { return }
-        // PostgREST UPDATE defaults to return=minimal (HTTP 204, empty
-        // body). Discard the return — decoding as User via .single().value
-        // throws on the empty body even though the UPDATE succeeded.
-        _ = try await SupabaseClientProvider.shared
+
+        // V0.101 — prefer the live session id over the cached id.
+        // Falls back to the cached id if the session is unavailable
+        // (shouldn't happen in practice; the cached id is the same
+        // value as session.user.id 99% of the time).
+        let sessionId = (try? await SupabaseClientProvider.shared.auth.session.user.id) ?? current.id
+        let idFilter = sessionId.uuidString
+
+        #if DEBUG
+        print("[GamesRoom] updateDisplayName: id=\(idFilter) new=\(trimmed)")
+        #endif
+
+        // PostgREST UPDATE returns the updated row(s) by default
+        // (Prefer: return=representation). The non-generic .execute()
+        // discards the body — we don't decode it, just need the
+        // absence of a throw. (Earlier bug class: decoding the body
+        // via .single().value throws on empty / minimal responses —
+        // see commits 3f2fbee and 2db1f4a.)
+        try await SupabaseClientProvider.shared
             .from("users")
             .update(["display_name": trimmed])
-            .eq("id", value: current.id.uuidString)
+            .eq("id", value: idFilter)
             .execute()
+
         // Mirror the change in the local cache so the UI updates
         // without a network round-trip. User only has id + displayName
         // (per GamesRoom/Models/User.swift v0.8).
         self.currentUser = User(id: current.id, displayName: trimmed)
+
+        #if DEBUG
+        print("[GamesRoom] updateDisplayName: persisted local cache; server updated.")
+        #endif
     }
 
     /// Convenience accessor for views and other services that need

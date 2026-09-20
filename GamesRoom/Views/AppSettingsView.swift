@@ -39,6 +39,7 @@ struct AppSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String = ""
     @State private var displayNameError: String?
+    @State private var displayNameErrorVisible: Bool = false
     @State private var showLogoutConfirm = false
     @State private var showDeleteConfirm = false
     @State private var isSaving = false
@@ -127,6 +128,20 @@ struct AppSettingsView: View {
                 }
             }
             .tint(Theme.Palette.accent)
+            // V0.101 — surface save failures as an alert so the user
+            // never sees a silent "Save" tap. Earlier the failure was
+            // only inline red text inside the Section, which on iPad
+            // can sit under the software keyboard and read as "did
+            // nothing." An alert is impossible to miss.
+            .alert(
+                "Couldn't save display name",
+                isPresented: $displayNameErrorVisible,
+                presenting: displayNameError
+            ) { _ in
+                Button("OK", role: .cancel) { }
+            } message: { msg in
+                Text(msg)
+            }
             .task {
                 name = authService.currentUser?.displayName ?? ""
                 #if DEBUG
@@ -181,9 +196,18 @@ struct AppSettingsView: View {
         defer { isSaving = false }
         do {
             try await authService.updateDisplayName(name)
-            await MainActor.run { dismiss() }
+            // AppSettingsView is @MainActor — dismiss() runs on the
+            // main actor without needing MainActor.run.
+            dismiss()
         } catch {
+            // V0.101 — surface the failure both inline and as an
+            // alert. Earlier the failure showed only as small red text
+            // inside the Form section; on iPad that text can sit
+            // under the keyboard and the user sees "Save" appear to
+            // do nothing. The alert guarantees the error is visible
+            // regardless of keyboard or layout.
             displayNameError = error.localizedDescription
+            displayNameErrorVisible = true
         }
     }
 
