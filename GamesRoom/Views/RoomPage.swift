@@ -714,7 +714,12 @@ struct RoomPage: View {
                 .accessibilityHint(Text("Enter a friend's join code to become a member"))
             }
         }
-        if let room = resolvedLastViewedRoom, room.userRole.isHost {
+        // V0.103 — member-visible on iPad (was host-only). With the
+        // detail header gear removed on iPad, this is the only
+        // room-settings entry there; members need it for
+        // notification prefs (V0.79). iPhone keeps the host gate —
+        // its detail-header gear is the member path.
+        if let room = resolvedLastViewedRoom, isPad || room.userRole.isHost {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     settingsRoom = room

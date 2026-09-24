@@ -305,8 +305,12 @@ struct RoomDetailView: View {
             // §3.7, the dropdown is the canonical reachability
             // surface; the Rooms tab remains the bulk-management
             // view.
-            ToolbarItem(placement: .topBarLeading) {
-                if !allRooms.isEmpty {
+            // V0.103 — compact-width only. On iPad (regular width)
+            // the sidebar is the one true room navigator; this
+            // dropdown duplicated it (Nathan's V1.0 UX review,
+            // 2026-09-24). iPhone has no sidebar, so it stays.
+            if !allRooms.isEmpty && hSize == .compact {
+                ToolbarItem(placement: .topBarLeading) {
                     RoomSwitcherMenu(
                         currentRoom: room,
                         allRooms: allRooms,
@@ -331,15 +335,22 @@ struct RoomDetailView: View {
             // V0.79 — the gear is member-visible. The settings sheet
             // self-gates its host-only sections; members gain the
             // "My notifications" section (opt-in + per-event mute).
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    settingsRoom = liveRoom
-                } label: {
-                    Image(systemName: Theme.Icon.gearshape)
-                        .foregroundStyle(Theme.Palette.primaryText)
+            // V0.103 — compact-width only. On iPad (regular width)
+            // this duplicated the RoomPage toolbar gear for the same
+            // RoomSettingsSheet; the RoomPage gear is the survivor
+            // and must stay member-visible so members keep a path
+            // to notification prefs.
+            if hSize == .compact {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        settingsRoom = liveRoom
+                    } label: {
+                        Image(systemName: Theme.Icon.gearshape)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                    }
+                    .accessibilityLabel(Text("Room settings"))
+                    .accessibilityHint(Text("Opens settings for \(room.name)"))
                 }
-                .accessibilityLabel(Text("Room settings"))
-                .accessibilityHint(Text("Opens settings for \(room.name)"))
             }
         }
         .sheet(item: $settingsRoom) { presented in
