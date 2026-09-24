@@ -707,6 +707,16 @@ actor InMemoryRoomStore: RoomStore {
     // MARK: Rooms list
 
     func fetchRooms() async throws -> [Room] {
+        #if DEBUG
+        // v1.0 (17) repro — when launched with
+        // `-test-empty-rooms`, return an empty rooms array so
+        // the iPad split-view sidebar shows the empty state in
+        // a UI test. Production (Release) builds never see this
+        // branch; the live Supabase path is unaffected.
+        if CommandLine.arguments.contains("-test-empty-rooms") {
+            return []
+        }
+        #endif
         return rooms
     }
 
