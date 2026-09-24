@@ -173,7 +173,13 @@ struct RoomPage: View {
                 SettingsPage()
             }
         }
-        .task {
+        // V0.102 — re-run refresh when the signed-in user changes.
+        // On iPad, RoomPage mounts *underneath* the sign-in sheet, so a
+        // plain `.task` fired unauthenticated at mount and nothing
+        // re-triggered it after login — joined rooms only appeared after
+        // app relaunch (build 18 bug report). Keying the task on the user
+        // id re-fetches on nil→user (fresh sign-in) and user→user switches.
+        .task(id: authService.currentUser?.id) {
             await roomService.refresh()
             await roomService.loadRoomsSocialProof()
             #if DEBUG
