@@ -326,7 +326,50 @@ struct RoomPage: View {
     /// on the page root — it fires once per real selection change
     /// regardless of which row was tapped.
     private var sidebar: some View {
-        Group {
+        VStack(spacing: 0) {
+            roomsArea
+            // V0.104 — app-scope settings live in a persistent sidebar
+            // footer, outside the rooms list: position separates scope.
+            // Replaces the V0.100 leading toolbar gear, which sat beside
+            // the room-settings gear with an identical glyph — the two
+            // scopes were indistinguishable. Footer row is present in
+            // the empty state too (zero-room users still need settings).
+            Divider().overlay(Theme.Palette.hairline)
+            Button {
+                showingAppSettings = true
+            } label: {
+                HStack(spacing: Theme.Layout.gutter) {
+                    Image(systemName: "gearshape")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    Text("App Settings")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Spacer()
+                }
+                .padding(.horizontal, Theme.Layout.edgePadding)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("App settings"))
+            .accessibilityHint(Text("Opens the Games Room app settings"))
+        }
+        .onChange(of: selectedRoom) { _, newRoom in
+            // Records the last-viewed room id whenever the iPad
+            // sidebar selection changes (or the iPhone path's
+            // push-pop cycle changes it). Same `lastViewedRoomId`
+            // storage key as the iPhone tap path, so a user who
+            // alternates between iPhone and iPad sees a single
+            // canonical resume.
+            if let newRoom {
+                recordLastViewed(newRoom)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var roomsArea: some View {
             if roomService.isLoading && roomService.rooms.isEmpty {
                 VStack(spacing: 12) {
                     ProgressView()
@@ -354,18 +397,6 @@ struct RoomPage: View {
                 .background(Theme.Palette.background)
             }
         }
-        .onChange(of: selectedRoom) { _, newRoom in
-            // Records the last-viewed room id whenever the iPad
-            // sidebar selection changes (or the iPhone path's
-            // push-pop cycle changes it). Same `lastViewedRoomId`
-            // storage key as the iPhone tap path, so a user who
-            // alternates between iPhone and iPad sees a single
-            // canonical resume.
-            if let newRoom {
-                recordLastViewed(newRoom)
-            }
-        }
-    }
 
     /// The visual content of one sidebar row. Plain HStack/VStack —
     /// no NavigationLink, no button wrapper. The List's selection
@@ -731,24 +762,10 @@ struct RoomPage: View {
                 .accessibilityHint(Text("Opens settings for \(room.name)"))
             }
         }
-        // V0.100 — iPad-only App Settings entry. The Settings tab
-        // in `ContentView` was removed on iPad because the sidebar
-        // already owns room selection; this gear is the single
-        // remaining path to App Settings on iPad. iPhone keeps the
-        // Settings tab in ContentView, so this item is hidden on
-        // iPhone.
-        if isPad {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    showingAppSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .foregroundStyle(Theme.Palette.primaryText)
-                }
-                .accessibilityLabel(Text("App settings"))
-                .accessibilityHint(Text("Opens the Games Room app settings"))
-            }
-        }
+        // V0.104 — the leading App Settings gear is removed; app
+        // settings now live in the sidebar footer row (position
+        // separates app-scope from room-scope; the two identical
+        // toolbar gears were indistinguishable). See `sidebar`.
     }
 
     // MARK: - Last-viewed resolution
