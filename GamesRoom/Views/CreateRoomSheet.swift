@@ -30,6 +30,15 @@
 
 import SwiftUI
 
+private enum FirstMissingField {
+    case roomName
+    var helperText: String {
+        switch self {
+        case .roomName: return "Enter a room name to continue."
+        }
+    }
+}
+
 struct CreateRoomSheet: View {
 
     @Environment(\.dismiss) private var dismiss
@@ -88,7 +97,21 @@ struct CreateRoomSheet: View {
                             .foregroundStyle(.red.opacity(0.85))
                     }
                 }
+
+                // V0.101 — bottom-anchored commit + first-missing-field helper.
+                Section {
+                    if let firstMissingField {
+                        Text(firstMissingField.helperText)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                    Button("Create") { Task { await save() } }
+                        .disabled(firstMissingField != nil || isSaving)
+                        .frame(maxWidth: .infinity)
+                        .tint(Theme.Palette.accent)
+                }
             }
+            .formStyle(.grouped)
             .scrollContentBackground(.hidden)
             .background(Theme.Palette.background)
             .navigationTitle("New room")
@@ -97,13 +120,6 @@ struct CreateRoomSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(Theme.Palette.primaryText)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        Task { await save() }
-                    }
-                    .disabled(isSaving || trimmedName.isEmpty)
-                    .tint(Theme.Palette.accent)
                 }
             }
         }
@@ -115,6 +131,13 @@ struct CreateRoomSheet: View {
     /// Trimmed room name — empty ⇒ the Create button is disabled.
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// First required field that is still empty. Drives the helper text
+    /// above the bottom-anchored Create button. Order matters: this is
+    /// the order users see hints.
+    private var firstMissingField: FirstMissingField? {
+        trimmedName.isEmpty ? .roomName : nil
     }
 
     // MARK: - Save
