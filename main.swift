@@ -4617,6 +4617,215 @@ runner.run("V0.94 slice C configurator preview is a pure function of picker stat
     }
 }
 
+// MARK: - V0.106 Question Box
+
+func qbUUID(_ n: Int) -> UUID {
+    UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", n))!
+}
+let qbT0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+runner.run("V0.106 house deck: 40 questions, 20/20, matches docs/V0.106_house_deck.json") {
+    runner.assertEqual(QuestionBoxHouseDeck.entries.count, 40)
+    runner.assertEqual(QuestionBoxHouseDeck.entries.filter { $0.tag == .deep }.count, 20)
+    runner.assertTrue(QuestionBoxHouseDeck.entries.allSatisfy { $0.text.count <= RoomQuestion.maxLength })
+    struct Row: Decodable { let text: String; let tag: QuestionTag }
+    let url = URL(fileURLWithPath: "docs/V0.106_house_deck.json")
+    let rows = try JSONDecoder().decode([Row].self, from: Data(contentsOf: url))
+    runner.assertEqual(rows.map(\.text), QuestionBoxHouseDeck.entries.map(\.text))
+    runner.assertEqual(rows.map(\.tag), QuestionBoxHouseDeck.entries.map(\.tag))
+    runner.assertTrue(QuestionBoxHouseDeck.placeholder(seed: qbUUID(7)).hasPrefix("e.g. "))
+}
+
+runner.run("V0.106 rotation: withdrawers ordered by FIRST withdrawal") {
+    let a = qbUUID(1), b = qbUUID(2), c = qbUUID(3)
+    let order = QuestionBoxRotation.order(
+        withdrawals: [
+            .init(memberId: a, at: qbT0.addingTimeInterval(120)),
+            .init(memberId: c, at: qbT0.addingTimeInterval(60)),
+            .init(memberId: a, at: qbT0.addingTimeInterval(30)),   // A's first is earliest
+            .init(memberId: c, at: qbT0.addingTimeInterval(10_000))
+        ],
+        claims: [.init(memberId: b, at: qbT0.addingTimeInterval(-86_400))]
+    )
+    runner.assertEqual(order, [a, c])
+}
+
+runner.run("V0.106 rotation: no bank falls back to claim order") {
+    let a = qbUUID(1), b = qbUUID(2), h = qbUUID(9)
+    let order = QuestionBoxRotation.order(
+        withdrawals: [],
+        claims: [
+            .init(memberId: h, at: qbT0.addingTimeInterval(-100)),
+            .init(memberId: b, at: qbT0.addingTimeInterval(-300)),
+            .init(memberId: a, at: qbT0.addingTimeInterval(-200))
+        ]
+    )
+    runner.assertEqual(order, [b, a, h])
+}
+
+runner.run("V0.106 rotation: host always reads the opener, then rotation wraps") {
+    let a = qbUUID(1), c = qbUUID(3), h = qbUUID(9)
+    let rot = [c, a]
+    runner.assertEqual(QuestionBoxRotation.reader(isOpener: true, hostId: h, rotation: rot, index: 5), h)
+    runner.assertEqual(QuestionBoxRotation.reader(isOpener: false, hostId: h, rotation: rot, index: 0), c)
+    runner.assertEqual(QuestionBoxRotation.reader(isOpener: false, hostId: h, rotation: rot, index: 1), a)
+    runner.assertEqual(QuestionBoxRotation.reader(isOpener: false, hostId: h, rotation: rot, index: 2), c)
+    runner.assertNil(QuestionBoxRotation.reader(isOpener: false, hostId: h, rotation: [], index: 0))
+}
+
+runner.run("V0.106 rotation: Pass hands to the next person; solo reader cannot pass") {
+    let a = qbUUID(1), c = qbUUID(3), h = qbUUID(9)
+    runner.assertEqual(QuestionBoxRotation.next(after: c, rotation: [c, a]), a)
+    runner.assertEqual(QuestionBoxRotation.next(after: a, rotation: [c, a]), c)
+    runner.assertEqual(QuestionBoxRotation.next(after: h, rotation: [c, a]), c)
+    runner.assertNil(QuestionBoxRotation.next(after: a, rotation: [a]))
+}
+
+runner.run("V0.106 cadence: opener at start, never before") {
+    func d(_ now: TimeInterval, last: TimeInterval? = nil) -> QuestionBoxCadence.Decision {
+        QuestionBoxCadence.decide(
+            now: qbT0.addingTimeInterval(now), playedAt: qbT0, settledAt: nil,
+            enabled: true, cadenceMinutes: 20,
+            lastTurnAt: last.map { qbT0.addingTimeInterval($0) }
+        )
+    }
+    runner.assertEqual(d(-1), .none)
+    runner.assertEqual(d(0), .opener)
+}
+
+runner.run("V0.106 cadence: fixed interval measured from the previous turn") {
+    func d(_ now: TimeInterval, last: TimeInterval, minutes: Int = 20) -> QuestionBoxCadence.Decision {
+        QuestionBoxCadence.decide(
+            now: qbT0.addingTimeInterval(now), playedAt: qbT0, settledAt: nil,
+            enabled: true, cadenceMinutes: minutes, lastTurnAt: qbT0.addingTimeInterval(last)
+        )
+    }
+    runner.assertEqual(d(19 * 60 + 59, last: 0), .none)
+    runner.assertEqual(d(20 * 60, last: 0), .interval)
+    runner.assertEqual(d(39 * 60, last: 20 * 60), .none)
+    runner.assertEqual(d(10 * 60, last: 0, minutes: 10), .interval)
+    runner.assertEqual(d(29 * 60, last: 0, minutes: 30), .none)
+    runner.assertEqual(d(30 * 60, last: 0, minutes: 30), .interval)
+}
+
+runner.run("V0.106 cadence: off allows only the opener; settle and disabled stop turns") {
+    runner.assertEqual(QuestionBoxCadence.decide(
+        now: qbT0.addingTimeInterval(9_999), playedAt: qbT0, settledAt: nil,
+        enabled: true, cadenceMinutes: 0, lastTurnAt: qbT0), .none)
+    runner.assertEqual(QuestionBoxCadence.decide(
+        now: qbT0, playedAt: qbT0, settledAt: nil,
+        enabled: true, cadenceMinutes: 0, lastTurnAt: nil), .opener)
+    runner.assertEqual(QuestionBoxCadence.decide(
+        now: qbT0.addingTimeInterval(3_600), playedAt: qbT0, settledAt: qbT0.addingTimeInterval(60),
+        enabled: true, cadenceMinutes: 20, lastTurnAt: qbT0), .none)
+    runner.assertEqual(QuestionBoxCadence.decide(
+        now: qbT0, playedAt: qbT0, settledAt: nil,
+        enabled: false, cadenceMinutes: 20, lastTurnAt: nil), .none)
+    runner.assertEqual(QuestionBoxSettings.cadenceOptions, [10, 20, 30, 0])
+    runner.assertEqual(QuestionBoxSettings.default.cadenceMinutes, 20)
+    runner.assertEqual(QuestionBoxCadence.label(for: 0), "Off")
+}
+
+runner.run("V0.106 Currently Into: fresh at 30 days, hidden after, hidden when empty") {
+    let now = qbT0
+    runner.assertTrue(CurrentlyInto(text: "Surfing", updatedAt: now.addingTimeInterval(-30 * 86_400)).isFresh(now: now))
+    runner.assertFalse(CurrentlyInto(text: "Surfing", updatedAt: now.addingTimeInterval(-30 * 86_400 - 1)).isFresh(now: now))
+    runner.assertNil(CurrentlyInto(text: "Surfing", updatedAt: now.addingTimeInterval(-31 * 86_400)).displayText(now: now))
+    runner.assertNil(CurrentlyInto(text: "   ", updatedAt: now).displayText(now: now))
+    runner.assertNil(CurrentlyInto(text: "Surfing", updatedAt: nil).displayText(now: now))
+    runner.assertEqual(CurrentlyInto(text: " Surfing ", updatedAt: now).displayText(now: now), "Surfing")
+}
+
+runner.run("V0.106 one-ask rule: stale/empty Currently Into wins, else question, never both") {
+    let now = qbT0
+    let fresh = CurrentlyInto(text: "Chess", updatedAt: now.addingTimeInterval(-86_400))
+    let stale = CurrentlyInto(text: "Chess", updatedAt: now.addingTimeInterval(-40 * 86_400))
+    let empty = CurrentlyInto(text: nil, updatedAt: nil)
+    runner.assertEqual(ClaimedCardAsk.resolve(currentlyInto: empty, questionBoxEnabled: true, now: now), .currentlyInto(prefill: ""))
+    runner.assertEqual(ClaimedCardAsk.resolve(currentlyInto: stale, questionBoxEnabled: true, now: now), .currentlyInto(prefill: "Chess"))
+    runner.assertEqual(ClaimedCardAsk.resolve(currentlyInto: fresh, questionBoxEnabled: true, now: now), .question)
+    runner.assertEqual(ClaimedCardAsk.resolve(currentlyInto: fresh, questionBoxEnabled: false, now: now), .none)
+    runner.assertEqual(ClaimedCardAsk.sanitize("  " + String(repeating: "x", count: 80), max: CurrentlyInto.maxLength).count, 60)
+    runner.assertEqual(ClaimedCardAsk.sanitize("   ", max: 140), "")
+}
+
+runner.run("V0.106 anonymity: get_question_box_state shape has no author id, askedBy nil when hidden") {
+    let json = """
+    {"turn_id":"00000000-0000-0000-0000-000000000011","event_id":"00000000-0000-0000-0000-000000000012",
+     "reader_id":"00000000-0000-0000-0000-000000000003","reader_display_name":"Cal",
+     "question_text":"Which decade would you live in?","asked_by":null,"kind":"interval",
+     "created_at":"2027-01-15T08:00:00Z","is_reader":true,"speaking_light":true,
+     "answer_first_display_name":"Alex"}
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let turn = try decoder.decode(QuestionTurn.self, from: Data(json.utf8))
+    runner.assertNil(turn.askedBy)
+    runner.assertTrue(turn.isReader)
+    runner.assertEqual(turn.answerFirstLine, "Pick who answers first — maybe Alex?")
+    runner.assertEqual(QuestionTurn.ritualLine, "Question from the box:")
+    // The member-facing RPC contract must not carry any author identifier.
+    let keys = Set(Mirror(reflecting: turn).children.compactMap(\.label))
+    runner.assertFalse(keys.contains("authorId"), "QuestionTurn must not model author_id")
+    runner.assertFalse(json.contains("author_id"))
+}
+
+final class FakeTorch: TorchControlling {
+    var hasTorch = true
+    var busy = false
+    var calls: [String] = []
+    func setOn(level: Float) -> Bool {
+        guard !busy else { calls.append("busy"); return false }
+        calls.append("on:\(level)")
+        return true
+    }
+    func setOff() { calls.append("off") }
+}
+
+runner.run("V0.106 speaking light: on at 0.1 when card opens, off on Done/Pass") {
+    let torch = FakeTorch()
+    let light = SpeakingLightController(torch: torch, schedule: { _, _ in })
+    light.cardOpened(settingEnabled: true)
+    light.cardOpened(settingEnabled: true)     // re-render must not re-fire
+    runner.assertTrue(light.isOn)
+    light.cardClosed()
+    light.cardClosed()
+    runner.assertEqual(torch.calls, ["on:0.1", "off"])
+}
+
+runner.run("V0.106 speaking light: auto-off after 3 min; stale timer ignored") {
+    let torch = FakeTorch()
+    var timers: [(TimeInterval, () -> Void)] = []
+    let light = SpeakingLightController(torch: torch, schedule: { d, w in timers.append((d, w)) })
+    light.cardOpened(settingEnabled: true)
+    runner.assertEqual(timers.first?.0, 180)
+    light.cardClosed()
+    light.cardOpened(settingEnabled: true)
+    timers[0].1()                               // first card's timer fires late
+    runner.assertTrue(light.isOn, "stale timer must not kill the second card's light")
+    timers[1].1()
+    runner.assertFalse(light.isOn)
+    runner.assertEqual(torch.calls, ["on:0.1", "off", "on:0.1", "off"])
+}
+
+runner.run("V0.106 speaking light: silent skip when setting off, no torch, or busy") {
+    let off = FakeTorch()
+    let l1 = SpeakingLightController(torch: off, schedule: { _, _ in })
+    l1.cardOpened(settingEnabled: false)
+    runner.assertEqual(off.calls, [])
+    let ipad = FakeTorch(); ipad.hasTorch = false
+    let l2 = SpeakingLightController(torch: ipad, schedule: { _, _ in })
+    l2.cardOpened(settingEnabled: true)
+    l2.cardClosed()
+    runner.assertEqual(ipad.calls, [])
+    let busy = FakeTorch(); busy.busy = true
+    let l3 = SpeakingLightController(torch: busy, schedule: { _, _ in })
+    l3.cardOpened(settingEnabled: true)
+    l3.cardClosed()
+    runner.assertFalse(l3.isOn)
+    runner.assertEqual(busy.calls, ["busy"])
+}
+
 // MARK: - Summary
 
 print("")
