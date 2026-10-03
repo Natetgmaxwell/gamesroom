@@ -4826,6 +4826,44 @@ runner.run("V0.106 speaking light: silent skip when setting off, no torch, or bu
     runner.assertEqual(busy.calls, ["busy"])
 }
 
+runner.runAsync("V0.106 in-memory store: host opener, fixed interval, Pass hands on, Done closes") {
+    InMemoryQuestionBoxState.secondsPerMinute = 0.001
+    defer { InMemoryQuestionBoxState.secondsPerMinute = 60 }
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms()[0]
+    let eventId = try await store.addEvent(roomId: room.id, name: "Live", playedAt: Date().addingTimeInterval(-60), packSlugs: ["monopoly_deal"], hiddenFromUserIds: [])
+    let alex = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    let sam = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    try await store.claimSeatWaived(eventId: eventId, memberId: sam)
+    try await store.claimSeatWaived(eventId: eventId, memberId: alex)
+    try await store.submitMemberQuestion(eventId: eventId, text: "  Tea or coffee forever?  ")
+    runner.assertEqual(try await store.fetchMyMemberQuestion(eventId: eventId), "Tea or coffee forever?")
+
+    try await store.questionBoxTick(eventId: eventId)
+    let opener = try await store.fetchQuestionBoxState(eventId: eventId)
+    runner.assertEqual(opener?.readerDisplayName, "Host")
+    runner.assertEqual(opener?.kind, "opener")
+    runner.assertEqual(opener?.questionText, "Tea or coffee forever?")
+    runner.assertNil(opener?.askedBy)
+
+    try await store.questionBoxTick(eventId: eventId)
+    runner.assertEqual(try await store.fetchQuestionBoxState(eventId: eventId)?.id, opener?.id)
+
+    try await Task.sleep(nanoseconds: 50_000_000)
+    try await store.questionBoxTick(eventId: eventId)
+    let second = try await store.fetchQuestionBoxState(eventId: eventId)
+    runner.assertEqual(second?.kind, "interval")
+    runner.assertFalse(second?.isReader ?? true)
+
+    try await store.respondQuestionTurn(turnId: second!.id, action: .pass)
+    let passed = try await store.fetchQuestionBoxState(eventId: eventId)
+    runner.assertEqual(passed?.kind, "pass")
+    runner.assertEqual(passed?.questionText, second?.questionText)
+    runner.assertTrue(passed?.readerId != second?.readerId)
+    try await store.respondQuestionTurn(turnId: passed!.id, action: .done)
+    runner.assertNil(try await store.fetchQuestionBoxState(eventId: eventId))
+}
+
 // MARK: - Summary
 
 print("")

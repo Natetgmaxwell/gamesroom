@@ -108,6 +108,9 @@ actor InMemoryRoomStore: RoomStore {
     /// fallback shelf.
     nonisolated var defaultInstalledPacks: [String] { Self.defaultInstalledPacks }
 
+    /// V0.106 — Question Box + Currently Into state (QuestionBoxStore.swift).
+    var questionBox = InMemoryQuestionBoxState()
+
     /// Map of `(eventId, memberId) → rsvp state`.
     private var rsvps: [UUID: [UUID: MemberRSVPState]]
 
@@ -608,6 +611,41 @@ actor InMemoryRoomStore: RoomStore {
         //                this init.
         //   empty     — empty rooms list → RoomPage empty state
         //                (Create-room hero CTA).
+        #if DEBUG
+        // V0.106 — UI-test seeds for the Question Box. `briefing`:
+        // upcoming night, Alex + Sam claimed, Alex's Currently Into is
+        // fresh and Sam's is 40 days stale. `live`: the night started a
+        // minute ago, everyone claimed, Sam withdrew chips before Alex
+        // (so the rotation after the host's opener is Sam, then Alex).
+        if let raw = CommandLine.arguments.first(where: { $0.hasPrefix("-question-box-seed=") }) {
+            let alex = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+            let sam = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+            let mode = raw.dropFirst("-question-box-seed=".count)
+            var event = carwoolaEvent
+            if mode == "live" {
+                event = Event(
+                    id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name,
+                    playedAt: Date().addingTimeInterval(-60), createdAt: carwoolaEvent.createdAt,
+                    venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote,
+                    maxSeats: carwoolaEvent.maxSeats, startedAt: Date().addingTimeInterval(-60),
+                    settledAt: nil, sessionId: nil, hostFinalized: false
+                )
+                self.events[carwoola.id] = event
+                self.rsvps[event.id] = [carwoola.createdBy: .claimed, alex: .claimed, sam: .claimed]
+                self.questionBox.withdrawals[event.id] = [
+                    .init(memberId: sam, at: Date().addingTimeInterval(-50)),
+                    .init(memberId: alex, at: Date().addingTimeInterval(-40))
+                ]
+            } else {
+                self.rsvps[event.id] = [alex: .claimed, sam: .claimed]
+                self.questionBox.currentlyInto[carwoola.id] = [
+                    alex: CurrentlyInto(text: "Learning the banjo", updatedAt: Date().addingTimeInterval(-2 * 86_400)),
+                    sam: CurrentlyInto(text: "Sourdough starters", updatedAt: Date().addingTimeInterval(-40 * 86_400))
+                ]
+            }
+        }
+        #endif
+
         guard CommandLine.arguments.contains("-screenshots-bypass-auth"),
               let screenState = Self.screenshotStateArg() else {
             return
@@ -1335,7 +1373,10 @@ actor InMemoryRoomStore: RoomStore {
     /// row so the dispatcher's `mutedMemberIds` set can derive
     /// straight from the existing `eventRSVPsByEvent` cache.
     func fetchEventRSVPs(eventId: UUID) async throws -> [EventRSVP] {
-        guard let event = events[eventId] else { return [] }
+        // V0.106 — `events` is keyed by room id; the old
+        // `events[eventId]` lookup never matched, so this always
+        // returned [] and the in-memory seat grid stayed empty.
+        guard let event = eventById(eventId) else { return [] }
         let members = try await fetchRoomMembers(roomId: event.roomId)
         let states = rsvps[eventId] ?? [:]
         let mutes = eventMutes[eventId] ?? [:]
@@ -1901,6 +1942,24 @@ actor InMemoryRoomStore: RoomStore {
         var candidates = arrivalCandidatesByEvent[eventId] ?? []
         candidates.removeAll { $0.userId == memberId }
         arrivalCandidatesByEvent[eventId] = candidates
+    }
+
+    // MARK: V0.106 helpers (QuestionBoxStore conformance)
+
+    func eventById(_ eventId: UUID) -> Event? {
+        events.values.first { $0.id == eventId }
+    }
+
+    func roomIdForEvent(_ eventId: UUID) -> UUID? {
+        eventById(eventId)?.roomId
+    }
+
+    func roomById(_ roomId: UUID) -> Room? {
+        rooms.first { $0.id == roomId }
+    }
+
+    func qbCurrentMemberId() -> UUID {
+        currentSyntheticMemberId()
     }
 
     // MARK: Synthetic identity
