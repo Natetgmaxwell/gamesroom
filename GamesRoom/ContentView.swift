@@ -150,6 +150,7 @@ struct ContentView: View {
         .onChange(of: auth.currentUser?.id) { _, newUserId in
             Task {
                 if newUserId != nil {
+                    QuestionBoxPushRegistration.registerIfPossible()
                     await RealtimeEventService.shared.start(roomService: roomService)
                 } else {
                     await RealtimeEventService.shared.stop()

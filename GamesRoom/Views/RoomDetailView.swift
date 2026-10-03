@@ -161,6 +161,13 @@ struct RoomDetailView: View {
         authService.currentUser?.id
     }
 
+    /// V0.106 — the active event while it is live (started, not
+    /// settled). Question turns only exist inside this window.
+    private var questionBoxLiveEvent: Event? {
+        guard let event = activeEvent, event.playedAt <= Date(), event.settledAt == nil else { return nil }
+        return event
+    }
+
     /// V0.62 — single source of truth for the caller's working hand,
     /// derived from `workingHands` (loaded via `get_event_working_hands`,
     /// migration 065). Replaces the old `casinoWithdrawn` derivation
@@ -290,6 +297,10 @@ struct RoomDetailView: View {
                 HostScoringDashboard(room: room, event: event, onClose: { scoringDashboardVisible = false })
                     .environmentObject(roomService)
                     .environmentObject(scoringService)
+                    .safeAreaInset(edge: .bottom) {
+                        QuestionBoxLiveSection(event: event, isHost: isHost)
+                            .padding(.horizontal, Theme.Layout.edgePadding)
+                    }
             } else {
                 scrollBody
             }
@@ -466,6 +477,10 @@ struct RoomDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
                 activeSlot
                     .frame(maxWidth: .infinity)
+                // V0.106 — Question Box live driver + host fallback.
+                if let event = questionBoxLiveEvent {
+                    QuestionBoxLiveSection(event: event, isHost: isHost)
+                }
                 // V0.79 — one-time notification opt-in prompt. Shows
                 // once per room (per device) while opt-in is off;
                 // after any answer it lives in Room settings only.
@@ -1826,6 +1841,10 @@ private struct BriefingSlot: View {
                 }
             }
 
+            // V0.106 — who's coming, with each claimed member's
+            // Currently Into as grey secondary text (fresh only).
+            WhosComingList(eventId: event.id, rsvps: rsvps)
+
             // V0.79 — notification preferences left the briefing
             // card. A one-time prompt on the main room page owns
             // discovery; Room settings → "My notifications" owns
@@ -1880,6 +1899,12 @@ private struct BriefingSlot: View {
                         Text("You're in.")
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.accent)
+                    }
+                    // V0.106 — the one optional ask (spec §3): Currently
+                    // Into when stale/empty, else the Question Box field.
+                    // Inline after the claim; claiming never waits on it.
+                    if event.playedAt > Date() {
+                        ClaimedCardAskField(roomId: room.id, eventId: event.id)
                     }
                     // V0.85 — the reclaim. A held deposit renders
                     // the "I'm here" button: one tap returns the

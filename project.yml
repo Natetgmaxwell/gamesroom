@@ -69,6 +69,18 @@ targets:
           # Fonts/ directory entirely; excluded here so the migration is
           # non-destructive.
           - "Fonts"
+    # V0.106 — Push Notifications capability (reader-only question
+    # turns). xcodegen writes this dict into GamesRoom.entitlements on
+    # generate, so the file and the yml can't drift. aps-environment is
+    # "development" here; App Store export rewrites it to production.
+    entitlements:
+      path: GamesRoom/GamesRoom.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.applesignin:
+          - Default
+        com.apple.security.application-groups:
+          - group.com.gamesroom.app
     configFiles:
       Debug: GamesRoom/Config.xcconfig
       Release: GamesRoom/Config.xcconfig
