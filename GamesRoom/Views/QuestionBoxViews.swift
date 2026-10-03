@@ -30,7 +30,7 @@ struct ClaimedCardAskField: View {
     private var ask: ClaimedCardAsk { questionBox.ask(roomId: roomId) }
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
             switch ask {
             case .currentlyInto(let prefill):
                 field(
@@ -148,8 +148,6 @@ struct WhosComingList: View {
                                 .accessibilityIdentifier("currently-into-\(rsvp.displayName)")
                         }
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("whos-coming-\(rsvp.displayName)")
                 }
             }
             .padding(.top, 4)
@@ -282,11 +280,14 @@ struct QuestionBoxLiveSection: View {
     @EnvironmentObject private var questionBox: QuestionBoxService
 
     var body: some View {
-        Group {
+        // A real container, not `Group`: Group modifiers apply per child,
+        // so with no turn yet (no child) the driver `.task` never ran.
+        VStack(spacing: 0) {
             if isHost, let turn = questionBox.turnByEvent[event.id], !turn.isReader {
                 HostQuestionFallback(turn: turn)
             }
         }
+        .frame(maxWidth: .infinity)
         .task(id: event.id) { await questionBox.driveLiveEvent(eventId: event.id) }
     }
 }
