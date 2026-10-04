@@ -197,22 +197,19 @@ main.support {
   justify-items: center;
   align-items: center;
 }
-/* Hero entrance: icon → H1 → CTA, fast and sequenced (≤650ms total) */
-.hero-inner > * {
-  animation: hero-rise 0.4s var(--ease-spring) both;
-}
-.hero-inner > *:nth-child(1) { animation-delay: 0.05s; }  /* icon */
-.hero-inner > *:nth-child(2) { animation-delay: 0.15s; }  /* H1 + lead */
-/* Preserve the ambient float on the hero icon: rise first, then float */
+/* Hero entrance: the hero is in the initial viewport, so don't gate on
+   JS or rely on a delay. The icon keeps its ambient float. */
+.hero-inner > * { animation: hero-rise 0.4s var(--ease-spring) both; }
+@keyframes hero-rise { from { opacity: 0.5; } to { opacity: 1; } }
 .hero-icon {
-  animation: hero-rise 0.4s var(--ease-spring) both,
-    icon-float 6s ease-in-out 0.5s infinite;
   width: 96px;
   height: 96px;
   border-radius: 22px;
   margin: 0 auto;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5),
     0 0 0 1px var(--hairline);
+  animation: hero-rise 0.4s var(--ease-spring) both,
+    icon-float 6s ease-in-out 0.5s infinite;
 }
 h1 {
   font-family: var(--font-display);
@@ -221,9 +218,9 @@ h1 {
   line-height: 1.18;
   letter-spacing: -0.01em;
   margin-bottom: 1rem;
-  max-width: 18ch;
+  max-width: 22ch;
 }
-.hero-copy h1 { max-width: 18ch; }
+.hero-copy h1 { max-width: 22ch; }
 h1 em { font-style: italic; color: var(--accent); }
 .lead {
   font-size: 1.1rem;
