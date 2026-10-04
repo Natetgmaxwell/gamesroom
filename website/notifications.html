@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Games Room — Notifications</title>
-  <meta name="description" content="Three quiet reminders per night, grouped per room, silent during play. The phone stays in the pocket.">
+  <title>Games Room: Notifications</title>
+  <meta name="description" content="Off until you turn them on. One message when a night is made, then three reminders: one week before, three to four days before, and the morning of. Nothing during play.">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
-  <link rel="stylesheet" href="/style.css?v=79">
+  <link rel="stylesheet" href="/style.css?v=84">
 </head>
 <body>
   <header class="site-header">
@@ -21,6 +21,7 @@
         <a href="/">Home</a>
         <a href="/how-it-works">How it works</a>
         <a href="/features">Features</a>
+        <a href="/play/briefing">Try it</a>
         <a href="/notifications" aria-current="page">Notifications</a>
         <a href="/privacy">Privacy</a>
       </nav>
@@ -30,19 +31,21 @@
   <main>
     <section class="statement fullbleed reveal">
       <h1>Three quiet reminders. Then silence.</h1>
-      <p>Games Room sends three notifications per night, and nothing else.</p>
+      <p>Notifications are off until you turn them on for a room. When they are on, you get these messages for each night, and nothing else.</p>
       <ul class="notif-list">
-        <li>A push when the night is created. The room is on.</li>
-        <li>A 48-hour briefing. Who's coming, what's played, what to bring.</li>
-        <li>A morning-of reminder. The night is tonight.</li>
+        <li>A message when the host makes the night.</li>
+        <li>One week before. The mascot tells you the night is coming.</li>
+        <li>Three to four days before. It reminds you again, with the host note.</li>
+        <li>The morning of the night, at 9 am. The night is today.</li>
       </ul>
     </section>
 
     <section class="shell reveal">
       <ul class="notif-rules">
-        <li class="notif-rule"><strong>Grouped per room:</strong> Notifications group by room on the lock screen. The poker room and the CAH room stay separate.</li>
-        <li class="notif-rule"><strong>Quiet during play:</strong> During the night, the app goes quiet. The phone stays in the pocket. No pings, no feed, no livestream of the table.</li>
-        <li class="notif-rule"><strong>One channel:</strong> There is one notification channel. Mute it in iOS settings and the app goes fully quiet. No in-app maze of toggles.</li>
+        <li class="notif-rule"><strong>Off by default:</strong> Each room asks you one time. You can change it later in the room settings.</li>
+        <li class="notif-rule"><strong>Stop for one night:</strong> Tap <span class="ui">Can't make it</span> and the reminders for that night stop. You can also mute one night.</li>
+        <li class="notif-rule"><strong>Quiet during play:</strong> The app sends nothing during the night. The phone stays in your pocket.</li>
+        <li class="notif-rule"><strong>No feed:</strong> There are no likes, no follows and no messages from other people. The app only tells you about the night.</li>
       </ul>
     </section>
   </main>
@@ -53,37 +56,34 @@
       <a href="/">Home</a>
       <a href="/how-it-works">How it works</a>
       <a href="/features">Features</a>
+      <a href="/play/briefing">Try it</a>
       <a href="/notifications">Notifications</a>
       <a href="/privacy">Privacy</a>
       <a href="/support">Support</a>
-      <a href="/privacy">Privacy policy</a>
     </nav>
   </footer>
 
   <script>
-    // ── Scroll-triggered reveal ──
     (function () {
+      var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       var items = document.querySelectorAll(".reveal");
-      if (!("IntersectionObserver" in window)) {
+      if (reduce || !("IntersectionObserver" in window)) {
         items.forEach(function (i) { i.classList.add("is-visible"); });
-        return;
+      } else {
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
+          });
+        }, { threshold: 0.12 });
+        items.forEach(function (i) { io.observe(i); });
       }
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) {
-          if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
-        });
-      }, { threshold: 0.12 });
-      items.forEach(function (i) { io.observe(i); });
-    })();
-
-    // ── Header pips light in sequence, repeating ──
-    (function () {
+      if (reduce) return;
       var pips = document.querySelectorAll(".pips span");
-      var i = 0;
+      var n = 0;
       setInterval(function () {
         pips.forEach(function (p) { p.classList.remove("lit"); });
-        pips[i].classList.add("lit");
-        i = (i + 1) % pips.length;
+        pips[n].classList.add("lit");
+        n = (n + 1) % pips.length;
       }, 550);
     })();
   </script>
