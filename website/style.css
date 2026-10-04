@@ -2034,11 +2034,20 @@ main.short-page { padding-bottom: 1.5rem; }
   .step-panel { padding: 0.5rem 1.25rem 1.5rem; }
   .step-line { display: block; color: var(--text-dim); font-size: 0.9rem; line-height: 1.4; margin-top: 0.15rem; }
 }
-/* Wide desktop: let the pair grow, give the hero copy room to breathe. */
+/* Wide desktop: the hero is centred, not a two-column split — the H1
+   needs the full row width to read on one line. */
 @media (min-width: 1024px) {
+  .hero-inner {
+    grid-template-columns: 1fr;
+    text-align: center;
+    justify-items: center;
+    gap: 1.5rem;
+  }
+  .hero-icon { margin: 0 auto; }
+  .hero-copy { max-width: 720px; }
+  .hero-copy h1 { font-size: 3rem; max-width: none; }
   .pair { gap: 3rem; }
   .pair figure { max-width: 480px; }
-  .hero-copy h1 { font-size: 3rem; max-width: 28ch; }
 }
 @media (prefers-reduced-motion: reduce) {
   .step-toggle::before, .step-toggle::after, .night-strip details { transition: none; }
