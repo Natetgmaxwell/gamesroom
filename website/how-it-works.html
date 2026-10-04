@@ -7,7 +7,7 @@
   <meta name="description" content="How Games Room works, step by step: join a room, set the night, claim a seat, play and score, and close the season. Each step has a diagram.">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
-  <link rel="stylesheet" href="/style.css?v=88">
+  <link rel="stylesheet" href="/style.css?v=89">
 </head>
 <body>
   <header class="site-header">
@@ -86,11 +86,13 @@
         <li class="frame">
           <svg class="dg" viewBox="0 0 200 140" role="img" aria-label="The friend is in the room. The used code has a line through it.">
             <rect width="200" height="140" rx="10" fill="#131315"/>
-            <circle cx="100" cy="58" r="38" fill="#B08D57" fill-opacity=".08" stroke="#B08D57" stroke-opacity=".6"/>
-            <g fill="#F4EFE6"><circle cx="80" cy="50" r="8"/><circle cx="100" cy="40" r="8"/><circle cx="120" cy="50" r="8"/></g>
-            <circle cx="100" cy="74" r="8" fill="#B08D57"/>
-            <text x="100" y="124" class="t-dim" font-size="14" text-anchor="middle" letter-spacing="1">K7MPQ2</text>
-            <line x1="66" y1="119" x2="134" y2="119" stroke="#B08D57" stroke-width="2"/>
+            <circle cx="100" cy="50" r="30" fill="#B08D57" fill-opacity=".08" stroke="#B08D57" stroke-opacity=".6"/>
+            <g fill="#F4EFE6"><circle cx="84" cy="44" r="7"/><circle cx="100" cy="36" r="7"/><circle cx="116" cy="44" r="7"/></g>
+            <circle cx="100" cy="64" r="7" fill="#B08D57"/>
+            <g aria-hidden="true">
+              <text x="100" y="113" class="t-dim" font-size="14" text-anchor="middle" letter-spacing="1">K7MPQ2</text>
+              <line x1="62" y1="109" x2="138" y2="109" stroke="#B08D57" stroke-width="2"/>
+            </g>
           </svg>
           <p>The friend is in. The code does not work again.</p>
         </li>
@@ -132,10 +134,13 @@
         <li class="frame">
           <svg class="dg" viewBox="0 0 200 140" role="img" aria-label="A phone outside the room gets nothing. A lock is on the room.">
             <rect width="200" height="140" rx="10" fill="#131315"/>
-            <circle cx="80" cy="70" r="40" fill="none" stroke="#B08D57" stroke-opacity=".6" stroke-width="1.5"/>
-            <rect x="68" y="66" width="24" height="20" rx="3" fill="#B08D57"/><path d="M73 66 V 58 A 7 7 0 0 1 87 58 V 66" fill="none" stroke="#B08D57" stroke-width="2.5"/>
-            <rect x="152" y="54" width="22" height="34" rx="4" fill="none" stroke="#3D3D40" stroke-width="1.5"/>
-            <text x="163" y="108" class="t-dim" font-size="13" text-anchor="middle">outside</text>
+            <circle cx="80" cy="70" r="36" fill="none" stroke="#B08D57" stroke-opacity=".6" stroke-width="1.5"/>
+            <rect x="68" y="68" width="24" height="18" rx="3" fill="#B08D57"/><path d="M73 68 V 62 A 7 7 0 0 1 87 62 V 68" fill="none" stroke="#B08D57" stroke-width="2.5"/>
+            <g fill="none" stroke="#3D3D40" stroke-width="1.5" stroke-dasharray="3 3">
+              <rect x="138" y="50" width="20" height="32" rx="4"/>
+            </g>
+            <text x="148" y="104" class="t-dim" font-size="12" text-anchor="middle">outside</text>
+            <line x1="118" y1="58" x2="142" y2="82" stroke="#B08D57" stroke-opacity=".5" stroke-width="1.5"/>
           </svg>
           <p>People outside the room do not see the night.</p>
         </li>
@@ -152,22 +157,22 @@
       <p class="kicker">Before the night</p>
       <h2 id="rem-h">Three reminders. Then <em>quiet</em>.</h2>
       <div class="diagram reminder-diagram">
-        <svg class="dg" viewBox="0 0 600 260" role="img" aria-label="A timeline. Three gold dots: one week before, three to four days before, and the morning of the night. The night itself has no dot. The phone is quiet during play.">
-          <rect width="600" height="260" rx="12" fill="#131315"/>
-          <line x1="30" y1="130" x2="570" y2="130" stroke="#3D3D40" stroke-width="2.5"/>
-          <g fill="#B08D57"><circle cx="80" cy="130" r="13"/><circle cx="290" cy="130" r="13"/><circle cx="450" cy="130" r="13"/></g>
-          <rect x="516" y="102" width="56" height="56" rx="8" fill="#B08D57" fill-opacity=".18" stroke="#B08D57" stroke-width="1.5"/>
-          <text x="544" y="137" class="t-acc" font-size="18" font-weight="600" text-anchor="middle">7 pm</text>
+        <svg class="dg" viewBox="0 0 600 280" role="img" aria-label="A timeline with three gold dots above the line, each labelled above. A 7 pm cell at the right is labelled quiet. Below the line, each dot has a small before label. The 7 pm cell has no before label.">
+          <rect width="600" height="280" rx="12" fill="#131315"/>
+          <line x1="30" y1="150" x2="570" y2="150" stroke="#3D3D40" stroke-width="2.5"/>
+          <g fill="#B08D57"><circle cx="80" cy="150" r="13"/><circle cx="290" cy="150" r="13"/><circle cx="450" cy="150" r="13"/></g>
+          <rect x="516" y="122" width="56" height="56" rx="8" fill="#B08D57" fill-opacity=".18" stroke="#B08D57" stroke-width="1.5"/>
+          <text x="544" y="157" class="t-acc" font-size="18" font-weight="600" text-anchor="middle">7 pm</text>
           <g text-anchor="middle" font-size="22" font-weight="600" class="t">
-            <text x="80" y="88">1 week</text>
-            <text x="290" y="88">3 to 4 days</text>
-            <text x="450" y="194">Morning</text>
+            <text x="80" y="108">1 week</text>
+            <text x="290" y="108">3 to 4 days</text>
+            <text x="450" y="108">Morning</text>
           </g>
-          <g text-anchor="middle" font-size="21" class="t-dim">
-            <text x="80" y="188">before</text>
-            <text x="290" y="188">before</text>
-            <text x="450" y="226">9 am</text>
-            <text x="544" y="86">quiet</text>
+          <g text-anchor="middle" font-size="18" class="t-dim">
+            <text x="80" y="194">before</text>
+            <text x="290" y="194">before</text>
+            <text x="450" y="194">9 am</text>
+            <text x="544" y="106">quiet</text>
           </g>
         </svg>
       </div>

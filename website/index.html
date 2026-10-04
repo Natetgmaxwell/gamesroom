@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
   <!-- Bump the ?v= query on /style.css with every website deploy (cache-busting; HTML is no-cache). -->
-  <link rel="stylesheet" href="/style.css?v=88">
+  <link rel="stylesheet" href="/style.css?v=89">
 </head>
 <body>
   <header class="site-header">
@@ -99,18 +99,19 @@
       <p class="kicker">What the talk sounds like</p>
       <h2 id="why-2">Serious, then <em>stupid</em>, then serious again.</h2>
       <div class="diagram">
-        <svg class="dg swing-wave" viewBox="0 0 600 320" role="img" aria-label="A line goes up and down across one night, from Big ideas at the top to Nonsense at the bottom. Gold dots on the line show the end of each game.">
+        <svg class="dg swing-wave" viewBox="0 0 600 320" role="img" aria-label="A line goes up and down across one night. Four gold dots mark the end of each game. The first and third go up, the second and fourth go down.">
           <rect width="600" height="320" rx="12" fill="#131315"/>
           <line x1="30" y1="180" x2="570" y2="180" stroke="#3D3D40" stroke-dasharray="3 6"/>
           <text x="30" y="40" class="t" fill-opacity=".8" font-size="22">Big ideas</text>
           <text x="30" y="306" class="t" fill-opacity=".8" font-size="22">Nonsense</text>
           <path d="M30 180 C 70 90, 110 90, 150 170 S 200 270, 240 245 S 290 100, 330 105 S 380 265, 420 250 S 470 100, 510 115 S 550 190, 570 180" fill="none" stroke="#B08D57" stroke-width="3.5"/>
           <g><circle class="wave-dot" cx="240" cy="245" r="9"/><circle class="wave-dot" cx="330" cy="105" r="9"/><circle class="wave-dot" cx="420" cy="250" r="9"/><circle class="wave-dot" cx="510" cy="115" r="9"/></g>
+          <!-- 4 "game ends" labels: 2 above the line (where the wave peaks), 2 below (where it troughs) -->
           <g class="t-dim wave-label" text-anchor="middle">
-            <text x="240" y="290">game ends</text>
-            <text x="330" y="80">game ends</text>
-            <text x="420" y="295">game ends</text>
-            <text x="510" y="90">game ends</text>
+            <text x="330" y="78">game ends</text>
+            <text x="510" y="88">game ends</text>
+            <text x="240" y="288">game ends</text>
+            <text x="420" y="293">game ends</text>
           </g>
         </svg>
       </div>
@@ -143,11 +144,13 @@
           <p>Phones face down.</p>
         </li>
         <li class="frame">
-          <svg class="dg" viewBox="0 0 200 140" role="img" aria-label="After the night, the phones scan the chips and show the result.">
+          <svg class="dg" viewBox="0 0 200 140" role="img" aria-label="After the night, a phone shows a gold star with plus 60, the scan result.">
             <rect width="200" height="140" rx="10" fill="#131315"/>
-            <g fill="none" stroke="#F4EFE6" stroke-opacity=".7" stroke-width="1.8"><rect x="34" y="40" width="26" height="48" rx="5"/><rect x="72" y="40" width="26" height="48" rx="5"/><rect x="110" y="40" width="26" height="48" rx="5"/><rect x="148" y="40" width="26" height="48" rx="5"/></g>
-            <g fill="#B08D57"><circle cx="47" cy="64" r="5"/><circle cx="85" cy="64" r="5"/><circle cx="123" cy="64" r="5"/><circle cx="161" cy="64" r="5"/></g>
-            <text x="100" y="118" class="t" font-size="18" font-weight="600" text-anchor="middle">After</text>
+            <rect x="70" y="14" width="60" height="112" rx="9" fill="none" stroke="#F4EFE6" stroke-opacity=".7" stroke-width="1.5"/>
+            <circle cx="100" cy="56" r="20" fill="#B08D57" fill-opacity=".2" stroke="#B08D57" stroke-width="1.5"/>
+            <path d="M100 44 L 104.4 53.2 L 114 54.5 L 107 61 L 108.6 70.5 L 100 65.8 L 91.4 70.5 L 93 61 L 86 54.5 L 95.6 53.2 Z" fill="#B08D57"/>
+            <text x="100" y="100" class="t-acc" font-size="16" font-weight="600" text-anchor="middle">+60</text>
+            <text x="100" y="118" class="t" font-size="14" font-weight="500" text-anchor="middle">Tonight's Star</text>
           </svg>
           <p>Scan. Settle. Tonight's Star.</p>
         </li>
@@ -475,11 +478,15 @@
           <p>The season ends. The awards go out, and the table laughs.</p>
         </li>
         <li>
-          <svg class="dg" viewBox="0 0 160 120" role="img" aria-label="Week 12. Six people sit. One new person sits with them. Lines of talk join the new person to the table.">
+          <svg class="dg" viewBox="0 0 160 120" role="img" aria-label="Week 12. Six people sit. One new person sits with them. Dashed lines join the new person to two of the table.">
             <rect width="160" height="120" rx="10" fill="#131315"/>
             <circle cx="80" cy="60" r="28" fill="#B08D57" fill-opacity=".14" stroke="#B08D57"/>
             <g fill="none" stroke="#B08D57" stroke-opacity=".5"><path d="M80 18 Q 98 26 116 39"/><path d="M116 39 Q 126 60 116 81"/><path d="M44 81 Q 34 60 44 39"/><path d="M44 39 Q 62 26 80 18"/></g>
             <g fill="#F4EFE6"><circle cx="80" cy="18" r="8"/><circle cx="116" cy="39" r="8"/><circle cx="116" cy="81" r="8"/><circle cx="44" cy="81" r="8"/><circle cx="44" cy="39" r="8"/></g>
+            <g fill="none" stroke="#B08D57" stroke-opacity=".7" stroke-dasharray="3 3">
+              <path d="M80 94 Q 100 92 112 84"/>
+              <path d="M80 94 Q 60 92 48 84"/>
+            </g>
             <circle cx="80" cy="102" r="8" fill="#B08D57"/>
           </svg>
           <span class="week">Week 12</span>
@@ -494,35 +501,35 @@
       <h2 id="anti-h">Look at the table, not the <em>screen</em>.</h2>
       <ul class="anti">
         <li class="anti-item">
-          <svg class="dg" viewBox="0 0 80 80" role="img" aria-label="A feed of posts with a line through it.">
-            <rect x="22" y="8" width="36" height="64" rx="6" fill="none" stroke="#F4EFE6" stroke-opacity=".5" stroke-width="1.5"/>
-            <g fill="#F4EFE6" fill-opacity=".3"><rect x="27" y="16" width="26" height="10" rx="2"/><rect x="27" y="30" width="26" height="10" rx="2"/><rect x="27" y="44" width="26" height="10" rx="2"/><rect x="27" y="58" width="26" height="8" rx="2"/></g>
-            <line x1="10" y1="70" x2="70" y2="10" stroke="#B08D57" stroke-width="3" stroke-linecap="round"/>
+          <svg class="dg" viewBox="0 0 64 64" role="img" aria-label="A feed of posts with a line through it.">
+            <rect x="18" y="6" width="28" height="52" rx="5" fill="none" stroke="#F4EFE6" stroke-opacity=".6" stroke-width="1.8"/>
+            <g fill="#F4EFE6" fill-opacity=".35"><rect x="22" y="13" width="20" height="8" rx="1.5"/><rect x="22" y="25" width="20" height="8" rx="1.5"/><rect x="22" y="37" width="20" height="8" rx="1.5"/><rect x="22" y="49" width="14" height="6" rx="1.5"/></g>
+            <line x1="10" y1="54" x2="54" y2="10" stroke="#B08D57" stroke-width="3" stroke-linecap="round"/>
           </svg>
           <span>No feed</span>
         </li>
         <li class="anti-item">
-          <svg class="dg" viewBox="0 0 80 80" role="img" aria-label="Two message bubbles with a line through them.">
-            <path d="M14 18 H 48 A 4 4 0 0 1 52 22 V 38 A 4 4 0 0 1 48 42 H 26 L 18 50 V 42 H 14 A 4 4 0 0 1 10 38 V 22 A 4 4 0 0 1 14 18 Z" fill="none" stroke="#F4EFE6" stroke-opacity=".5" stroke-width="1.5"/>
-            <path d="M34 46 H 64 A 4 4 0 0 1 68 50 V 62 A 4 4 0 0 1 64 66 H 62 V 72 L 54 66 H 34 A 4 4 0 0 1 30 62 V 50 A 4 4 0 0 1 34 46 Z" fill="none" stroke="#F4EFE6" stroke-opacity=".5" stroke-width="1.5"/>
-            <line x1="10" y1="70" x2="70" y2="10" stroke="#B08D57" stroke-width="3" stroke-linecap="round"/>
+          <svg class="dg" viewBox="0 0 64 64" role="img" aria-label="Two message bubbles with a line through them.">
+            <path d="M10 14 H 42 A 4 4 0 0 1 46 18 V 32 A 4 4 0 0 1 42 36 H 22 L 14 42 V 36 H 10 A 4 4 0 0 1 6 32 V 18 A 4 4 0 0 1 10 14 Z" fill="none" stroke="#F4EFE6" stroke-opacity=".6" stroke-width="1.8" transform="translate(2 0)"/>
+            <path d="M22 34 H 54 A 4 4 0 0 1 58 38 V 50 A 4 4 0 0 1 54 54 H 52 V 58 L 44 54 H 22 A 4 4 0 0 1 18 50 V 38 A 4 4 0 0 1 22 34 Z" fill="none" stroke="#F4EFE6" stroke-opacity=".6" stroke-width="1.8"/>
+            <line x1="8" y1="56" x2="56" y2="8" stroke="#B08D57" stroke-width="3" stroke-linecap="round"/>
           </svg>
           <span>No DMs</span>
         </li>
         <li class="anti-item">
-          <svg class="dg" viewBox="0 0 80 80" role="img" aria-label="A person with a plus sign and a line through it.">
-            <circle cx="32" cy="28" r="10" fill="none" stroke="#F4EFE6" stroke-opacity=".5" stroke-width="1.5"/>
-            <path d="M14 62 A 18 18 0 0 1 50 62" fill="none" stroke="#F4EFE6" stroke-opacity=".5" stroke-width="1.5"/>
-            <path d="M58 30 V 46 M50 38 H 66" stroke="#F4EFE6" stroke-opacity=".5" stroke-width="1.5"/>
-            <line x1="10" y1="70" x2="70" y2="10" stroke="#B08D57" stroke-width="3" stroke-linecap="round"/>
+          <svg class="dg" viewBox="0 0 64 64" role="img" aria-label="A person with a plus sign and a line through it.">
+            <circle cx="24" cy="22" r="8" fill="none" stroke="#F4EFE6" stroke-opacity=".6" stroke-width="1.8"/>
+            <path d="M10 50 A 14 14 0 0 1 38 50" fill="none" stroke="#F4EFE6" stroke-opacity=".6" stroke-width="1.8"/>
+            <path d="M48 22 V 36 M41 29 H 55" stroke="#F4EFE6" stroke-opacity=".6" stroke-width="1.8"/>
+            <line x1="8" y1="56" x2="56" y2="8" stroke="#B08D57" stroke-width="3" stroke-linecap="round"/>
           </svg>
           <span>No follows</span>
         </li>
         <li class="anti-item">
-          <svg class="dg" viewBox="0 0 80 80" role="img" aria-label="A flame with a day count and a line through it.">
-            <path d="M40 12 C 52 26 58 36 58 48 A 18 18 0 0 1 22 48 C 22 38 28 32 32 26 C 34 34 38 36 40 36 C 40 28 38 20 40 12 Z" fill="none" stroke="#F4EFE6" stroke-opacity=".5" stroke-width="1.5"/>
-            <text x="40" y="58" text-anchor="middle" font-size="12" class="t-dim">7</text>
-            <line x1="10" y1="70" x2="70" y2="10" stroke="#B08D57" stroke-width="3" stroke-linecap="round"/>
+          <svg class="dg" viewBox="0 0 64 64" role="img" aria-label="A flame with a day count and a line through it.">
+            <path d="M32 8 C 42 20 48 28 48 38 A 16 16 0 0 1 16 38 C 16 30 22 24 25 20 C 27 26 30 28 32 28 C 32 22 30 16 32 8 Z" fill="none" stroke="#F4EFE6" stroke-opacity=".6" stroke-width="1.8"/>
+            <text x="32" y="46" text-anchor="middle" font-size="11" fill="#F4EFE6" fill-opacity=".5" font-family="Helvetica, Arial, sans-serif">7</text>
+            <line x1="8" y1="56" x2="56" y2="8" stroke="#B08D57" stroke-width="3" stroke-linecap="round"/>
           </svg>
           <span>No streaks</span>
         </li>
