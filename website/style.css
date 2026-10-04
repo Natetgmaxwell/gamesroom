@@ -2037,8 +2037,8 @@ main.short-page { padding-bottom: 1.5rem; }
 /* Wide desktop: let the pair grow, give the hero copy room to breathe. */
 @media (min-width: 1024px) {
   .pair { gap: 3rem; }
-  .pair figure svg { max-width: 480px; margin: 0 auto; }
-  .hero-copy h1 { font-size: 3rem; }
+  .pair figure { max-width: 480px; }
+  .hero-copy h1 { font-size: 3rem; max-width: 28ch; }
 }
 @media (prefers-reduced-motion: reduce) {
   .step-toggle::before, .step-toggle::after, .night-strip details { transition: none; }
