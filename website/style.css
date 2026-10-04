@@ -1831,7 +1831,10 @@ body.has-modal-open { overflow: hidden; }
   gap: 1.75rem;
   margin: 1.5rem 0 0.5rem;
 }
-.pair figure, .diagram figure { margin: 0; }
+/* Pair diagrams: cap the figure width on desktop so the two SVGs sit
+   side by side at a comfortable size, not stretched across 1120px. */
+.pair figure { max-width: 520px; margin: 0 auto; }
+.pair figure svg { width: 100%; height: auto; }
 .pair figcaption {
   color: var(--text-dim);
   font-size: 0.95rem;
@@ -1840,6 +1843,10 @@ body.has-modal-open { overflow: hidden; }
   max-width: 44ch;
 }
 .pair figcaption b { color: var(--text); font-weight: 600; display: block; margin-bottom: 0.2rem; }
+@media (min-width: 1024px) {
+  .pair { gap: 3rem; }
+  .pair figure { max-width: 480px; }
+}
 .ui {
   color: var(--text);
   font-weight: 600;
@@ -1930,11 +1937,16 @@ details[open] .step-toggle::after { transform: translate(-50%, -50%) rotate(0deg
 .walkthrough-link { margin-top: 0.75rem; }
 
 /* Wave diagram: dots match the wave path, labels live on two tracks. */
-.swing-wave circle.wave-dot { fill: #B08D57; }
+.swing-wave circle.wave-dot {
+  fill: #B08D57;
+  stroke: #131315;
+  stroke-width: 1;
+}
 .swing-wave .wave-label {
-  font-size: 21px;
   fill: rgba(244, 239, 230, 0.62);
+  font-size: 16px;
   font-family: var(--font-body);
+  letter-spacing: 0.01em;
 }
 
 /* Season compounds: one table, four weeks */
