@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
   <!-- Bump the ?v= query on /style.css with every website deploy (cache-busting; HTML is no-cache). -->
-  <link rel="stylesheet" href="/style.css?v=84">
+  <link rel="stylesheet" href="/style.css?v=85">
 </head>
 <body>
   <header class="site-header">
@@ -99,14 +99,19 @@
       <p class="kicker">What the talk sounds like</p>
       <h2 id="why-2">Serious, then <em>stupid</em>, then serious again.</h2>
       <div class="diagram">
-        <svg class="dg" viewBox="0 0 600 300" role="img" aria-label="A line goes up and down across one night, from Big ideas at the top to Nonsense at the bottom. Gold dots on the line show the end of each game.">
-          <rect width="600" height="300" rx="12" fill="#131315"/>
-          <line x1="30" y1="160" x2="570" y2="160" stroke="#3D3D40" stroke-dasharray="3 6"/>
+        <svg class="dg swing-wave" viewBox="0 0 600 320" role="img" aria-label="A line goes up and down across one night, from Big ideas at the top to Nonsense at the bottom. Gold dots on the line show the end of each game.">
+          <rect width="600" height="320" rx="12" fill="#131315"/>
+          <line x1="30" y1="180" x2="570" y2="180" stroke="#3D3D40" stroke-dasharray="3 6"/>
           <text x="30" y="40" class="t" fill-opacity=".8" font-size="22">Big ideas</text>
-          <text x="30" y="284" class="t" fill-opacity=".8" font-size="22">Nonsense</text>
-          <path d="M30 160 C 70 70, 110 70, 150 150 S 200 250, 240 225 S 290 80, 330 85 S 380 245, 420 230 S 470 80, 510 95 S 550 170, 570 160" fill="none" stroke="#B08D57" stroke-width="3.5"/>
-          <g fill="#B08D57"><circle cx="240" cy="225" r="9"/><circle cx="330" cy="85" r="9"/><circle cx="420" cy="230" r="9"/><circle cx="510" cy="95" r="9"/></g>
-          <g class="t-dim" font-size="21" text-anchor="middle"><text x="240" y="260">game ends</text><text x="330" y="62">game ends</text><text x="420" y="265">game ends</text><text x="510" y="72">game ends</text></g>
+          <text x="30" y="306" class="t" fill-opacity=".8" font-size="22">Nonsense</text>
+          <path d="M30 180 C 70 90, 110 90, 150 170 S 200 270, 240 245 S 290 100, 330 105 S 380 265, 420 250 S 470 100, 510 115 S 550 190, 570 180" fill="none" stroke="#B08D57" stroke-width="3.5"/>
+          <g><circle class="wave-dot" cx="240" cy="245" r="9"/><circle class="wave-dot" cx="330" cy="105" r="9"/><circle class="wave-dot" cx="420" cy="250" r="9"/><circle class="wave-dot" cx="510" cy="115" r="9"/></g>
+          <g class="t-dim wave-label" text-anchor="middle">
+            <text x="240" y="290">game ends</text>
+            <text x="330" y="80">game ends</text>
+            <text x="420" y="295">game ends</text>
+            <text x="510" y="90">game ends</text>
+          </g>
         </svg>
       </div>
       <div class="ste-copy">

@@ -221,7 +221,9 @@ h1 {
   line-height: 1.18;
   letter-spacing: -0.01em;
   margin-bottom: 1rem;
+  max-width: 18ch;
 }
+.hero-copy h1 { max-width: 18ch; }
 h1 em { font-style: italic; color: var(--accent); }
 .lead {
   font-size: 1.1rem;
@@ -1789,35 +1791,45 @@ body.has-modal-open { overflow: hidden; }
   border-bottom: 1px solid rgba(176, 141, 87, 0.35);
 }
 
-/* ── Show-don't-tell layer (v84) ─────────────────────────────────────
-   Inline SVG diagrams + STE captions, revealed in three layers:
-   home (why + strip) → <details> step panels → /how-it-works sections.
-   Token reuse only. No JS needed for disclosure. */
+/* ── Show-don't-tell layer (v85 — formatting tidy) ───────────────────
+   Three layers of disclosure: home (why + strip) → <details> step
+   panels → /how-it-works sections. Token reuse only. */
 .diagram svg, .frame svg, .step-icon svg, .anti-item svg { display: block; width: 100%; height: auto; }
-.why {
-  padding-top: 3rem;
-  padding-bottom: 1rem;
+/* Why / mech sections are wide, not the 680px reading column. They
+   are content sections, not prose, so they get the desktop canvas. */
+.why, .mech {
+  max-width: var(--maxw-desktop);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+  padding-top: clamp(2.5rem, 5vw, 4.5rem);
+  padding-bottom: clamp(2.5rem, 5vw, 4.5rem);
+  border-top: 1px solid var(--hairline);
 }
-.why + .why { border-top: 1px solid var(--hairline); }
+.why:first-of-type, .mech:first-of-type { border-top: 0; }
 .why h2, .mech h2 {
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: 1.75rem;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  margin-bottom: 1rem;
+  font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+  line-height: 1.18;
+  letter-spacing: -0.015em;
+  margin-bottom: 1.25rem;
+  max-width: 22ch;
 }
 .why h2 em, .mech h2 em { color: var(--accent); }
-.why .kicker, .mech .kicker { margin-bottom: 0.5rem; }
-.ste-copy { max-width: 56ch; color: var(--text-dim); }
+.why .kicker, .mech .kicker { margin-bottom: 0.6rem; }
+.ste-copy { max-width: 56ch; color: var(--text-dim); margin-top: 1.25rem; }
 .ste-copy p { margin-bottom: 0.6rem; }
 .ste-copy strong { color: var(--text); font-weight: 600; }
-.diagram { margin: 1.25rem 0 1rem; }
-.diagram svg { max-width: 640px; }
+/* The wide diagrams (swing, reminder) fill the section; pair diagrams
+   are capped at the section width on desktop. */
+.diagram { margin: 1.25rem 0 0.5rem; }
+.diagram svg { max-width: 100%; }
 .pair {
   display: grid;
   gap: 1.75rem;
-  margin: 1.25rem 0 1rem;
+  margin: 1.5rem 0 0.5rem;
 }
 .pair figure, .diagram figure { margin: 0; }
 .pair figcaption {
@@ -1834,9 +1846,11 @@ body.has-modal-open { overflow: hidden; }
   white-space: nowrap;
 }
 
-/* How a night works: five steps, each a native <details> */
-.night h2 { margin-bottom: 0.5rem; }
-.night-strip { display: grid; gap: 0.75rem; margin: 1.25rem 0 1.5rem; }
+/* How a night works: five steps, each a native <details>.
+   Closed state is a tight one-line row (icon + label + chevron).
+   The diagram and the prose live in the expanded panel. */
+.night h2 { margin-bottom: 0.75rem; }
+.night-strip { display: grid; gap: 0.5rem; margin: 1.25rem 0 1.5rem; }
 .night-strip details {
   background: var(--surface);
   border: 1px solid var(--hairline);
@@ -1847,28 +1861,31 @@ body.has-modal-open { overflow: hidden; }
 .night-strip summary {
   list-style: none;
   display: grid;
-  grid-template-columns: 44px 1fr auto;
+  grid-template-columns: 32px 1fr auto;
   align-items: center;
-  gap: 0.9rem;
-  padding: 0.9rem 1rem;
+  gap: 0.85rem;
+  padding: 0.7rem 0.9rem;
   cursor: pointer;
   border-radius: var(--radius);
+  min-height: 52px;
 }
+.night-strip summary:hover { background: rgba(176, 141, 87, 0.04); }
 .night-strip summary::-webkit-details-marker { display: none; }
 .night-strip summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.step-icon { width: 44px; height: 44px; }
-.step-head { display: block; }
+.step-icon { width: 32px; height: 32px; }
+.step-head { display: block; min-width: 0; }
 .step-num {
   display: block;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-dim);
+  margin-bottom: 0.1rem;
 }
-.step-title { display: block; font-weight: 600; color: var(--text); font-size: 1.05rem; }
-.step-line { display: block; color: var(--text-dim); font-size: 0.95rem; line-height: 1.45; margin-top: 0.15rem; }
+.step-title { display: block; font-weight: 600; color: var(--text); font-size: 1rem; }
+.step-line { display: none; } /* Only show the long form inside the panel. */
 .step-toggle {
-  width: 28px; height: 28px;
+  width: 24px; height: 24px;
   border-radius: 50%;
   border: 1px solid var(--hairline);
   position: relative;
@@ -1885,18 +1902,18 @@ body.has-modal-open { overflow: hidden; }
 }
 .step-toggle::after { transform: translate(-50%, -50%) rotate(90deg); }
 details[open] .step-toggle::after { transform: translate(-50%, -50%) rotate(0deg); }
-.step-panel { padding: 0.25rem 1rem 1.1rem; }
+.step-panel { padding: 0.5rem 0.5rem 1.25rem; }
 .frames {
   list-style: none;
-  margin: 0.5rem 0 0;
+  margin: 0.75rem 0 0;
   padding: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem 0.9rem;
+  gap: 1.25rem 0.9rem;
   counter-reset: frame;
 }
 .frame { margin: 0; counter-increment: frame; }
-.frame svg { max-width: 420px; }
+.frame svg { max-width: 100%; }
 .frame svg { border-radius: 10px; }
 .frame p {
   font-size: 0.9rem;
@@ -1909,8 +1926,16 @@ details[open] .step-toggle::after { transform: translate(-50%, -50%) rotate(0deg
   color: var(--accent);
   font-weight: 600;
 }
-.step-more { font-size: 0.92rem; color: var(--text-dim); margin: 0.9rem 0 0; }
-.walkthrough-link { margin-top: 0.5rem; }
+.step-more { font-size: 0.92rem; color: var(--text-dim); margin: 1rem 0 0; }
+.walkthrough-link { margin-top: 0.75rem; }
+
+/* Wave diagram: dots match the wave path, labels live on two tracks. */
+.swing-wave circle.wave-dot { fill: #B08D57; }
+.swing-wave .wave-label {
+  font-size: 21px;
+  fill: rgba(244, 239, 230, 0.62);
+  font-family: var(--font-body);
+}
 
 /* Season compounds: one table, four weeks */
 .season-viz {
@@ -1979,7 +2004,11 @@ details[open] .step-toggle::after { transform: translate(-50%, -50%) rotate(0deg
 }
 .awards b { display: block; color: var(--accent); font-weight: 600; font-size: 1rem; margin-bottom: 0.15rem; }
 .awards .private { border-style: dashed; }
-.reminder-diagram svg { max-width: 720px; }
+.reminder-diagram svg { max-width: 100%; }
+
+/* Notifications page: stop the dead zone before the footer. The page is
+   short by design; reduce the main bottom padding. */
+main.short-page { padding-bottom: 1.5rem; }
 
 @media (min-width: 560px) {
   .frames { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1993,7 +2022,14 @@ details[open] .step-toggle::after { transform: translate(-50%, -50%) rotate(0deg
   .awards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .anti-item svg { max-width: 104px; }
   .why h2, .mech h2 { font-size: 2rem; }
-  .step-panel { padding: 0.25rem 1.25rem 1.25rem 4.85rem; }
+  .step-panel { padding: 0.5rem 1.25rem 1.5rem; }
+  .step-line { display: block; color: var(--text-dim); font-size: 0.9rem; line-height: 1.4; margin-top: 0.15rem; }
+}
+/* Wide desktop: let the pair grow, give the hero copy room to breathe. */
+@media (min-width: 1024px) {
+  .pair { gap: 3rem; }
+  .pair figure svg { max-width: 480px; margin: 0 auto; }
+  .hero-copy h1 { font-size: 3rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .step-toggle::before, .step-toggle::after, .night-strip details { transition: none; }
