@@ -2101,7 +2101,8 @@ svg.dg.demo-phone text, .why-solo svg.dg text { font-family: "Helvetica Neue", H
 .hero2 .h1-big { font-size: clamp(2.6rem, 6.2vw, 4.6rem); line-height: 1.05; letter-spacing: -0.02em; max-width: none; margin: 0 0 1.75rem; }
 .hero2-line { color: var(--text-dim); font-size: 1.15rem; line-height: 1.55; max-width: 40ch; margin: 0 0 2.25rem; }
 .hero2-act { display: flex; align-items: center; gap: 1.25rem; margin: 0; }
-.hero2-act .cta, .hero2-act .cta:hover { box-shadow: none; }
+.hero2-act .cta, .hero2-act .cta:hover,
+.demo-play, .demo-play:hover { box-shadow: none; }
 .hero2-note { color: var(--text-dim); font-size: 14px; }
 .why .anti-sub { margin: -0.4rem 0 1.5rem; }
 @media (prefers-reduced-motion: reduce) {
