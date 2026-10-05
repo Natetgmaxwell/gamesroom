@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/icon-120.png">
   <!-- Bump the ?v= query on /style.css with every website deploy (cache-busting; HTML is no-cache). -->
-  <link rel="stylesheet" href="/style.css?v=91">
+  <link rel="stylesheet" href="/style.css?v=92">
 </head>
 <body>
   <header class="site-header">
@@ -175,37 +175,35 @@
       </div>
     </section>
 
-    <!-- HOW THE NIGHT FLOWS: the product mechanic behind the swing -->
-    <section class="shell why reveal" aria-labelledby="flow-h">
-      <p class="kicker">How the night flows</p>
-      <h2 id="flow-h">The games set the <em>rhythm</em>. The talk follows.</h2>
-      <div class="diagram">
-        <svg class="dg flow-line" viewBox="0 0 600 232" role="img" aria-label="One night from 7 pm to the end. Three games sit on a line: Poker, Monopoly Deal, Poker. A gold dot marks the end of each game, where the app records the score. A short gap after each game is a fresh start.">
-          <rect width="600" height="232" rx="12" fill="#131315"/>
-          <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
-            <text x="30" y="40" font-size="15" fill="#F4EFE6" fill-opacity=".55">Fri 7 pm</text>
-            <text x="570" y="40" font-size="15" fill="#F4EFE6" fill-opacity=".55" text-anchor="end">End of night</text>
-            <line x1="30" y1="110" x2="570" y2="110" stroke="#3D3D40" stroke-dasharray="3 6"/>
-            <rect x="30"  y="92" width="170" height="36" rx="8" fill="#2B251C" stroke="#B08D57" stroke-opacity=".7"/>
-            <rect x="240" y="92" width="150" height="36" rx="8" fill="#2B251C" stroke="#B08D57" stroke-opacity=".7"/>
-            <rect x="430" y="92" width="140" height="36" rx="8" fill="#2B251C" stroke="#B08D57" stroke-opacity=".7"/>
-            <g font-size="16" font-weight="600" fill="#F4EFE6" text-anchor="middle">
-              <text x="115" y="115">Poker</text><text x="315" y="115">Monopoly Deal</text><text x="500" y="115">Poker</text>
-            </g>
-            <g fill="#B08D57"><circle cx="200" cy="110" r="7"/><circle cx="390" cy="110" r="7"/><circle cx="570" cy="110" r="7"/></g>
-            <g font-size="14" fill="#F4EFE6" fill-opacity=".6" text-anchor="middle">
-              <text x="220" y="160">score in</text><text x="220" y="180">fresh start</text>
-              <text x="410" y="160">score in</text><text x="410" y="180">fresh start</text>
-              <text x="540" y="160">Tonight's Star</text>
-            </g>
-            <text x="30" y="214" font-size="13" fill="#B08D57" letter-spacing="1.5">THE APP KEEPS THE SCORE. YOU KEEP TALKING.</text>
-          </g>
-        </svg>
+    <!-- THE QUESTION BOX: what drives the swing between serious and stupid -->
+    <section class="shell why reveal" aria-labelledby="qb-h">
+      <p class="kicker">The Question Box</p>
+      <h2 id="qb-h">Serious, then <em>stupid</em>, then serious again.</h2>
+      <div class="qb">
+        <div class="qb-left">
+        <figure class="qb-card" aria-live="polite">
+          <p class="qb-cue">Question from the box</p>
+          <p class="qb-q">What is one job everyone thinks is respectable that you think is mostly a scam?</p>
+          <p class="qb-meta"><span class="qb-reader">Jo</span> is reading <span class="qb-tag">serious</span></p>
+        </figure>
+          <button class="cta qb-next" type="button">Pull the next question <span class="arrow">→</span></button>
+        </div>
+        <div class="qb-side">
+          <svg class="dg qb-wave" viewBox="0 0 600 240" role="img" aria-label="The talk across one night. Each question moves it. A serious question takes it up. A stupid question takes it down. Then the next question takes it up again.">
+            <text x="30" y="30" class="qb-axis">Serious</text>
+            <text x="30" y="226" class="qb-axis">Stupid</text>
+            <line x1="30" y1="120" x2="570" y2="120" stroke="#3D3D40" stroke-dasharray="3 6"/>
+            <path d="M30 120 S 45 62, 80 62 S 135 178, 170 178 S 225 62, 260 62 S 315 178, 350 178 S 405 62, 440 62 S 495 178, 530 178 S 560 120, 570 120" fill="none" stroke="#B08D57" stroke-width="3"/>
+            <circle class="qb-dot" data-i="0" cx="80" cy="62" r="8"/><circle class="qb-dot" data-i="1" cx="170" cy="178" r="8"/><circle class="qb-dot" data-i="2" cx="260" cy="62" r="8"/><circle class="qb-dot" data-i="3" cx="350" cy="178" r="8"/><circle class="qb-dot" data-i="4" cx="440" cy="62" r="8"/><circle class="qb-dot" data-i="5" cx="530" cy="178" r="8"/>
+          </svg>
+        </div>
       </div>
       <div class="ste-copy">
-        <p>The host picks the games when they set the night. The app keeps every score, so nobody does the maths at the table.</p>
-        <p>Each game ends with a result to laugh about. The next game is a fresh start. The talk can go deep, then silly, then deep again.</p>
+        <p>Every 20 minutes, the app gives one person a question to read out. The next question goes to the next person.</p>
+        <p>The deck mixes serious questions with stupid ones on purpose. So the talk goes deep, then silly, then deep again. You learn more about the people at the table each night.</p>
+        <p>The games set the volume. Poker runs quiet. Monopoly Deal runs loud. The questions set the topic. The host can turn the box off, edit the questions or add the room's own.</p>
       </div>
+      <script type="application/json" id="qb-data">[{"t": "serious", "q": "What is one job everyone thinks is respectable that you think is mostly a scam?", "r": "Jo"}, {"t": "stupid", "q": "Who at this table lasts longest in a zombie apocalypse, and who goes first?", "r": "Sam"}, {"t": "serious", "q": "Is it better to be respected or liked?", "r": "Alex"}, {"t": "stupid", "q": "What is the worst possible name for a pub, and who owns it?", "r": "Mia"}, {"t": "serious", "q": "If you could abolish one law tomorrow, which one goes?", "r": "You"}, {"t": "stupid", "q": "What is the dumbest thing you would name a dog?", "r": "Jo"}]</script>
     </section>
 
     <!-- HOW A NIGHT WORKS: layer 1 strip, layer 2 panels -->
@@ -658,6 +656,19 @@
       });
       demo.querySelector(".demo-play").addEventListener("click", function () { go("room", true); });
       go(location.search.indexOf("state=room") > -1 ? "room" : "chat");
+    })();
+  </script>
+
+  <script>
+    (function(){
+      var root=document.querySelector('.qb'); if(!root) return;
+      var Q=JSON.parse(document.getElementById('qb-data').textContent), i=0;
+      var q=root.querySelector('.qb-q'), r=root.querySelector('.qb-reader'), t=root.querySelector('.qb-tag'), dots=root.querySelectorAll('.qb-dot');
+      function show(n){ i=n%Q.length; q.textContent=Q[i].q; r.textContent=Q[i].r; t.textContent=Q[i].t;
+        dots.forEach(function(d){ d.classList.toggle('on', +d.dataset.i===i); d.classList.toggle('past', +d.dataset.i<i); }); }
+      root.querySelector('.qb-next').addEventListener('click',function(){ show(i+1); });
+      dots.forEach(function(d){ d.style.cursor='pointer'; d.addEventListener('click',function(){ show(+d.dataset.i); }); });
+      show(0);
     })();
   </script>
 </body>

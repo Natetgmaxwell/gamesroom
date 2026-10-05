@@ -2108,3 +2108,21 @@ svg.dg.demo-phone text, .why-solo svg.dg text { font-family: "Helvetica Neue", H
 @media (prefers-reduced-motion: reduce) {
   .st-chat, .st-room, .demo .seat, .demo .rem circle { transition: none !important; transition-delay: 0s !important; }
 }
+
+/* v92: Question Box section */
+.qb { display: grid; gap: 2rem; align-items: center; margin-top: 1.5rem; }
+@media (min-width: 860px) { .qb { grid-template-columns: minmax(0, 360px) 1fr; gap: 3rem; } }
+.qb-card { margin: 0; padding: 2rem 1.75rem; border: 1px solid var(--hairline); border-radius: 22px; background: var(--surface); min-height: 260px; display: flex; flex-direction: column; }
+.qb-cue { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 1rem; }
+.qb-q { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.25; color: var(--text); margin: 0 0 1.5rem; flex: 1; }
+.qb-meta { color: var(--text-dim); font-size: 14px; margin: 0; }
+.qb-reader { color: var(--text); font-weight: 600; }
+.qb-tag { margin-left: .5rem; color: var(--text-dim); text-transform: uppercase; font-size: 11px; letter-spacing: .12em; }
+.qb-left, .qb-side { display: grid; gap: 1.25rem; }
+.qb-wave { width: 100%; height: auto; }
+.qb-axis { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 15px; fill: #F4EFE6; fill-opacity: .55; }
+.qb-dot { fill: #131315; stroke: #B08D57; stroke-width: 2; transition: fill .25s ease, r .25s ease; }
+.qb-dot.past { fill: #B08D57; fill-opacity: .45; }
+.qb-dot.on { fill: #B08D57; r: 11; }
+.qb-next, .qb-next:hover { justify-self: start; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .qb-dot { transition: none; } }
