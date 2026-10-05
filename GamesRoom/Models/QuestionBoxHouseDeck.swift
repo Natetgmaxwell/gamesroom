@@ -36,7 +36,7 @@ enum QuestionBoxHouseDeck {
         Entry(text: "Which of your opinions would lose you a friend if you said it at a dinner party?", tag: .deep),
         Entry(text: "What's a completely normal thing that you find deeply suspicious?", tag: .unhinged),
         Entry(text: "Is being funny or being good-looking worth more in the long run?", tag: .deep),
-        Entry(text: "What's a smell you secretly love that everyone else hates?", tag: .unhinged),
+        Entry(text: "Which fictional villain was actually right?", tag: .unhinged),
         Entry(text: "If you could abolish one law tomorrow, which one goes?", tag: .deep),
         Entry(text: "What's the most unhinged thing you've ever done to avoid a phone call?", tag: .unhinged),
         Entry(text: "Should you stay friends with someone whose politics you can't stand?", tag: .deep),
