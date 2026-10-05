@@ -2059,3 +2059,51 @@ svg.dg text { font-family: var(--font-body); }
 svg.dg .t-dim { fill: rgba(244, 239, 230, 0.55); }
 svg.dg .t-acc { fill: var(--accent); }
 svg.dg .t { fill: var(--text); }
+
+/* ── v91: simple hero, "What Games Room does" demo, "Who it is for" ── */
+.demo { display: grid; gap: 1.25rem; }
+.demo-toggle { display: inline-flex; gap: 1.5rem; border-bottom: 1px solid var(--hairline); width: max-content; }
+.demo-toggle button { background: none; border: 0; color: var(--text-dim); font: inherit; font-size: 15px; padding: .5rem 0; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.demo-toggle button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.demo-stage { display: grid; gap: 1.5rem; align-items: center; }
+@media (min-width: 760px) { .demo-stage { grid-template-columns: 300px 1fr; gap: 3rem; } }
+.demo-phone { width: 100%; max-width: 300px; height: auto; }
+svg.dg.demo-phone text, .why-solo svg.dg text { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+.demo-notes { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; max-width: 44ch; }
+.demo-notes li { color: var(--text-dim); }
+.demo-notes b { color: var(--text); font-weight: 600; display: block; }
+.demo-play { justify-self: start; }
+
+.st-chat, .st-room { transition: opacity .35s ease; }
+.demo[data-state="chat"] .st-room, .demo[data-state="room"] .st-chat { opacity: 0; }
+.demo[data-state="chat"] .n-room, .demo[data-state="room"] .n-chat { display: none; }
+.demo[data-state="room"] .demo-play { visibility: hidden; }
+
+.seat rect { fill: #B08D57; }
+.seat text { fill: #0A0A0B; }
+.seat.s5 rect { stroke: #F4EFE6; stroke-width: 2; }
+.demo .seat, .demo .rem circle { opacity: 0; transition: opacity .3s ease, transform .3s var(--ease-spring); transform-box: fill-box; transform-origin: center; transform: scale(.8); }
+.demo.lit .seat, .demo.lit .rem circle { opacity: 1; transform: none; }
+.demo.lit .s2 { transition-delay: .25s } .demo.lit .s3 { transition-delay: .5s } .demo.lit .s4 { transition-delay: .75s } .demo.lit .s5 { transition-delay: 1s }
+.demo.lit .r1 { transition-delay: 1.3s } .demo.lit .r2 { transition-delay: 1.55s } .demo.lit .r3 { transition-delay: 1.8s }
+
+.who { list-style: none; padding: 0; margin: 0; display: grid; gap: 2rem; }
+@media (min-width: 760px) { .who { grid-template-columns: repeat(3, 1fr); } }
+.who-role { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.who-tag { font-family: var(--font-display); font-style: italic; font-size: 1.35rem; line-height: 1.25; margin: .4rem 0 .6rem; color: var(--text); }
+.who li > p:last-child { color: var(--text-dim); margin: 0; }
+
+.why-solo { display: grid; gap: 1.5rem; align-items: center; }
+@media (min-width: 760px) { .why-solo { grid-template-columns: 1fr 1fr; gap: 3rem; } }
+.why-solo svg { width: 100%; height: auto; }
+
+.hero2.why { padding-top: 7rem; padding-bottom: 6rem; border-top: 0; }
+.hero2 .h1-big { font-size: clamp(2.6rem, 6.2vw, 4.6rem); line-height: 1.05; letter-spacing: -0.02em; max-width: none; margin: 0 0 1.75rem; }
+.hero2-line { color: var(--text-dim); font-size: 1.15rem; line-height: 1.55; max-width: 40ch; margin: 0 0 2.25rem; }
+.hero2-act { display: flex; align-items: center; gap: 1.25rem; margin: 0; }
+.hero2-act .cta, .hero2-act .cta:hover { box-shadow: none; }
+.hero2-note { color: var(--text-dim); font-size: 14px; }
+.why .anti-sub { margin: -0.4rem 0 1.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .st-chat, .st-room, .demo .seat, .demo .rem circle { transition: none !important; transition-delay: 0s !important; }
+}
