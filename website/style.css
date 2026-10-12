@@ -2104,6 +2104,8 @@ svg.dg.demo-phone text, .why-solo svg.dg text { font-family: "Helvetica Neue", H
 .hero2-act .cta, .hero2-act .cta:hover,
 .demo-play, .demo-play:hover { box-shadow: none; }
 .hero2-note { color: var(--text-dim); font-size: 14px; }
+.store-badge { display: inline-flex; line-height: 0; }
+.store-badge img { display: block; height: 40px; width: auto; }
 .why .anti-sub { margin: -0.4rem 0 1.5rem; }
 @media (prefers-reduced-motion: reduce) {
   .st-chat, .st-room, .demo .seat, .demo .rem circle { transition: none !important; transition-delay: 0s !important; }
