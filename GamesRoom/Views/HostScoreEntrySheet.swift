@@ -109,7 +109,7 @@ struct HostScoreEntrySheet: View {
                         memberChipTray
                     }
                     Stepper(
-                        "Round index: \(roundIndex)",
+                        "Round \(roundIndex)",
                         value: $roundIndex,
                         in: 1...50
                     )
@@ -153,7 +153,7 @@ struct HostScoreEntrySheet: View {
                         .foregroundStyle(Theme.Palette.primaryText)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Submit") {
+                    Button("Save") {
                         Task { await save() }
                     }
                     .disabled(isSaving || selectedMemberIds.isEmpty)
