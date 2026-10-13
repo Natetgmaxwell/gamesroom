@@ -52,6 +52,7 @@ struct RoomDetailView: View {
     /// here (not on UIDevice) so iPad multitasking split-screen stays
     /// on the phone-shaped scroll path.
     @Environment(\.horizontalSizeClass) private var hSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Drives the host-only Room Settings sheet from the in-room
     /// toolbar gear (L6 spec). Mirrors `RoomPage.settingsRoom` for
@@ -99,6 +100,11 @@ struct RoomDetailView: View {
     // it lives in the toolbar so hosts can schedule the next
     // session without entering the settings sheet.
     @State private var showingAddEvent: Bool = false
+    /// v1.1 — the season the host just closed from Room settings.
+    /// `close_season` opens the next season straight away, so without
+    /// this the page would skip the awards card; holding the closed
+    /// season lands the host on it until a new night is scheduled.
+    @State private var justClosedSeason: Season?
 
     // V0.9 Wave 2 Slice 2.2 - the inline "+" in RoomSwitcherMenu
     // opens the same CreateRoomSheet the Rooms tab's "+" opens.
@@ -369,6 +375,13 @@ struct RoomDetailView: View {
                 // W-04 — pop back to the rooms list; the deleted
                 // room is already gone from the service cache.
                 dismiss()
+            }, onSeasonClosed: { closed in
+                Task {
+                    await roomService.loadSeasonAwards(seasonId: closed.id, force: true)
+                    withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                        justClosedSeason = closed
+                    }
+                }
             })
             .environmentObject(roomService)
             .environmentObject(casinoService)
@@ -382,6 +395,7 @@ struct RoomDetailView: View {
                 roomId: room.id,
                 onSaved: { _ in
                     showingAddEvent = false
+                    justClosedSeason = nil
                     Task { await refresh(force: true) }
                 }
             )
@@ -647,6 +661,9 @@ struct RoomDetailView: View {
         // should render the awards card regardless of whether the
         // room has a recently-settled or in-play event — the
         // awards card IS the hero for that period.
+        if let closed = justClosedSeason {
+            return .seasonClose(closed, awardsForPrivacy(seasonId: closed.id))
+        }
         if let season = currentSeason, season.status == .ended {
             return .seasonClose(season, seasonAwardsForPrivacy)
         }
@@ -700,9 +717,11 @@ struct RoomDetailView: View {
     /// The SQL RLS layer also enforces this gate — this resolver is
     /// belt-and-braces against a server regression.
     private var seasonAwardsForPrivacy: [SeasonAward] {
-        let all = roomService.cachedSeasonAwards(
-            seasonId: currentSeason?.id ?? UUID()
-        )
+        awardsForPrivacy(seasonId: currentSeason?.id ?? UUID())
+    }
+
+    private func awardsForPrivacy(seasonId: UUID) -> [SeasonAward] {
+        let all = roomService.cachedSeasonAwards(seasonId: seasonId)
         guard let me = authService.currentUser?.id else { return all }
         let isHost = room.userRole == .host
         let optedIn = room.memberDrowningOptIn
@@ -1069,7 +1088,7 @@ struct RoomDetailView: View {
             }
         }
         .transition(.opacity)
-        .animation(.easeInOut(duration: 0.25), value: state)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: state)
     }
 
     // MARK: - Data operations
@@ -2123,6 +2142,7 @@ private struct SeatGridRow: View {
     /// grid render. Reset to false after ~500ms so the burst is a
     /// single one-shot celebration.
     @State private var justClaimed: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var columns: [GridItem] {
         let count = SeatGrid.columnCount(for: maxSeats)
@@ -2176,7 +2196,7 @@ private struct SeatGridRow: View {
                     ConfettiBurst()
                 }
             }
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isYours)
+            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: isYours)
             .accessibilityElement()
             .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
         } else {
@@ -2215,6 +2235,7 @@ private struct SeatGridRow: View {
 // MARK: - Witness slot (at-play)
 
 private struct WitnessSlot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     enum CTA: Equatable {
         case withdraw
         case scan
@@ -2457,7 +2478,7 @@ private struct WitnessSlot: View {
         // secondary CTAs' fade-in from one place. Closures aren't
         // Equatable, so the secondary CTAs track the Bool of the
         // optional, not the closure itself.
-        .animation(Theme.Motion.popIn, value: workingHand)
+        .animation(reduceMotion ? Theme.Motion.fade : Theme.Motion.popIn, value: workingHand)
         .animation(Theme.Motion.fade, value: onWithdrawMore != nil)
         .animation(Theme.Motion.fade, value: onCAHSettle != nil)
     }
@@ -4683,10 +4704,11 @@ private struct RoomSwitcherMenu: View {
 
 private struct AppearModifier: ViewModifier {
     @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
             .opacity(appeared ? 1 : 0)
-            .scaleEffect(appeared ? 1 : 0.97)
+            .scaleEffect(appeared || reduceMotion ? 1 : 0.97)
             .onAppear {
                 withAnimation(.easeOut(duration: 0.25)) {
                     appeared = true
@@ -4707,10 +4729,11 @@ extension View {
 
 private struct PressScaleModifier: ViewModifier {
     @State private var isPressed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
-            .scaleEffect(isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isPressed)
+            .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.8), value: isPressed)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in isPressed = true }

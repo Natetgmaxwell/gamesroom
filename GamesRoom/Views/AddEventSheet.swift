@@ -241,6 +241,7 @@ struct AddEventSheet: View {
                 playedAt: playedAt,
                 packSlugs: packSlugs
             )
+            Haptics.success()
             onSaved(newEventId)
             dismiss()
         } catch {

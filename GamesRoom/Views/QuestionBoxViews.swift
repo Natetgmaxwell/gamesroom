@@ -194,7 +194,7 @@ struct QuestionReaderCard: View {
             }
             Spacer(minLength: 0)
             HStack(spacing: 12) {
-                Button(action: close(onDone)) {
+                Button(action: close(onDone, haptic: Haptics.success)) {
                     Text("Done")
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.background)
@@ -204,7 +204,7 @@ struct QuestionReaderCard: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .accessibilityIdentifier("reader-card-done")
-                Button(action: close(onPass)) {
+                Button(action: close(onPass, haptic: Haptics.light)) {
                     Text("Pass")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
@@ -225,8 +225,8 @@ struct QuestionReaderCard: View {
         }
     }
 
-    private func close(_ action: @escaping () -> Void) -> () -> Void {
-        { light.cardClosed(); action() }
+    private func close(_ action: @escaping () -> Void, haptic: @escaping () -> Void) -> () -> Void {
+        { light.cardClosed(); haptic(); action() }
     }
 }
 

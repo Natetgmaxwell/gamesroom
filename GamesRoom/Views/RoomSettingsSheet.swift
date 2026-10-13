@@ -50,6 +50,9 @@ struct RoomSettingsSheet: View {
     /// pop/dismiss the surrounding navigation (the room is gone from
     /// the service's rooms cache at this point).
     var onRoomDeleted: (() -> Void)?
+    /// v1.1 — invoked after Declare season end succeeds, with the
+    /// closed season, so the room page can land on its awards card.
+    var onSeasonClosed: ((Season) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var roomService: RoomService
@@ -130,9 +133,14 @@ struct RoomSettingsSheet: View {
     // how-to body. nil = no detail sheet presented.
     @State private var packDetailType: (any PackDefinition.Type)?
 
-    init(room: Room, onRoomDeleted: (() -> Void)? = nil) {
+    init(
+        room: Room,
+        onRoomDeleted: (() -> Void)? = nil,
+        onSeasonClosed: ((Season) -> Void)? = nil
+    ) {
         self.room = room
         self.onRoomDeleted = onRoomDeleted
+        self.onSeasonClosed = onSeasonClosed
         _roomName = State(initialValue: room.name)
         _mascotName = State(initialValue: room.mascotName)
         _mascotPersonality = State(initialValue: room.mascotPersonality)
@@ -611,8 +619,10 @@ struct RoomSettingsSheet: View {
         isDeclaring = true
         defer { isDeclaring = false }
         do {
-            _ = try await roomService.closeSeason(roomId: room.id)
+            let closed = try await roomService.closeSeason(roomId: room.id)
+            Haptics.success()
             dismiss()
+            onSeasonClosed?(closed)
         } catch {
             // V0.81 — autosave status row carries the error.
             saveState = .failed((error as NSError).localizedDescription)

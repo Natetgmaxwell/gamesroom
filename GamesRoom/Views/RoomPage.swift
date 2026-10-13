@@ -59,6 +59,7 @@ struct RoomPage: View {
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var casinoService: CasinoService
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The room the user is currently being pushed into. Driven by the
     /// `NavigationStack`'s `selection:` binding. Setting it triggers
@@ -251,6 +252,7 @@ struct RoomPage: View {
     private var stackView: some View {
         let column = NavigationStack(path: $roomsPath) {
             content
+                .animation(roomsArrivalAnimation, value: roomService.rooms.map(\.id))
                 .background(Theme.Palette.background.ignoresSafeArea())
                 .navigationTitle("Rooms")
                 .navigationBarTitleDisplayMode(.large)
@@ -441,6 +443,12 @@ struct RoomPage: View {
         } else {
             roomsList
         }
+    }
+
+    /// v1.1 — a created or joined room arrives with a short fade
+    /// rather than a jump; off under Reduce Motion.
+    private var roomsArrivalAnimation: Animation? {
+        reduceMotion ? nil : Theme.Motion.fade
     }
 
     // MARK: - Rooms list (with optional last-viewed hero)
