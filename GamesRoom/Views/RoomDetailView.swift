@@ -122,6 +122,20 @@ struct RoomDetailView: View {
     @State private var seatActionError: String?
     @State private var showSeatActionError: Bool = false
 
+    /// V0.100 — first-refresh gate. Flips to `true` after the
+    /// initial `refresh()` in `.task` resolves. The state machine
+    /// uses this to distinguish "data fetch in flight" (true
+    /// `.loading` — show spinner) from "fetched, no data" (a
+    /// genuine empty state — show `.readStandings` with the
+    /// "ledger fills in after your first night" copy, never a
+    /// spinner). Without this, a freshly-created room with no
+    /// events + no leaderboard rows + no briefing pins the state
+    /// machine at `.loading` forever, so the user sees a spinner
+    /// on a room that will never load. Seeded rooms like Felt
+    /// Faction never hit this path because they carry historical
+    /// leaderboard rows.
+    @State private var hasLoadedInitialData: Bool = false
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
@@ -145,6 +159,13 @@ struct RoomDetailView: View {
 
     private var currentUserId: UUID? {
         authService.currentUser?.id
+    }
+
+    /// V0.106 — the active event while it is live (started, not
+    /// settled). Question turns only exist inside this window.
+    private var questionBoxLiveEvent: Event? {
+        guard let event = activeEvent, event.playedAt <= Date(), event.settledAt == nil else { return nil }
+        return event
     }
 
     /// V0.62 — single source of truth for the caller's working hand,
@@ -276,6 +297,10 @@ struct RoomDetailView: View {
                 HostScoringDashboard(room: room, event: event, onClose: { scoringDashboardVisible = false })
                     .environmentObject(roomService)
                     .environmentObject(scoringService)
+                    .safeAreaInset(edge: .bottom) {
+                        QuestionBoxLiveSection(event: event, isHost: isHost)
+                            .padding(.horizontal, Theme.Layout.edgePadding)
+                    }
             } else {
                 scrollBody
             }
@@ -291,8 +316,12 @@ struct RoomDetailView: View {
             // §3.7, the dropdown is the canonical reachability
             // surface; the Rooms tab remains the bulk-management
             // view.
-            ToolbarItem(placement: .topBarLeading) {
-                if !allRooms.isEmpty {
+            // V0.103 — compact-width only. On iPad (regular width)
+            // the sidebar is the one true room navigator; this
+            // dropdown duplicated it (Nathan's V1.0 UX review,
+            // 2026-09-24). iPhone has no sidebar, so it stays.
+            if !allRooms.isEmpty && hSize == .compact {
+                ToolbarItem(placement: .topBarLeading) {
                     RoomSwitcherMenu(
                         currentRoom: room,
                         allRooms: allRooms,
@@ -317,15 +346,22 @@ struct RoomDetailView: View {
             // V0.79 — the gear is member-visible. The settings sheet
             // self-gates its host-only sections; members gain the
             // "My notifications" section (opt-in + per-event mute).
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    settingsRoom = liveRoom
-                } label: {
-                    Image(systemName: Theme.Icon.gearshape)
-                        .foregroundStyle(Theme.Palette.primaryText)
+            // V0.103 — compact-width only. On iPad (regular width)
+            // this duplicated the RoomPage toolbar gear for the same
+            // RoomSettingsSheet; the RoomPage gear is the survivor
+            // and must stay member-visible so members keep a path
+            // to notification prefs.
+            if hSize == .compact {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        settingsRoom = liveRoom
+                    } label: {
+                        Image(systemName: Theme.Icon.gearshape)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                    }
+                    .accessibilityLabel(Text("Room settings"))
+                    .accessibilityHint(Text("Opens settings for \(room.name)"))
                 }
-                .accessibilityLabel(Text("Room settings"))
-                .accessibilityHint(Text("Opens settings for \(room.name)"))
             }
         }
         .sheet(item: $settingsRoom) { presented in
@@ -414,6 +450,14 @@ struct RoomDetailView: View {
         }
         .task {
             await refresh()
+            // V0.100 — first-refresh gate. Flip AFTER the refresh
+            // resolves so the state machine can distinguish "still
+            // loading" from "loaded but empty". A failed refresh
+            // still flips the flag — a long-running fetch failure
+            // shouldn't leave the user on a perpetual spinner
+            // either; the per-loader error handling + the eventual
+            // "Pull to refresh" affordance cover the retry path.
+            hasLoadedInitialData = true
         }
         .refreshable {
             await refresh(force: true)
@@ -433,6 +477,10 @@ struct RoomDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
                 activeSlot
                     .frame(maxWidth: .infinity)
+                // V0.106 — Question Box live driver + host fallback.
+                if let event = questionBoxLiveEvent {
+                    QuestionBoxLiveSection(event: event, isHost: isHost)
+                }
                 // V0.79 — one-time notification opt-in prompt. Shows
                 // once per room (per device) while opt-in is off;
                 // after any answer it lives in Room settings only.
@@ -561,7 +609,23 @@ struct RoomDetailView: View {
     // MARK: - State resolution
 
     private var state: V0State {
-        if activeEvent == nil, briefing == nil, leaderboard.isEmpty {
+        // V0.100 — distinguish "still loading" from "loaded empty".
+        // The old gate `activeEvent == nil, briefing == nil,
+        // leaderboard.isEmpty` conflated the two: a freshly-created
+        // room with no events ever would keep this true forever,
+        // pinning the state machine at `.loading` and showing a
+        // spinner on a room that will never load. `hasLoadedInitialData`
+        // flips after the first `refresh()` resolves; below that,
+        // trust the spinner; after that, the room has *loaded*
+        // and any empty sub-state must fall through to `.readStandings`,
+        // `.seasonClose`, or the active-event branches — never
+        // spinner-on-forever.
+        //
+        // The legacy `if activeEvent == nil && briefing == nil &&
+        // leaderboard.isEmpty { return .loading }` check is gone:
+        // once the gate has flipped, an empty room is a real
+        // empty state, not a loading state.
+        if !hasLoadedInitialData {
             return .loading
         }
         // M1.1 — season-close takes priority over active-event
@@ -945,13 +1009,43 @@ struct RoomDetailView: View {
                 )
 
             case .readStandings:
+                // V0.100 — branch the empty-state copy on host vs
+                // member. A freshly-created room (the case the
+                // `.loading` bug stranded) lands here for the host
+                // with zero events; the previous flat copy was
+                // technically correct ("the ledger fills in after
+                // your first night") but didn't offer the obvious
+                // next action. The host gets the same "+ Add an
+                // event" CTA that the in-room toolbar already
+                // surfaces; members get the legacy "wait for the
+                // host to schedule" copy.
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Standings")
+                    Text(isHost ? "No nights on the books yet" : "Standings")
                         .font(Theme.Typography.title)
                         .foregroundStyle(Theme.Palette.primaryText)
-                    Text("The ledger fills in after your first night.")
+                    Text(isHost
+                         ? "Schedule your first night to kick the ledger off."
+                         : "The ledger fills in after your first night.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    if isHost {
+                        Button {
+                            showingAddEvent = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: Theme.Icon.plus)
+                                Text("Add an event")
+                            }
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.background)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 16)
+                            .background(Theme.Palette.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 4)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .sectionCard(.hero)
@@ -1747,6 +1841,10 @@ private struct BriefingSlot: View {
                 }
             }
 
+            // V0.106 — who's coming, with each claimed member's
+            // Currently Into as grey secondary text (fresh only).
+            WhosComingList(eventId: event.id, rsvps: rsvps)
+
             // V0.79 — notification preferences left the briefing
             // card. A one-time prompt on the main room page owns
             // discovery; Room settings → "My notifications" owns
@@ -1801,6 +1899,12 @@ private struct BriefingSlot: View {
                         Text("You're in.")
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.accent)
+                    }
+                    // V0.106 — the one optional ask (spec §3): Currently
+                    // Into when stale/empty, else the Question Box field.
+                    // Inline after the claim; claiming never waits on it.
+                    if event.playedAt > Date() {
+                        ClaimedCardAskField(roomId: room.id, eventId: event.id)
                     }
                     // V0.85 — the reclaim. A held deposit renders
                     // the "I'm here" button: one tap returns the

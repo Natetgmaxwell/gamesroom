@@ -21,6 +21,7 @@ import Supabase
 
 @main
 struct GamesRoomApp: App {
+    @UIApplicationDelegateAdaptor(GamesRoomAppDelegate.self) private var appDelegate
     @StateObject private var auth = AuthService()
     #if DEBUG
     // V0.92 screenshot mode — when launched with
@@ -34,8 +35,14 @@ struct GamesRoomApp: App {
             : LiveRoomStore.shared
     }
     @StateObject private var roomService = RoomService(store: GamesRoomApp.makeScreenshotStore())
+    @StateObject private var questionBox = QuestionBoxService(
+        store: CommandLine.arguments.contains("-screenshots-bypass-auth")
+            ? InMemoryRoomStore.shared as QuestionBoxStore
+            : LiveQuestionBoxStore.shared
+    )
     #else
     @StateObject private var roomService = RoomService(store: LiveRoomStore.shared)
+    @StateObject private var questionBox = QuestionBoxService(store: LiveQuestionBoxStore.shared)
     #endif
     @StateObject private var casinoService = CasinoService()
     @StateObject private var scoringService = ScoringService()
@@ -47,6 +54,17 @@ struct GamesRoomApp: App {
                 .environmentObject(roomService)
                 .environmentObject(casinoService)
                 .environmentObject(scoringService)
+                .environmentObject(questionBox)
+                // V0.106 — the reader's full-screen card. Presented app-wide
+                // so it reaches the reader wherever they are in the app.
+                .fullScreenCover(item: $questionBox.readerCard) { turn in
+                    QuestionReaderCard(
+                        turn: turn,
+                        onDone: { Task { await questionBox.respond(turn, action: .done) } },
+                        onPass: { Task { await questionBox.respond(turn, action: .pass) } }
+                    )
+                }
+                .onAppear { GamesRoomAppDelegate.questionBox = questionBox }
                 // The palette is dark-mode-first (near-black canvas,
                 // warm parchment text, brass accent). Forcing dark
                 // scheme at the root keeps system surfaces (Form

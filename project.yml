@@ -45,7 +45,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    CURRENT_PROJECT_VERSION: "22"
 
 targets:
 
@@ -69,6 +69,18 @@ targets:
           # Fonts/ directory entirely; excluded here so the migration is
           # non-destructive.
           - "Fonts"
+    # V0.106 — Push Notifications capability (reader-only question
+    # turns). xcodegen writes this dict into GamesRoom.entitlements on
+    # generate, so the file and the yml can't drift. aps-environment is
+    # "development" here; App Store export rewrites it to production.
+    entitlements:
+      path: GamesRoom/GamesRoom.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.applesignin:
+          - Default
+        com.apple.security.application-groups:
+          - group.com.gamesroom.app
     configFiles:
       Debug: GamesRoom/Config.xcconfig
       Release: GamesRoom/Config.xcconfig
@@ -147,6 +159,33 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: "YES"
 
+  # Acceptance test target for the iPad sidebar tap regression
+  # (builds 11/12). The previous fix "passed" a verification that
+  # set `selectedRoom` programmatically and screenshotted the
+  # detail pane — that tests the detail rendering, NOT that a
+  # synthesized tap actually drives selection. This target exists
+  # so the real gesture path is exercised in CI.
+  #
+  # Launched by `xcodebuild ... -only-testing:GamesRoomUITests
+  #   -destination 'platform=iOS Simulator,name=iPad Air 11-inch (M4)'`.
+  # The single test (`test_sidebarTapDrivesDetailPaneAndSecondTapSwitches`)
+  # sets the `-screenshots-bypass-auth` launch arg so the app uses
+  # the seeded `InMemoryRoomStore` instead of the live Supabase
+  # store (no network on the simulator).
+  GamesRoomUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: GamesRoomUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gamesroom.app.uitests
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_TARGET_NAME: GamesRoom
+    dependencies:
+      - target: GamesRoom
+
 schemes:
   GamesRoom:
     build:
@@ -156,6 +195,8 @@ schemes:
       config: Debug
     test:
       config: Debug
+      targets:
+        - GamesRoomUITests
     profile:
       config: Release
     analyze:

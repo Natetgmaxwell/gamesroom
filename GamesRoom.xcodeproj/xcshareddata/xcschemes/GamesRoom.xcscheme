@@ -39,6 +39,17 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "F9F502C0EEF4B785D53C5A4E"
+               BuildableName = "GamesRoomUITests.xctest"
+               BlueprintName = "GamesRoomUITests"
+               ReferencedContainer = "container:GamesRoom.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

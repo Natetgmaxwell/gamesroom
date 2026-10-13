@@ -378,6 +378,20 @@ struct RoomSettingsSheet: View {
                         )
                     }
 
+                    // V0.106 — Question Box settings + editor (host only).
+                    if room.userRole == .host {
+                        NavigationLink {
+                            QuestionBoxSettingsView(roomId: room.id)
+                        } label: {
+                            settingsRow(
+                                icon: Theme.Icon.bubbleLeftAndBubbleRightFill,
+                                title: "Questions",
+                                detail: "Question Box, timer, speaking light"
+                            )
+                        }
+                        .accessibilityIdentifier("settings-questions-link")
+                    }
+
                     NavigationLink {
                         RoomSettingsMembersSheet(room: room)
                     } label: {

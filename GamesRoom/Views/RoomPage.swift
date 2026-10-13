@@ -124,6 +124,13 @@ struct RoomPage: View {
     /// code" CTA (P0.2 onboarding).
     @State private var showingJoinRoom: Bool = false
 
+    /// V0.100 — iPad-only entry point for the App Settings page.
+    /// On iPhone the Settings tab in `ContentView` is the path; on
+    /// iPad the sidebar + this toolbar gear replace the removed
+    /// Settings tab so the user has exactly one way to reach
+    /// Settings per form factor.
+    @State private var showingAppSettings: Bool = false
+
     /// Mirror of the persisted last-viewed room id, kept live so the
     /// hero card re-renders if the user switches rooms in another
     /// surface. Stored as a String because UUID is not directly
@@ -156,7 +163,23 @@ struct RoomPage: View {
             JoinRoomSheet()
                 .environmentObject(roomService)
         }
-        .task {
+        // V0.100 — iPad-only App Settings entry. The Settings tab
+        // in `ContentView` is gone on iPad (see ContentView.swift),
+        // so this sheet is the single Settings path on iPad.
+        // Gated on `isPad` so iPhone never double-presents — the
+        // Settings tab in ContentView handles iPhone.
+        .sheet(isPresented: $showingAppSettings) {
+            if isPad {
+                SettingsPage()
+            }
+        }
+        // V0.102 — re-run refresh when the signed-in user changes.
+        // On iPad, RoomPage mounts *underneath* the sign-in sheet, so a
+        // plain `.task` fired unauthenticated at mount and nothing
+        // re-triggered it after login — joined rooms only appeared after
+        // app relaunch (build 18 bug report). Keying the task on the user
+        // id re-fetches on nil→user (fresh sign-in) and user→user switches.
+        .task(id: authService.currentUser?.id) {
             await roomService.refresh()
             await roomService.loadRoomsSocialProof()
             #if DEBUG
@@ -258,8 +281,21 @@ struct RoomPage: View {
                         room: room,
                         allRooms: roomService.rooms,
                         onDismiss: { selectedRoom = nil },
-                        onSwitchRoom: { _ in }
+                        onSwitchRoom: { newRoom in selectedRoom = newRoom }
                     )
+                    // Belt-and-braces: if any future caller routes the
+                    // iPad detail via a value-push instead of selection,
+                    // the destination is in scope here. The current iPad
+                    // path uses `selectedRoom` directly (sidebar rows are
+                    // plain, .tag-driven) so this destination is dormant.
+                    .navigationDestination(for: Room.self) { room in
+                        RoomDetailView(
+                            room: room,
+                            allRooms: roomService.rooms,
+                            onDismiss: { selectedRoom = nil },
+                            onSwitchRoom: { newRoom in selectedRoom = newRoom }
+                        )
+                    }
                 } else {
                     Text("Select a room")
                         .font(Theme.Typography.body)
@@ -271,8 +307,69 @@ struct RoomPage: View {
 
     /// iPad sidebar — the rooms list as a platform-idiomatic
     /// sidebar List. Selection drives the detail pane.
+    ///
+    /// Fix v2 (replaces 2.1(a)'s NavigationLink+tag+hack):
+    /// rows are PLAIN content (no NavigationLink). List(selection:)
+    /// + .tag then owns taps natively — selection highlight,
+    /// keyboard navigation, and the `selectedRoom` write all
+    /// happen through the standard sidebar mechanism.
+    ///
+    /// Why not NavigationLink(value:): inside NavigationSplitView
+    /// on iPadOS, NavigationLink consumes the tap looking for a
+    /// navigationDestination(for: Room.self) in scope. The only
+    /// such destination lives in the iPhone-only path
+    /// (RoomPage.swift:423); on iPad no destination is in scope,
+    /// so the link ate the tap and `List(selection:)` never fired.
+    /// Hardware-confirmed on iPad Air M1 with build 11.
+    ///
+    /// `recordLastViewed` is wired via `.onChange(of: selectedRoom)`
+    /// on the page root — it fires once per real selection change
+    /// regardless of which row was tapped.
     private var sidebar: some View {
-        Group {
+        VStack(spacing: 0) {
+            roomsArea
+            // V0.104 — app-scope settings live in a persistent sidebar
+            // footer, outside the rooms list: position separates scope.
+            // Replaces the V0.100 leading toolbar gear, which sat beside
+            // the room-settings gear with an identical glyph — the two
+            // scopes were indistinguishable. Footer row is present in
+            // the empty state too (zero-room users still need settings).
+            Divider().overlay(Theme.Palette.hairline)
+            Button {
+                showingAppSettings = true
+            } label: {
+                HStack(spacing: Theme.Layout.gutter) {
+                    Image(systemName: "gearshape")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    Text("App Settings")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Spacer()
+                }
+                .padding(.horizontal, Theme.Layout.edgePadding)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("App settings"))
+            .accessibilityHint(Text("Opens the Games Room app settings"))
+        }
+        .onChange(of: selectedRoom) { _, newRoom in
+            // Records the last-viewed room id whenever the iPad
+            // sidebar selection changes (or the iPhone path's
+            // push-pop cycle changes it). Same `lastViewedRoomId`
+            // storage key as the iPhone tap path, so a user who
+            // alternates between iPhone and iPad sees a single
+            // canonical resume.
+            if let newRoom {
+                recordLastViewed(newRoom)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var roomsArea: some View {
             if roomService.isLoading && roomService.rooms.isEmpty {
                 VStack(spacing: 12) {
                     ProgressView()
@@ -287,32 +384,39 @@ struct RoomPage: View {
             } else {
                 List(selection: $selectedRoom) {
                     ForEach(roomService.rooms) { room in
-                        NavigationLink(value: room) {
-                            HStack(spacing: Theme.Layout.gutter) {
-                                if roomService.activeEventByRoom[room.id] != nil {
-                                    Circle()
-                                        .fill(Theme.Palette.accent)
-                                        .frame(width: 8, height: 8)
-                                        .accessibilityLabel(Text("Active session"))
-                                }
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(room.name)
-                                        .font(Theme.Typography.body.weight(.semibold))
-                                        .foregroundStyle(Theme.Palette.primaryText)
-                                    Text(socialProofCaption(for: room) ?? "Tap to open")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                                }
-                            }
-                        }
-                        .simultaneousGesture(TapGesture().onEnded {
-                            recordLastViewed(room)
-                        })
+                        sidebarRow(for: room)
+                            .tag(room)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityLabel(Text(room.name))
+                            .accessibilityHint(Text("Opens \(room.name) in the detail pane"))
                     }
                 }
                 .listStyle(.sidebar)
                 .scrollContentBackground(.hidden)
                 .background(Theme.Palette.background)
+            }
+        }
+
+    /// The visual content of one sidebar row. Plain HStack/VStack —
+    /// no NavigationLink, no button wrapper. The List's selection
+    /// binding owns the tap behavior.
+    @ViewBuilder
+    private func sidebarRow(for room: Room) -> some View {
+        HStack(spacing: Theme.Layout.gutter) {
+            if roomService.activeEventByRoom[room.id] != nil {
+                Circle()
+                    .fill(Theme.Palette.accent)
+                    .frame(width: 8, height: 8)
+                    .accessibilityLabel(Text("Active session"))
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(room.name)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                Text(socialProofCaption(for: room) ?? "Tap to open")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
         }
     }
@@ -641,7 +745,12 @@ struct RoomPage: View {
                 .accessibilityHint(Text("Enter a friend's join code to become a member"))
             }
         }
-        if let room = resolvedLastViewedRoom, room.userRole.isHost {
+        // V0.103 — member-visible on iPad (was host-only). With the
+        // detail header gear removed on iPad, this is the only
+        // room-settings entry there; members need it for
+        // notification prefs (V0.79). iPhone keeps the host gate —
+        // its detail-header gear is the member path.
+        if let room = resolvedLastViewedRoom, isPad || room.userRole.isHost {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     settingsRoom = room
@@ -653,6 +762,10 @@ struct RoomPage: View {
                 .accessibilityHint(Text("Opens settings for \(room.name)"))
             }
         }
+        // V0.104 — the leading App Settings gear is removed; app
+        // settings now live in the sidebar footer row (position
+        // separates app-scope from room-scope; the two identical
+        // toolbar gears were indistinguishable). See `sidebar`.
     }
 
     // MARK: - Last-viewed resolution
