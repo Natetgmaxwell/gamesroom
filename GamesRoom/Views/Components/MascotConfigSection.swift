@@ -106,6 +106,7 @@ struct MascotConfigSection: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.counterclockwise")
+                        .accessibilityHidden(true)
                     Text("Reset to default Tally")
                 }
                 .font(Theme.Typography.body)

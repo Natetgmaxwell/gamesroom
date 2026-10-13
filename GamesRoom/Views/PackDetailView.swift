@@ -54,6 +54,7 @@ struct PackDetailView: View {
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: pack.iconSystemName)
+                .accessibilityHidden(true)
                 .font(.system(size: 36))
                 .foregroundStyle(Theme.Palette.accent)
             VStack(alignment: .leading, spacing: 2) {

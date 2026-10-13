@@ -133,6 +133,7 @@ struct LeaderboardRow: View {
 
     private var chevron: some View {
         Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
+            .accessibilityHidden(true)
             .font(Theme.Typography.footnote)
             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
             .frame(width: 16)

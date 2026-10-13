@@ -68,6 +68,7 @@ struct PackStoreView: View {
         } label: {
             HStack(spacing: Theme.Layout.gutter) {
                 Image(systemName: pack.iconSystemName)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
                     .frame(width: 32)

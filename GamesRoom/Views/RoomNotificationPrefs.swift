@@ -166,6 +166,7 @@ private struct EventMuteRow: View {
         )) {
             HStack(spacing: 8) {
                 Image(systemName: isMuted ? Theme.Icon.bellSlashFill : Theme.Icon.bellFill)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent.opacity(0.8))
                 Text("Mute “\(event.name)”")

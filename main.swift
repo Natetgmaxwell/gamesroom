@@ -926,6 +926,10 @@ runner.run("SocialProof formats one claimed name") {
     runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: ["Sarah"]), "Sarah has claimed a seat")
 }
 
+runner.run("SocialProof says 'You have' for the current user (v1.1 VoiceOver grammar)") {
+    runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: ["You"]), "You have claimed a seat")
+}
+
 runner.run("SocialProof formats two claimed names") {
     runner.assertEqual(SocialProof.claimedSeatsCaption(claimedNames: ["Sarah", "Mike"]), "Sarah and Mike have claimed seats")
 }

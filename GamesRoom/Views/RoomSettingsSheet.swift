@@ -335,6 +335,7 @@ struct RoomSettingsSheet: View {
                         }
                         Spacer()
                         Image(systemName: Theme.Icon.chevronRight)
+                            .accessibilityHidden(true)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                     }
@@ -573,6 +574,7 @@ struct RoomSettingsSheet: View {
     private func settingsRow(icon: String, title: String, detail: String) -> some View {
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: icon)
+                .accessibilityHidden(true)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.accent)
                 .frame(width: 28)
@@ -929,6 +931,7 @@ struct RoomSettingsOperationsSheet: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: Theme.Icon.infoCircle)
+                                .accessibilityHidden(true)
                             Text("How to play")
                         }
                         .font(Theme.Typography.caption)

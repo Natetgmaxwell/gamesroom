@@ -1831,6 +1831,7 @@ private struct BriefingSlot: View {
                 Button(action: onEdit) {
                     HStack(spacing: 4) {
                         Image(systemName: Theme.Icon.infoCircle)
+                            .accessibilityHidden(true)
                         Text("Edit details")
                     }
                     .font(Theme.Typography.caption)
@@ -2176,6 +2177,7 @@ private struct SeatGridRow: View {
                 Image(systemName: Theme.Icon.chairFill)
                     .font(Theme.Typography.body)
                     .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
+                    .accessibilityHidden(true)
                 Text(initial(for: rsvp.displayName))
                     .font(Theme.Typography.footnote.weight(.semibold))
                     .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
@@ -2204,6 +2206,7 @@ private struct SeatGridRow: View {
                 Image(systemName: Theme.Icon.chair)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
+                    .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(
@@ -2298,6 +2301,7 @@ private struct WitnessSlot: View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
             HStack(spacing: 12) {
                 Image(systemName: Theme.Icon.circleHexagongridFill)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
                 Text(headerTitle)
@@ -2862,6 +2866,7 @@ private struct MemberMenuPicker: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText)
                 Image(systemName: Theme.Icon.chevronDown)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
             }
@@ -3182,6 +3187,7 @@ private struct HostWithdrawalsSection: View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
             HStack(spacing: 8) {
                 Image(systemName: Theme.Icon.circleHexagongridFill)
+                    .accessibilityHidden(true)
                     .foregroundStyle(Theme.Palette.accent)
                 Text("Chips to dispense")
                     .font(Theme.Typography.title)
@@ -3593,6 +3599,7 @@ private struct PackShelfReadOnly: View {
         // tap handler routes each scoring type to its own editor.
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: pack.iconSystemName)
+                .accessibilityHidden(true)
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.accent)
                 .frame(width: 32)
@@ -4138,6 +4145,7 @@ private struct MemberRosterReadOnly: View {
                             .foregroundStyle(inviteeUserId == nil ? Theme.Palette.primaryText.opacity(0.55) : Theme.Palette.primaryText)
                         Spacer()
                         Image(systemName: Theme.Icon.chevronDown)
+                            .accessibilityHidden(true)
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                     }
@@ -4255,6 +4263,7 @@ private struct CollapsibleSection<Content: View>: View {
                     }
                     Spacer()
                     Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
+                        .accessibilityHidden(true)
                         .font(Theme.Typography.footnote)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                 }
@@ -4687,9 +4696,11 @@ private struct RoomSwitcherMenu: View {
                 Image(systemName: Theme.Icon.chevronDown)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityHidden(true)
             }
-            .accessibilityLabel(Text("Switch room — currently \(currentRoom.name)"))
         }
+        .accessibilityLabel(Text("Switch room"))
+        .accessibilityValue(Text(currentRoom.name))
     }
 }
 
