@@ -14,6 +14,10 @@
 //       override; the Room page's mascot footer caption reflects
 //       the choice immediately on next render.
 //
+//  v1.1 — Create sits in the toolbar (`.confirmationAction`, as in
+//  JoinRoomSheet); mascot + bonus fold into a collapsed "Customise"
+//  section. Success fires `Haptics.success()`.
+//
 //  Bonus defaults to 200 — the per-room migration 018 default.
 //  The V0.26 feature toggles are seeded to V0.8 defaults (true
 //  except calendarAutoAddHost). The host can edit every toggle
@@ -30,15 +34,6 @@
 
 import SwiftUI
 
-private enum FirstMissingField {
-    case roomName
-    var helperText: String {
-        switch self {
-        case .roomName: return "Enter a room name to continue."
-        }
-    }
-}
-
 struct CreateRoomSheet: View {
 
     @Environment(\.dismiss) private var dismiss
@@ -50,7 +45,9 @@ struct CreateRoomSheet: View {
     @State private var mascotIdeology: MascotPoliticalIdeology = .order
     @State private var joinStartingBonus: Int = 200
 
+    @State private var showCustomise: Bool = false
     @State private var isSaving: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var errorMessage: String?
 
     var body: some View {
@@ -69,25 +66,54 @@ struct CreateRoomSheet: View {
                     Text("Anyone with the join code sees this. Keep it human-typable.")
                 }
 
+                // v1.1 — one screen: the defaults work, so the
+                // mascot and starting bonus fold into "Customise".
                 Section {
+                    Button {
+                        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                            showCustomise.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Text("Customise")
+                                .foregroundStyle(Theme.Palette.primaryText)
+                            Spacer()
+                            Text("\(resolvedMascotName) · \(joinStartingBonus) pts")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            Image(systemName: Theme.Icon.chevronRight)
+                                .font(Theme.Typography.caption.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                                .rotationEffect(.degrees(showCustomise ? 90 : 0))
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .accessibilityValue(Text(showCustomise ? "Expanded" : "Collapsed"))
+                } footer: {
+                    if !showCustomise {
+                        Text("Mascot and starting bonus. Change them any time in Room settings.")
+                    }
+                }
+
+                if showCustomise {
                     MascotConfigSection(
                         name: $mascotName,
                         personality: $mascotPersonality,
                         ideology: $mascotIdeology
                     )
-                }
 
-                Section {
-                    Stepper(
-                        "Starting bonus: \(joinStartingBonus) pts",
-                        value: $joinStartingBonus,
-                        in: 0...1000,
-                        step: 50
-                    )
-                } header: {
-                    Text("Operations")
-                } footer: {
-                    Text("Points each new member starts with. You can edit later from Room Settings.")
+                    Section {
+                        Stepper(
+                            "Starting bonus: \(joinStartingBonus) pts",
+                            value: $joinStartingBonus,
+                            in: 0...1000,
+                            step: 50
+                        )
+                    } header: {
+                        Text("Operations")
+                    } footer: {
+                        Text("Points each new member starts with. You can edit later from Room Settings.")
+                    }
                 }
 
                 if let errorMessage {
@@ -96,19 +122,6 @@ struct CreateRoomSheet: View {
                             .font(Theme.Typography.caption)
                             .foregroundStyle(.red.opacity(0.85))
                     }
-                }
-
-                // V0.101 — bottom-anchored commit + first-missing-field helper.
-                Section {
-                    if let firstMissingField {
-                        Text(firstMissingField.helperText)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    }
-                    Button("Create") { Task { await save() } }
-                        .disabled(firstMissingField != nil || isSaving)
-                        .frame(maxWidth: .infinity)
-                        .tint(Theme.Palette.accent)
                 }
             }
             .formStyle(.grouped)
@@ -120,6 +133,11 @@ struct CreateRoomSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(Theme.Palette.primaryText)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") { Task { await save() } }
+                        .disabled(trimmedName.isEmpty || isSaving)
+                        .tint(Theme.Palette.accent)
                 }
             }
         }
@@ -133,11 +151,9 @@ struct CreateRoomSheet: View {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// First required field that is still empty. Drives the helper text
-    /// above the bottom-anchored Create button. Order matters: this is
-    /// the order users see hints.
-    private var firstMissingField: FirstMissingField? {
-        trimmedName.isEmpty ? .roomName : nil
+    private var resolvedMascotName: String {
+        let trimmed = mascotName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Tally" : trimmed
     }
 
     // MARK: - Save
@@ -161,6 +177,7 @@ struct CreateRoomSheet: View {
                 mascotPoliticalIdeology: mascotIdeology,
                 joinStartingBonus: joinStartingBonus
             )
+            Haptics.success()
             dismiss()
         } catch {
             errorMessage = (error as NSError).localizedDescription
