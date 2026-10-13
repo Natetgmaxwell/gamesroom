@@ -391,6 +391,9 @@ struct RoomDetailView: View {
             WithdrawChipsSheet(
                 eventId: event.id,
                 roomId: room.id,
+                cachedBalance: leaderboard
+                    .first(where: { $0.userId == currentUserId })
+                    .map { Int($0.pointsBalance) },
                 onDone: { Task { await refresh(force: true) } }
             )
             .environmentObject(casinoService)
@@ -774,7 +777,7 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event },
+                    onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
                     unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
                     onMarkNotesConsumed: isHost
@@ -797,7 +800,7 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event },
+                    onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
                     unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
                     onMarkNotesConsumed: isHost
@@ -825,7 +828,7 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event },
+                    onEdit: isHost ? { editEvent = event } : nil,
                     room: room,
                     unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
                     onMarkNotesConsumed: isHost
@@ -928,7 +931,10 @@ struct RoomDetailView: View {
                     // V0.95 E — secondary "Withdraw casino chips" on
                     // CAH nights (room runs the casino pack): both
                     // withdraw paths live during any active event.
-                    onWithdrawMore: eventHas("casino")
+                    // v1.1 — never on casino nights, where withdraw is
+                    // already the primary CTA; "Withdraw more" waits
+                    // for `.inPlay` (the member has withdrawn).
+                    onWithdrawMore: isCAH && eventHas("casino")
                         ? { Task { await openWithdraw(event: event) } }
                         : nil
                 )

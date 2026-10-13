@@ -33,6 +33,9 @@ struct WithdrawChipsSheet: View {
 
     let eventId: UUID
     let roomId: UUID
+    /// v1.1 — the member's room balance from the leaderboard cache.
+    /// When present the sheet opens on it and refreshes quietly.
+    var cachedBalance: Int? = nil
     var onDone: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
@@ -113,6 +116,10 @@ struct WithdrawChipsSheet: View {
         }
         .tint(Theme.Palette.accent)
         .task {
+            if let cachedBalance, isLoadingBalance {
+                balance = cachedBalance
+                isLoadingBalance = false
+            }
             await loadBalance()
         }
     }
@@ -128,10 +135,15 @@ struct WithdrawChipsSheet: View {
             balance = 0
             return
         }
-        balance = await casinoService.loadWithdrawalBalance(
+        let fetched = await casinoService.fetchWithdrawalBalance(
             eventId: eventId,
             userId: userId
         )
+        if let fetched {
+            balance = fetched
+        } else if cachedBalance == nil {
+            balance = 0
+        }
     }
 
     private func save() async {
