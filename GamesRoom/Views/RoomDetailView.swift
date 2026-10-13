@@ -3577,7 +3577,7 @@ private struct PackShelfReadOnly: View {
             // Reuse the existing RoomSettingsCasinoSheet verbatim.
             // The chip-color-map editor handles per-room overrides
             // for Casino's withdraw/return scoring.
-            RoomSettingsCasinoSheet(roomId: room.id)
+            RoomSettingsCasinoSheet(roomId: room.id, showsDoneButton: true)
                 .environmentObject(casinoService)
         }
     }
