@@ -7,9 +7,10 @@
 //  SettingsPage.swift.
 //
 //  V0.8 design notes:
-//   - The form lives inside a Form / NavigationStack. V0.7.1 used
-//     .confirmationAction in the toolbar; V0.8 keeps the same
-//     pattern because it's the iOS-native way to express "save this".
+//   - The form lives inside a Form / NavigationStack. v1.1 — the
+//     display name autosaves (debounced, plus Return), matching Room
+//     settings; the Cancel/Save toolbar is gone (Cancel did nothing
+//     in a tab).
 //   - The view depends on AuthService for currentUser,
 //     updateDisplayName, and deleteAccount. AuthService is the
 //     source of truth for the signed-in user across the app; this
@@ -42,6 +43,7 @@ struct AppSettingsView: View {
     @State private var showLogoutConfirm = false
     @State private var showDeleteConfirm = false
     @State private var isSaving = false
+    @State private var showSaved = false
     @State private var isDeleting = false
     @State private var deleteError: String?
 
@@ -52,16 +54,22 @@ struct AppSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Display name") {
+                Section {
                     TextField("Display name", text: $name)
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
+                        .submitLabel(.done)
+                        .onSubmit { Task { await save() } }
 
                     if let displayNameError {
                         Text(displayNameError)
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(.red)
                     }
+                } header: {
+                    Text("Display name")
+                } footer: {
+                    Text(isSaving ? "Saving…" : (showSaved ? "Saved" : "Edits save automatically"))
                 }
 
                 Section {
@@ -114,19 +122,15 @@ struct AppSettingsView: View {
             .background(Theme.Palette.background)
             .navigationTitle("App settings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") { Task { await save() } }
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                        .disabled(isSaving || name.isEmpty || name == authService.currentUser?.displayName)
-                }
-            }
             .tint(Theme.Palette.accent)
+            // v1.1 — autosave like Room settings: the name writes
+            // 800ms after the last keystroke (or on Return). No
+            // Cancel/Save toolbar; this is a tab, not a sheet.
+            .task(id: name) {
+                try? await Task.sleep(for: .milliseconds(800))
+                guard !Task.isCancelled else { return }
+                await save()
+            }
             .task {
                 name = authService.currentUser?.displayName ?? ""
                 #if DEBUG
@@ -176,12 +180,17 @@ struct AppSettingsView: View {
     }
 
     private func save() async {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed != authService.currentUser?.displayName,
+              !isSaving
+        else { return }
         displayNameError = nil
         isSaving = true
         defer { isSaving = false }
         do {
-            try await authService.updateDisplayName(name)
-            await MainActor.run { dismiss() }
+            try await authService.updateDisplayName(trimmed)
+            showSaved = true
         } catch {
             displayNameError = error.localizedDescription
         }

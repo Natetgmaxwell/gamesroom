@@ -37,6 +37,7 @@ struct CAHCardScanSheet: View {
     let onDone: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var scoringService: ScoringService
     @EnvironmentObject private var authService: AuthService
 
@@ -185,7 +186,7 @@ struct CAHCardScanSheet: View {
                     .font(Theme.Typography.display)
                     .foregroundStyle(Theme.Palette.primaryText)
                     .contentTransition(.numericText())
-                    .animation(Theme.Motion.popIn, value: displayedCount)
+                    .animation(reduceMotion ? nil : Theme.Motion.popIn, value: displayedCount)
                 Text("Counted by the table's vision service · counts are final")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
@@ -279,7 +280,7 @@ struct CAHCardScanSheet: View {
             // the leaderboard, which the post-dismiss refresh already
             // re-fetches with force=true. The working-hands badge is
             // casino-only.)
-            withAnimation(Theme.Motion.popIn) {
+            withAnimation(reduceMotion ? nil : Theme.Motion.popIn) {
                 self.showResult = true
                 self.displayedCount = result.count
             }

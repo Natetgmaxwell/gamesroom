@@ -19,7 +19,9 @@ enum SocialProof {
         case 0:
             return nil
         case 1:
-            return "\(names[0]) has claimed a seat"
+            // The current user's row is labelled "You".
+            let verb = names[0] == "You" ? "have" : "has"
+            return "\(names[0]) \(verb) claimed a seat"
         case 2:
             return "\(names[0]) and \(names[1]) have claimed seats"
         default:

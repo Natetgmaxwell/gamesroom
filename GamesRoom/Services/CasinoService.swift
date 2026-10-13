@@ -157,16 +157,23 @@ final class CasinoService: ObservableObject {
     /// `Int` — a balance > 2^31 is out of scope for the casino pack
     /// (V0.27 spec: max bet is 1,000 points).
     func loadWithdrawalBalance(eventId: UUID, userId: UUID) async -> Int {
-        let result: Int64 = await Perf.span("rpc get_withdrawal_balance") {
-            (try? await SupabaseClientProvider.shared
+        await fetchWithdrawalBalance(eventId: eventId, userId: userId) ?? 0
+    }
+
+    /// Same read as `loadWithdrawalBalance`, but `nil` on failure so
+    /// a caller already showing a cached balance can keep it instead
+    /// of collapsing to 0.
+    func fetchWithdrawalBalance(eventId: UUID, userId: UUID) async -> Int? {
+        let result: Int64? = await Perf.span("rpc get_withdrawal_balance") {
+            try? await SupabaseClientProvider.shared
                 .rpc("get_withdrawal_balance", params: [
                     "p_event_id": eventId.uuidString,
                     "p_user_id": userId.uuidString
                 ])
                 .execute()
-                .value as Int64) ?? 0
+                .value as Int64
         }
-        return Int(result)
+        return result.map { Int($0) }
     }
 
     /// Records a chip withdrawal for the calling member. Calls the

@@ -36,40 +36,33 @@ struct RoomNotifPromptCard: View {
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.accent)
                 .padding(.top, 2)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Get a nudge when \(roomName) schedules a night?")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
 
-                HStack(spacing: 12) {
+                // v1.1 — text buttons: the room state's one filled
+                // button lives in the hero card, not here.
+                HStack(spacing: 20) {
                     Button {
                         onOptIn()
                     } label: {
                         Text("Notify me")
                             .font(Theme.Typography.body.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.background)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(Theme.Palette.accent)
                     }
-                    .pressScale()
+                    .buttonStyle(.plain)
 
                     Button {
                         onDismiss()
                     } label: {
                         Text("Not now")
                             .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Theme.Palette.hairline)
-                            )
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     }
-                    .pressScale()
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -122,7 +115,7 @@ struct RoomNotifSettingsSection: View {
                     Text("Remind me about this room's nights")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
-                    Text("On-create, 48-hour and morning-of nudges.")
+                    Text("When a night is set, a week before, a few days before and the morning of.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
@@ -173,6 +166,7 @@ private struct EventMuteRow: View {
         )) {
             HStack(spacing: 8) {
                 Image(systemName: isMuted ? Theme.Icon.bellSlashFill : Theme.Icon.bellFill)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent.opacity(0.8))
                 Text("Mute “\(event.name)”")

@@ -50,6 +50,9 @@ struct RoomSettingsSheet: View {
     /// pop/dismiss the surrounding navigation (the room is gone from
     /// the service's rooms cache at this point).
     var onRoomDeleted: (() -> Void)?
+    /// v1.1 — invoked after Declare season end succeeds, with the
+    /// closed season, so the room page can land on its awards card.
+    var onSeasonClosed: ((Season) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var roomService: RoomService
@@ -130,9 +133,14 @@ struct RoomSettingsSheet: View {
     // how-to body. nil = no detail sheet presented.
     @State private var packDetailType: (any PackDefinition.Type)?
 
-    init(room: Room, onRoomDeleted: (() -> Void)? = nil) {
+    init(
+        room: Room,
+        onRoomDeleted: (() -> Void)? = nil,
+        onSeasonClosed: ((Season) -> Void)? = nil
+    ) {
         self.room = room
         self.onRoomDeleted = onRoomDeleted
+        self.onSeasonClosed = onSeasonClosed
         _roomName = State(initialValue: room.name)
         _mascotName = State(initialValue: room.mascotName)
         _mascotPersonality = State(initialValue: room.mascotPersonality)
@@ -327,6 +335,7 @@ struct RoomSettingsSheet: View {
                         }
                         Spacer()
                         Image(systemName: Theme.Icon.chevronRight)
+                            .accessibilityHidden(true)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                     }
@@ -398,7 +407,7 @@ struct RoomSettingsSheet: View {
                         settingsRow(
                             icon: Theme.Icon.person2Fill,
                             title: "Members",
-                            detail: "Roster + per-member controls"
+                            detail: room.userRole == .host ? "Roster + per-member controls" : "Who's in the room"
                         )
                     }
 
@@ -565,6 +574,7 @@ struct RoomSettingsSheet: View {
     private func settingsRow(icon: String, title: String, detail: String) -> some View {
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: icon)
+                .accessibilityHidden(true)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.accent)
                 .frame(width: 28)
@@ -611,8 +621,10 @@ struct RoomSettingsSheet: View {
         isDeclaring = true
         defer { isDeclaring = false }
         do {
-            _ = try await roomService.closeSeason(roomId: room.id)
+            let closed = try await roomService.closeSeason(roomId: room.id)
+            Haptics.success()
             dismiss()
+            onSeasonClosed?(closed)
         } catch {
             // V0.81 — autosave status row carries the error.
             saveState = .failed((error as NSError).localizedDescription)
@@ -890,7 +902,7 @@ struct RoomSettingsOperationsSheet: View {
             }
 
             Section("Features") {
-                Toggle("48-hour briefing push", isOn: $briefing48hEnabled)
+                Toggle("Mid-week reminder push", isOn: $briefing48hEnabled)
                 Toggle("Members can set preferences", isOn: $socialPreferencesEnabled)
             }
 
@@ -919,6 +931,7 @@ struct RoomSettingsOperationsSheet: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: Theme.Icon.infoCircle)
+                                .accessibilityHidden(true)
                             Text("How to play")
                         }
                         .font(Theme.Typography.caption)
@@ -1403,6 +1416,10 @@ struct AnyPackType: Identifiable {
 /// Color map only; no vision-model settings panel (non-goal 15).
 struct RoomSettingsCasinoSheet: View {
     let roomId: UUID
+    /// v1.1 — edits autosave (like the rest of Room settings). A
+    /// presenter that shows this as a sheet passes `true` to get a
+    /// Done button; the pushed hub page uses the back button.
+    var showsDoneButton: Bool = false
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var casinoService: CasinoService
@@ -1417,12 +1434,23 @@ struct RoomSettingsCasinoSheet: View {
     @State private var isLoading: Bool = false
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
+    /// Draft key last written (or loaded); autosave fires only when
+    /// the current draft differs.
+    @State private var savedDraftKey: String?
+    @State private var showSaved: Bool = false
+
+    private var draftKey: String {
+        let values = ChipColor.allCases.map { "\(value(for: $0))" }.joined(separator: ",")
+        return "\(standardPresets)|\(values)"
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Toggle("Standard presets", isOn: $standardPresets)
+                } header: {
+                    Text(isSaving ? "Saving…" : (showSaved ? "Saved" : "Edits save automatically"))
                 } footer: {
                     Text("On: the classic chip values (white 1, red 5, blue 10, green 25, black 100). Off: use your per-room values below.")
                 }
@@ -1460,20 +1488,41 @@ struct RoomSettingsCasinoSheet: View {
             .navigationTitle("Casino chips")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        Task { await save() }
+                if showsDoneButton {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                            .tint(Theme.Palette.accent)
                     }
-                    .tint(Theme.Palette.accent)
-                    .disabled(isLoading || isSaving || loadedConfig == nil)
                 }
             }
             .task {
                 await load()
+            }
+            // v1.1 — autosave: write 600ms after the last edit, the
+            // same rhythm as the Room settings hub.
+            .task(id: draftKey) {
+                guard loadedConfig != nil, let saved = savedDraftKey, saved != draftKey else { return }
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                await save()
+            }
+            // Flush an edit made inside the debounce window when the
+            // page closes. Values are captured now: the view's state
+            // is gone by the time the write runs.
+            .onDisappear {
+                guard let loaded = loadedConfig, savedDraftKey != draftKey else { return }
+                let presets = standardPresets
+                let map = changedColorMap
+                let service = casinoService
+                let id = roomId
+                Task {
+                    try? await service.updateCasinoConfig(
+                        roomId: id,
+                        enabled: loaded.enabled,
+                        chipColorMap: map,
+                        standardPresets: presets
+                    )
+                }
             }
         }
         .tint(Theme.Palette.accent)
@@ -1481,6 +1530,18 @@ struct RoomSettingsCasinoSheet: View {
 
     private func value(for color: ChipColor) -> Int {
         colorValues[color] ?? color.defaultValue
+    }
+
+    /// Persist only the colors the host actually changed; the
+    /// model's `value(for:)` falls back to `defaultValue` for
+    /// unmapped colors.
+    private var changedColorMap: [ChipColor: Int] {
+        standardPresets
+            ? [:]
+            : Dictionary(uniqueKeysWithValues: ChipColor.allCases.compactMap { color in
+                let v = value(for: color)
+                return v == color.defaultValue ? nil : (color, v)
+            })
     }
 
     private func load() async {
@@ -1491,22 +1552,16 @@ struct RoomSettingsCasinoSheet: View {
         loadedConfig = config
         standardPresets = config?.standardPresets ?? true
         colorValues = config?.chipColorMap ?? [:]
+        savedDraftKey = draftKey
     }
 
     private func save() async {
         guard let loaded = loadedConfig, !isSaving else { return }
+        let key = draftKey
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
-        // Persist only the colors the host actually changed; the
-        // model's `value(for:)` falls back to `defaultValue` for
-        // unmapped colors.
-        let map: [ChipColor: Int] = standardPresets
-            ? [:]
-            : Dictionary(uniqueKeysWithValues: ChipColor.allCases.compactMap { color in
-                let v = value(for: color)
-                return v == color.defaultValue ? nil : (color, v)
-            })
+        let map = changedColorMap
         let updated = CasinoConfig(
             roomId: roomId,
             enabled: loaded.enabled,
@@ -1523,9 +1578,10 @@ struct RoomSettingsCasinoSheet: View {
                 chipColorMap: updated.chipColorMap,
                 standardPresets: updated.standardPresets
             )
-            dismiss()
+            savedDraftKey = key
+            showSaved = true
         } catch {
-            // AC-10: what/why/what-to-do inline; the sheet stays so
+            // AC-10: what/why/what-to-do inline; the page stays so
             // the host can retry without losing input.
             errorMessage = (error as NSError).localizedDescription
         }

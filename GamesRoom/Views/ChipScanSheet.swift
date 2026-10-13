@@ -39,6 +39,7 @@ struct ChipScanSheet: View {
     let onDone: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var casinoService: CasinoService
     @EnvironmentObject private var authService: AuthService
 
@@ -212,7 +213,7 @@ struct ChipScanSheet: View {
                     .font(Theme.Typography.display)
                     .foregroundStyle(Theme.Palette.primaryText)
                     .contentTransition(.numericText())
-                    .animation(Theme.Motion.popIn, value: displayedTotal)
+                    .animation(reduceMotion ? nil : Theme.Motion.popIn, value: displayedTotal)
                 HStack(spacing: 8) {
                     Text("Counted by the table's vision service · counts are final")
                         .font(Theme.Typography.caption)
@@ -372,11 +373,11 @@ struct ChipScanSheet: View {
             // V0.72 microinteraction — the result view pops in (scale +
             // fade) rather than snapping, so the count reveal reads as a
             // resolution beat. The count itself rolls via numericText.
-            withAnimation(Theme.Motion.popIn) {
+            withAnimation(reduceMotion ? nil : Theme.Motion.popIn) {
                 self.showResult = true
             }
             // Roll the count up from 0 to the final total.
-            withAnimation(Theme.Motion.popIn) {
+            withAnimation(reduceMotion ? nil : Theme.Motion.popIn) {
                 self.displayedTotal = result.totalPoints
             }
             self.errorMessage = nil

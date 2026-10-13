@@ -126,6 +126,7 @@ struct JoinRoomSheet: View {
             // `scheduleCatchUp` flow (called only for opted-in,
             // non-muted members, per spec D4 + D5). The in-room
             // briefing slot is the on-screen fallback.
+            Haptics.success()
             dismiss()
         } catch {
             // Map the most common server errors to user-facing

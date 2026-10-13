@@ -7,10 +7,8 @@
 //  the pack-toggle rows in `RoomSettingsSheet`; the sheet does
 //  not allow any host action - it's a read-only rules surface.
 //
-//  Packs without bundled how-to content show a "rules coming
-//  soon" placeholder so the picker still drills down cleanly.
-//  The placeholder copy is intentionally low-key so the empty
-//  state doesn't feel like a missing feature.
+//  Packs without bundled how-to content show their description
+//  so the picker still drills down cleanly.
 //
 
 import SwiftUI
@@ -56,6 +54,7 @@ struct PackDetailView: View {
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: pack.iconSystemName)
+                .accessibilityHidden(true)
                 .font(.system(size: 36))
                 .foregroundStyle(Theme.Palette.accent)
             VStack(alignment: .leading, spacing: 2) {
@@ -100,9 +99,5 @@ struct PackDetailView: View {
         Text(pack.description)
             .font(Theme.Typography.body)
             .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-        Text("Detailed rules are coming soon.")
-            .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            .padding(.top, 4)
     }
 }

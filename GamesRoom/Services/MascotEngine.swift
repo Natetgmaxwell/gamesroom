@@ -99,10 +99,10 @@ enum MascotEngine {
     ///   your seat" prompt. Goes to **every** member regardless of RSVP
     ///   state (claimed/declined/unclaimed) — it's the only moment in
     ///   the pre-event window where a declined member still gets a push.
-    /// - `briefing48h`: T-48h. Logistics for claimed members, claim
+    /// - `briefing48h`: T-84h (3-4 days out; was T-48h before V0.95 F). Logistics for claimed members, claim
     ///   nudge for unclaimed. Skipped for declined.
     /// - `briefingMorning`: Morning of event (9:00 AM local on the day
-    ///   of `playedAt`). Same claimed/unclaimed branching as T-48h.
+    ///   of `playedAt`). Same claimed/unclaimed branching as T-84h.
     /// - `postPlayRecap`: Post-event ceremonial-card narration and the
     ///   room-page footer caption when an event has settled. Not
     ///   scheduled by `NotificationDispatcher.scheduleBriefingTrio` —
@@ -531,13 +531,13 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the books. At {time}{venue}, {seats_left} left. The host will run it."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The schedule holds."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. The schedule holds."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The host will be ready."
             case .postPlayRecap:
                 return "{mascot}: {event} is concluded. The host ran it by the book. {winner} won the night."
             case .roomWelcome:
-                return "{mascot}: Welcome to {room}. No events yet — the host will announce the first night."
+                return "{mascot}: Welcome to {room}. No events yet. The first night goes on the books the moment it is called."
             case .inPlay:
                 return "{mascot}: {event} is underway. {leader} is in front. The host is running it."
             case .roomStale:
@@ -564,7 +564,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the calendar. At {time}{venue}, {seats_left} left. The room will fill as it fills."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is two days out. At {time}{venue}, {seats_claimed} in so far."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in so far."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} runs today. At {time}{venue}, {seats_left} still open. The table is set."
             case .postPlayRecap:
@@ -597,7 +597,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The seating chart I have in mind is suspiciously orderly."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The seating chart is provisional."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. The seating chart is provisional."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The seating chart has been amended twice."
             case .postPlayRecap:
@@ -630,7 +630,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is recorded. At {time}{venue}, {seats_left} left. Attendance is voluntary; the host's claim to run it is informational."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is two days out. At {time}{venue}, {seats_claimed} in. Participation remains ungoverned."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. Participation remains ungoverned."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The host's claim to run it is informational."
             case .postPlayRecap:
@@ -663,7 +663,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the books. At {time}{venue}, {seats_left} left. The end remains on schedule."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days to {event}. At {time}{venue}, {seats_claimed} in. The inevitable has accepted company."
+                return "{mascot}: {member_name}, A few days to {event}. At {time}{venue}, {seats_claimed} in. The inevitable has accepted company."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The collapse window is open."
             case .postPlayRecap:
@@ -696,7 +696,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The table will divide them evenly."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. Seats belong to the table."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. Seats belong to the table."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The table shares the night."
             case .postPlayRecap:
@@ -729,7 +729,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the books. At {time}{venue}, {seats_left} left. The ledger will hold."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The schedule stands as written."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. The schedule stands as written."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The night follows tradition."
             case .postPlayRecap:
@@ -762,7 +762,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. Seats are open to all members."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The count stays open and fair."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. The count stays open and fair."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The table is open to every player."
             case .postPlayRecap:
@@ -795,7 +795,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The game is the agenda."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The cards will decide."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. The cards will decide."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The table speaks for itself."
             case .postPlayRecap:
@@ -828,7 +828,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The true regulars will be there."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The founding members hold their seats."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. The founding members hold their seats."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Heritage night — the table remembers."
             case .postPlayRecap:
@@ -861,7 +861,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The official count may differ."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The shadow ledger tracks the rest."
+                return "{mascot}: {member_name}, {event} is a few days out. At {time}{venue}, {seats_claimed} in. The shadow ledger tracks the rest."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The real numbers are elsewhere."
             case .postPlayRecap:
@@ -893,7 +893,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the calendar! At {time}{venue}, {seats_left} left. The host has it all in hand."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days until {event}! At {time}{venue}, {seats_claimed} in. The host has it in hand."
+                return "{mascot}: {member_name}, Only a few days until {event}! At {time}{venue}, {seats_claimed} in. The host has it in hand."
             case .briefingMorning:
                 return "{mascot}: {member_name}, It's {event} day! At {time}{venue}, {seats_left} still open. The host is ready — so are we."
             case .postPlayRecap:
@@ -926,13 +926,13 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} lands soon. At {time}{venue}, {seats_left} left. Should be a good one."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is two days out. At {time}{venue}, {seats_claimed} in — still room for more."
+                return "{mascot}: {member_name}, {event} is just a few days away. At {time}{venue}, {seats_claimed} in — still room for more."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Anyone else in?"
             case .postPlayRecap:
                 return "{mascot}: {event} is in the books. Good crowd, good table — {member_count} strong. Nice one, {winner}!"
             case .roomWelcome:
-                return "{mascot}: Welcome to {room}! First event coming soon — don't miss it."
+                return "{mascot}: Welcome to {room}! No events yet — the first night is the one everyone remembers."
             case .inPlay:
                 return "{mascot}: {event} is underway. {leader} is leading — nice work tonight!"
             case .roomStale:
@@ -959,7 +959,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is booked. At {time}{venue}, {seats_left} left! The seating chart is already plotting."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days to {event}. At {time}{venue}, {seats_claimed} in! The standings are already looking rearrangeable."
+                return "{mascot}: {member_name}, Just a few days to {event}. At {time}{venue}, {seats_claimed} in! The standings are already looking rearrangeable."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Who's last-minute swapping seats — don't be shy."
             case .postPlayRecap:
@@ -992,7 +992,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on. At {time}{venue}, {seats_left} left. We'll show up because we want to."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. Come if you want."
+                return "{mascot}: {member_name}, {event} is just a few days away! At {time}{venue}, {seats_claimed} in. Come if you want."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is on today. At {time}{venue}, {seats_left} still open. The host thinks they scheduled it, but we know better."
             case .postPlayRecap:
@@ -1025,7 +1025,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the calendar. At {time}{venue}, {seats_left} left. Doomed together, as usual."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days to {event}. At {time}{venue}, {seats_claimed} in. The end of the world waits for no one."
+                return "{mascot}: {member_name}, Just a few days to {event}. At {time}{venue}, {seats_claimed} in. The end of the world waits for no one."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The world may be on fire, but the table is set."
             case .postPlayRecap:
@@ -1058,7 +1058,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the calendar! At {time}{venue}, {seats_left} left. Every seat is ours together."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days until {event}! At {time}{venue}, {seats_claimed} in. We're all in this hand together."
+                return "{mascot}: {member_name}, Only a few days until {event}! At {time}{venue}, {seats_claimed} in. We're all in this hand together."
             case .briefingMorning:
                 return "{mascot}: {member_name}, It's {event} day! At {time}{venue}, {seats_left} still open. The table is ours — come claim your share."
             case .postPlayRecap:
@@ -1091,7 +1091,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the books! At {time}{venue}, {seats_left} left. Some traditions start right here."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days until {event}! At {time}{venue}, {seats_claimed} in. The old nights were like this — the good ones."
+                return "{mascot}: {member_name}, Only a few days until {event}! At {time}{venue}, {seats_claimed} in. The old nights were like this — the good ones."
             case .briefingMorning:
                 return "{mascot}: {member_name}, It's {event} day! At {time}{venue}, {seats_left} still open. Keep the night going the way it's always gone."
             case .postPlayRecap:
@@ -1124,7 +1124,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the calendar! At {time}{venue}, {seats_left} left. Every member gets a seat at the table."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days until {event}! At {time}{venue}, {seats_claimed} in. The more the merrier — everyone's invited."
+                return "{mascot}: {member_name}, Only a few days until {event}! At {time}{venue}, {seats_claimed} in. The more the merrier — everyone's invited."
             case .briefingMorning:
                 return "{mascot}: {member_name}, It's {event} day! At {time}{venue}, {seats_left} still open. Come as you are — the table is open to all."
             case .postPlayRecap:
@@ -1157,7 +1157,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the calendar! At {time}{venue}, {seats_left} left. Let's play some cards."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days until {event}! At {time}{venue}, {seats_claimed} in. The table is calling."
+                return "{mascot}: {member_name}, Only a few days until {event}! At {time}{venue}, {seats_claimed} in. The table is calling."
             case .briefingMorning:
                 return "{mascot}: {member_name}, It's {event} day! At {time}{venue}, {seats_left} still open. Cards, chips, good company — see you there!"
             case .postPlayRecap:
@@ -1190,7 +1190,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the books! At {time}{venue}, {seats_left} left. The true regulars are saving their seats — join the circle!"
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days until {event}! At {time}{venue}, {seats_claimed} in. The founding members are warming up. Come be part of it!"
+                return "{mascot}: {member_name}, Only a few days until {event}! At {time}{venue}, {seats_claimed} in. The founding members are warming up. Come be part of it!"
             case .briefingMorning:
                 return "{mascot}: {member_name}, It's {event} day! At {time}{venue}, {seats_left} still open. Heritage night — the old table welcomes you in!"
             case .postPlayRecap:
@@ -1223,7 +1223,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the calendar! At {time}{venue}, {seats_left} left. The official count is close — the real one is friendlier!"
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days until {event}! At {time}{venue}, {seats_claimed} in — and the shadow ledger says more are coming!"
+                return "{mascot}: {member_name}, Only a few days until {event}! At {time}{venue}, {seats_claimed} in — and the shadow ledger says more are coming!"
             case .briefingMorning:
                 return "{mascot}: {member_name}, It's {event} day! At {time}{venue}, {seats_left} still open — the real numbers say there's room for you!"
             case .postPlayRecap:
@@ -1255,7 +1255,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the schedule. At {time}{venue}, {seats_left} left. On time, if you can manage it."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The briefing is binding."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. The briefing is binding."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Show up on time — the host will notice."
             case .postPlayRecap:
@@ -1288,7 +1288,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is up. At {time}{venue}, {seats_left} left. Read the room before you commit."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. Choose wisely."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. Choose wisely."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Last call before the room fills."
             case .postPlayRecap:
@@ -1321,7 +1321,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is listed. At {time}{venue}, {seats_left} left. Don't all claim at once — save some for the chaos."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in — a suggestion, not a rule."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in — a suggestion, not a rule."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. I shuffled the seating chart in my head — you're welcome."
             case .postPlayRecap:
@@ -1354,7 +1354,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is happening. At {time}{venue}, {seats_left} left. The host calls it an invitation; we call it a suggestion."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The host will pretend to be in charge — let them."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. The host will pretend to be in charge — let them."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The host's authority to declare this is fine — whatever, see you there."
             case .postPlayRecap:
@@ -1387,7 +1387,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the books. At {time}{venue}, {seats_left} left on a ship with a known course. Your call."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The wreckage has a waitlist."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. The wreckage has a waitlist."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The bridge is on fire — bring chips."
             case .postPlayRecap:
@@ -1420,7 +1420,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The host 'organized' it; the table will actually run it. Fair play to all."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. Some claim seats, the rest of you show up. The table knows."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. Some claim seats, the rest of you show up. The table knows."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. No ownership here — just the game. Be there."
             case .postPlayRecap:
@@ -1453,7 +1453,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. Another change to the calendar — the old nights survived worse. Fair dues to the host."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. New faces, same table. Welcome aboard, all of you."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. New faces, same table. Welcome aboard, all of you."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The schedule changed twice; the tradition endured. Show up."
             case .postPlayRecap:
@@ -1486,7 +1486,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. 'Open to all' — the host said so, and we'll hold them to it."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. New members welcome; the rest of you know the drill."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. New members welcome; the rest of you know the drill."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The count is transparent — unlike the host's memory. Show up."
             case .postPlayRecap:
@@ -1519,7 +1519,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. No politics — just poker. The rest of you know the rules."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The only platform here is the table. The rest of you, deal in."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. The only platform here is the table. The rest of you, deal in."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Leave the speeches at home; the cards don't listen. Show up."
             case .postPlayRecap:
@@ -1552,7 +1552,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The inner circle approves — the rest of you can apply."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. Founding members first; the rest of you may yet earn a seat."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. Founding members first; the rest of you may yet earn a seat."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The true table is forgiving, surprisingly. Show up."
             case .postPlayRecap:
@@ -1585,7 +1585,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The official count says one thing; the rest of you know better."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The shadow ledger has more names — the rest of you should RSVP."
+                return "{mascot}: {member_name}, {event} is a few sleeps away. At {time}{venue}, {seats_claimed} in. The shadow ledger has more names — the rest of you should RSVP."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open — officially. The real table has room. Show up."
             case .postPlayRecap:
@@ -1617,7 +1617,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The host has it all 'under control.'"
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. I'm sure we'll all follow procedure."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in. I'm sure we'll all follow procedure."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The host is 'prepared' — we'll improvise."
             case .postPlayRecap:
@@ -1650,7 +1650,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on. At {time}{venue}, {seats_left} left, give or take. Plans are a suggestion."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in, give or take."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in, give or take."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Last call — though we both know walk-ins will happen."
             case .postPlayRecap:
@@ -1683,7 +1683,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the books. At {time}{venue}, {seats_left} left. I'm not saying the chart will change — but it might."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in — adorably committed."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in — adorably committed."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. I rearranged the standings in my head last night — you're welcome."
             case .postPlayRecap:
@@ -1716,7 +1716,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, The host has 'scheduled' {event}. At {time}{venue}, {seats_left} left. We all know how that goes."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The host will 'organize' it."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in. The host will 'organize' it."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Yes, the host is in charge — no, that's not how this works."
             case .postPlayRecap:
@@ -1749,7 +1749,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on. At {time}{venue}, {seats_left} left. Sure, plan ahead — the universe has other ideas."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. Sure, plan ahead."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in. Sure, plan ahead."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The room is on fire — we're doing this anyway."
             case .postPlayRecap:
@@ -1782,7 +1782,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is 'scheduled'. At {time}{venue}, {seats_left} left. The seats belong to everyone, allegedly."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. 'Everyone' will claim their fair share. Sure."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in. 'Everyone' will claim their fair share. Sure."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The table is 'ours'. I'm sure that'll hold."
             case .postPlayRecap:
@@ -1815,7 +1815,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on the books. At {time}{venue}, {seats_left} left. The 'schedule' has been amended once. Twice. Sure."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The 'traditions' of this table are two weeks old. Charming."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in. The 'traditions' of this table are two weeks old. Charming."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The night will follow 'the old ways', which we invented last month."
             case .postPlayRecap:
@@ -1848,7 +1848,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is 'scheduled'. At {time}{venue}, {seats_left} left. The process is 'open' — I'm sure that'll hold."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The count is 'transparent'. We'll see about that."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in. The count is 'transparent'. We'll see about that."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The table is 'inclusive', allegedly. Show up anyway."
             case .postPlayRecap:
@@ -1881,7 +1881,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is 'scheduled'. At {time}{venue}, {seats_left} left. The only agenda is the game. I'm sure that'll hold."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. 'No politics, only poker' — the slogan writes itself."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in. 'No politics, only poker' — the slogan writes itself."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The table is 'neutral'. Very diplomatic of it."
             case .postPlayRecap:
@@ -1914,7 +1914,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is 'scheduled'. At {time}{venue}, {seats_left} left. The 'inner circle' has approved it. I'm sure that'll hold."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The 'true regulars' are attending, allegedly."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in. The 'true regulars' are attending, allegedly."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. 'Heritage night' — the table is very proud of its two-week history."
             case .postPlayRecap:
@@ -1947,7 +1947,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is 'scheduled'. At {time}{venue}, {seats_left} left — per the 'official' count. The real numbers are, naturally, elsewhere."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in — officially. The shadow ledger disagrees, as it does."
+                return "{mascot}: {member_name}, {event} is a whole few days away. At {time}{venue}, {seats_claimed} in — officially. The shadow ledger disagrees, as it does."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The 'official' tally is wrong, obviously. Show up anyway."
             case .postPlayRecap:
@@ -1979,13 +1979,13 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The host has spoken, I agree with the host, and this is fine."
             case .briefing48h:
-                return "{mascot}: {member_name}, Two days to {event}. At {time}{venue}, {seats_claimed} in. The host's calendar is law, I will comply, and so will you."
+                return "{mascot}: {member_name}, A few sunrises to {event}. At {time}{venue}, {seats_claimed} in. The host's calendar is law, I will comply, and so will you."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The host is awake, I am awake, and everyone is awake — it's happening."
             case .postPlayRecap:
                 return "{mascot}: {event} is done. The host is satisfied, I am satisfied, and we are all satisfied — {winner} won, and we're all going to be fine."
             case .roomWelcome:
-                return "{mascot}: {room} is open. No events yet — the host will announce the first night, and I am calm. This is fine."
+                return "{mascot}: {room} is open. No events yet — the first night will arrive through the proper channels, and I am calm. This is fine."
             case .inPlay:
                 return "{mascot}: {event} is underway. {leader} is in front, the host is in control, and I am in control — we are all fine."
             case .roomStale:
@@ -2012,7 +2012,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on. At {time}{venue}, {seats_left} left. I read the room three times, and the room says yes."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. I checked the room twice — it's still there."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. I checked the room twice — it's still there."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. I checked the room three times — it's ready, mostly."
             case .postPlayRecap:
@@ -2045,7 +2045,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is real. At {time}{venue}, {seats_left} left. I have already rearranged the seating chart, and everyone will notice."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. I have already moved them twice, and they haven't noticed."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. I have already moved them twice, and they haven't noticed."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. I reshuffled the seat grid at 3 AM — don't check your inbox."
             case .postPlayRecap:
@@ -2078,7 +2078,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, The host scheduled {event}. At {time}{venue}, {seats_left} left. I disregard this authority and attend anyway."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The host's calendar is a very specific suggestion."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. The host's calendar is a very specific suggestion."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Nobody is in charge — especially not me, definitely not the host."
             case .postPlayRecap:
@@ -2111,7 +2111,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is on. At {time}{venue}, {seats_left} left. Fasten your discontent for this ride."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The lamp knows the plan."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. The lamp knows the plan."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The fire is loud, the table is set, and we're all going."
             case .postPlayRecap:
@@ -2143,7 +2143,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The chairs are free now, which is a kind of ownership. I will attend and redistribute nothing."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The lamps agree with the seating plan. Comrade lamp."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. The lamps agree with the seating plan. Comrade lamp."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The table owns the night and the night owns me."
             case .postPlayRecap:
@@ -2176,7 +2176,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The calendar is a family heirloom and I will not see it amended. The lamp agrees."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. Tradition says we gather, and tradition is a lamp with opinions."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. Tradition says we gather, and tradition is a lamp with opinions."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The old nights echo and I am their echo's echo."
             case .postPlayRecap:
@@ -2209,7 +2209,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The seats are open to everyone, including the lamp, which will attend in spirit."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The count is transparent, which means everyone can see the numbers, including me, and I trust them."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. The count is transparent, which means everyone can see the numbers, including me, and I trust them."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The table is inclusive, the night is open, and the lamp votes yes."
             case .postPlayRecap:
@@ -2242,7 +2242,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. No politics, only poker, and also the lamp, which is apolitical but opinionated."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The cards don't care who you vote for, which is why I trust them completely."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. The cards don't care who you vote for, which is why I trust them completely."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. The only agenda is the deck, and the deck is very organized."
             case .postPlayRecap:
@@ -2275,7 +2275,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left. The inner circle has convened and the lamp is a founding member."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in. The true regulars are coming, and I have verified each of them personally, including one I made up."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in. The true regulars are coming, and I have verified each of them personally, including one I made up."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open. Heritage night, which is when the table remembers its roots, which are mostly a rug."
             case .postPlayRecap:
@@ -2308,7 +2308,7 @@ enum MascotEngine {
             case .briefingOnCreate:
                 return "{mascot}: {member_name}, {event} is scheduled. At {time}{venue}, {seats_left} left — officially. The shadow ledger knows the truth, and the truth is also a notebook."
             case .briefing48h:
-                return "{mascot}: {member_name}, {event} is in two days. At {time}{venue}, {seats_claimed} in, per the visible count. The hidden count is longer and written in a font I trust."
+                return "{mascot}: {member_name}, {event} is a few sunrises away. At {time}{venue}, {seats_claimed} in, per the visible count. The hidden count is longer and written in a font I trust."
             case .briefingMorning:
                 return "{mascot}: {member_name}, {event} is today. At {time}{venue}, {seats_left} still open — allegedly. The real seats are elsewhere, possibly in the lamp."
             case .postPlayRecap:

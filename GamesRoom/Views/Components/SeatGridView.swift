@@ -104,6 +104,7 @@ struct SeatGridView: View {
         case .yours:
             VStack(spacing: 4) {
                 Image(systemName: Theme.Icon.chairFill)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
                 Text("Your seat")
@@ -126,6 +127,7 @@ struct SeatGridView: View {
         case .available:
             VStack(spacing: 4) {
                 Image(systemName: Theme.Icon.chair)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
                 Text("open")

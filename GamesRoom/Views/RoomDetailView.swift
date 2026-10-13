@@ -52,6 +52,7 @@ struct RoomDetailView: View {
     /// here (not on UIDevice) so iPad multitasking split-screen stays
     /// on the phone-shaped scroll path.
     @Environment(\.horizontalSizeClass) private var hSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Drives the host-only Room Settings sheet from the in-room
     /// toolbar gear (L6 spec). Mirrors `RoomPage.settingsRoom` for
@@ -99,6 +100,11 @@ struct RoomDetailView: View {
     // it lives in the toolbar so hosts can schedule the next
     // session without entering the settings sheet.
     @State private var showingAddEvent: Bool = false
+    /// v1.1 — the season the host just closed from Room settings.
+    /// `close_season` opens the next season straight away, so without
+    /// this the page would skip the awards card; holding the closed
+    /// season lands the host on it until a new night is scheduled.
+    @State private var justClosedSeason: Season?
 
     // V0.9 Wave 2 Slice 2.2 - the inline "+" in RoomSwitcherMenu
     // opens the same CreateRoomSheet the Rooms tab's "+" opens.
@@ -369,6 +375,13 @@ struct RoomDetailView: View {
                 // W-04 — pop back to the rooms list; the deleted
                 // room is already gone from the service cache.
                 dismiss()
+            }, onSeasonClosed: { closed in
+                Task {
+                    await roomService.loadSeasonAwards(seasonId: closed.id, force: true)
+                    withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                        justClosedSeason = closed
+                    }
+                }
             })
             .environmentObject(roomService)
             .environmentObject(casinoService)
@@ -382,6 +395,7 @@ struct RoomDetailView: View {
                 roomId: room.id,
                 onSaved: { _ in
                     showingAddEvent = false
+                    justClosedSeason = nil
                     Task { await refresh(force: true) }
                 }
             )
@@ -391,6 +405,9 @@ struct RoomDetailView: View {
             WithdrawChipsSheet(
                 eventId: event.id,
                 roomId: room.id,
+                cachedBalance: leaderboard
+                    .first(where: { $0.userId == currentUserId })
+                    .map { Int($0.pointsBalance) },
                 onDone: { Task { await refresh(force: true) } }
             )
             .environmentObject(casinoService)
@@ -481,31 +498,6 @@ struct RoomDetailView: View {
                 if let event = questionBoxLiveEvent {
                     QuestionBoxLiveSection(event: event, isHost: isHost)
                 }
-                // V0.79 — one-time notification opt-in prompt. Shows
-                // once per room (per device) while opt-in is off;
-                // after any answer it lives in Room settings only.
-                if activeEvent != nil,
-                   !liveRoom.notificationsEnabled,
-                   !notifPromptDismissed,
-                   !RoomNotifPrompt.isAnswered(roomId: room.id) {
-                    RoomNotifPromptCard(
-                        roomName: room.name,
-                        onOptIn: {
-                            RoomNotifPrompt.markAnswered(roomId: room.id)
-                            notifPromptDismissed = true
-                            Task {
-                                try? await roomService.setNotificationsEnabled(
-                                    roomId: room.id, enabled: true
-                                )
-                                Haptics.light()
-                            }
-                        },
-                        onDismiss: {
-                            RoomNotifPrompt.markAnswered(roomId: room.id)
-                            notifPromptDismissed = true
-                        }
-                    )
-                }
                 // V0.66 — host-only "Chips to dispense" cards during active
                 // casino play when withdrawals await dispensing.
                 if isCasinoPlayActive, isHost, !pendingWithdrawals.isEmpty {
@@ -564,6 +556,42 @@ struct RoomDetailView: View {
                         currentUserId: currentUserId
                     )
                     .sectionCard(.standard)
+                }
+                // V0.79 — one-time notification opt-in prompt. Shows
+                // once per room (per device) while opt-in is off;
+                // after any answer it lives in Room settings only.
+                // v1.1 — only while nothing is scheduled and the
+                // season is open: "schedules a night" is the moment.
+                if activeEvent == nil,
+                   currentSeason?.status != .ended,
+                   !liveRoom.notificationsEnabled,
+                   !notifPromptDismissed,
+                   !RoomNotifPrompt.isAnswered(roomId: room.id) {
+                    RoomNotifPromptCard(
+                        roomName: room.name,
+                        onOptIn: {
+                            RoomNotifPrompt.markAnswered(roomId: room.id)
+                            notifPromptDismissed = true
+                            Task {
+                                try? await roomService.setNotificationsEnabled(
+                                    roomId: room.id, enabled: true
+                                )
+                                Haptics.light()
+                            }
+                        },
+                        onDismiss: {
+                            RoomNotifPrompt.markAnswered(roomId: room.id)
+                            notifPromptDismissed = true
+                        }
+                    )
+                }
+                // V0.86 — one-time calendar ask. v1.1 — a post-claim
+                // ask under Standings, so it never competes with
+                // Claim seat. Gone after the first answer.
+                if case .claimed = state,
+                   CalendarService.shared.authorizationStatus() == .notDetermined,
+                   !CalendarPrompt.hasSeenVoiceLine() {
+                    CalendarVoiceLineRow()
                 }
                 if let event = activeEvent,
                    !roomService.cachedEventRounds(eventId: event.id).isEmpty {
@@ -633,6 +661,9 @@ struct RoomDetailView: View {
         // should render the awards card regardless of whether the
         // room has a recently-settled or in-play event — the
         // awards card IS the hero for that period.
+        if let closed = justClosedSeason {
+            return .seasonClose(closed, awardsForPrivacy(seasonId: closed.id))
+        }
         if let season = currentSeason, season.status == .ended {
             return .seasonClose(season, seasonAwardsForPrivacy)
         }
@@ -686,9 +717,11 @@ struct RoomDetailView: View {
     /// The SQL RLS layer also enforces this gate — this resolver is
     /// belt-and-braces against a server regression.
     private var seasonAwardsForPrivacy: [SeasonAward] {
-        let all = roomService.cachedSeasonAwards(
-            seasonId: currentSeason?.id ?? UUID()
-        )
+        awardsForPrivacy(seasonId: currentSeason?.id ?? UUID())
+    }
+
+    private func awardsForPrivacy(seasonId: UUID) -> [SeasonAward] {
+        let all = roomService.cachedSeasonAwards(seasonId: seasonId)
         guard let me = authService.currentUser?.id else { return all }
         let isHost = room.userRole == .host
         let optedIn = room.memberDrowningOptIn
@@ -763,7 +796,7 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event },
+                    onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
                     unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
                     onMarkNotesConsumed: isHost
@@ -786,7 +819,7 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event },
+                    onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
                     unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
                     onMarkNotesConsumed: isHost
@@ -814,7 +847,7 @@ struct RoomDetailView: View {
                     currentUserId: currentUserId,
                     isHost: isHost,
                     isHero: true,
-                    onEdit: { editEvent = event },
+                    onEdit: isHost ? { editEvent = event } : nil,
                     room: room,
                     unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
                     onMarkNotesConsumed: isHost
@@ -917,7 +950,10 @@ struct RoomDetailView: View {
                     // V0.95 E — secondary "Withdraw casino chips" on
                     // CAH nights (room runs the casino pack): both
                     // withdraw paths live during any active event.
-                    onWithdrawMore: eventHas("casino")
+                    // v1.1 — never on casino nights, where withdraw is
+                    // already the primary CTA; "Withdraw more" waits
+                    // for `.inPlay` (the member has withdrawn).
+                    onWithdrawMore: isCAH && eventHas("casino")
                         ? { Task { await openWithdraw(event: event) } }
                         : nil
                 )
@@ -1052,7 +1088,7 @@ struct RoomDetailView: View {
             }
         }
         .transition(.opacity)
-        .animation(.easeInOut(duration: 0.25), value: state)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: state)
     }
 
     // MARK: - Data operations
@@ -1795,6 +1831,7 @@ private struct BriefingSlot: View {
                 Button(action: onEdit) {
                     HStack(spacing: 4) {
                         Image(systemName: Theme.Icon.infoCircle)
+                            .accessibilityHidden(true)
                         Text("Edit details")
                     }
                     .font(Theme.Typography.caption)
@@ -1802,21 +1839,6 @@ private struct BriefingSlot: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 2)
-            }
-
-            // V0.84 C5 — host-only notes section, above the seat
-            // grid. Hidden when there are no unconsumed notes.
-            // Per the spec: "for each note — '<MascotName>: <Member>
-            // left a note for next time.' + the note text (body font).
-            // After render (onAppear of section), host taps 'Done
-            // reading' ⇒ markMemberNotesConsumed."
-            if isHost, !unconsumedNotes.isEmpty, let onMarkNotesConsumed {
-                UnconsumedMemberNotesSection(
-                    room: room,
-                    notes: unconsumedNotes,
-                    onDone: { ids in onMarkNotesConsumed(ids) }
-                )
-                .padding(.top, 4)
             }
 
             // 2026-08-10 feedback round — the seat grid is the
@@ -1839,31 +1861,6 @@ private struct BriefingSlot: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
-            }
-
-            // V0.106 — who's coming, with each claimed member's
-            // Currently Into as grey secondary text (fresh only).
-            WhosComingList(eventId: event.id, rsvps: rsvps)
-
-            // V0.79 — notification preferences left the briefing
-            // card. A one-time prompt on the main room page owns
-            // discovery; Room settings → "My notifications" owns
-            // the durable toggles. "Can't make it" already mutes
-            // per-event (dispatcher's declined gate), so no mute
-            // control lives here anymore.
-
-            // V0.86 — first-time-only mascot voice line for the
-            // calendar permission. The brief: "Games Room can add
-            // events to your calendar. Tap to allow." One-time,
-            // then gone (substrate: no come-back engagement). The
-            // gate is `EKEventStore.authorizationStatus(for:
-            // .event) == .notDetermined && !CalendarPrompt
-            // .hasSeenVoiceLine()`. The markSeen() fires on
-            // first interaction (denied or granted) — the row
-            // never re-appears.
-            if CalendarService.shared.authorizationStatus() == .notDetermined,
-               !CalendarPrompt.hasSeenVoiceLine() {
-                CalendarVoiceLineRow()
             }
 
             switch myRSVP {
@@ -1970,6 +1967,24 @@ private struct BriefingSlot: View {
                 )
                 .padding(.top, 8)
             }
+
+            // V0.106 — who's coming, with each claimed member's
+            // Currently Into as grey secondary text (fresh only).
+            // v1.1 — below the RSVP buttons so Claim seat stays
+            // above the fold.
+            WhosComingList(eventId: event.id, rsvps: rsvps)
+
+            // V0.84 C5 — host-only notes for next time. v1.1 — sits
+            // under the RSVP buttons so Claim seat is the first
+            // action; "Done reading" is a text button.
+            if isHost, !unconsumedNotes.isEmpty, let onMarkNotesConsumed {
+                UnconsumedMemberNotesSection(
+                    room: room,
+                    notes: unconsumedNotes,
+                    onDone: { ids in onMarkNotesConsumed(ids) }
+                )
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
@@ -2066,11 +2081,7 @@ private struct UnconsumedMemberNotesSection: View {
             Button(action: { onDone(capturedIds) }) {
                 Text("Done reading")
                     .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(Theme.Palette.accent)
             }
             .buttonStyle(.plain)
         }
@@ -2132,6 +2143,7 @@ private struct SeatGridRow: View {
     /// grid render. Reset to false after ~500ms so the burst is a
     /// single one-shot celebration.
     @State private var justClaimed: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var columns: [GridItem] {
         let count = SeatGrid.columnCount(for: maxSeats)
@@ -2165,6 +2177,7 @@ private struct SeatGridRow: View {
                 Image(systemName: Theme.Icon.chairFill)
                     .font(Theme.Typography.body)
                     .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
+                    .accessibilityHidden(true)
                 Text(initial(for: rsvp.displayName))
                     .font(Theme.Typography.footnote.weight(.semibold))
                     .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
@@ -2185,7 +2198,7 @@ private struct SeatGridRow: View {
                     ConfettiBurst()
                 }
             }
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isYours)
+            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: isYours)
             .accessibilityElement()
             .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
         } else {
@@ -2193,6 +2206,7 @@ private struct SeatGridRow: View {
                 Image(systemName: Theme.Icon.chair)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
+                    .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(
@@ -2224,6 +2238,7 @@ private struct SeatGridRow: View {
 // MARK: - Witness slot (at-play)
 
 private struct WitnessSlot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     enum CTA: Equatable {
         case withdraw
         case scan
@@ -2286,6 +2301,7 @@ private struct WitnessSlot: View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
             HStack(spacing: 12) {
                 Image(systemName: Theme.Icon.circleHexagongridFill)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
                 Text(headerTitle)
@@ -2466,7 +2482,7 @@ private struct WitnessSlot: View {
         // secondary CTAs' fade-in from one place. Closures aren't
         // Equatable, so the secondary CTAs track the Bool of the
         // optional, not the closure itself.
-        .animation(Theme.Motion.popIn, value: workingHand)
+        .animation(reduceMotion ? Theme.Motion.fade : Theme.Motion.popIn, value: workingHand)
         .animation(Theme.Motion.fade, value: onWithdrawMore != nil)
         .animation(Theme.Motion.fade, value: onCAHSettle != nil)
     }
@@ -2850,6 +2866,7 @@ private struct MemberMenuPicker: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText)
                 Image(systemName: Theme.Icon.chevronDown)
+                    .accessibilityHidden(true)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
             }
@@ -3170,6 +3187,7 @@ private struct HostWithdrawalsSection: View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
             HStack(spacing: 8) {
                 Image(systemName: Theme.Icon.circleHexagongridFill)
+                    .accessibilityHidden(true)
                     .foregroundStyle(Theme.Palette.accent)
                 Text("Chips to dispense")
                     .font(Theme.Typography.title)
@@ -3565,7 +3583,7 @@ private struct PackShelfReadOnly: View {
             // Reuse the existing RoomSettingsCasinoSheet verbatim.
             // The chip-color-map editor handles per-room overrides
             // for Casino's withdraw/return scoring.
-            RoomSettingsCasinoSheet(roomId: room.id)
+            RoomSettingsCasinoSheet(roomId: room.id, showsDoneButton: true)
                 .environmentObject(casinoService)
         }
     }
@@ -3581,6 +3599,7 @@ private struct PackShelfReadOnly: View {
         // tap handler routes each scoring type to its own editor.
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: pack.iconSystemName)
+                .accessibilityHidden(true)
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.accent)
                 .frame(width: 32)
@@ -4126,6 +4145,7 @@ private struct MemberRosterReadOnly: View {
                             .foregroundStyle(inviteeUserId == nil ? Theme.Palette.primaryText.opacity(0.55) : Theme.Palette.primaryText)
                         Spacer()
                         Image(systemName: Theme.Icon.chevronDown)
+                            .accessibilityHidden(true)
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                     }
@@ -4243,6 +4263,7 @@ private struct CollapsibleSection<Content: View>: View {
                     }
                     Spacer()
                     Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
+                        .accessibilityHidden(true)
                         .font(Theme.Typography.footnote)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                 }
@@ -4675,9 +4696,11 @@ private struct RoomSwitcherMenu: View {
                 Image(systemName: Theme.Icon.chevronDown)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityHidden(true)
             }
-            .accessibilityLabel(Text("Switch room — currently \(currentRoom.name)"))
         }
+        .accessibilityLabel(Text("Switch room"))
+        .accessibilityValue(Text(currentRoom.name))
     }
 }
 
@@ -4692,10 +4715,11 @@ private struct RoomSwitcherMenu: View {
 
 private struct AppearModifier: ViewModifier {
     @State private var appeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
             .opacity(appeared ? 1 : 0)
-            .scaleEffect(appeared ? 1 : 0.97)
+            .scaleEffect(appeared || reduceMotion ? 1 : 0.97)
             .onAppear {
                 withAnimation(.easeOut(duration: 0.25)) {
                     appeared = true
@@ -4716,10 +4740,11 @@ extension View {
 
 private struct PressScaleModifier: ViewModifier {
     @State private var isPressed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
         content
-            .scaleEffect(isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isPressed)
+            .scaleEffect(isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.8), value: isPressed)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in isPressed = true }

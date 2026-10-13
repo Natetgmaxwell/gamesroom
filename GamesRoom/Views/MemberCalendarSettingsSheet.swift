@@ -115,6 +115,7 @@ struct MemberCalendarSettingsSheet: View {
                 Section {
                     HStack {
                         Image(systemName: statusIcon)
+                            .accessibilityHidden(true)
                             .foregroundStyle(statusTint)
                         Text(statusLabel)
                             .font(Theme.Typography.body)
@@ -237,6 +238,7 @@ struct CalendarVoiceLineRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Layout.gutter / 2) {
             Image(systemName: "calendar.badge.plus")
+                .accessibilityHidden(true)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.accent)
                 .padding(.top, 2)

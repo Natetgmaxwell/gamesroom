@@ -18,8 +18,17 @@ struct ConfettiBurst: View {
     ]
 
     @State private var burst = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        if reduceMotion {
+            EmptyView()
+        } else {
+            burstCanvas
+        }
+    }
+
+    private var burstCanvas: some View {
         Canvas { context, size in
             guard burst else { return }
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
