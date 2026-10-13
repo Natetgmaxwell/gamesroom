@@ -481,31 +481,6 @@ struct RoomDetailView: View {
                 if let event = questionBoxLiveEvent {
                     QuestionBoxLiveSection(event: event, isHost: isHost)
                 }
-                // V0.79 — one-time notification opt-in prompt. Shows
-                // once per room (per device) while opt-in is off;
-                // after any answer it lives in Room settings only.
-                if activeEvent != nil,
-                   !liveRoom.notificationsEnabled,
-                   !notifPromptDismissed,
-                   !RoomNotifPrompt.isAnswered(roomId: room.id) {
-                    RoomNotifPromptCard(
-                        roomName: room.name,
-                        onOptIn: {
-                            RoomNotifPrompt.markAnswered(roomId: room.id)
-                            notifPromptDismissed = true
-                            Task {
-                                try? await roomService.setNotificationsEnabled(
-                                    roomId: room.id, enabled: true
-                                )
-                                Haptics.light()
-                            }
-                        },
-                        onDismiss: {
-                            RoomNotifPrompt.markAnswered(roomId: room.id)
-                            notifPromptDismissed = true
-                        }
-                    )
-                }
                 // V0.66 — host-only "Chips to dispense" cards during active
                 // casino play when withdrawals await dispensing.
                 if isCasinoPlayActive, isHost, !pendingWithdrawals.isEmpty {
@@ -564,6 +539,42 @@ struct RoomDetailView: View {
                         currentUserId: currentUserId
                     )
                     .sectionCard(.standard)
+                }
+                // V0.79 — one-time notification opt-in prompt. Shows
+                // once per room (per device) while opt-in is off;
+                // after any answer it lives in Room settings only.
+                // v1.1 — only while nothing is scheduled and the
+                // season is open: "schedules a night" is the moment.
+                if activeEvent == nil,
+                   currentSeason?.status != .ended,
+                   !liveRoom.notificationsEnabled,
+                   !notifPromptDismissed,
+                   !RoomNotifPrompt.isAnswered(roomId: room.id) {
+                    RoomNotifPromptCard(
+                        roomName: room.name,
+                        onOptIn: {
+                            RoomNotifPrompt.markAnswered(roomId: room.id)
+                            notifPromptDismissed = true
+                            Task {
+                                try? await roomService.setNotificationsEnabled(
+                                    roomId: room.id, enabled: true
+                                )
+                                Haptics.light()
+                            }
+                        },
+                        onDismiss: {
+                            RoomNotifPrompt.markAnswered(roomId: room.id)
+                            notifPromptDismissed = true
+                        }
+                    )
+                }
+                // V0.86 — one-time calendar ask. v1.1 — a post-claim
+                // ask under Standings, so it never competes with
+                // Claim seat. Gone after the first answer.
+                if case .claimed = state,
+                   CalendarService.shared.authorizationStatus() == .notDetermined,
+                   !CalendarPrompt.hasSeenVoiceLine() {
+                    CalendarVoiceLineRow()
                 }
                 if let event = activeEvent,
                    !roomService.cachedEventRounds(eventId: event.id).isEmpty {
@@ -1804,21 +1815,6 @@ private struct BriefingSlot: View {
                 .padding(.top, 2)
             }
 
-            // V0.84 C5 — host-only notes section, above the seat
-            // grid. Hidden when there are no unconsumed notes.
-            // Per the spec: "for each note — '<MascotName>: <Member>
-            // left a note for next time.' + the note text (body font).
-            // After render (onAppear of section), host taps 'Done
-            // reading' ⇒ markMemberNotesConsumed."
-            if isHost, !unconsumedNotes.isEmpty, let onMarkNotesConsumed {
-                UnconsumedMemberNotesSection(
-                    room: room,
-                    notes: unconsumedNotes,
-                    onDone: { ids in onMarkNotesConsumed(ids) }
-                )
-                .padding(.top, 4)
-            }
-
             // 2026-08-10 feedback round — the seat grid is the
             // "chairs coloured in" visual indicator: claimed seats
             // render filled with the member's initial, open seats
@@ -1839,31 +1835,6 @@ private struct BriefingSlot: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
-            }
-
-            // V0.106 — who's coming, with each claimed member's
-            // Currently Into as grey secondary text (fresh only).
-            WhosComingList(eventId: event.id, rsvps: rsvps)
-
-            // V0.79 — notification preferences left the briefing
-            // card. A one-time prompt on the main room page owns
-            // discovery; Room settings → "My notifications" owns
-            // the durable toggles. "Can't make it" already mutes
-            // per-event (dispatcher's declined gate), so no mute
-            // control lives here anymore.
-
-            // V0.86 — first-time-only mascot voice line for the
-            // calendar permission. The brief: "Games Room can add
-            // events to your calendar. Tap to allow." One-time,
-            // then gone (substrate: no come-back engagement). The
-            // gate is `EKEventStore.authorizationStatus(for:
-            // .event) == .notDetermined && !CalendarPrompt
-            // .hasSeenVoiceLine()`. The markSeen() fires on
-            // first interaction (denied or granted) — the row
-            // never re-appears.
-            if CalendarService.shared.authorizationStatus() == .notDetermined,
-               !CalendarPrompt.hasSeenVoiceLine() {
-                CalendarVoiceLineRow()
             }
 
             switch myRSVP {
@@ -1970,6 +1941,24 @@ private struct BriefingSlot: View {
                 )
                 .padding(.top, 8)
             }
+
+            // V0.106 — who's coming, with each claimed member's
+            // Currently Into as grey secondary text (fresh only).
+            // v1.1 — below the RSVP buttons so Claim seat stays
+            // above the fold.
+            WhosComingList(eventId: event.id, rsvps: rsvps)
+
+            // V0.84 C5 — host-only notes for next time. v1.1 — sits
+            // under the RSVP buttons so Claim seat is the first
+            // action; "Done reading" is a text button.
+            if isHost, !unconsumedNotes.isEmpty, let onMarkNotesConsumed {
+                UnconsumedMemberNotesSection(
+                    room: room,
+                    notes: unconsumedNotes,
+                    onDone: { ids in onMarkNotesConsumed(ids) }
+                )
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
@@ -2066,11 +2055,7 @@ private struct UnconsumedMemberNotesSection: View {
             Button(action: { onDone(capturedIds) }) {
                 Text("Done reading")
                     .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(Theme.Palette.accent)
             }
             .buttonStyle(.plain)
         }
