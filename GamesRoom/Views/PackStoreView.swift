@@ -38,7 +38,7 @@ struct PackStoreView: View {
             } header: {
                 Text("Available packs")
             } footer: {
-                Text("All packs ship pre-installed in v1. Paid packs will appear here in a future release.")
+                Text("Every pack comes with the app.")
             }
         }
         .scrollContentBackground(.hidden)

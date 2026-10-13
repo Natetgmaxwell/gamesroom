@@ -398,7 +398,7 @@ struct RoomSettingsSheet: View {
                         settingsRow(
                             icon: Theme.Icon.person2Fill,
                             title: "Members",
-                            detail: "Roster + per-member controls"
+                            detail: room.userRole == .host ? "Roster + per-member controls" : "Who's in the room"
                         )
                     }
 
@@ -890,7 +890,7 @@ struct RoomSettingsOperationsSheet: View {
             }
 
             Section("Features") {
-                Toggle("48-hour briefing push", isOn: $briefing48hEnabled)
+                Toggle("Mid-week reminder push", isOn: $briefing48hEnabled)
                 Toggle("Members can set preferences", isOn: $socialPreferencesEnabled)
             }
 

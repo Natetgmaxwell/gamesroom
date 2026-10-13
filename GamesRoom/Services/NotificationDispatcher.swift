@@ -24,7 +24,7 @@
 //  Body-text conventions (V0.87 — every push is the mascot's voice,
 //  personalised by member name; no bare "reminder" register):
 //   - on-create (all states): "{mascot}: {member_name}, {event} is on the books — open the room to claim your seat."
-//   - T-48h claimed        : matrix-voiced "{mascot}: {member_name}, {event} is in two days…"
+//   - T-48h claimed        : matrix-voiced "{mascot}: {member_name}, {event} is a few days out…"
 //   - T-48h unclaimed      : matrix-voiced body + personality claim clause
 //   - morning-of claimed   : matrix-voiced "{mascot}: {member_name}, {event} is today…"
 //   - morning-of unclaimed : matrix-voiced body + personality claim clause
@@ -453,7 +453,7 @@ final class NotificationDispatcher {
         ideology: MascotPoliticalIdeology = .centrist,
         memberCount: Int = 0
     ) -> (title: String, body: String) {
-        let title = "\(mascotName): \(eventName) — in two days"
+        let title = "\(mascotName): \(eventName) — in a few days"
         switch state {
         case .claimed, .unclaimed:
             var body = MascotEngine.generateVoice(

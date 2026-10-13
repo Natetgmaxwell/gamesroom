@@ -122,7 +122,7 @@ struct RoomNotifSettingsSection: View {
                     Text("Remind me about this room's nights")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
-                    Text("On-create, 48-hour and morning-of nudges.")
+                    Text("When a night is set, a week before, a few days before and the morning of.")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
