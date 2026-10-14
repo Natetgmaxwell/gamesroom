@@ -178,9 +178,8 @@ actor InMemoryRoomStore: RoomStore {
         // `userRole = .member` so the screenshot pipeline can capture
         // a non-host member's view of the ceremonial card. Without
         // this, `isHost` resolves true (the seed is `userRole: .host`)
-        // and the V0.84 C2 host picker — Best play / Good sport /
-        // Held the room / Showed up / Custom pills + member picker +
-        // "Save the call" CTA — renders on the `.justSettled`
+        // and the V0.84 C2 host "Make a call" action renders on the
+        // `.justSettled`
         // capture, which is what surface #4 (Ceremonial card) is NOT
         // supposed to show. The picker itself is host-only (gated on
         // `isHost && onTonightStarPick` in RoomDetailView); this

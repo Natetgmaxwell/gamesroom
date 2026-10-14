@@ -37,6 +37,7 @@
 		4435FFC9E3DD24DB3952B495 /* Event.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653B6DBC86EC4BEDD0BDEDBE /* Event.swift */; };
 		452CD2AF5B52C52FFF30967C /* RoomSystemEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0251D76C65B0A606289FA4CC /* RoomSystemEvent.swift */; };
 		46F46AB963C786D34F401442 /* RoomSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141BA6D69390D613123C2280 /* RoomSettingsSheet.swift */; };
+		47F3C3DFF3A3277DF7298338 /* SettledMakeACallTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 328563890E641CC54F3D6E3C /* SettledMakeACallTests.swift */; };
 		4C5516B76589B0D76ABA2455 /* SessionRoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70E3DD0F8128D682D5994786 /* SessionRoundTimeline.swift */; };
 		4D84341100F20D642C40023D /* CasinoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EDF7C62A09D4D63B3FFA19 /* CasinoService.swift */; };
 		4F9A3FA80BAD2D67A332B61E /* CasinoWithdrawal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CF952F4E5ECF5E10B682ACD /* CasinoWithdrawal.swift */; };
@@ -211,6 +212,7 @@
 		30E1F74C102CA5E1BC33BC46 /* GamesRoomWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GamesRoomWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		317D4B4078FBF46BF4FC1631 /* TonightStarPick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonightStarPick.swift; sourceTree = "<group>"; };
 		32699BBEEDE931CAE5E51D1E /* RoomPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPage.swift; sourceTree = "<group>"; };
+		328563890E641CC54F3D6E3C /* SettledMakeACallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettledMakeACallTests.swift; sourceTree = "<group>"; };
 		3578CED0E938B93F73FC478B /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
 		36CDC197F61633AA51BA79DD /* MascotPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPersonality.swift; sourceTree = "<group>"; };
 		37D937307CF0336737DAAA9A /* AddEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEventSheet.swift; sourceTree = "<group>"; };
@@ -467,6 +469,7 @@
 				5FF5C97BAFCB7924A8728FAC /* iPadNoRedundantTopNavTests.swift */,
 				F14A563A8B026C6F8944FEFF /* iPadSidebarRoomTapTests.swift */,
 				9C4EBA135E9BB760C54F40FF /* QuestionBoxAcceptanceTests.swift */,
+				328563890E641CC54F3D6E3C /* SettledMakeACallTests.swift */,
 			);
 			path = GamesRoomUITests;
 			sourceTree = "<group>";
@@ -758,6 +761,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7B6CB87A6B7B0C30F3E66600 /* QuestionBoxAcceptanceTests.swift in Sources */,
+				47F3C3DFF3A3277DF7298338 /* SettledMakeACallTests.swift in Sources */,
 				050BEBDD40916C58E72BA5CC /* iPadEmptyRoomContentTests.swift in Sources */,
 				AC512CD596BA66CAEA3430B8 /* iPadNoRedundantTopNavTests.swift in Sources */,
 				F76C470CB4F2CB34926FCDD0 /* iPadSidebarRoomTapTests.swift in Sources */,

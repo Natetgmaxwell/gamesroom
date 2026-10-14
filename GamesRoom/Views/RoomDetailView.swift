@@ -2554,12 +2554,8 @@ private struct CeremonialCard: View {
     let onSubmitMemberNote: ((String) -> Void)?
     let onSkipMemberNote: (() -> Void)?
 
-    /// V0.84 C2 — local UI state for the inline picker. Empty
-    /// string means "no member selected yet"; picker only
-    /// submits when a member is selected.
-    @State private var pickerSelectedMemberId: UUID?
-    @State private var pickerSelectedCategory: TonightStarOverrideCategory = .bestPlay
-    @State private var pickerCustomText: String = ""
+    /// V0.84 C2 — host-only. Presents `TonightStarCallSheet`.
+    @State private var showingCallSheet = false
 
     /// V0.84 C5 — local UI state for the one-line drop text field.
     @State private var memberNoteDraft: String = ""
@@ -2589,8 +2585,33 @@ private struct CeremonialCard: View {
             // V0.84 C2 — Tonight's Star section. Hidden when
             // `tonightStarCard == nil` (no host pick AND no
             // chip-swing winner — matches the 067 empty case).
-            if let card = tonightStarCard {
-                TonightStarSection(card: card)
+            // The host's "Make a call" sits trailing on the same
+            // row and opens the pick-member + reason sheet.
+            HStack(alignment: .lastTextBaseline) {
+                if let card = tonightStarCard {
+                    TonightStarSection(card: card)
+                }
+                if isHost, let onTonightStarPick, !hostPickMembers.isEmpty {
+                    Spacer(minLength: 12)
+                    Button { showingCallSheet = true } label: {
+                        HStack(spacing: 4) {
+                            Text("Make a call")
+                            Image(systemName: Theme.Icon.chevronRight)
+                                .accessibilityHidden(true)
+                        }
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("make-a-call")
+                    .sheet(isPresented: $showingCallSheet) {
+                        TonightStarCallSheet(
+                            members: hostPickMembers,
+                            currentCard: tonightStarCard,
+                            onSave: onTonightStarPick
+                        )
+                    }
+                }
             }
 
             // V0.84 C5 — one-line drop prompt. Member-only, gated on
@@ -2613,33 +2634,6 @@ private struct CeremonialCard: View {
                     onSkip: {
                         onSkipMemberNote()
                         memberNoteDraft = ""
-                    }
-                )
-            }
-
-            // V0.84 C2 — host-only inline picker. Sits below the
-            // member-visible star section. Gated on `isHost` AND a
-            // non-nil `onTonightStarPick` callback (parents don't
-            // wire the callback when the room has no members).
-            if isHost, let onTonightStarPick, !hostPickMembers.isEmpty {
-                HostTonightStarPickerSection(
-                    members: hostPickMembers,
-                    currentCard: tonightStarCard,
-                    selectedMemberId: $pickerSelectedMemberId,
-                    selectedCategory: $pickerSelectedCategory,
-                    customText: $pickerCustomText,
-                    onSave: {
-                        guard let memberId = pickerSelectedMemberId else { return }
-                        let category = pickerSelectedCategory
-                        let text: String?
-                        if category == .custom {
-                            let trimmed = pickerCustomText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !trimmed.isEmpty else { return }
-                            text = trimmed
-                        } else {
-                            text = nil
-                        }
-                        onTonightStarPick(memberId, category, text)
                     }
                 )
             }
@@ -2759,126 +2753,85 @@ private struct MemberNotePromptSection: View {
     }
 }
 
-// MARK: - Host Tonight's Star picker (V0.84 C2)
+// MARK: - Tonight's Star call sheet (V0.84 C2 host)
 
-/// V0.84 C2 — host-only inline picker for Tonight's Star. Member
-/// menu + category chips row + custom text field (visible only
-/// when `.custom`, required) + Save. No body header line — the
-/// category chips row is the picker's first affordance.
-private struct HostTonightStarPickerSection: View {
+/// V0.84 C2 — host-only. "Make a call" on the ceremonial card opens
+/// this sheet: pick a member, pick a reason (custom needs a line),
+/// Save. Mirrors `PackPayoutSheet`'s shape (NavigationStack + Form +
+/// Cancel/Save toolbar).
+private struct TonightStarCallSheet: View {
     let members: [Member]
-    let currentCard: TonightStarCard?
-    @Binding var selectedMemberId: UUID?
-    @Binding var selectedCategory: TonightStarOverrideCategory
-    @Binding var customText: String
-    let onSave: () -> Void
+    let onSave: (UUID, TonightStarOverrideCategory, String?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var memberId: UUID?
+    @State private var category: TonightStarOverrideCategory
+    @State private var customText: String
+
+    init(members: [Member], currentCard: TonightStarCard?, onSave: @escaping (UUID, TonightStarOverrideCategory, String?) -> Void) {
+        self.members = members
+        self.onSave = onSave
+        let current = members.first { $0.userId == currentCard?.memberId }
+            ?? members.first { $0.displayName == currentCard?.memberDisplayName }
+        _memberId = State(initialValue: current?.userId)
+        _category = State(initialValue: currentCard?.overrideCategory ?? .bestPlay)
+        _customText = State(initialValue: currentCard?.customText ?? "")
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                ForEach(TonightStarOverrideCategory.allCases, id: \.self) { cat in
-                    Button(action: { selectedCategory = cat }) {
-                        Text(cat.shortLabel)
-                            .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(
-                                selectedCategory == cat
-                                    ? Theme.Palette.background
-                                    : Theme.Palette.primaryText.opacity(0.75)
-                            )
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                selectedCategory == cat
-                                    ? Theme.Palette.accent
-                                    : Theme.Palette.surface
-                            )
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+        NavigationStack {
+            Form {
+                Section("Member") {
+                    Picker("Member", selection: $memberId) {
+                        ForEach(members, id: \.userId) { member in
+                            Text(member.displayName).tag(Optional(member.userId))
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+                Section("Reason") {
+                    Picker("Reason", selection: $category) {
+                        ForEach(TonightStarOverrideCategory.allCases, id: \.self) { cat in
+                            Text(cat.shortLabel).tag(cat)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    if category == .custom {
+                        TextField("Custom line", text: $customText)
+                    }
                 }
             }
-            MemberMenuPicker(
-                members: members,
-                selection: $selectedMemberId
-            )
-            if selectedCategory == .custom {
-                TextField(
-                    "",
-                    text: $customText,
-                    prompt: Text("Custom line")
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
-                )
-                .textFieldStyle(.plain)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText)
-                .padding(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
-            }
-            Button(action: onSave) {
-                Text("Save the call")
-                    .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSave)
-        }
-        .onAppear {
-            if selectedMemberId == nil {
-                selectedMemberId = currentCard?.memberId ?? members.first?.userId
+            .textCase(nil)
+            .scrollContentBackground(.hidden)
+            .background(Theme.Palette.background)
+            .navigationTitle("Tonight's Star")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        guard let memberId else { return }
+                        onSave(memberId, category, category == .custom ? trimmedCustomText : nil)
+                        dismiss()
+                    }
+                    .disabled(!canSave)
+                }
             }
         }
+        .tint(Theme.Palette.accent)
+    }
+
+    private var trimmedCustomText: String {
+        customText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var canSave: Bool {
-        guard selectedMemberId != nil else { return false }
-        if selectedCategory == .custom {
-            return !customText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        return true
-    }
-}
-
-// MARK: - Member menu picker (V0.84 C2 host)
-
-/// V0.84 C2 — host-only member picker. SwiftUI `Menu` driven by
-/// the room's `Member` roster so the host can re-point Tonight's
-/// Star at any room member, not just the chip-swing default.
-private struct MemberMenuPicker: View {
-    let members: [Member]
-    @Binding var selection: UUID?
-
-    var body: some View {
-        Menu {
-            ForEach(members, id: \.userId) { member in
-                Button(member.displayName) { selection = member.userId }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Text(currentLabel)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Image(systemName: Theme.Icon.chevronDown)
-                    .accessibilityHidden(true)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
-        }
-    }
-
-    private var currentLabel: String {
-        guard let selection,
-              let member = members.first(where: { $0.userId == selection }) else {
-            return "Pick a member"
-        }
-        return member.displayName
+        memberId != nil && (category != .custom || !trimmedCustomText.isEmpty)
     }
 }
 
