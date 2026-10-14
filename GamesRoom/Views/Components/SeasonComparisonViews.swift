@@ -8,11 +8,15 @@
 //  the past, accent is now, and the numbers sit beside the bars.
 //  Level 1 (tap a row) is the dual trace: that season night by night
 //  over the season before it as a grey ghost, plus one sentence.
+//  Level 2 ("Every night") is the season grid: a square per night per
+//  member, green for points won, red for points lost, deeper for more.
 //
 
 import SwiftUI
 
 struct SeasonsSection: View {
+    let roomId: UUID
+    let youId: UUID?
     let rows: [SeasonHistoryEntry]
     let currentScore: Int64
     /// The caller's running total after each night this season
@@ -23,6 +27,8 @@ struct SeasonsSection: View {
     @State private var grown = false
     /// Which row shows its trace: 0 = this season, else the ordinal.
     @State private var expanded: Int?
+    @State private var gridSheet: GridSheetItem?
+    @EnvironmentObject private var roomService: RoomService
 
     private var scale: Int64 {
         SeasonComparison.barScale(current: currentScore, pastTotals: rows.map(\.callerTotal))
@@ -38,6 +44,16 @@ struct SeasonsSection: View {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
             expanded = expanded == key ? nil : key
         }
+        if expanded == key, key != 0, let season = rows.first(where: { $0.ordinal == key }) {
+            Task { await roomService.loadSeasonGrid(roomId: roomId, seasonId: season.seasonId) }
+        }
+    }
+
+    /// Opens level 2 for a season when its grid is loaded; nil hides
+    /// the "Every night" action (no grid until migration 101).
+    private func openGrid(_ seasonId: UUID?, title: String) -> (() -> Void)? {
+        guard let grid = roomService.cachedSeasonGrid(roomId: roomId, seasonId: seasonId) else { return nil }
+        return { gridSheet = GridSheetItem(id: seasonId?.uuidString ?? "current", title: title, grid: grid) }
     }
 
     var body: some View {
@@ -50,6 +66,9 @@ struct SeasonsSection: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(item: $gridSheet) { item in
+            SeasonGridSheet(title: item.title, grid: item.grid, youId: youId)
+        }
         .onAppear {
             if reduceMotion { grown = true } else {
                 withAnimation(.easeOut(duration: 0.5)) { grown = true }
@@ -95,7 +114,8 @@ struct SeasonsSection: View {
                 solid: currentNights,
                 ghost: ghost,
                 solidColor: Theme.Palette.accent,
-                sentence: SeasonComparison.currentTraceSentence(current: currentNights, previous: ghost)
+                sentence: SeasonComparison.currentTraceSentence(current: currentNights, previous: ghost),
+                onOpenGrid: openGrid(nil, title: "This season")
             )
         }
     }
@@ -146,7 +166,8 @@ struct SeasonsSection: View {
                 solid: season,
                 ghost: before,
                 solidColor: Theme.Palette.primaryText.opacity(0.85),
-                sentence: SeasonComparison.pastTraceSentence(season: season, before: before)
+                sentence: SeasonComparison.pastTraceSentence(season: season, before: before),
+                onOpenGrid: openGrid(row.seasonId, title: name)
             )
         }
     }
@@ -250,19 +271,37 @@ struct SeasonTraceDetail: View {
     let ghost: [Int64]
     let solidColor: Color
     let sentence: String
+    var onOpenGrid: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SeasonDualTrace(solid: solid, ghost: ghost, solidColor: solidColor)
-                .frame(height: 76)
-            Text(sentence)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                SeasonDualTrace(solid: solid, ghost: ghost, solidColor: solidColor)
+                    .frame(height: 76)
+                Text(sentence)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(sentence))
+            .accessibilityIdentifier("season-trace")
+            if let onOpenGrid {
+                Button(action: onOpenGrid) {
+                    HStack(spacing: 4) {
+                        Text("Every night")
+                        Image(systemName: Theme.Icon.chevronRight)
+                            .font(Theme.Typography.footnote)
+                            .accessibilityHidden(true)
+                    }
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(Text("Shows every member's points, night by night."))
+                .accessibilityIdentifier("season-grid-open")
+            }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(sentence))
-        .accessibilityIdentifier("season-trace")
     }
 }
 
@@ -361,5 +400,125 @@ private struct TracePlot {
             path.move(to: s0); path.addLine(to: s1); path.addLine(to: g1); path.addLine(to: g0); path.closeSubpath()
             return (path, solid[i] >= ghost[i])
         }
+    }
+}
+
+// MARK: - Level 2
+
+struct GridSheetItem: Identifiable {
+    let id: String
+    let title: String
+    let grid: SeasonGrid
+}
+
+/// The season grid (Land-or-Water): one row per night, one column per
+/// member, a square per cell. Green deepens with points won, red with
+/// points lost, a faint square means the member sat out. No axes or
+/// legend; tap a square for its numbers.
+struct SeasonGridSheet: View {
+    let title: String
+    let grid: SeasonGrid
+    let youId: UUID?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected: Cell?
+    private let now = Date()
+    private let markerWidth: CGFloat = 52
+
+    struct Cell: Hashable {
+        let night: UUID
+        let member: UUID
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(spacing: 4) {
+                        header
+                        ForEach(Array(grid.nights.enumerated()), id: \.element.id) { r, night in
+                            nightRow(r, night)
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(Text(grid.summarySentence(now: now)))
+                    Text(selected.map { grid.cellSentence(night: $0.night, member: $0.member, now: now) } ?? " ")
+                        .font(Theme.Typography.monoCaption)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                        .accessibilityHidden(selected == nil)
+                        .accessibilityIdentifier("season-grid-detail")
+                }
+                .padding(Theme.Layout.edgePadding)
+            }
+            .background(Theme.Palette.background)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 4) {
+            Color.clear.frame(width: markerWidth, height: 1)
+            ForEach(grid.members) { member in
+                Text(initials(member.name))
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Theme.Palette.accent.opacity(member.id == youId ? 0.32 : 0.18)))
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel(Text(member.id == youId ? "\(member.name), you" : member.name))
+            }
+        }
+        .padding(.bottom, 4)
+    }
+
+    private func nightRow(_ r: Int, _ night: SeasonGrid.Night) -> some View {
+        HStack(spacing: 4) {
+            Text(marker(r))
+                .font(Theme.Typography.monoFootnote)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.5))
+                .frame(width: markerWidth, alignment: .leading)
+                .accessibilityHidden(true)
+            ForEach(Array(grid.members.enumerated()), id: \.element.id) { c, member in
+                let cell = Cell(night: night.id, member: member.id)
+                Button { selected = selected == cell ? nil : cell } label: {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(fill(grid.points(night: night.id, member: member.id)))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(Theme.Palette.primaryText, lineWidth: selected == cell ? 1.5 : 0)
+                        )
+                        .frame(height: 30)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(grid.cellSentence(night: night.id, member: member.id, now: now)))
+                .accessibilityIdentifier("season-grid-cell-\(r)-\(c)")
+            }
+        }
+    }
+
+    /// "3w ago", left blank when the night above already says it, so
+    /// two nights in one week read as a pair rather than a repeat.
+    private func marker(_ r: Int) -> String {
+        let label = SeasonGrid.relativeLabel(grid.nights[r].playedAt, now: now)
+        guard r > 0 else { return label }
+        return SeasonGrid.relativeLabel(grid.nights[r - 1].playedAt, now: now) == label ? "" : label
+    }
+
+    private func fill(_ points: Int64?) -> Color {
+        guard let points else { return Theme.Palette.primaryText.opacity(0.04) }
+        if points == 0 { return Theme.Palette.primaryText.opacity(0.12) }
+        let tint = points > 0 ? Theme.Palette.gain : Theme.Palette.loss
+        return tint.opacity(grid.intensity(points))
+    }
+
+    private func initials(_ name: String) -> String {
+        name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
     }
 }

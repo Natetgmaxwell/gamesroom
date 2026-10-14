@@ -113,4 +113,61 @@ struct SeasonGrid: Hashable {
         let top = row.filter { $0.value == best }
         return top.count == 1 ? top.first?.key : nil
     }
+
+    // MARK: Level 2 — words for the grid
+
+    /// Row marker for a night: "today", "5d ago", "3w ago", "4mo ago".
+    static func relativeLabel(_ date: Date, now: Date) -> String {
+        let days = Int((now.timeIntervalSince(date) / 86_400).rounded(.down))
+        if days < 1 { return "today" }
+        if days < 7 { return "\(days)d ago" }
+        if days < 60 { return "\(days / 7)w ago" }
+        return "\(days / 30)mo ago"
+    }
+
+    /// The verbatim numbers under one square.
+    func cellSentence(night: UUID, member: UUID, now: Date) -> String {
+        let name = members.first { $0.id == member }?.name ?? "Member"
+        let when = nights.first { $0.id == night }.map { Self.relativeLabel($0.playedAt, now: now) } ?? ""
+        guard let p = points(night: night, member: member) else {
+            return "\(name) sat out, \(when)."
+        }
+        let running = runningTotal(member: member, through: night)
+        let so = running < 0 ? "\u{2212}\(-running)" : "\(running)"
+        return "\(name), \(when): \(SeasonComparison.signed(p)). \(so) so far."
+    }
+
+    /// What VoiceOver hears before the squares: the season's shape
+    /// in one or two sentences.
+    func summarySentence(now: Date) -> String {
+        guard !nights.isEmpty else { return "No nights scored." }
+        var wins: [UUID: Int] = [:]
+        for night in nights { if let w = winner(of: night.id) { wins[w, default: 0] += 1 } }
+        var parts = ["\(SeasonComparison.nightsPhrase(nights.count).capitalizedFirst)."]
+        if let most = wins.values.max(),
+           let top = wins.filter({ $0.value == most }).map(\.key).onlyElement,
+           let name = members.first(where: { $0.id == top })?.name {
+            parts.append("\(name) won the most nights, \(SeasonComparison.number(most)).")
+        }
+        var best: (night: Night, member: Member, points: Int64)?
+        for night in nights {
+            for member in members {
+                if let p = points(night: night.id, member: member.id), p > (best?.points ?? 0) {
+                    best = (night, member, p)
+                }
+            }
+        }
+        if let best {
+            parts.append("Biggest night: \(best.member.name), \(SeasonComparison.signed(best.points)), \(Self.relativeLabel(best.night.playedAt, now: now)).")
+        }
+        return parts.joined(separator: " ")
+    }
+}
+
+private extension String {
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+private extension Array {
+    var onlyElement: Element? { count == 1 ? first : nil }
 }

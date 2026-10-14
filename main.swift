@@ -1894,6 +1894,42 @@ runner.run("SeasonComparison trace sentences read the gap in plain words") {
     runner.assertEqual(SeasonComparison.number(12), "12")
 }
 
+runner.run("SeasonGrid.relativeLabel reads nights as days, weeks, months") {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-3_600), now: now), "today")
+    runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-86_400 * 5), now: now), "5d ago")
+    runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-86_400 * 22), now: now), "3w ago")
+    runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-86_400 * 100), now: now), "3mo ago")
+}
+
+runner.run("SeasonGrid winner, intensity and cell sentences") {
+    let grid = SeasonGrid(rows: [
+        gridRow(1, 0, 1, "Ana", -50), gridRow(1, 0, 2, "Ben", 300),
+        gridRow(2, 7, 1, "Ana", 400), gridRow(2, 7, 2, "Ben", 20),
+        gridRow(3, 14, 1, "Ana", 100), gridRow(3, 14, 2, "Ben", 100)
+    ])
+    let ana = grid.members.first { $0.name == "Ana" }!.id
+    let ben = grid.members.first { $0.name == "Ben" }!.id
+    runner.assertEqual(grid.winner(of: grid.nights[0].id), ben)
+    runner.assertEqual(grid.winner(of: grid.nights[1].id), ana)
+    runner.assertNil(grid.winner(of: grid.nights[2].id), "tie has no winner")
+    runner.assertEqual(grid.maxMagnitude, 400)
+    runner.assertEqual(grid.intensity(400), 1.0)
+    runner.assertEqual(grid.intensity(-200), 0.5)
+    runner.assertEqual(grid.intensity(10), 0.18)
+    runner.assertEqual(grid.intensity(0), 0.0)
+    let now = Date(timeIntervalSince1970: 1_800_000_000 + 21 * 86_400)
+    runner.assertEqual(grid.runningTotal(member: ana, through: grid.nights[1].id), 350)
+    runner.assertEqual(grid.cellSentence(night: grid.nights[1].id, member: ana, now: now), "Ana, 2w ago: +400. 350 so far.")
+    runner.assertEqual(grid.cellSentence(night: grid.nights[0].id, member: ana, now: now), "Ana, 3w ago: \u{2212}50. \u{2212}50 so far.")
+    let decided = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(1, 0, 2, "Ben", 5), gridRow(2, 7, 1, "Ana", 30)])
+    runner.assertEqual(decided.summarySentence(now: now), "Two nights. Ana won the most nights, two. Biggest night: Ana, +30, 2w ago.")
+    let sitOut = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(2, 7, 2, "Ben", 20)])
+    let anaId = sitOut.members.first { $0.name == "Ana" }!.id
+    runner.assertEqual(sitOut.cellSentence(night: sitOut.nights[1].id, member: anaId, now: now), "Ana sat out, 2w ago.")
+    runner.assertEqual(grid.summarySentence(now: now), "Three nights. Biggest night: Ana, +400, 2w ago.")
+}
+
 runner.runAsync("InMemoryRoomStore season grid sums to each member's season totals") {
     let store = InMemoryRoomStore()
     let room = try await store.fetchRooms().first!

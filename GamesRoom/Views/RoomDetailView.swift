@@ -604,6 +604,8 @@ struct RoomDetailView: View {
                 // section is member-visible (read surface).
                 if !roomService.cachedSeasonHistory(roomId: room.id).isEmpty {
                     SeasonsSection(
+                        roomId: room.id,
+                        youId: currentUserId,
                         rows: roomService.cachedSeasonHistory(roomId: room.id),
                         currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0,
                         currentNights: currentUserId.flatMap { me in
