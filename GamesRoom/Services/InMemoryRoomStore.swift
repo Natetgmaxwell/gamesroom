@@ -107,6 +107,9 @@ actor InMemoryRoomStore: RoomStore {
     /// fallback shelf.
     nonisolated var defaultInstalledPacks: [String] { Self.defaultInstalledPacks }
 
+    /// Matches `AuthService.injectStubUserForScreenshots()`.
+    static let screenshotCallerId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+
     /// V0.106 — Question Box + Currently Into state (QuestionBoxStore.swift).
     var questionBox = InMemoryQuestionBoxState()
 
@@ -316,7 +319,12 @@ actor InMemoryRoomStore: RoomStore {
 
         let carwoolaLeaderboard: [LeaderboardEntry] = [
             LeaderboardEntry(
-                userId: carwoola.createdBy,
+                // Screenshot mode seats the stub user (AuthService's
+                // deterministic 0…01 id) as this row, so the caller's
+                // own score drives the Seasons comparison (slice 2c).
+                userId: CommandLine.arguments.contains("-screenshots-bypass-auth")
+                    ? Self.screenshotCallerId
+                    : carwoola.createdBy,
                 displayName: "Host",
                 role: "host",
                 pointsBalance: 1_200,

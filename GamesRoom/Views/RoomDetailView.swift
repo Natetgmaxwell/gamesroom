@@ -603,7 +603,7 @@ struct RoomDetailView: View {
                 // Renders only when the room has ended seasons; the
                 // section is member-visible (read surface).
                 if !roomService.cachedSeasonHistory(roomId: room.id).isEmpty {
-                    SeasonHistorySection(
+                    SeasonsSection(
                         rows: roomService.cachedSeasonHistory(roomId: room.id),
                         currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0
                     )
@@ -3188,7 +3188,7 @@ private struct HostWithdrawalsSection: View {
 
 /// Slice 2a (Hearth) — the flat section title: small, grey,
 /// sentence case. Hierarchy comes from type, not a card.
-private struct SectionTitle: View {
+struct SectionTitle: View {
     let text: String
 
     var body: some View {
@@ -3291,135 +3291,6 @@ private struct RoundBreakdownSection: View {
 
     private func deltaText(_ delta: Int64) -> String {
         delta >= 0 ? "+\(delta)" : "\(delta)"
-    }
-}
-
-// MARK: - Season history (W-05, US-10)
-
-/// Previous-seasons comparison — the "improving over time" view.
-/// Renders one row per ended season with the caller's total, the
-/// delta vs the active season, and a sparkline of the caller's
-/// intra-season arc. Member-visible read surface; hidden entirely
-/// when the room has no ended seasons.
-private struct SeasonHistorySection: View {
-    let rows: [SeasonHistoryEntry]
-    let currentScore: Int64
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SectionTitle(text: "Past seasons")
-            Text("Your standing each season — how the current arc compares.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
-                seasonRow(row)
-                if idx != rows.count - 1 {
-                    Divider().overlay(Theme.Palette.hairline)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func seasonRow(_ row: SeasonHistoryEntry) -> some View {
-        let d = row.delta(against: currentScore)
-        let primaryText = row.subtitle.isEmpty ? dateRange(row) : row.subtitle
-        let showCaption = !row.subtitle.isEmpty
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(primaryText)
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.primaryText)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if showCaption {
-                        Text(dateRange(row))
-                            .font(Theme.Typography.monoFootnote)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(row.callerTotal)")
-                        .font(Theme.Typography.monoSemiboldTitle)
-                        .foregroundStyle(Theme.Palette.primaryText)
-                    deltaCluster(d)
-                }
-                .fixedSize(horizontal: true, vertical: false)
-            }
-            if row.scoreProgression.count >= 2 {
-                TrendSparkline(points: row.scoreProgression, color: trendColor(for: d))
-                    .frame(height: 22)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.vertical, 12)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            Text("\(primaryText), \(row.callerTotal) points, \(deltaLabel(d)) versus the current season")
-        )
-    }
-
-    private func deltaCluster(_ d: Int64) -> some View {
-        Text(deltaLabel(d))
-            .font(Theme.Typography.monoCaption)
-            .foregroundStyle(d > 0 ? Theme.Palette.gain : (d < 0 ? Theme.Palette.loss : Theme.Palette.primaryText.opacity(0.4)))
-    }
-
-    private func trendColor(for d: Int64) -> Color {
-        d > 0
-            ? Theme.Palette.accent
-            : (d < 0 ? Theme.Palette.primaryText.opacity(0.6) : Theme.Palette.primaryText.opacity(0.45))
-    }
-
-    private func dateRange(_ row: SeasonHistoryEntry) -> String {
-        if let ended = row.endedAt {
-            return "\(row.startedAt.formatted(.dateTime.month().day().year())) – \(ended.formatted(.dateTime.month().day().year()))"
-        }
-        return row.startedAt.formatted(date: .abbreviated, time: .omitted)
-    }
-
-    private func deltaLabel(_ d: Int64) -> String {
-        d > 0 ? "+\(d)" : (d < 0 ? "−\(-d)" : "0")
-    }
-}
-
-/// Hand-rolled polyline sparkline for `SeasonHistoryEntry.scoreProgression`.
-/// No Swift Charts import — the codebase has zero Charts precedent and
-/// the parse-check environment must keep working.
-private struct TrendSparkline: View {
-    let points: [SeasonScorePoint]
-    let color: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            let totalMin = points.map(\.total).min() ?? 0
-            let totalMax = points.map(\.total).max() ?? 0
-            let range = totalMax - totalMin
-            let denom = max(Double(points.count - 1), 1)
-            let path = Path { p in
-                for (i, point) in points.enumerated() {
-                    let x = geo.size.width * (Double(i) / denom)
-                    let normalized: Double
-                    if range == 0 {
-                        normalized = 0.5
-                    } else {
-                        normalized = Double(point.total - totalMin) / Double(range)
-                    }
-                    let y = geo.size.height * (1 - normalized)
-                    if i == 0 {
-                        p.move(to: CGPoint(x: x, y: y))
-                    } else {
-                        p.addLine(to: CGPoint(x: x, y: y))
-                    }
-                }
-            }
-            path
-                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-        }
-        .accessibilityHidden(true)
     }
 }
 

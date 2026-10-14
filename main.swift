@@ -1769,6 +1769,51 @@ runner.run("SeasonHistoryEntry.delta(against:) is positive when climbed since th
     runner.assertEqual(past.delta(against: 80), -20)
 }
 
+// MARK: - Season comparison (v1.2 slice 2c)
+
+runner.run("SeasonComparison.barScale takes the largest magnitude, never zero") {
+    runner.assertEqual(SeasonComparison.barScale(current: 1_200, pastTotals: [980, 640]), 1_200)
+    runner.assertEqual(SeasonComparison.barScale(current: 300, pastTotals: [980, -1_500]), 1_500)
+    runner.assertEqual(SeasonComparison.barScale(current: nil, pastTotals: [640]), 640)
+    runner.assertEqual(SeasonComparison.barScale(current: 0, pastTotals: []), 1)
+}
+
+runner.run("SeasonComparison.barFraction is proportional, sign-blind and clamped") {
+    runner.assertEqual(SeasonComparison.barFraction(600, scale: 1_200), 0.5)
+    runner.assertEqual(SeasonComparison.barFraction(-300, scale: 1_200), 0.25)
+    runner.assertEqual(SeasonComparison.barFraction(2_000, scale: 1_200), 1.0)
+    runner.assertEqual(SeasonComparison.barFraction(10, scale: 0), 0.0)
+}
+
+runner.run("SeasonComparison current-bar sentence reads the tick as words") {
+    runner.assertEqual(
+        SeasonComparison.currentBarSentence(score: 1_200, lastSeasonFinal: 980),
+        "This season, 1200 so far, 220 past where last season ended."
+    )
+    runner.assertEqual(
+        SeasonComparison.currentBarSentence(score: 500, lastSeasonFinal: 980),
+        "This season, 500 so far, 480 short of where last season ended."
+    )
+    runner.assertEqual(
+        SeasonComparison.currentBarSentence(score: 980, lastSeasonFinal: 980),
+        "This season, 980 so far, level with where last season ended."
+    )
+    runner.assertEqual(SeasonComparison.currentBarSentence(score: 40, lastSeasonFinal: nil), "This season, 40 so far.")
+}
+
+runner.run("SeasonComparison past-bar sentence is told from this season") {
+    runner.assertEqual(
+        SeasonComparison.pastBarSentence(name: "The Comeback", total: 980, currentScore: 1_200),
+        "The Comeback, finished on 980. This season is 220 ahead."
+    )
+    runner.assertEqual(
+        SeasonComparison.pastBarSentence(name: "Genesis", total: 640, currentScore: 500),
+        "Genesis, finished on 640. This season is 140 behind."
+    )
+    runner.assertEqual(SeasonComparison.signed(-40), "\u{2212}40")
+    runner.assertEqual(SeasonComparison.signed(220), "+220")
+}
+
 // MARK: - Casino config (W-06, US-26)
 
 runner.runAsync("InMemoryRoomStore casino config defaults to standard presets") {

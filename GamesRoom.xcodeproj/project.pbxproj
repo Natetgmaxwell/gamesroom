@@ -22,6 +22,7 @@
 		18E9CC8EB759B398A57804CE /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEBAD7E6C6F297D35AE7B03 /* Session.swift */; };
 		22B4CC0CD0485B9605869FC3 /* LeaderboardRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9980956B9B611EB77B7FB958 /* LeaderboardRow.swift */; };
 		23F32FFCC1CC1FD835ED59AA /* AnyJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCB44B3B227BAC7E904740C /* AnyJSON.swift */; };
+		285B3153D913E2BA5516889F /* SeasonComparison.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F65D8097AF09C70E12A15D /* SeasonComparison.swift */; };
 		28B81650A96FB66EB0E5927C /* GamesRoomApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8E0EE80C757B202A8596DEF /* GamesRoomApp.swift */; };
 		2B3DE1EE3BE13F0D62384930 /* TonightStarPick.swift in Sources */ = {isa = PBXBuildFile; fileRef = 317D4B4078FBF46BF4FC1631 /* TonightStarPick.swift */; };
 		31035F5989663BF45F9B6E51 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 60DDF81CA7A5497EC514042A /* Supabase */; };
@@ -51,6 +52,7 @@
 		5C6553455B7F46CC9B347540 /* CAHCardScanSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC6D02DF32D737D3C29DE9C7 /* CAHCardScanSheet.swift */; };
 		5D5CF9F77F1B7EC422D385B8 /* InviteRewards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 910EBB1978355ABF1FE8D03A /* InviteRewards.swift */; };
 		5E737D8385CE933B83087B99 /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF4E62FA725FE33ABB818FF /* AppSettingsView.swift */; };
+		5EA8CB4660F48ADD635DB928 /* SeasonComparisonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3568C1752B7658DEFD0D9669 /* SeasonComparisonViews.swift */; };
 		5F405A7C1E1762A4EEB41BCC /* MapleMono-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = CCCC2F354B0C3F0DB790D022 /* MapleMono-OFL.txt */; };
 		6035E674E52B615CF31509F6 /* AwardType.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2223F8ABE133AE223C47345 /* AwardType.swift */; };
 		6104B8CEC19A02469FFE6CA0 /* SessionDelta.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC82767B70E66946094A4FB8 /* SessionDelta.swift */; };
@@ -212,6 +214,7 @@
 		317D4B4078FBF46BF4FC1631 /* TonightStarPick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TonightStarPick.swift; sourceTree = "<group>"; };
 		32699BBEEDE931CAE5E51D1E /* RoomPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPage.swift; sourceTree = "<group>"; };
 		328563890E641CC54F3D6E3C /* SettledMakeACallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettledMakeACallTests.swift; sourceTree = "<group>"; };
+		3568C1752B7658DEFD0D9669 /* SeasonComparisonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonComparisonViews.swift; sourceTree = "<group>"; };
 		3578CED0E938B93F73FC478B /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
 		36CDC197F61633AA51BA79DD /* MascotPersonality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPersonality.swift; sourceTree = "<group>"; };
 		37D937307CF0336737DAAA9A /* AddEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEventSheet.swift; sourceTree = "<group>"; };
@@ -258,6 +261,7 @@
 		92BCAC0FF0C689F16E45DD8E /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
 		92DDB488F83ED604AC31AFA3 /* DetectionSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionSource.swift; sourceTree = "<group>"; };
 		95D0E4263E71446510BA4535 /* SettlementAttestation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettlementAttestation.swift; sourceTree = "<group>"; };
+		98F65D8097AF09C70E12A15D /* SeasonComparison.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonComparison.swift; sourceTree = "<group>"; };
 		9980956B9B611EB77B7FB958 /* LeaderboardRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardRow.swift; sourceTree = "<group>"; };
 		9AA4E2AEBA7E2984D706B8ED /* ScanSettleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSettleService.swift; sourceTree = "<group>"; };
 		9C4EBA135E9BB760C54F40FF /* QuestionBoxAcceptanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionBoxAcceptanceTests.swift; sourceTree = "<group>"; };
@@ -413,6 +417,7 @@
 				9980956B9B611EB77B7FB958 /* LeaderboardRow.swift */,
 				F24840003109847AD0F18AE3 /* MascotBubble.swift */,
 				454726733CBAAEC21CD82475 /* MascotConfigSection.swift */,
+				3568C1752B7658DEFD0D9669 /* SeasonComparisonViews.swift */,
 				1915D52A4802F40D42F8731D /* SeatGridView.swift */,
 				70E3DD0F8128D682D5994786 /* SessionRoundTimeline.swift */,
 				E9DB081E4B65A7862F743722 /* TrajectorySparkline.swift */,
@@ -558,6 +563,7 @@
 				268781F6521C043D2C829048 /* ScoreSnapshot.swift */,
 				2E9EA4D5E78DB47B995F7D69 /* Season.swift */,
 				5E6F4B6D4039A7D0882DC7B8 /* SeasonAward.swift */,
+				98F65D8097AF09C70E12A15D /* SeasonComparison.swift */,
 				07F927F6C52213CC624FABB0 /* SeasonHistoryEntry.swift */,
 				42BE7058F0E76B549C110988 /* SeasonStatCard.swift */,
 				A760410D9CAE4E960934C33A /* SeasonStatus.swift */,
@@ -862,6 +868,8 @@
 				10837C410DD0B17D25F3005A /* ScoringService.swift in Sources */,
 				98D8C3000CEE45D7B9950042 /* Season.swift in Sources */,
 				A6A9D93180C6F218A31795AC /* SeasonAward.swift in Sources */,
+				285B3153D913E2BA5516889F /* SeasonComparison.swift in Sources */,
+				5EA8CB4660F48ADD635DB928 /* SeasonComparisonViews.swift in Sources */,
 				929154D11FD37ABA5F39D766 /* SeasonHistoryEntry.swift in Sources */,
 				079745DEFD2BD05EDB862309 /* SeasonStatCard.swift in Sources */,
 				B773895FD55F747258C61C06 /* SeasonStatCardView.swift in Sources */,
