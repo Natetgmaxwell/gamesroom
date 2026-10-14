@@ -1814,6 +1814,105 @@ runner.run("SeasonComparison past-bar sentence is told from this season") {
     runner.assertEqual(SeasonComparison.signed(220), "+220")
 }
 
+func gridRow(_ night: Int, _ day: Double, _ member: Int, _ name: String, _ pts: Int64) -> SeasonGridRow {
+    SeasonGridRow(
+        sessionId: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", night))!,
+        playedAt: Date(timeIntervalSince1970: 1_800_000_000 + day * 86_400),
+        memberId: UUID(uuidString: String(format: "00000000-0000-0000-0001-%012d", member))!,
+        displayName: name,
+        points: pts
+    )
+}
+
+runner.run("SeasonGrid orders nights oldest first and members by total") {
+    let grid = SeasonGrid(rows: [
+        gridRow(2, 7, 1, "Ana", 100), gridRow(1, 0, 1, "Ana", -50),
+        gridRow(1, 0, 2, "Ben", 300), gridRow(2, 7, 2, "Ben", 20),
+        gridRow(3, 14, 1, "Ana", 400)
+    ])
+    runner.assertEqual(grid.nights.count, 3)
+    runner.assertTrue(grid.nights[0].playedAt < grid.nights[1].playedAt, "oldest first")
+    runner.assertEqual(grid.members.map(\.name), ["Ana", "Ben"])
+    runner.assertEqual(grid.members.map(\.total), [450, 320])
+    runner.assertNil(grid.points(night: grid.nights[2].id, member: grid.members[1].id), "Ben sat out night 3")
+}
+
+runner.run("SeasonGrid.cumulative skips nights the member sat out") {
+    let grid = SeasonGrid(rows: [
+        gridRow(1, 0, 1, "Ana", -50), gridRow(1, 0, 2, "Ben", 300),
+        gridRow(2, 7, 1, "Ana", 100), gridRow(3, 14, 2, "Ben", 20)
+    ])
+    let ana = grid.members.first { $0.name == "Ana" }!.id
+    let ben = grid.members.first { $0.name == "Ben" }!.id
+    runner.assertEqual(grid.cumulative(for: ana), [-50, 50])
+    runner.assertEqual(grid.cumulative(for: ben), [300, 320])
+    runner.assertEqual(grid.cumulative(for: UUID()), [])
+}
+
+runner.run("SeasonComparison.nightTotals keeps one point per night") {
+    let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    let pts = [
+        SeasonScorePoint(at: t0, total: 100),
+        SeasonScorePoint(at: t0, total: 160),
+        SeasonScorePoint(at: t0.addingTimeInterval(86_400), total: 90)
+    ]
+    runner.assertEqual(SeasonComparison.nightTotals(pts), [160, 90])
+    runner.assertEqual(SeasonComparison.nightTotals([]), [])
+}
+
+runner.run("SeasonComparison.traceGap compares at the same night, or the ghost's finish") {
+    runner.assertEqual(SeasonComparison.traceGap(current: [150, 430, 390], previous: [100, 200, 400, 320]), -10)
+    runner.assertEqual(SeasonComparison.traceGap(current: [100, 200, 300], previous: [50]), 250)
+    runner.assertNil(SeasonComparison.traceGap(current: [], previous: [50]))
+    runner.assertNil(SeasonComparison.traceGap(current: [10], previous: []))
+}
+
+runner.run("SeasonComparison trace sentences read the gap in plain words") {
+    runner.assertEqual(
+        SeasonComparison.currentTraceSentence(
+            current: [150, 430, 390, 510, 880, 1_200],
+            previous: [100, 200, 400, 320, 500, 620, 880, 980]
+        ),
+        "Ahead of last season by 580 after six nights. Last season ran two more nights."
+    )
+    runner.assertEqual(
+        SeasonComparison.currentTraceSentence(current: [100, 150], previous: [200, 400]),
+        "Behind last season by 250 after two nights."
+    )
+    runner.assertEqual(
+        SeasonComparison.currentTraceSentence(current: [100], previous: [100, 300]),
+        "Level with last season after one night. Last season ran one more night."
+    )
+    runner.assertEqual(SeasonComparison.currentTraceSentence(current: [], previous: [1]), "No nights scored yet this season.")
+    runner.assertEqual(
+        SeasonComparison.currentTraceSentence(current: [40], previous: []),
+        "40 after one night. Nothing from last season to compare."
+    )
+    runner.assertEqual(SeasonComparison.pastTraceSentence(season: [200, 980], before: [640]), "Finished 340 ahead of the season before.")
+    runner.assertEqual(SeasonComparison.pastTraceSentence(season: [100], before: [640]), "Finished 540 behind the season before.")
+    runner.assertEqual(SeasonComparison.pastTraceSentence(season: [640], before: []), "First season here. Finished on 640.")
+    runner.assertEqual(SeasonComparison.number(12), "12")
+}
+
+runner.runAsync("InMemoryRoomStore season grid sums to each member's season totals") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    let board = try await store.fetchLeaderboard(roomId: room.id)
+    let current = SeasonGrid(rows: try await store.fetchSeasonGrid(roomId: room.id, seasonId: nil))
+    runner.assertTrue(current.nights.count >= 5, "current season seeded with nights")
+    for entry in board {
+        let total = current.members.first { $0.id == entry.userId }?.total
+        runner.assertEqual(total, entry.seasonScore)
+    }
+    let history = try await store.fetchSeasonHistory(roomId: room.id)
+    for season in history {
+        let grid = SeasonGrid(rows: try await store.fetchSeasonGrid(roomId: room.id, seasonId: season.seasonId))
+        runner.assertTrue(!grid.isEmpty, "past season grid seeded")
+        let host = board.first { $0.role == "host" }!.userId
+        runner.assertEqual(grid.cumulative(for: host), SeasonComparison.nightTotals(season.scoreProgression))
+    }
+}
+
 // MARK: - Casino config (W-06, US-26)
 
 runner.runAsync("InMemoryRoomStore casino config defaults to standard presets") {

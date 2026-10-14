@@ -58,6 +58,66 @@ enum SeasonComparison {
         return "\(name), finished on \(total). \(comparison)"
     }
 
+    // MARK: Level 1 — dual trace
+
+    /// One running total per night from a `score_progression` series.
+    /// The server emits one point per transaction, so a night with
+    /// several transactions repeats its timestamp; keep the last.
+    static func nightTotals(_ points: [SeasonScorePoint]) -> [Int64] {
+        var out: [Int64] = []
+        var lastAt: Date?
+        for p in points {
+            if p.at == lastAt, !out.isEmpty { out[out.count - 1] = p.total } else { out.append(p.total) }
+            lastAt = p.at
+        }
+        return out
+    }
+
+    /// The gap between the solid line and the ghost at the solid
+    /// line's latest night. When the ghost ran fewer nights, its
+    /// final total stands in. nil when either line is empty.
+    static func traceGap(current: [Int64], previous: [Int64]) -> Int64? {
+        guard let last = current.last, !previous.isEmpty else { return nil }
+        return last - previous[min(current.count, previous.count) - 1]
+    }
+
+    /// The one plain sentence under the current season's trace.
+    static func currentTraceSentence(current: [Int64], previous: [Int64]) -> String {
+        guard let last = current.last else { return "No nights scored yet this season." }
+        let nights = nightsPhrase(current.count)
+        guard let gap = traceGap(current: current, previous: previous) else {
+            return "\(last) after \(nights). Nothing from last season to compare."
+        }
+        let lead: String
+        if gap > 0 { lead = "Ahead of last season by \(gap) after \(nights)." }
+        else if gap < 0 { lead = "Behind last season by \(-gap) after \(nights)." }
+        else { lead = "Level with last season after \(nights)." }
+        let more = previous.count - current.count
+        guard more > 0 else { return lead }
+        return lead + " Last season ran \(more == 1 ? "one more night" : "\(number(more)) more nights")."
+    }
+
+    /// The sentence under a past season's trace, told against the
+    /// season before it.
+    static func pastTraceSentence(season: [Int64], before: [Int64]) -> String {
+        guard let final = season.last else { return "No nights scored that season." }
+        guard let prior = before.last else { return "First season here. Finished on \(final)." }
+        let d = final - prior
+        if d > 0 { return "Finished \(d) ahead of the season before." }
+        if d < 0 { return "Finished \(-d) behind the season before." }
+        return "Finished level with the season before."
+    }
+
+    static func nightsPhrase(_ n: Int) -> String {
+        n == 1 ? "one night" : "\(number(n)) nights"
+    }
+
+    /// Small counts read as words in a sentence; larger stay digits.
+    static func number(_ n: Int) -> String {
+        let words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+        return (0..<words.count).contains(n) ? words[n] : "\(n)"
+    }
+
     /// Signed label with a true minus sign, matching standings.
     static func signed(_ value: Int64) -> String {
         if value > 0 { return "+\(value)" }

@@ -89,6 +89,12 @@ actor InMemoryRoomStore: RoomStore {
     /// the other rooms stay empty.
     private var seasonHistoryByRoom: [UUID: [SeasonHistoryEntry]]
 
+    /// v1.2 slice 2c — `seasonId → get_season_grid rows`. Carwoola's
+    /// active season and both prior seasons are seeded; the caller's
+    /// column in each past grid replays that season's
+    /// `scoreProgression` night for night.
+    private var seasonGridBySeason: [UUID: [SeasonGridRow]] = [:]
+
     /// Map of `roomId → system events queue`. M4. Drives the
     /// briefing slot's "System" section.
     private var roomSystemEvents: [UUID: [RoomSystemEvent]]
@@ -562,34 +568,70 @@ actor InMemoryRoomStore: RoomStore {
         // Points sit inside the season window and the last point
         // matches `callerTotal`, matching the migration-057
         // contract.
+        // v1.2 slice 2c — each season is seeded as a nights x members
+        // grid (get_season_grid rows); the caller's history entry is
+        // derived from it, so the bars, traces and grid agree.
+        // Current season: every column sums to that member's
+        // seasonScore. The Comeback ran eight nights, Genesis seven.
+        let hostId = carwoolaLeaderboard[0].userId
+        let alexId = carwoolaLeaderboard[1].userId
+        let samId = carwoolaLeaderboard[2].userId
+        func seedGrid(daysAgo: [Double], _ columns: [(UUID, String, [Int64?])]) -> [SeasonGridRow] {
+            let nights = daysAgo.map { (UUID(), Date().addingTimeInterval(-86_400 * $0)) }
+            return columns.flatMap { member, name, points in
+                points.enumerated().compactMap { i, p in
+                    p.map { SeasonGridRow(sessionId: nights[i].0, playedAt: nights[i].1, memberId: member, displayName: name, points: $0) }
+                }
+            }
+        }
+        func history(_ rows: [SeasonGridRow], for member: UUID) -> [SeasonScorePoint] {
+            var running: Int64 = 0
+            return rows.filter { $0.memberId == member }
+                .sorted { $0.playedAt < $1.playedAt }
+                .map { running += $0.points; return SeasonScorePoint(at: $0.playedAt, total: running) }
+        }
+        let currentGrid = seedGrid(daysAgo: [28, 24, 19, 14, 9, 3], [
+            (hostId, "Host", [150, 280, -40, 120, 370, 320]),
+            (alexId, "Alex", [200, -60, 300, 60, 300, 180]),
+            (samId, "Sam", [100, 400, 300, -60, nil, nil])
+        ])
+        let comebackGrid = seedGrid(daysAgo: [58, 54, 50, 46, 42, 38, 34, 31], [
+            (hostId, "Host", [100, 100, 200, -80, 180, 120, 260, 100]),
+            (alexId, "Alex", [200, -100, 150, 300, -50, 100, 200, 100]),
+            (samId, "Sam", [-60, 300, nil, 250, -120, 80, nil, 200])
+        ])
+        let genesisGrid = seedGrid(daysAgo: [115, 107, 99, 91, 83, 75, 66], [
+            (hostId, "Host", [-50, 120, 80, 150, -60, 200, 200]),
+            (alexId, "Alex", [100, 200, 150, -80, 250, 100, 60]),
+            (samId, "Sam", [300, -100, 200, 50, 120, nil, 150])
+        ])
+        let comebackId = UUID()
+        let genesisId = UUID()
+        self.seasonGridBySeason = [
+            carwoolaSeason.id: currentGrid,
+            comebackId: comebackGrid,
+            genesisId: genesisGrid
+        ]
         self.seasonHistoryByRoom[carwoola.id] = [
             SeasonHistoryEntry(
-                seasonId: UUID(),
+                seasonId: comebackId,
                 ordinal: 2,
                 subtitle: "The Comeback",
                 startedAt: Date().addingTimeInterval(-86_400 * 60),
                 endedAt: Date().addingTimeInterval(-86_400 * 30),
                 callerTotal: 980,
                 callerRank: 1,
-                scoreProgression: [
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 55), total: 200),
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 45), total: 600),
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 32), total: 980)
-                ]
+                scoreProgression: history(comebackGrid, for: hostId)
             ),
             SeasonHistoryEntry(
-                seasonId: UUID(),
+                seasonId: genesisId,
                 ordinal: 1,
                 subtitle: "Genesis",
                 startedAt: Date().addingTimeInterval(-86_400 * 120),
                 endedAt: Date().addingTimeInterval(-86_400 * 61),
                 callerTotal: 640,
                 callerRank: 3,
-                scoreProgression: [
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 110), total: 150),
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 90), total: 400),
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 65), total: 640)
-                ]
+                scoreProgression: history(genesisGrid, for: hostId)
             )
         ]
 
@@ -1259,6 +1301,14 @@ actor InMemoryRoomStore: RoomStore {
     /// auth context).
     func fetchSeasonHistory(roomId: UUID) async throws -> [SeasonHistoryEntry] {
         return seasonHistoryByRoom[roomId] ?? []
+    }
+
+    /// In-memory mirror of `get_season_grid` (migration 101). nil
+    /// season = the active one.
+    func fetchSeasonGrid(roomId: UUID, seasonId: UUID?) async throws -> [SeasonGridRow] {
+        let key = seasonId ?? currentSeasons[roomId]?.id
+        guard let key else { return [] }
+        return seasonGridBySeason[key] ?? []
     }
 
     // MARK: Room packs (M4)

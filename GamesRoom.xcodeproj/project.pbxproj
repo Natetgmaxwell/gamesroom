@@ -20,6 +20,7 @@
 		175437409347B1C605C45FA6 /* MemberRSVPState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9002A448532A537FB1C7C203 /* MemberRSVPState.swift */; };
 		175E4E6CE8CB5CD8B1CCC0C9 /* Perf.swift in Sources */ = {isa = PBXBuildFile; fileRef = E093B2B25152E6D9317933BC /* Perf.swift */; };
 		18E9CC8EB759B398A57804CE /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEBAD7E6C6F297D35AE7B03 /* Session.swift */; };
+		2193F0E51B5FFBFBF2E5F7DA /* SeasonGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C04EF08043A43FBD71C28C7 /* SeasonGrid.swift */; };
 		22B4CC0CD0485B9605869FC3 /* LeaderboardRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9980956B9B611EB77B7FB958 /* LeaderboardRow.swift */; };
 		23F32FFCC1CC1FD835ED59AA /* AnyJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCB44B3B227BAC7E904740C /* AnyJSON.swift */; };
 		285B3153D913E2BA5516889F /* SeasonComparison.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F65D8097AF09C70E12A15D /* SeasonComparison.swift */; };
@@ -185,6 +186,7 @@
 		02EDF7C62A09D4D63B3FFA19 /* CasinoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CasinoService.swift; sourceTree = "<group>"; };
 		05F9E02EBD7B4121F334B5DA /* EventTransaction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventTransaction.swift; sourceTree = "<group>"; };
 		07F927F6C52213CC624FABB0 /* SeasonHistoryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonHistoryEntry.swift; sourceTree = "<group>"; };
+		0C04EF08043A43FBD71C28C7 /* SeasonGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonGrid.swift; sourceTree = "<group>"; };
 		0D02429175C20FD56AC5258B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0D74C3AB67C7AE8086E1FFD0 /* BoundingBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundingBox.swift; sourceTree = "<group>"; };
 		0E6C1CE104200F29EBB8F725 /* CreateRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateRoomSheet.swift; sourceTree = "<group>"; };
@@ -564,6 +566,7 @@
 				2E9EA4D5E78DB47B995F7D69 /* Season.swift */,
 				5E6F4B6D4039A7D0882DC7B8 /* SeasonAward.swift */,
 				98F65D8097AF09C70E12A15D /* SeasonComparison.swift */,
+				0C04EF08043A43FBD71C28C7 /* SeasonGrid.swift */,
 				07F927F6C52213CC624FABB0 /* SeasonHistoryEntry.swift */,
 				42BE7058F0E76B549C110988 /* SeasonStatCard.swift */,
 				A760410D9CAE4E960934C33A /* SeasonStatus.swift */,
@@ -870,6 +873,7 @@
 				A6A9D93180C6F218A31795AC /* SeasonAward.swift in Sources */,
 				285B3153D913E2BA5516889F /* SeasonComparison.swift in Sources */,
 				5EA8CB4660F48ADD635DB928 /* SeasonComparisonViews.swift in Sources */,
+				2193F0E51B5FFBFBF2E5F7DA /* SeasonGrid.swift in Sources */,
 				929154D11FD37ABA5F39D766 /* SeasonHistoryEntry.swift in Sources */,
 				079745DEFD2BD05EDB862309 /* SeasonStatCard.swift in Sources */,
 				B773895FD55F747258C61C06 /* SeasonStatCardView.swift in Sources */,

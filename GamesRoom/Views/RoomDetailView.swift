@@ -605,7 +605,10 @@ struct RoomDetailView: View {
                 if !roomService.cachedSeasonHistory(roomId: room.id).isEmpty {
                     SeasonsSection(
                         rows: roomService.cachedSeasonHistory(roomId: room.id),
-                        currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0
+                        currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0,
+                        currentNights: currentUserId.flatMap { me in
+                            roomService.cachedSeasonGrid(roomId: room.id, seasonId: nil)?.cumulative(for: me)
+                        } ?? []
                     )
                 }
                 CollapsibleSection(title: "Packs", caption: "Games-night rules your room is set up for.") {
@@ -1210,7 +1213,12 @@ struct RoomDetailView: View {
         // every refresh so a host declaring a season-close in
         // another tab surfaces the new ended-season row on the
         // next pull-to-refresh.
-        _ = await roomService.loadSeasonHistory(roomId: room.id, force: force)
+        let history = await roomService.loadSeasonHistory(roomId: room.id, force: force)
+        // v1.2 slice 2c — the active season's grid feeds the
+        // Seasons dual trace. Quiet no-op until migration 101.
+        if !history.isEmpty {
+            await roomService.loadSeasonGrid(roomId: room.id, seasonId: nil, force: force)
+        }
     }
 
     private func loadMembersIfNeeded(force: Bool = false) async {

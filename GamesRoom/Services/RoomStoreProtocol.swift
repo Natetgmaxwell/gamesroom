@@ -313,6 +313,14 @@ protocol RoomStore: Sendable {
     /// Server side: `get_season_history(p_room_id)` (migration 053).
     func fetchSeasonHistory(roomId: UUID) async throws -> [SeasonHistoryEntry]
 
+    /// Points per game night per member for one season; `seasonId`
+    /// nil means the active season. Drives the Seasons dual trace
+    /// and season grid (v1.2 slice 2c).
+    ///
+    /// Server side: `get_season_grid(p_room_id, p_season_id)`
+    /// (migration 101, not yet deployed).
+    func fetchSeasonGrid(roomId: UUID, seasonId: UUID?) async throws -> [SeasonGridRow]
+
     // MARK: Room packs (M4 — pack-as-platform polish)
 
     /// Returns the pack slugs installed in this room. Mirrors
