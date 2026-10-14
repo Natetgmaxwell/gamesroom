@@ -14,10 +14,10 @@
 //    2. **When** — `DatePicker`. Defaults to *tomorrow at 19:00*.
 //       The default is local-time and rounded to the hour, matching
 //       the "Saturday 8pm" voice the mascot uses in the briefing.
-//    3. **Pack** — `Picker` over the four V0.8 packs. The catalog is
+//    3. **Pack** — `Picker` over the registered packs. The catalog is
 //       intentionally hardcoded: {casino, cards_against_humanity,
-//       monopoly_deal, pluto_chess}. There is no per-room pack
-//       discovery here — the host picks one of the four global
+//       monopoly_deal}. There is no per-room pack
+//       discovery here — the host picks one of the global
 //       slugs. Selecting a pack that hasn't been added to the room
 //       is allowed; the server resolves it.
 //

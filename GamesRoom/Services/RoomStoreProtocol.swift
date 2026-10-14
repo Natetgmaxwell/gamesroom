@@ -174,9 +174,8 @@ protocol RoomStore: Sendable {
     // MARK: Event create
 
     /// Inserts one row in `public.events` and returns its id.
-    /// `packSlug` is one of the four hardcoded V0.8 packs
-    /// (`casino`, `cards_against_humanity`, `monopoly_deal`,
-    /// `pluto_chess`).
+    /// `packSlug` is one of the registered packs
+    /// (`casino`, `cards_against_humanity`, `monopoly_deal`).
     /// `hiddenFromUserIds` is the V0.94 per-event hidden-members
     /// list — members on it don't see the event or receive its
     /// briefing push. Empty by default.

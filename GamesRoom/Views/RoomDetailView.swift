@@ -1610,7 +1610,7 @@ struct RoomDetailView: View {
     }
 
     /// V0.68 — "Score a round" is only meaningful for single-winner
-    /// packs (Monopoly Deal, Pluto Chess) whose scoring surface is
+    /// packs (Monopoly Deal) whose scoring surface is
     /// `HostScoreEntrySheet`/dashboard. For `.withdrawReturn` (casino)
     /// and `.countBased` (CAH) the primary settle CTA already opens
     /// the same sheet, so the host-only button is gated off there.

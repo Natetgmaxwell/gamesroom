@@ -14,10 +14,10 @@
 //    4. A renderer hint (a SwiftUI view-id the host-side scoring
 //       dashboard dispatches on)
 //
-//  The four V0.8 MVP packs — casino, cards_against_humanity,
-//  monopoly_deal, pluto_chess — each conform. Legacy V0.7
-//  `monopoly-deal` / `blackjack` rows from migration 012 are still
-//  readable but the iOS picker only surfaces the four conformers.
+//  The active packs — casino, cards_against_humanity,
+//  monopoly_deal — each conform. Legacy V0.7 `monopoly-deal` /
+//  `blackjack` rows (migration 012) and packs retired by migration
+//  097 stay readable, but the picker only surfaces the conformers.
 //
 //  All packs resolve through `PackRegistry.shared.definition(for: slug)`.
 //  Server-side `public.packs` table is the authoritative availability
@@ -69,8 +69,7 @@ extension PackDefinition {
 /// Discriminator from `public.packs.scoring_type`. Three V0.34
 /// families are supported:
 /// - `single_winner`: the round picks one member, awards
-///   `winPoints` to that member's season score (Monopoly Deal,
-///   Pluto Chess).
+///   `winPoints` to that member's season score (Monopoly Deal).
 /// - `withdraw_return`: the round records a net delta per
 ///   member (Casino); the host enters each member's return
 ///   amount and the net delta is returned-to-balance minus

@@ -88,7 +88,7 @@ struct ScoreEntry: Codable, Hashable, Identifiable {
 /// the matching `ScoreEntry` array.
 enum PackScoringInput: Hashable {
     /// Single-winner round. Mirrors `single_winner` packs
-    /// (monopoly_deal, pluto_chess). The resolver emits one
+    /// (monopoly_deal). The resolver emits one
     /// entry: the winner's user id plus `winPoints` season-score
     /// delta.
     case singleWinner(roundIndex: Int, winnerMemberId: UUID, winPoints: Int)

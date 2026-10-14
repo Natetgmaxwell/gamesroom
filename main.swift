@@ -148,9 +148,9 @@ runner.run("StorageKeys.keepScanPhotos round-trips") {
 
 // MARK: - PackRegistry tests
 
-runner.run("PackRegistry default registry holds four V0.8 packs") {
+runner.run("PackRegistry default registry holds three packs (Pluto Chess retired)") {
     let slugs = PackRegistry.shared.allPacks.map { $0.slug }
-    runner.assertEqual(slugs, ["casino", "cards_against_humanity", "monopoly_deal", "pluto_chess"])
+    runner.assertEqual(slugs, ["casino", "cards_against_humanity", "monopoly_deal"])
 }
 
 runner.run("PackRegistry isRegistered rejects legacy / unknown slugs") {
@@ -159,7 +159,8 @@ runner.run("PackRegistry isRegistered rejects legacy / unknown slugs") {
     runner.assertFalse(PackRegistry.shared.isRegistered(slug: ""))
     runner.assertFalse(PackRegistry.shared.isRegistered(slug: "unknown-pack"))
     runner.assertTrue(PackRegistry.shared.isRegistered(slug: "casino"))
-    runner.assertTrue(PackRegistry.shared.isRegistered(slug: "pluto_chess"))
+    runner.assertFalse(PackRegistry.shared.isRegistered(slug: "pluto_chess"))
+    runner.assertTrue(PackRegistry.shared.isRegistered(slug: "monopoly_deal"))
 }
 
 runner.run("Pack scoring types match migration 034 / V0.34 count-based CAH") {
@@ -171,7 +172,6 @@ runner.run("Pack scoring types match migration 034 / V0.34 count-based CAH") {
     runner.assertEqual(CasinoPack.scoringType, .withdrawReturn)
     runner.assertEqual(CardsAgainstHumanityPack.scoringType, .countBased)
     runner.assertEqual(MonopolyDealPack.scoringType, .singleWinner)
-    runner.assertEqual(PlutoChessPack.scoringType, .singleWinner)
 }
 
 runner.run("PackScoringType.countBased raw value is 'count_based' and Codable round-trips") {
@@ -200,7 +200,6 @@ runner.run("PackScoringType displayLabel covers all three families") {
 runner.run("PackRegistry winPoints single-winner packs return 1") {
     runner.assertEqual(PackRegistry.shared.winPoints(for: "cards_against_humanity"), 1)
     runner.assertEqual(PackRegistry.shared.winPoints(for: "monopoly_deal"), 1)
-    runner.assertEqual(PackRegistry.shared.winPoints(for: "pluto_chess"), 1)
     runner.assertEqual(PackRegistry.shared.winPoints(for: "casino"), 0)
     runner.assertEqual(PackRegistry.shared.winPoints(for: "unknown"), 1)
 }
@@ -245,7 +244,7 @@ runner.run("PackScoringResolver multiWinner empty list produces no entries") {
         winnerMemberIds: [],
         winPoints: 1
     )
-    let entries = PackScoringResolver.resolve(input, packSlug: "pluto_chess")
+    let entries = PackScoringResolver.resolve(input, packSlug: "monopoly_deal")
     runner.assertEqual(entries.count, 0)
 }
 
@@ -798,8 +797,8 @@ runner.run("PackHowToCatalog returns bundled content for casino") {
     runner.assertTrue(howTo?.sections.count ?? 0 >= 3)
 }
 
-runner.run("PackHowToCatalog returns bundled content for all four V0.8 packs") {
-    let slugs = ["casino", "cards_against_humanity", "monopoly_deal", "pluto_chess"]
+runner.run("PackHowToCatalog returns bundled content for every registered pack") {
+    let slugs = ["casino", "cards_against_humanity", "monopoly_deal"]
     for slug in slugs {
         runner.assertNotNil(
             PackHowToCatalog.howTo(forSlug: slug),
@@ -810,6 +809,7 @@ runner.run("PackHowToCatalog returns bundled content for all four V0.8 packs") {
 
 runner.run("PackHowToCatalog returns nil for unknown slugs") {
     runner.assertNil(PackHowToCatalog.howTo(forSlug: "no_such_pack"))
+    runner.assertNil(PackHowToCatalog.howTo(forSlug: "pluto_chess"))
     runner.assertNil(PackHowToCatalog.howTo(forSlug: ""))
 }
 
@@ -842,7 +842,6 @@ runner.run("PackDefinition default howToSlug falls back to slug") {
     runner.assertEqual(CasinoPack.howToSlug, "casino")
     runner.assertEqual(CardsAgainstHumanityPack.howToSlug, "cards_against_humanity")
     runner.assertEqual(MonopolyDealPack.howToSlug, "monopoly_deal")
-    runner.assertEqual(PlutoChessPack.howToSlug, "pluto_chess")
 }
 
 // MARK: - EventRSVP (2026-08-10 feedback round)
@@ -1057,7 +1056,7 @@ runner.run("RoomPackConfig defaults missing win_points to 1") {
     let json = """
     {
       "room_id": "33333333-3333-3333-3333-333333333333",
-      "pack_slug": "pluto_chess"
+      "pack_slug": "monopoly_deal"
     }
     """
     let decoded = try JSONDecoder().decode(RoomPackConfig.self, from: json.data(using: .utf8)!)
@@ -1104,7 +1103,7 @@ runner.run("EventRound defaults missing entries to empty") {
       "id": "11111111-1111-1111-1111-111111111111",
       "event_id": "22222222-2222-2222-2222-222222222222",
       "room_id": "33333333-3333-3333-3333-333333333333",
-      "pack_slug": "pluto_chess",
+      "pack_slug": "monopoly_deal",
       "round_index": 1,
       "created_by": "66666666-6666-6666-6666-666666666666",
       "created_at": "2026-08-10T12:00:00Z"
@@ -1338,7 +1337,7 @@ runner.run("CatchUpMessage upcoming event voices the claim prompt and appends st
 
 runner.run("CatchUpMessage claimed state does not nudge") {
     let body = CatchUpMessage.body(
-        eventName: "Pluto Chess Sunday",
+        eventName: "Monopoly Deal Sunday",
         playedAt: Date().addingTimeInterval(86_400),
         mascotName: "Felty",
         leaderboardSummary: "",
@@ -1838,8 +1837,8 @@ runner.run("Array<EventRound>.nextRoundIndex stays monotonic after a delete") {
     let roomId = UUID()
     let userId = UUID()
     let rounds: [EventRound] = [
-        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "pluto_chess", roundIndex: 1, entries: [], createdBy: userId, createdAt: Date()),
-        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "pluto_chess", roundIndex: 3, entries: [], createdBy: userId, createdAt: Date())
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "monopoly_deal", roundIndex: 1, entries: [], createdBy: userId, createdAt: Date()),
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "monopoly_deal", roundIndex: 3, entries: [], createdBy: userId, createdAt: Date())
     ]
     runner.assertEqual(rounds.nextRoundIndex, 4)
 }
@@ -1872,7 +1871,7 @@ runner.run("EventRound defaults correctionOf to nil when absent") {
       "id": "11111111-1111-1111-1111-111111111111",
       "event_id": "22222222-2222-2222-2222-222222222222",
       "room_id": "33333333-3333-3333-3333-333333333333",
-      "pack_slug": "pluto_chess",
+      "pack_slug": "monopoly_deal",
       "round_index": 1,
       "entries": [],
       "created_by": "66666666-6666-6666-6666-666666666666",
@@ -2147,7 +2146,7 @@ runner.run("MascotEngine.recentWinners ignores non-winner entries") {
     let rounds: [EventRound] = [
         EventRound(
             id: UUID(), eventId: eventId, roomId: UUID(),
-            packSlug: "pluto_chess", roundIndex: 1,
+            packSlug: "monopoly_deal", roundIndex: 1,
             entries: [
                 ScoreEntry(memberId: alice, pointsDelta: -20, meta: [:])
             ],
@@ -2244,7 +2243,7 @@ runner.run("MascotEngine.lastWinnerDelta returns nil when no winner") {
     let rounds = [
         EventRound(
             id: UUID(), eventId: eventId, roomId: UUID(),
-            packSlug: "pluto_chess", roundIndex: 1,
+            packSlug: "monopoly_deal", roundIndex: 1,
             entries: [
                 ScoreEntry(memberId: alice, pointsDelta: -20, meta: [:])
             ],
