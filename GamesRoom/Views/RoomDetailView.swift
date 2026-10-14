@@ -607,7 +607,6 @@ struct RoomDetailView: View {
                         rows: roomService.cachedSeasonHistory(roomId: room.id),
                         currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0
                     )
-                    .sectionCard(.standard)
                 }
                 CollapsibleSection(title: "Packs", caption: "Games-night rules your room is set up for.") {
                     PackShelfReadOnly(room: room)
@@ -3358,30 +3357,17 @@ private struct SeasonHistorySection: View {
     let currentScore: Int64
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Past seasons")
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
+        VStack(alignment: .leading, spacing: 0) {
+            SectionTitle(text: "Past seasons")
             Text("Your standing each season — how the current arc compares.")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-
-            VStack(spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
-                    seasonRow(row)
-                    if idx != rows.count - 1 {
-                        Divider()
-                            .overlay(Theme.Palette.hairline)
-                            .padding(.horizontal, Theme.Layout.edgePadding)
-                    }
+            ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
+                seasonRow(row)
+                if idx != rows.count - 1 {
+                    Divider().overlay(Theme.Palette.hairline)
                 }
             }
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -3420,8 +3406,7 @@ private struct SeasonHistorySection: View {
                     .frame(maxWidth: .infinity)
             }
         }
-        .padding(.vertical, Theme.Layout.cardInset)
-        .padding(.horizontal, Theme.Layout.edgePadding)
+        .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             Text("\(primaryText), \(row.callerTotal) points, \(deltaLabel(d)) versus the current season")
