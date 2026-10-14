@@ -30,6 +30,9 @@ enum Theme {
         static let hairline = Color(red: 0.239, green: 0.239, blue: 0.251)         // #3D3D40
         /// Brass-warm single accent. The only chromatic voice in the app.
         static let accent = Color(red: 0.690, green: 0.553, blue: 0.341)            // #B08D57
+        /// Score movement only (standings delta): up is green, down is red.
+        static let gain = Color(red: 0.188, green: 0.820, blue: 0.345)              // #30D158
+        static let loss = Color(red: 1.000, green: 0.271, blue: 0.227)              // #FF453A
     }
 
     // MARK: Typography

@@ -55,21 +55,29 @@ struct LeaderboardRow: View {
     private var header: some View {
         HStack(spacing: 12) {
             rankBadge
-            Text(name)
-                .font(Theme.Typography.body.weight(isYou ? .semibold : .regular))
-                .foregroundStyle(Theme.Palette.primaryText)
-                .lineLimit(1)
-            if isRecentlyCorrected {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 8, height: 8)
-                    .accessibilityLabel(Text("Score recently corrected"))
-                    .transition(.opacity.combined(with: .scale))
-            }
-            if isYou {
-                Text("you")
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(name)
+                        .font(Theme.Typography.body.weight(isYou ? .semibold : .regular))
+                        .foregroundStyle(Theme.Palette.primaryText)
+                        .lineLimit(1)
+                    if isRecentlyCorrected {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 8, height: 8)
+                            .accessibilityLabel(Text("Score recently corrected"))
+                            .transition(.opacity.combined(with: .scale))
+                    }
+                    if isYou {
+                        Text("you")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.accent)
+                    }
+                }
+                Text("\(sessionsPlayed) sessions")
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.accent)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityHidden(true)
             }
             Spacer(minLength: 8)
             scoreColumn
@@ -86,21 +94,14 @@ struct LeaderboardRow: View {
     }
 
     private var scoreColumn: some View {
-        VStack(alignment: .trailing, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(deltaLabel)
+                .font(Theme.Typography.monoCaption)
+                .foregroundStyle(deltaColor)
             Text("\(score)")
                 .font(Theme.Typography.mono)
                 .foregroundStyle(Theme.Palette.primaryText)
-            HStack(spacing: 6) {
-                Text(deltaLabel)
-                    .font(Theme.Typography.monoFootnote)
-                    .foregroundStyle(deltaColor)
-                Text("·")
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
-                Text("\(sessionsPlayed) sessions")
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            }
+                .frame(minWidth: 72, alignment: .trailing)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(score) points, last delta \(deltaLabel), \(sessionsPlayed) sessions"))
@@ -117,13 +118,14 @@ struct LeaderboardRow: View {
     // MARK: Helpers
 
     private var deltaLabel: String {
-        let prefix = lastDelta > 0 ? "+" : ""
-        return "\(prefix)\(lastDelta)"
+        if lastDelta > 0 { return "+\(lastDelta)" }
+        if lastDelta < 0 { return "−\(-lastDelta)" }
+        return "0"
     }
 
     private var deltaColor: Color {
-        if lastDelta > 0 { return Theme.Palette.accent }
-        if lastDelta < 0 { return Theme.Palette.primaryText.opacity(0.55) }
+        if lastDelta > 0 { return Theme.Palette.gain }
+        if lastDelta < 0 { return Theme.Palette.loss }
         return Theme.Palette.primaryText.opacity(0.4)
     }
 
