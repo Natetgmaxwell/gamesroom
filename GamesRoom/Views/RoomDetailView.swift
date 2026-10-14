@@ -555,7 +555,6 @@ struct RoomDetailView: View {
                         entries: leaderboard,
                         currentUserId: currentUserId
                     )
-                    .sectionCard(.standard)
                 }
                 // V0.79 — one-time notification opt-in prompt. Shows
                 // once per room (per device) while opt-in is off;
@@ -3240,16 +3239,28 @@ private struct HostWithdrawalsSection: View {
 
 // MARK: - Standings section (always-on, below the slot)
 
+/// Slice 2a (Hearth) — the flat section title: small, grey,
+/// sentence case. Hierarchy comes from type, not a card.
+private struct SectionTitle: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(Theme.Typography.caption.weight(.semibold))
+            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 private struct StandingsSection: View {
     let entries: [LeaderboardEntry]
     let currentUserId: UUID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Standings")
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
+        VStack(alignment: .leading, spacing: 0) {
+            SectionTitle(text: "Standings")
             ForEach(Array(entries.enumerated()), id: \.element.id) { idx, entry in
+                if idx > 0 { Divider().overlay(Theme.Palette.hairline) }
                 LeaderboardRow(
                     rank: idx + 1,
                     name: entry.displayName,
