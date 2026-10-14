@@ -141,7 +141,6 @@
 		F3E1A7906F6E5C7B94D42CA8 /* BoundingBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D74C3AB67C7AE8086E1FFD0 /* BoundingBox.swift */; };
 		F46B2DE9B61FF1878C56431B /* MapleMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 46045DEAC9856F24DF857230 /* MapleMono-Regular.ttf */; };
 		F534BD450E57018711EC93E0 /* MascotEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBD65A9E04C5846DAA94757E /* MascotEngine.swift */; };
-		F639BC033FC4B64872E32B8C /* MascotTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CC62360006BC3217F0A1BB /* MascotTypography.swift */; };
 		F76C470CB4F2CB34926FCDD0 /* iPadSidebarRoomTapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14A563A8B026C6F8944FEFF /* iPadSidebarRoomTapTests.swift */; };
 		F99E513F8BCCF36DC32E63AE /* GamesRoomWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD2C5CD3D45EAE629FC725DD /* GamesRoomWidgets.swift */; };
 		FBE3AB83BA26F3A4DF1E0FAA /* HostScoreEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17B83BA81458C209476F6B1A /* HostScoreEntrySheet.swift */; };
@@ -253,7 +252,6 @@
 		82237123FBAF9729F566347F /* RoomGraphSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomGraphSummary.swift; sourceTree = "<group>"; };
 		8608D2B19A164FC4237B0D13 /* ScanCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanCameraView.swift; sourceTree = "<group>"; };
 		863A0958600C72EB3A97DA97 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
-		89CC62360006BC3217F0A1BB /* MascotTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotTypography.swift; sourceTree = "<group>"; };
 		9002A448532A537FB1C7C203 /* MemberRSVPState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberRSVPState.swift; sourceTree = "<group>"; };
 		910EBB1978355ABF1FE8D03A /* InviteRewards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteRewards.swift; sourceTree = "<group>"; };
 		918277A2669F8D0075799C71 /* RoomNotificationPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomNotificationPrefs.swift; sourceTree = "<group>"; };
@@ -425,7 +423,6 @@
 		338898A5CF1FEA02A93561FE /* Support */ = {
 			isa = PBXGroup;
 			children = (
-				89CC62360006BC3217F0A1BB /* MascotTypography.swift */,
 				E093B2B25152E6D9317933BC /* Perf.swift */,
 			);
 			path = Support;
@@ -819,7 +816,6 @@
 				07BAA891AC24C05A5433A994 /* MascotNotificationAttachment.swift in Sources */,
 				42697189CE8E3D5484648C84 /* MascotPersonality.swift in Sources */,
 				7CF2AE73B08414097F004724 /* MascotPoliticalIdeology.swift in Sources */,
-				F639BC033FC4B64872E32B8C /* MascotTypography.swift in Sources */,
 				0A12FC2D8286A53B5EFCAEAB /* MascotVoiceService.swift in Sources */,
 				BCD8D9133418356A5034480A /* Member.swift in Sources */,
 				8BB83EE8C1DBD710601D4AD7 /* MemberCalendarSettingsSheet.swift in Sources */,
