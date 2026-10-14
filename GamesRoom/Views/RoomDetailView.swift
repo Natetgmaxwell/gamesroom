@@ -2565,27 +2565,26 @@ private struct CeremonialCard: View {
     @State private var memberNoteDraft: String = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Text(chapterLine?.title ?? event.name)
-                .font(Theme.Typography.display)
-                .foregroundStyle(Theme.Palette.primaryText)
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(chapterLine?.title ?? event.name)
+                    .font(Theme.Typography.title)
+                    .foregroundStyle(Theme.Palette.primaryText)
 
-            if let settledAt = event.settledAt {
-                Text("Settled \(settledAt, format: .relative(presentation: .named))")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            }
+                if let settledAt = event.settledAt {
+                    Text("Settled \(settledAt, format: .relative(presentation: .named))")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
 
-            if let teaser = chapterLine?.nextEpisodeTeaser, !teaser.isEmpty {
-                HStack(spacing: 6) {
-                    Text("↳ Next:")
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                    Text(teaser)
+                if let teaser = chapterLine?.nextEpisodeTeaser, !teaser.isEmpty {
+                    Text("Next: \(teaser)")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .padding(.top, 6)
                 }
             }
+            .accessibilityElement(children: .combine)
 
             // V0.84 C2 — Tonight's Star section. Hidden when
             // `tonightStarCard == nil` (no host pick AND no
@@ -2645,6 +2644,11 @@ private struct CeremonialCard: View {
                 )
             }
 
+            if let line = tonightStarCard?.heroFootLine {
+                Text(line)
+                    .font(Theme.Typography.caption.italic())
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
@@ -2665,30 +2669,26 @@ private struct CeremonialCard: View {
 // MARK: - Tonight's Star section (V0.84 C2)
 
 /// V0.84 C2 — Tonight's Star read section on the ceremonial card.
-/// Renders the winner (display name) + the category line (mascot
-/// voice when the host picked a category; plain "the night's
-/// biggest swing" when the chip-swing fallback is in play). The
-/// `custom_text` from a `.custom` host pick is rendered alongside
-/// (not inside) the mascot line, per the spec.
+/// Renders the winner (display name) plus the host's `custom_text`
+/// when present. The category line (mascot voice, or the plain
+/// chip-swing fallback) sits at the card's foot via `heroFootLine`.
 private struct TonightStarSection: View {
     let card: TonightStarCard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Tonight's Star")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             HStack(spacing: 6) {
                 Image(systemName: "star.fill")
-                    .font(Theme.Typography.body.weight(.semibold))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent)
-                Text("Tonight's Star")
+                    .accessibilityHidden(true)
+                Text(card.memberDisplayName)
                     .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
+                    .foregroundStyle(Theme.Palette.primaryText)
             }
-            Text(card.memberDisplayName)
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
-            Text(categoryLine)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.75))
             if let custom = card.customText, !custom.isEmpty {
                 Text("“\(custom)”")
                     .font(Theme.Typography.body)
@@ -2697,10 +2697,12 @@ private struct TonightStarSection: View {
         }
         .accessibilityElement(children: .combine)
     }
+}
 
-    private var categoryLine: String {
-        if let category = card.overrideCategory {
-            return category.mascotLine(winnerName: card.memberDisplayName)
+private extension TonightStarCard {
+    var heroFootLine: String {
+        if let category = overrideCategory {
+            return category.mascotLine(winnerName: memberDisplayName)
         }
         return "The night's biggest swing."
     }
