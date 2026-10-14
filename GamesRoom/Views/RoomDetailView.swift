@@ -615,7 +615,6 @@ struct RoomDetailView: View {
                 CollapsibleSection(title: "Members", caption: "Everyone with a seat at the table.") {
                     MemberRosterReadOnly(room: room)
                 }
-                .sectionCard(.standard)
                 MascotFooterCaption(
                     room: liveRoom,
                     activeEvent: activeEvent,
@@ -3846,8 +3845,9 @@ private struct MemberRosterReadOnly: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+        VStack(alignment: .leading, spacing: 0) {
             inviteSection
+            Divider().overlay(Theme.Palette.hairline)
             let members = roomService.cachedMembers(roomId: room.id)
             if members.isEmpty {
                 Text("No members yet — share your join code to get the table set.")
@@ -3859,18 +3859,10 @@ private struct MemberRosterReadOnly: View {
                     ForEach(Array(members.enumerated()), id: \.element.id) { idx, member in
                         memberRow(member)
                         if idx != members.count - 1 {
-                            Divider()
-                                .overlay(Theme.Palette.hairline)
-                                .padding(.horizontal, Theme.Layout.edgePadding)
+                            Divider().overlay(Theme.Palette.hairline)
                         }
                     }
                 }
-                .background(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3895,7 +3887,7 @@ private struct MemberRosterReadOnly: View {
     /// quota-limited) + a tier-3 invitee-scoped code field.
     @ViewBuilder
     private var inviteSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+        VStack(alignment: .leading, spacing: 0) {
             // V0.76 — reward banner. Shows when a friend has joined
             // via the caller's code and the +50 has landed. The
             // success haptic fires once (rewardHapticFired) so the
@@ -3935,14 +3927,7 @@ private struct MemberRosterReadOnly: View {
                     }
                     .accessibilityLabel(Text("Copy invite code"))
                 }
-                .padding(.vertical, Theme.Layout.cardInset)
-                .padding(.horizontal, Theme.Layout.edgePadding)
-                .background(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.vertical, 12)
             }
 
             if isHost {
@@ -3975,14 +3960,7 @@ private struct MemberRosterReadOnly: View {
             }
             Spacer()
         }
-        .padding(.vertical, Theme.Layout.cardInset)
-        .padding(.horizontal, Theme.Layout.edgePadding)
-        .background(Theme.Palette.accent.opacity(0.08))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Theme.Palette.accent.opacity(0.3), lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 12)
     }
 
     /// V0.55 — host "Invite a friend" row. Generates a tier-1 host
@@ -4006,14 +3984,7 @@ private struct MemberRosterReadOnly: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Spacer()
             }
-            .padding(.vertical, Theme.Layout.cardInset)
-            .padding(.horizontal, Theme.Layout.edgePadding)
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 12)
         }
         .buttonStyle(.plain)
     }
@@ -4056,14 +4027,7 @@ private struct MemberRosterReadOnly: View {
                     .padding(.vertical, 6)
                 }
             }
-            .padding(.vertical, Theme.Layout.cardInset)
-            .padding(.horizontal, Theme.Layout.edgePadding)
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 12)
         }
     }
 
@@ -4088,14 +4052,7 @@ private struct MemberRosterReadOnly: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Spacer()
             }
-            .padding(.vertical, Theme.Layout.cardInset)
-            .padding(.horizontal, Theme.Layout.edgePadding)
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 12)
         }
         .buttonStyle(.plain)
     }
@@ -4129,14 +4086,7 @@ private struct MemberRosterReadOnly: View {
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                     }
-                    .padding(.vertical, Theme.Layout.cardInset)
-                    .padding(.horizontal, Theme.Layout.edgePadding)
-                    .background(Theme.Palette.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.vertical, 12)
                 }
                 if let inviteeUserId {
                     Button {
@@ -4207,8 +4157,7 @@ private struct MemberRosterReadOnly: View {
             }
             Spacer(minLength: 8)
         }
-        .padding(.vertical, Theme.Layout.cardInset)
-        .padding(.horizontal, Theme.Layout.edgePadding)
+        .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(member.displayName), \(member.role == .host ? "host" : "member")"))
     }
