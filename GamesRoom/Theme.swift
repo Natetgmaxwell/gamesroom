@@ -30,7 +30,7 @@ enum Theme {
         static let hairline = Color(red: 0.239, green: 0.239, blue: 0.251)         // #3D3D40
         /// Brass-warm single accent. The only chromatic voice in the app.
         static let accent = Color(red: 0.690, green: 0.553, blue: 0.341)            // #B08D57
-        /// Score movement only (standings delta): up is green, down is red.
+        /// Score movement only (standings + past-season deltas): up green, down red.
         static let gain = Color(red: 0.188, green: 0.820, blue: 0.345)              // #30D158
         static let loss = Color(red: 1.000, green: 0.271, blue: 0.227)              // #FF453A
     }
@@ -66,9 +66,6 @@ enum Theme {
         static let monoCaptionSemibold = Font.custom("MapleMono-SemiBold", size: 13)
         /// Mono at footnote size — balances, deltas in tight rows (11pt).
         static let monoFootnote = Font.custom("MapleMono-Regular", size: 11)
-        /// Mono italic — the conservative mascot's handwriting (V0.99c).
-        /// True cursive italic forms = taught-by-nuns letterform manners.
-        static let monoItalic = Font.custom("MapleMono-Italic", size: 13)
         /// Title — default family, room / section title (22pt).
         static let title = Font.system(size: 22, weight: .semibold, design: .default)
         /// Body — default family, the regular reading voice (17pt).

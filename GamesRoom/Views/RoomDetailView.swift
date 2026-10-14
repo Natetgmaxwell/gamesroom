@@ -2295,10 +2295,6 @@ private struct WitnessSlot: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
             HStack(spacing: 12) {
-                Image(systemName: Theme.Icon.circleHexagongridFill)
-                    .accessibilityHidden(true)
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.accent)
                 Text(headerTitle)
                     .font(Theme.Typography.title.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -3074,7 +3070,7 @@ private struct SystemBanner: View {
                 HStack(spacing: 10) {
                     Image(systemName: iconFor(event.kind))
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.accent)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(event.kind.displayName)
                             .font(Theme.Typography.body.weight(.semibold))
@@ -3367,19 +3363,9 @@ private struct SeasonHistorySection: View {
     }
 
     private func deltaCluster(_ d: Int64) -> some View {
-        let color: Color = d > 0
-            ? Theme.Palette.accent
-            : (d < 0 ? Theme.Palette.primaryText.opacity(0.6) : Theme.Palette.primaryText.opacity(0.45))
-        let arrow: String? = d == 0 ? nil : (d > 0 ? "arrow.up" : "arrow.down")
-        return HStack(spacing: 3) {
-            if let arrowName = arrow {
-                Image(systemName: arrowName)
-                    .font(Theme.Typography.footnote.weight(.semibold))
-            }
-            Text(deltaLabel(d))
-                .font(Theme.Typography.monoCaptionSemibold)
-        }
-        .foregroundStyle(color)
+        Text(deltaLabel(d))
+            .font(Theme.Typography.monoCaption)
+            .foregroundStyle(d > 0 ? Theme.Palette.gain : (d < 0 ? Theme.Palette.loss : Theme.Palette.primaryText.opacity(0.4)))
     }
 
     private func trendColor(for d: Int64) -> Color {
@@ -3396,7 +3382,7 @@ private struct SeasonHistorySection: View {
     }
 
     private func deltaLabel(_ d: Int64) -> String {
-        d >= 0 ? "+\(d)" : "\(d)"
+        d > 0 ? "+\(d)" : (d < 0 ? "−\(-d)" : "0")
     }
 }
 
@@ -3536,7 +3522,7 @@ private struct PackShelfReadOnly: View {
             Image(systemName: pack.iconSystemName)
                 .accessibilityHidden(true)
                 .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.accent)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(pack.displayName)
@@ -3548,8 +3534,8 @@ private struct PackShelfReadOnly: View {
                     .lineLimit(2)
                 if pack.scoringType == .singleWinner || pack.scoringType == .countBased {
                     Text(payoutCaption(for: pack))
-                        .font(Theme.Typography.footnote.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
+                        .font(Theme.Typography.footnote)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         .padding(.top, 2)
                 }
             }
@@ -3933,7 +3919,8 @@ private struct MemberRosterReadOnly: View {
         } label: {
             HStack {
                 Image(systemName: Theme.Icon.person2Fill)
-                    .foregroundStyle(Theme.Palette.accent)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityHidden(true)
                 Text("Invite a friend")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -4001,7 +3988,8 @@ private struct MemberRosterReadOnly: View {
         } label: {
             HStack {
                 Image(systemName: Theme.Icon.person2Fill)
-                    .foregroundStyle(Theme.Palette.accent)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityHidden(true)
                 Text("Invite a friend")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
