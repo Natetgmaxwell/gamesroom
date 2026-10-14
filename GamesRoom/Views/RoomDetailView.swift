@@ -612,7 +612,6 @@ struct RoomDetailView: View {
                     PackShelfReadOnly(room: room)
                         .environmentObject(casinoService)
                 }
-                .sectionCard(.standard)
                 CollapsibleSection(title: "Members", caption: "Everyone with a seat at the table.") {
                     MemberRosterReadOnly(room: room)
                 }
@@ -3524,23 +3523,13 @@ private struct PackShelfReadOnly: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            VStack(spacing: 0) {
-                ForEach(Array(packs.enumerated()), id: \.offset) { idx, pack in
-                    packRow(pack)
-                    if idx != packs.count - 1 {
-                        Divider()
-                            .overlay(Theme.Palette.hairline)
-                            .padding(.horizontal, Theme.Layout.edgePadding)
-                    }
+        VStack(spacing: 0) {
+            ForEach(Array(packs.enumerated()), id: \.offset) { idx, pack in
+                packRow(pack)
+                if idx != packs.count - 1 {
+                    Divider().overlay(Theme.Palette.hairline)
                 }
             }
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(item: Binding<AnyPackType?>(
@@ -3617,8 +3606,7 @@ private struct PackShelfReadOnly: View {
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
             }
         }
-        .padding(.vertical, Theme.Layout.cardInset)
-        .padding(.horizontal, Theme.Layout.edgePadding)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
         .onTapGesture {
             guard isHost else { return }
@@ -4240,15 +4228,13 @@ private struct CollapsibleSection<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
             } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(Theme.Typography.title)
-                            .foregroundStyle(Theme.Palette.primaryText)
+                        SectionTitle(text: title)
                         Text(caption)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
