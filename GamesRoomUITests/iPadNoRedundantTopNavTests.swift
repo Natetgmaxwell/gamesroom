@@ -70,10 +70,10 @@ final class iPadNoRedundantTopNavTests: XCTestCase {
         app.launch()
 
         // Sidebar must populate.
-        let plutoRow = app.staticTexts["Pluto Chess Sundays"]
+        let dealRow = app.staticTexts["Deal Sundays"]
         XCTAssertTrue(
-            plutoRow.waitForExistence(timeout: 10),
-            "Sidebar did not render — 'Pluto Chess Sundays' row never appeared."
+            dealRow.waitForExistence(timeout: 10),
+            "Sidebar did not render — 'Deal Sundays' row never appeared."
         )
 
         // (a) The Rooms / Settings top tab bar is gone.

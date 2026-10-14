@@ -94,13 +94,12 @@ actor InMemoryRoomStore: RoomStore {
     private var roomSystemEvents: [UUID: [RoomSystemEvent]]
 
     /// Default pack set every room starts with when there's no
-    /// explicit override. Matches the V0.8 brief's "all 4 packs
-    /// pre-installed" position.
+    /// explicit override. Every registered pack pre-installed
+    /// (V0.8 brief).
     private static let defaultInstalledPacks: [String] = [
         "casino",
         "cards_against_humanity",
-        "monopoly_deal",
-        "pluto_chess"
+        "monopoly_deal"
     ]
 
     /// M4 — public read accessor for the default. Callers that
@@ -215,9 +214,9 @@ actor InMemoryRoomStore: RoomStore {
             maxSeats: 6,
             memberInviteQuota: 3
         )
-        let pluto = Room(
+        let dealSundays = Room(
             id: UUID(),
-            name: "Pluto Chess Sundays",
+            name: "Deal Sundays",
             mascotName: "Felix",
             mascotPersonality: .friendly,
             mascotPoliticalIdeology: .centrist,
@@ -261,7 +260,7 @@ actor InMemoryRoomStore: RoomStore {
         // This is the room the iPad empty-room content UI test
         // taps to assert the state machine resolves past
         // `.loading` to `.readStandings`. Without it, every
-        // seeded room carries at least a season (Felt / Pluto)
+        // seeded room carries at least a season (Felt / Deal Sundays)
         // or events + leaderboard (Carwoola) so the `.readStandings`
         // branch was unreachable from the test harness.
         let testSandbox = Room(
@@ -361,7 +360,7 @@ actor InMemoryRoomStore: RoomStore {
             )
         ]
 
-        self.rooms = [carwoola, pluto, felt, testSandbox]
+        self.rooms = [carwoola, dealSundays, felt, testSandbox]
         self.events = [carwoola.id: carwoolaEvent]
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
@@ -387,8 +386,8 @@ actor InMemoryRoomStore: RoomStore {
                 roomId: carwoola.id, enabled: false,
                 chipColorMap: [:], standardPresets: true
             ),
-            pluto.id: CasinoConfig(
-                roomId: pluto.id, enabled: false,
+            dealSundays.id: CasinoConfig(
+                roomId: dealSundays.id, enabled: false,
                 chipColorMap: [:], standardPresets: true
             ),
             felt.id: CasinoConfig(
@@ -399,11 +398,11 @@ actor InMemoryRoomStore: RoomStore {
 
         // M1.1 — seed every room with an active season so the
         // V0State resolver has a season to read. Seed two rooms
-        // (pluto + felt) with `status = .ended` to exercise the
+        // (dealSundays + felt) with `status = .ended` to exercise the
         // `.seasonClose` branch on RoomDetailView.
-        let plutoSeason = Season(
+        let dealSundaysSeason = Season(
             id: UUID(),
-            roomId: pluto.id,
+            roomId: dealSundays.id,
             ordinal: 1,
             subtitle: "The Long River",
             status: .ended,
@@ -430,7 +429,7 @@ actor InMemoryRoomStore: RoomStore {
         )
         self.currentSeasons = [
             carwoola.id: carwoolaSeason,
-            pluto.id: plutoSeason,
+            dealSundays.id: dealSundaysSeason,
             felt.id: feltSeason
         ]
 
@@ -443,12 +442,12 @@ actor InMemoryRoomStore: RoomStore {
         let otherMemberId = UUID()
         let hostUserId = carwoola.createdBy
         self.seasonAwards = [
-            plutoSeason.id: [
+            dealSundaysSeason.id: [
                 SeasonAward(
                     id: UUID(),
-                    seasonId: plutoSeason.id,
-                    roomId: pluto.id,
-                    recipientUserId: pluto.createdBy,
+                    seasonId: dealSundaysSeason.id,
+                    roomId: dealSundays.id,
+                    recipientUserId: dealSundays.createdBy,
                     recipientDisplayName: "Felix",
                     awardType: .veteran,
                     caption: "Played every Sunday for 8 weeks.",
@@ -456,8 +455,8 @@ actor InMemoryRoomStore: RoomStore {
                 ),
                 SeasonAward(
                     id: UUID(),
-                    seasonId: plutoSeason.id,
-                    roomId: pluto.id,
+                    seasonId: dealSundaysSeason.id,
+                    roomId: dealSundays.id,
                     recipientUserId: otherMemberId,
                     recipientDisplayName: "Sam",
                     awardType: .drowning,
@@ -496,7 +495,7 @@ actor InMemoryRoomStore: RoomStore {
         // Operations sub-sheet's updateRoomPacks call.
         self.roomPacks = [
             carwoola.id: Self.defaultInstalledPacks,
-            pluto.id: Self.defaultInstalledPacks,
+            dealSundays.id: Self.defaultInstalledPacks,
             felt.id: Self.defaultInstalledPacks
         ]
         self.roomSystemEvents = [:]
@@ -716,7 +715,7 @@ actor InMemoryRoomStore: RoomStore {
             // push lands on the ended-season room. Mirror
             // carwoola's leaderboard into felt so the state
             // machine doesn't fall through to `.loading`.
-            rooms = [felt, carwoola, pluto]
+            rooms = [felt, carwoola, dealSundays]
             leaderboards[felt.id] = leaderboards[carwoola.id]
 
         case "empty":

@@ -48,19 +48,19 @@ final class iPadSidebarRoomTapTests: XCTestCase {
     ///   1. Launches the app on an iPad simulator with the
     ///      `-screenshots-bypass-auth` flag (DEBUG-only), which
     ///      swaps the live Supabase store for `InMemoryRoomStore`
-    ///      (4 seeded rooms: Carwoola Crew, Pluto Chess Sundays,
+    ///      (4 seeded rooms: Carwoola Crew, Deal Sundays,
     ///      Felt Faction, Friday Night Hold'em).
     ///   2. Waits for the sidebar to be populated.
-    ///   3. **Synthesizes a real tap** on the "Pluto Chess Sundays"
+    ///   3. **Synthesizes a real tap** on the "Deal Sundays"
     ///      row — same gesture a user's finger would generate.
-    ///   4. Asserts the detail pane's nav bar shows "Pluto Chess
+    ///   4. Asserts the detail pane's nav bar shows "Deal
     ///      Sundays" — proves the sidebar tap drove selection,
     ///      which drove the detail render.
     ///   5. **Synthesizes a second tap** on a DIFFERENT room
     ///      ("Felt Faction") — proves the sidebar selection can
     ///      switch, not just initially select.
     ///   6. Asserts the detail pane switched to "Felt Faction" and
-    ///      Pluto is no longer the active detail.
+    ///      Deal Sundays is no longer the active detail.
     func test_sidebarTapDrivesDetailPaneAndSecondTapSwitches() throws {
         let app = XCUIApplication()
         app.launchArguments += [
@@ -79,29 +79,29 @@ final class iPadSidebarRoomTapTests: XCTestCase {
         // InMemoryRoomStore.swift:197+ — names are literal strings
         // and not localized, so XCUIApplication.staticTexts matches
         // them exactly).
-        let plutoRow = app.staticTexts["Pluto Chess Sundays"]
+        let dealRow = app.staticTexts["Deal Sundays"]
         let feltRow = app.staticTexts["Felt Faction"]
 
         // Wait for the sidebar to populate. The bypass store seeds
         // synchronously, but the sidebar still has to render
         // after RoomPage's .task fetches them into roomService.rooms.
         XCTAssertTrue(
-            plutoRow.waitForExistence(timeout: 10),
-            "Sidebar did not render — 'Pluto Chess Sundays' row never appeared. " +
+            dealRow.waitForExistence(timeout: 10),
+            "Sidebar did not render — 'Deal Sundays' row never appeared. " +
             "Bypass-auth or InMemoryRoomStore may be broken; check launch args."
         )
 
-        // FIRST TAP — real synthesized tap on Pluto Chess Sundays.
-        plutoRow.tap()
+        // FIRST TAP — real synthesized tap on Deal Sundays.
+        dealRow.tap()
 
-        // Assert the detail pane now shows Pluto. RoomDetailView
+        // Assert the detail pane now shows Deal Sundays. RoomDetailView
         // renders `.navigationTitle(liveRoom.name)` (RoomDetailView.swift:284),
         // so the title appears as a nav-bar element. Allow a few
         // seconds for the detail view to render.
-        let plutoDetail = app.navigationBars["Pluto Chess Sundays"]
+        let dealDetail = app.navigationBars["Deal Sundays"]
         XCTAssertTrue(
-            plutoDetail.waitForExistence(timeout: 5),
-            "Detail pane did not show 'Pluto Chess Sundays' after sidebar tap. " +
+            dealDetail.waitForExistence(timeout: 5),
+            "Detail pane did not show 'Deal Sundays' after sidebar tap. " +
             "The iPad sidebar tap regression is STILL present — selectedRoom " +
             "was not driven by the row tap."
         )
@@ -110,7 +110,7 @@ final class iPadSidebarRoomTapTests: XCTestCase {
         // If the detail was driven by something OTHER than
         // List(selection:) (e.g. a stale NavigationLink state), this
         // assertion will fail because the detail pane will remain on
-        // Pluto even after tapping Felt.
+        // Deal Sundays even after tapping Felt.
         feltRow.tap()
 
         let feltDetail = app.navigationBars["Felt Faction"]
@@ -124,8 +124,8 @@ final class iPadSidebarRoomTapTests: XCTestCase {
         // current detail — guards against a regression where both
         // rooms appear simultaneously or stale nav state lingers.
         XCTAssertFalse(
-            app.navigationBars["Pluto Chess Sundays"].exists,
-            "Detail pane still shows 'Pluto Chess Sundays' after tapping Felt Faction."
+            app.navigationBars["Deal Sundays"].exists,
+            "Detail pane still shows 'Deal Sundays' after tapping Felt Faction."
         )
     }
 }
