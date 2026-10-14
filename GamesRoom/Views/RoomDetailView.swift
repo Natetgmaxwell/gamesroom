@@ -598,7 +598,6 @@ struct RoomDetailView: View {
                         rounds: roomService.cachedEventRounds(eventId: event.id),
                         members: roomService.cachedMembers(roomId: room.id)
                     )
-                    .sectionCard(.standard)
                 }
                 // W-05 — previous-seasons comparison (US-10).
                 // Renders only when the room has ended seasons; the
@@ -3306,11 +3305,8 @@ private struct RoundBreakdownSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Round history")
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
-
+        VStack(alignment: .leading, spacing: 0) {
+            SectionTitle(text: "Round history")
             ForEach(rounds) { round in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -3336,7 +3332,7 @@ private struct RoundBreakdownSection: View {
                         }
                     }
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, 10)
                 if round.id != rounds.last?.id {
                     Divider().overlay(Theme.Palette.hairline)
                 }
