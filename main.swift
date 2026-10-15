@@ -1902,32 +1902,70 @@ runner.run("SeasonGrid.relativeLabel reads nights as days, weeks, months") {
     runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-86_400 * 100), now: now), "3mo ago")
 }
 
-runner.run("SeasonGrid winner, intensity and cell sentences") {
+runner.run("SeasonGrid tap sentences read the verbatim numbers") {
     let grid = SeasonGrid(rows: [
         gridRow(1, 0, 1, "Ana", -50), gridRow(1, 0, 2, "Ben", 300),
-        gridRow(2, 7, 1, "Ana", 400), gridRow(2, 7, 2, "Ben", 20),
-        gridRow(3, 14, 1, "Ana", 100), gridRow(3, 14, 2, "Ben", 100)
+        gridRow(2, 7, 1, "Ana", 400), gridRow(2, 7, 2, "Ben", 20)
     ])
     let ana = grid.members.first { $0.name == "Ana" }!.id
-    let ben = grid.members.first { $0.name == "Ben" }!.id
-    runner.assertEqual(grid.winner(of: grid.nights[0].id), ben)
-    runner.assertEqual(grid.winner(of: grid.nights[1].id), ana)
-    runner.assertNil(grid.winner(of: grid.nights[2].id), "tie has no winner")
-    runner.assertEqual(grid.maxMagnitude, 400)
-    runner.assertEqual(grid.intensity(400), 1.0)
-    runner.assertEqual(grid.intensity(-200), 0.5)
-    runner.assertEqual(grid.intensity(10), 0.18)
-    runner.assertEqual(grid.intensity(0), 0.0)
     let now = Date(timeIntervalSince1970: 1_800_000_000 + 21 * 86_400)
     runner.assertEqual(grid.runningTotal(member: ana, through: grid.nights[1].id), 350)
     runner.assertEqual(grid.cellSentence(night: grid.nights[1].id, member: ana, now: now), "Ana, 2w ago: +400. 350 so far.")
     runner.assertEqual(grid.cellSentence(night: grid.nights[0].id, member: ana, now: now), "Ana, 3w ago: \u{2212}50. \u{2212}50 so far.")
-    let decided = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(1, 0, 2, "Ben", 5), gridRow(2, 7, 1, "Ana", 30)])
-    runner.assertEqual(decided.summarySentence(now: now), "Two nights. Ana won the most nights, two. Biggest night: Ana, +30, 2w ago.")
     let sitOut = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(2, 7, 2, "Ben", 20)])
     let anaId = sitOut.members.first { $0.name == "Ana" }!.id
     runner.assertEqual(sitOut.cellSentence(night: sitOut.nights[1].id, member: anaId, now: now), "Ana sat out, 2w ago.")
-    runner.assertEqual(grid.summarySentence(now: now), "Three nights. Biggest night: Ana, +400, 2w ago.")
+}
+
+runner.run("SeasonGrid strips run oldest to newest: won, lost, even, gap for sat out") {
+    // Rows arrive newest first to prove the strip sorts by date, not input order.
+    let grid = SeasonGrid(rows: [
+        gridRow(4, 21, 1, "Ana", 0),
+        gridRow(3, 14, 2, "Ben", 90),
+        gridRow(2, 7, 1, "Ana", -40), gridRow(2, 7, 2, "Ben", 40),
+        gridRow(1, 0, 1, "Ana", 250), gridRow(1, 0, 2, "Ben", -250)
+    ])
+    let ana = grid.members.first { $0.name == "Ana" }!.id
+    let ben = grid.members.first { $0.name == "Ben" }!.id
+    runner.assertEqual(grid.strip(for: ana), [.won, .lost, .satOut, .even])
+    runner.assertEqual(grid.strip(for: ben), [.lost, .won, .won, .satOut])
+    runner.assertEqual(grid.strip(for: ana).count, grid.nights.count)
+    runner.assertEqual(grid.mark(night: grid.nights[0].id, member: ana), .won)
+    runner.assertEqual(grid.mark(night: grid.nights[2].id, member: ana), .satOut)
+    runner.assertEqual(grid.mark(night: grid.nights[3].id, member: ana), .even)
+    runner.assertEqual(grid.strip(for: UUID()), [.satOut, .satOut, .satOut, .satOut])
+}
+
+runner.run("SeasonGrid row sentences read a member's strip for VoiceOver") {
+    let grid = SeasonGrid(rows: [
+        gridRow(1, 0, 1, "Sam", 300), gridRow(2, 7, 1, "Sam", -60), gridRow(3, 14, 1, "Sam", 250),
+        gridRow(1, 0, 2, "Kim", -120), gridRow(4, 21, 2, "Kim", 0),
+        gridRow(4, 21, 1, "Sam", 0)
+    ])
+    let sam = grid.members.first { $0.name == "Sam" }!.id
+    let kim = grid.members.first { $0.name == "Kim" }!.id
+    runner.assertEqual(grid.rowSentence(member: sam), "Sam: 2 nights won, 1 lost, 1 even, 490 total.")
+    runner.assertEqual(grid.rowSentence(member: kim), "Kim: 0 nights won, 1 lost, 1 even, 2 sat out, \u{2212}120 total.")
+    let one = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(2, 7, 2, "Ben", 20)])
+    let ana = one.members.first { $0.name == "Ana" }!.id
+    runner.assertEqual(one.rowSentence(member: ana), "Ana: 1 night won, 0 lost, 1 sat out, 10 total.")
+}
+
+runner.run("SeasonGrid summary names who won the most nights and the biggest night") {
+    let decided = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(1, 0, 2, "Ben", 5), gridRow(2, 7, 1, "Ana", 30)])
+    runner.assertEqual(decided.summarySentence(), "Two nights. Ana won the most nights, two. Biggest night: Ana, +30.")
+    // Won = finished the night up, matching the green marks: Ben's two
+    // small wins out-count Ana's one big night.
+    let counted = SeasonGrid(rows: [
+        gridRow(1, 0, 1, "Ana", 400), gridRow(1, 0, 2, "Ben", 20),
+        gridRow(2, 7, 1, "Ana", -50), gridRow(2, 7, 2, "Ben", 30)
+    ])
+    runner.assertEqual(counted.summarySentence(), "Two nights. Ben won the most nights, two. Biggest night: Ana, +400.")
+    let tied = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(2, 7, 2, "Ben", 20)])
+    runner.assertEqual(tied.summarySentence(), "Two nights. Biggest night: Ben, +20.")
+    let allDown = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", -10)])
+    runner.assertEqual(allDown.summarySentence(), "One night.")
+    runner.assertEqual(SeasonGrid(rows: []).summarySentence(), "No nights scored.")
 }
 
 runner.runAsync("InMemoryRoomStore season grid sums to each member's season totals") {

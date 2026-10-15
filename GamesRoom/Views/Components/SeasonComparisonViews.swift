@@ -8,8 +8,8 @@
 //  the past, accent is now, and the numbers sit beside the bars.
 //  Level 1 (tap a row) is the dual trace: that season night by night
 //  over the season before it as a grey ghost, plus one sentence.
-//  Level 2 ("Every night") is the season grid: a square per night per
-//  member, green for points won, red for points lost, deeper for more.
+//  Level 2 ("Every night") is one row per member with a strip of the
+//  season's nights: green finished up, red down, a gap sat out.
 //
 
 import SwiftUI
@@ -298,7 +298,7 @@ struct SeasonTraceDetail: View {
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint(Text("Shows every member's points, night by night."))
+                .accessibilityHint(Text("Shows every member's nights, won and lost."))
                 .accessibilityIdentifier("season-grid-open")
             }
         }
@@ -411,19 +411,22 @@ struct GridSheetItem: Identifiable {
     let grid: SeasonGrid
 }
 
-/// The season grid (Land-or-Water): one row per night, one column per
-/// member, a square per cell. Green deepens with points won, red with
-/// points lost, a faint square means the member sat out. No axes or
-/// legend; tap a square for its numbers.
+/// The season, one row per member: the Members list idiom (monogram,
+/// name, total on the right) with a strip of the season's nights in
+/// place of the caption, oldest on the left. Green = finished the
+/// night up, red = down, a gap = sat out. Sign only, never size. No
+/// axes, legend or dates; tap a mark for its numbers and date.
 struct SeasonGridSheet: View {
     let title: String
     let grid: SeasonGrid
     let youId: UUID?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selected: Cell?
     private let now = Date()
-    private let markerWidth: CGFloat = 52
+    private let avatarSize: CGFloat = 32
+    private let avatarGap: CGFloat = 12
 
     struct Cell: Hashable {
         let night: UUID
@@ -433,20 +436,17 @@ struct SeasonGridSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(spacing: 4) {
-                        header
-                        ForEach(Array(grid.nights.enumerated()), id: \.element.id) { r, night in
-                            nightRow(r, night)
-                        }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(grid.summarySentence())
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 4)
+                        .accessibilityIdentifier("season-grid-summary")
+                    ForEach(Array(grid.members.enumerated()), id: \.element.id) { r, member in
+                        if r > 0 { Divider().overlay(Theme.Palette.hairline) }
+                        memberRow(r, member)
                     }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityLabel(Text(grid.summarySentence(now: now)))
-                    Text(selected.map { grid.cellSentence(night: $0.night, member: $0.member, now: now) } ?? " ")
-                        .font(Theme.Typography.monoCaption)
-                        .foregroundStyle(Theme.Palette.primaryText)
-                        .accessibilityHidden(selected == nil)
-                        .accessibilityIdentifier("season-grid-detail")
                 }
                 .padding(Theme.Layout.edgePadding)
             }
@@ -461,61 +461,93 @@ struct SeasonGridSheet: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 4) {
-            Color.clear.frame(width: markerWidth, height: 1)
-            ForEach(grid.members) { member in
-                Text(initials(member.name))
-                    .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(Theme.Palette.accent.opacity(member.id == youId ? 0.32 : 0.18)))
-                    .frame(maxWidth: .infinity)
-                    .accessibilityLabel(Text(member.id == youId ? "\(member.name), you" : member.name))
+    private func memberRow(_ r: Int, _ member: SeasonGrid.Member) -> some View {
+        let isYou = member.id == youId
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: avatarGap) {
+                Circle()
+                    .fill(Theme.Palette.accent.opacity(0.18))
+                    .frame(width: avatarSize, height: avatarSize)
+                    .overlay(
+                        Text(initials(member.name))
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.accent)
+                    )
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(member.name)
+                            .font(Theme.Typography.body.weight(isYou ? .semibold : .regular))
+                            .foregroundStyle(Theme.Palette.primaryText)
+                            .lineLimit(1)
+                        if isYou {
+                            Text("you")
+                                .font(Theme.Typography.footnote)
+                                .foregroundStyle(Theme.Palette.accent)
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text(isYou ? "You, " + grid.rowSentence(member: member.id) : grid.rowSentence(member: member.id)))
+                    .accessibilityIdentifier("season-strip-row-\(r)")
+                    strip(r, member)
+                }
+                Spacer(minLength: 8)
+                Text("\(member.total)")
+                    .font(Theme.Typography.mono)
+                    .foregroundStyle(Theme.Palette.primaryText)
+                    .frame(minWidth: 72, alignment: .trailing)
+                    .accessibilityHidden(true)
+            }
+            if let selected, selected.member == member.id {
+                Text(grid.cellSentence(night: selected.night, member: selected.member, now: now))
+                    .font(Theme.Typography.monoCaption)
+                    .foregroundStyle(Theme.Palette.primaryText)
+                    .padding(.leading, avatarSize + avatarGap)
+                    .transition(.opacity)
+                    .accessibilityIdentifier("season-grid-detail")
             }
         }
-        .padding(.bottom, 4)
+        .padding(.vertical, 12)
     }
 
-    private func nightRow(_ r: Int, _ night: SeasonGrid.Night) -> some View {
-        HStack(spacing: 4) {
-            Text(marker(r))
-                .font(Theme.Typography.monoFootnote)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.5))
-                .frame(width: markerWidth, alignment: .leading)
-                .accessibilityHidden(true)
-            ForEach(Array(grid.members.enumerated()), id: \.element.id) { c, member in
+    /// One mark per night, oldest first. Marks shrink to fit long
+    /// seasons; the tap target stays a full row tall.
+    private func strip(_ r: Int, _ member: SeasonGrid.Member) -> some View {
+        HStack(spacing: 3) {
+            ForEach(Array(grid.nights.enumerated()), id: \.element.id) { c, night in
                 let cell = Cell(night: night.id, member: member.id)
-                Button { selected = selected == cell ? nil : cell } label: {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(fill(grid.points(night: night.id, member: member.id)))
+                Button { select(cell) } label: {
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(fill(grid.mark(night: night.id, member: member.id)))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: 2.5)
                                 .stroke(Theme.Palette.primaryText, lineWidth: selected == cell ? 1.5 : 0)
                         )
-                        .frame(height: 30)
-                        .frame(maxWidth: .infinity)
+                        .frame(minWidth: 4, maxWidth: 10)
+                        .frame(height: 14)
+                        .frame(height: 26)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(grid.cellSentence(night: night.id, member: member.id, now: now)))
-                .accessibilityIdentifier("season-grid-cell-\(r)-\(c)")
+                .accessibilityIdentifier("season-grid-mark-\(r)-\(c)")
             }
         }
     }
 
-    /// "3w ago", left blank when the night above already says it, so
-    /// two nights in one week read as a pair rather than a repeat.
-    private func marker(_ r: Int) -> String {
-        let label = SeasonGrid.relativeLabel(grid.nights[r].playedAt, now: now)
-        guard r > 0 else { return label }
-        return SeasonGrid.relativeLabel(grid.nights[r - 1].playedAt, now: now) == label ? "" : label
+    private func select(_ cell: Cell) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+            selected = selected == cell ? nil : cell
+        }
     }
 
-    private func fill(_ points: Int64?) -> Color {
-        guard let points else { return Theme.Palette.primaryText.opacity(0.04) }
-        if points == 0 { return Theme.Palette.primaryText.opacity(0.12) }
-        let tint = points > 0 ? Theme.Palette.gain : Theme.Palette.loss
-        return tint.opacity(grid.intensity(points))
+    private func fill(_ mark: SeasonGrid.Mark) -> Color {
+        switch mark {
+        case .won: return Theme.Palette.gain
+        case .lost: return Theme.Palette.loss
+        case .even: return Theme.Palette.primaryText.opacity(0.3)
+        case .satOut: return .clear
+        }
     }
 
     private func initials(_ name: String) -> String {

@@ -26,9 +26,9 @@ struct SeasonGridRow: Codable, Hashable {
     }
 }
 
-/// The season as a nights x members matrix. Nights run oldest first;
-/// members run by season total, highest first. A missing cell means
-/// the member did not play that night (distinct from scoring 0).
+/// The season as nights x members. Nights run oldest first; members
+/// run by season total, highest first. A missing cell means the member
+/// did not play that night (distinct from scoring 0).
 struct SeasonGrid: Hashable {
     struct Night: Hashable, Identifiable {
         let id: UUID
@@ -71,18 +71,20 @@ struct SeasonGrid: Hashable {
         cells[night]?[member]
     }
 
-    /// Largest single-night magnitude in the season. Every cell's
-    /// colour intensity is read against this, so the grid's darkest
-    /// green is the season's best night.
-    var maxMagnitude: Int64 {
-        max(cells.values.flatMap { $0.values }.map { abs($0) }.max() ?? 0, 1)
+    /// One night in a member's strip. Won and lost are the sign of
+    /// the night, never its size: the sheet draws no magnitude.
+    enum Mark: Hashable {
+        case won, lost, even, satOut
     }
 
-    /// 0...1 colour intensity for a cell. Played cells never drop
-    /// below a floor so a small score still reads as "played".
-    func intensity(_ points: Int64) -> Double {
-        guard points != 0 else { return 0 }
-        return max(0.18, min(Double(abs(points)) / Double(maxMagnitude), 1))
+    func mark(night: UUID, member: UUID) -> Mark {
+        guard let p = points(night: night, member: member) else { return .satOut }
+        return p > 0 ? .won : (p < 0 ? .lost : .even)
+    }
+
+    /// One mark per season night, oldest first.
+    func strip(for member: UUID) -> [Mark] {
+        nights.map { mark(night: $0.id, member: member) }
     }
 
     /// The member's running total after each night they played,
@@ -106,17 +108,10 @@ struct SeasonGrid: Hashable {
         return running
     }
 
-    /// The member with the night's top score, nil on a tie or an
-    /// empty night.
-    func winner(of night: UUID) -> UUID? {
-        guard let row = cells[night], let best = row.values.max() else { return nil }
-        let top = row.filter { $0.value == best }
-        return top.count == 1 ? top.first?.key : nil
-    }
+    // MARK: Level 2 — words for the strips
 
-    // MARK: Level 2 — words for the grid
-
-    /// Row marker for a night: "today", "5d ago", "3w ago", "4mo ago".
+    /// When a night was, as said in a tap sentence: "today", "5d ago",
+    /// "3w ago", "4mo ago".
     static func relativeLabel(_ date: Date, now: Date) -> String {
         let days = Int((now.timeIntervalSince(date) / 86_400).rounded(.down))
         if days < 1 { return "today" }
@@ -125,7 +120,7 @@ struct SeasonGrid: Hashable {
         return "\(days / 30)mo ago"
     }
 
-    /// The verbatim numbers under one square.
+    /// The verbatim numbers under one mark.
     func cellSentence(night: UUID, member: UUID, now: Date) -> String {
         let name = members.first { $0.id == member }?.name ?? "Member"
         let when = nights.first { $0.id == night }.map { Self.relativeLabel($0.playedAt, now: now) } ?? ""
@@ -133,34 +128,52 @@ struct SeasonGrid: Hashable {
             return "\(name) sat out, \(when)."
         }
         let running = runningTotal(member: member, through: night)
-        let so = running < 0 ? "\u{2212}\(-running)" : "\(running)"
-        return "\(name), \(when): \(SeasonComparison.signed(p)). \(so) so far."
+        return "\(name), \(when): \(SeasonComparison.signed(p)). \(Self.plain(running)) so far."
     }
 
-    /// What VoiceOver hears before the squares: the season's shape
-    /// in one or two sentences.
-    func summarySentence(now: Date) -> String {
+    /// One member's row as VoiceOver hears it:
+    /// "Sam: 4 nights won, 2 lost, 2 sat out, 490 total."
+    func rowSentence(member: UUID) -> String {
+        let name = members.first { $0.id == member }?.name ?? "Member"
+        let total = members.first { $0.id == member }?.total ?? 0
+        let marks = strip(for: member)
+        let won = marks.filter { $0 == .won }.count
+        var parts = ["\(won) \(won == 1 ? "night" : "nights") won", "\(marks.filter { $0 == .lost }.count) lost"]
+        let even = marks.filter { $0 == .even }.count
+        if even > 0 { parts.append("\(even) even") }
+        let out = marks.filter { $0 == .satOut }.count
+        if out > 0 { parts.append("\(out) sat out") }
+        parts.append("\(Self.plain(total)) total")
+        return "\(name): \(parts.joined(separator: ", "))."
+    }
+
+    /// The line above the strips. "Won the most nights" counts the
+    /// same green marks the strips show (nights finished up).
+    func summarySentence() -> String {
         guard !nights.isEmpty else { return "No nights scored." }
-        var wins: [UUID: Int] = [:]
-        for night in nights { if let w = winner(of: night.id) { wins[w, default: 0] += 1 } }
         var parts = ["\(SeasonComparison.nightsPhrase(nights.count).capitalizedFirst)."]
-        if let most = wins.values.max(),
-           let top = wins.filter({ $0.value == most }).map(\.key).onlyElement,
-           let name = members.first(where: { $0.id == top })?.name {
-            parts.append("\(name) won the most nights, \(SeasonComparison.number(most)).")
+        let wins = members.map { m in (m, strip(for: m.id).filter { $0 == .won }.count) }
+        if let most = wins.map(\.1).max(), most > 0,
+           let top = wins.filter({ $0.1 == most }).onlyElement {
+            parts.append("\(top.0.name) won the most nights, \(SeasonComparison.number(most)).")
         }
-        var best: (night: Night, member: Member, points: Int64)?
+        var best: (member: Member, points: Int64)?
         for night in nights {
             for member in members {
                 if let p = points(night: night.id, member: member.id), p > (best?.points ?? 0) {
-                    best = (night, member, p)
+                    best = (member, p)
                 }
             }
         }
         if let best {
-            parts.append("Biggest night: \(best.member.name), \(SeasonComparison.signed(best.points)), \(Self.relativeLabel(best.night.playedAt, now: now)).")
+            parts.append("Biggest night: \(best.member.name), \(SeasonComparison.signed(best.points)).")
         }
         return parts.joined(separator: " ")
+    }
+
+    /// A total with a true minus sign and no plus: "490", "−120".
+    private static func plain(_ value: Int64) -> String {
+        value < 0 ? "\u{2212}\(-value)" : "\(value)"
     }
 }
 
