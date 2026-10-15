@@ -62,6 +62,7 @@
 		67DD05EFAE265E6B9F60CB72 /* MascotBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24840003109847AD0F18AE3 /* MascotBubble.swift */; };
 		680AE2DBB849A9F923A3BAEA /* WorkingHand.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8548682BE45B0CD1E9B2EFB /* WorkingHand.swift */; };
 		6DC1C4866041FE4D08ED34B5 /* RoomPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32699BBEEDE931CAE5E51D1E /* RoomPage.swift */; };
+		6E1F59473E8DADE22BC5637E /* MembersInvitePlusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EFF71784E0ABD864651960A /* MembersInvitePlusTests.swift */; };
 		6ECE49E7329406AC09470D60 /* DetectionSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92DDB488F83ED604AC31AFA3 /* DetectionSource.swift */; };
 		729ACEC8EE8B55A210DABBF6 /* Fraunces-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 25607FC68430408C8695DECA /* Fraunces-Regular.ttf */; };
 		7B6CB87A6B7B0C30F3E66600 /* QuestionBoxAcceptanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C4EBA135E9BB760C54F40FF /* QuestionBoxAcceptanceTests.swift */; };
@@ -240,6 +241,7 @@
 		5E6F4B6D4039A7D0882DC7B8 /* SeasonAward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonAward.swift; sourceTree = "<group>"; };
 		5ECB5C43D9481C6990EDEDCE /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		5EEBAD7E6C6F297D35AE7B03 /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
+		5EFF71784E0ABD864651960A /* MembersInvitePlusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersInvitePlusTests.swift; sourceTree = "<group>"; };
 		5FF5C97BAFCB7924A8728FAC /* iPadNoRedundantTopNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadNoRedundantTopNavTests.swift; sourceTree = "<group>"; };
 		653B6DBC86EC4BEDD0BDEDBE /* Event.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Event.swift; sourceTree = "<group>"; };
 		683977B0D2ACAE5513D5FCCF /* ScoreLiveActivityDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreLiveActivityDriver.swift; sourceTree = "<group>"; };
@@ -472,6 +474,7 @@
 				27B2A99692D042DBDE8F5CE2 /* iPadEmptyRoomContentTests.swift */,
 				5FF5C97BAFCB7924A8728FAC /* iPadNoRedundantTopNavTests.swift */,
 				F14A563A8B026C6F8944FEFF /* iPadSidebarRoomTapTests.swift */,
+				5EFF71784E0ABD864651960A /* MembersInvitePlusTests.swift */,
 				9C4EBA135E9BB760C54F40FF /* QuestionBoxAcceptanceTests.swift */,
 				328563890E641CC54F3D6E3C /* SettledMakeACallTests.swift */,
 			);
@@ -766,6 +769,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6E1F59473E8DADE22BC5637E /* MembersInvitePlusTests.swift in Sources */,
 				7B6CB87A6B7B0C30F3E66600 /* QuestionBoxAcceptanceTests.swift in Sources */,
 				47F3C3DFF3A3277DF7298338 /* SettledMakeACallTests.swift in Sources */,
 				050BEBDD40916C58E72BA5CC /* iPadEmptyRoomContentTests.swift in Sources */,

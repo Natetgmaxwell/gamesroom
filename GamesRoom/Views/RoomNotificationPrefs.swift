@@ -66,15 +66,9 @@ struct RoomNotifPromptCard: View {
                 }
             }
         }
-        .padding(Theme.Layout.cardInset)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Theme.Palette.hairline, lineWidth: 1)
-                )
-        )
+        // v1.2.1 — flat, like every other room-page section. The boxed
+        // card floated between flat sections with uneven air around it.
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -61,6 +61,7 @@ struct RoomDetailView: View {
     /// V0.79 — flips when the one-time notif prompt is answered so
     /// SwiftUI re-renders the card away (UserDefaults isn't observed).
     @State private var notifPromptDismissed: Bool = false
+    @State private var packsExpanded = false
     // V0.84 C5 — flips when the one-line drop is dismissed locally
     // so SwiftUI re-renders the prompt away (UserDefaults isn't
     // observed directly). The underlying dismissal flag is stored
@@ -491,7 +492,7 @@ struct RoomDetailView: View {
     // branch on `showScoringDashboard` (iPad host scoring surface).
     private var scrollBody: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
+            VStack(alignment: .leading, spacing: Theme.Layout.roomSectionGap) {
                 activeSlot
                     .frame(maxWidth: .infinity)
                 // V0.106 — Question Box live driver + host fallback.
@@ -613,13 +614,15 @@ struct RoomDetailView: View {
                         } ?? []
                     )
                 }
-                CollapsibleSection(title: "Packs", caption: "Games-night rules your room is set up for.") {
+                CollapsibleSection(
+                    title: "Packs",
+                    caption: "Games-night rules your room is set up for.",
+                    isExpanded: $packsExpanded
+                ) {
                     PackShelfReadOnly(room: room)
                         .environmentObject(casinoService)
                 }
-                CollapsibleSection(title: "Members", caption: "Everyone with a seat at the table.") {
-                    MemberRosterReadOnly(room: room)
-                }
+                MembersSection(room: room)
                 MascotFooterCaption(
                     room: liveRoom,
                     activeEvent: activeEvent,
@@ -632,6 +635,9 @@ struct RoomDetailView: View {
             .padding(.horizontal, Theme.Layout.edgePadding)
             .padding(.vertical, Theme.Layout.sectionSpacing)
         }
+        // Dense text scrolls under the glass toolbar; the default soft
+        // edge left it legible behind the room pill and buttons.
+        .scrollEdgeEffectStyle(.hard, for: .top)
     }
 
     // MARK: - State resolution
@@ -2652,10 +2658,6 @@ private struct CeremonialCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
-        // Bottom safe-area: clears the iOS tab bar (~49pt) plus the
-        // home-indicator inset (~31pt on iPhone 6.9). Without this
-        // the Tonight's Star block gets clipped behind the tab bar.
-        .padding(.bottom, 80)
         // M2.5 — state-driven hero wash. The CeremonialCard
         // (.justSettled) is always the active slot in its V0State,
         // so .hero is correct here. The hard-coded `.hero` on
@@ -3216,6 +3218,7 @@ private struct StandingsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionTitle(text: "Standings")
+                .padding(.bottom, Theme.Layout.roomHeaderGap)
             ForEach(Array(entries.enumerated()), id: \.element.id) { idx, entry in
                 if idx > 0 { Divider().overlay(Theme.Palette.hairline) }
                 LeaderboardRow(
@@ -3265,6 +3268,7 @@ private struct RoundBreakdownSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionTitle(text: "Round history")
+                .padding(.bottom, Theme.Layout.roomHeaderGap)
             ForEach(rounds) { round in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -3290,7 +3294,7 @@ private struct RoundBreakdownSection: View {
                         }
                     }
                 }
-                .padding(.vertical, 10)
+                .padding(.vertical, Theme.Layout.roomRowInset)
                 if round.id != rounds.last?.id {
                     Divider().overlay(Theme.Palette.hairline)
                 }
@@ -3412,7 +3416,8 @@ private struct PackShelfReadOnly: View {
                 Text(pack.description)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
+                    .fixedSize(horizontal: false, vertical: true)
                 if pack.scoringType == .singleWinner || pack.scoringType == .countBased {
                     Text(payoutCaption(for: pack))
                         .font(Theme.Typography.footnote)
@@ -3427,7 +3432,7 @@ private struct PackShelfReadOnly: View {
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
             }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, Theme.Layout.roomRowInset)
         .contentShape(Rectangle())
         .onTapGesture {
             guard isHost else { return }
@@ -3646,8 +3651,8 @@ private struct MemberRosterReadOnly: View {
     @EnvironmentObject private var authService: AuthService
 
     /// V0.55 — the freshly-minted invite code, shown for the host /
-    /// member to share. `nil` until "Invite a friend" is tapped.
-    @State private var inviteCode: String?
+    /// member to share. `nil` until the Members plus is tapped.
+    @Binding var inviteCode: String?
     /// V0.55 — the invitee picked for a tier-3 scoped code. `nil`
     /// until the member picks a co-member from their other rooms.
     @State private var inviteeUserId: UUID?
@@ -3668,14 +3673,16 @@ private struct MemberRosterReadOnly: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            inviteSection
-            Divider().overlay(Theme.Palette.hairline)
+            if hasInviteContent {
+                inviteSection
+                Divider().overlay(Theme.Palette.hairline)
+            }
             let members = roomService.cachedMembers(roomId: room.id)
             if members.isEmpty {
                 Text("No members yet — share your join code to get the table set.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .padding(.vertical, Theme.Layout.cardInset)
+                    .padding(.vertical, Theme.Layout.roomRowInset)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(members.enumerated()), id: \.element.id) { idx, member in
@@ -3703,10 +3710,21 @@ private struct MemberRosterReadOnly: View {
         }
     }
 
-    /// V0.55 — the invite affordance on the roster. Host sees
-    /// "Invite a friend" (tier 1 host code) + the tier-2 approval
-    /// queue (one-tap remove). Member sees "Invite a friend" (tier 2,
-    /// quota-limited) + a tier-3 invitee-scoped code field.
+    /// Whether anything sits above the roster: a reward, a minted
+    /// code, the host's tier-2 queue or the member's tier-3 field.
+    private var hasInviteContent: Bool {
+        if let rewards = inviteRewards, rewards.friendsJoined > 0 { return true }
+        if inviteCode != nil { return true }
+        if isHost {
+            return roomService.cachedMembers(roomId: room.id).contains { $0.inviteTier == 2 }
+        }
+        return !otherRoomMembers().isEmpty
+    }
+
+    /// V0.55 — the invite affordance on the roster. The mint itself
+    /// is the Members header plus (v1.2.1). Host sees the tier-2
+    /// approval queue (one-tap remove); member sees a tier-3
+    /// invitee-scoped code field.
     @ViewBuilder
     private var inviteSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -3753,10 +3771,8 @@ private struct MemberRosterReadOnly: View {
             }
 
             if isHost {
-                hostInviteRow
                 tierTwoApprovalQueue
             } else {
-                memberInviteRow
                 tierThreeInviteField
             }
         }
@@ -3783,33 +3799,6 @@ private struct MemberRosterReadOnly: View {
             Spacer()
         }
         .padding(.vertical, 12)
-    }
-
-    /// V0.55 — host "Invite a friend" row. Generates a tier-1 host
-    /// code.
-    private var hostInviteRow: some View {
-        Button {
-            Task {
-                do {
-                    inviteCode = try await roomService.generateInviteCode(roomId: room.id, inviteeUserId: nil)
-                } catch {
-                    inviteError = error.localizedDescription
-                    showInviteError = true
-                }
-            }
-        } label: {
-            HStack {
-                Image(systemName: Theme.Icon.person2Fill)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .accessibilityHidden(true)
-                Text("Invite a friend")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Spacer()
-            }
-            .padding(.vertical, 12)
-        }
-        .buttonStyle(.plain)
     }
 
     /// V0.55 — host tier-2 approval queue. Lists recent tier-2
@@ -3852,33 +3841,6 @@ private struct MemberRosterReadOnly: View {
             }
             .padding(.vertical, 12)
         }
-    }
-
-    /// V0.55 — member "Invite a friend" row. Generates a tier-2
-    /// member code (quota-limited per migration 007).
-    private var memberInviteRow: some View {
-        Button {
-            Task {
-                do {
-                    inviteCode = try await roomService.generateInviteCode(roomId: room.id, inviteeUserId: nil)
-                } catch {
-                    inviteError = error.localizedDescription
-                    showInviteError = true
-                }
-            }
-        } label: {
-            HStack {
-                Image(systemName: Theme.Icon.person2Fill)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .accessibilityHidden(true)
-                Text("Invite a friend")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Spacer()
-            }
-            .padding(.vertical, 12)
-        }
-        .buttonStyle(.plain)
     }
 
     /// V0.55 — member tier-3 invitee-scoped code field. Picks a
@@ -3981,7 +3943,7 @@ private struct MemberRosterReadOnly: View {
             }
             Spacer(minLength: 8)
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, Theme.Layout.roomRowInset)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(member.displayName), \(member.role == .host ? "host" : "member")"))
     }
@@ -3994,41 +3956,127 @@ private struct MemberRosterReadOnly: View {
 
 // MARK: - Collapsible section (V0.40)
 
-private struct CollapsibleSection<Content: View>: View {
+private struct CollapsibleSection<Content: View, Accessory: View>: View {
     let title: String
     let caption: String
-    @State private var isExpanded: Bool = false
+    @Binding var isExpanded: Bool
+    @ViewBuilder let accessory: Accessory
     @ViewBuilder let content: Content
 
+    init(
+        title: String,
+        caption: String,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder accessory: () -> Accessory = { EmptyView() },
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.caption = caption
+        self._isExpanded = isExpanded
+        self.accessory = accessory()
+        self.content = content()
+    }
+
+    private func toggle() {
+        withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        SectionTitle(text: title)
-                        Text(caption)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+        VStack(alignment: .leading, spacing: Theme.Layout.roomHeaderGap) {
+            // Trailing controls sit on the title's baseline, not
+            // centred on the title + caption block.
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Button(action: toggle) {
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            SectionTitle(text: title)
+                            Text(caption)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        }
+                        Spacer(minLength: 8)
                     }
-                    Spacer()
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(title))
+                .accessibilityHint(Text(isExpanded ? "Tap to collapse." : "Tap to expand."))
+
+                accessory
+
+                Button(action: toggle) {
                     Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
-                        .accessibilityHidden(true)
                         .font(Theme.Typography.footnote)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                        .frame(width: 16)
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(title))
-            .accessibilityHint(Text(isExpanded ? "Tap to collapse." : "Tap to expand."))
 
             if isExpanded {
                 content
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Members section (v1.2.1)
+
+/// Members with the invite as a plus on the header. Owns the minted
+/// code so the plus can open the section and show it in one tap.
+private struct MembersSection: View {
+    let room: Room
+    @EnvironmentObject private var roomService: RoomService
+    @State private var isExpanded = false
+    @State private var inviteCode: String?
+    @State private var inviteError: String?
+    @State private var showInviteError = false
+
+    var body: some View {
+        CollapsibleSection(
+            title: "Members",
+            caption: "Everyone with a seat at the table.",
+            isExpanded: $isExpanded,
+            accessory: {
+                Button(action: invite) {
+                    Image(systemName: Theme.Icon.plus)
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                // Full tap target, but only the glyph's height counts
+                // toward the header so the row stays as tall as Packs.
+                .padding(.vertical, -16)
+                .accessibilityLabel(Text("Invite a friend"))
+                .accessibilityIdentifier("members-invite")
+            }
+        ) {
+            MemberRosterReadOnly(room: room, inviteCode: $inviteCode)
+        }
+        .alert("Invite failed", isPresented: $showInviteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(inviteError ?? "")
+        }
+    }
+
+    /// The pre-1.2.1 "Invite a friend" row's action, unchanged: mint
+    /// a code (tier 1 for the host, tier 2 for a member). Opens the
+    /// section so the code row is on screen.
+    private func invite() {
+        withAnimation(.easeInOut(duration: 0.18)) { isExpanded = true }
+        Task {
+            do {
+                inviteCode = try await roomService.generateInviteCode(roomId: room.id, inviteeUserId: nil)
+            } catch {
+                inviteError = error.localizedDescription
+                showInviteError = true
+            }
+        }
     }
 }
 
@@ -4221,7 +4269,6 @@ private struct MascotFooterCaption: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.top, Theme.Layout.sectionSpacing)
         // V0.70 — the mascot "speaks" when its caption changes.
         // `.id(caption)` forces SwiftUI to treat each new line
         // as a different view so the transition fires; the

@@ -59,6 +59,7 @@ struct SeasonsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionTitle(text: "Seasons")
+                .padding(.bottom, Theme.Layout.roomHeaderGap)
             currentRow
             ForEach(rows) { row in
                 Divider().overlay(Theme.Palette.hairline)
@@ -101,7 +102,7 @@ struct SeasonsSection: View {
                 grown: grown
             )
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, Theme.Layout.roomRowInset)
         .expandableRow(
             enabled: !currentNights.isEmpty,
             isExpanded: expanded == 0,
@@ -152,7 +153,7 @@ struct SeasonsSection: View {
                 grown: grown
             )
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, Theme.Layout.roomRowInset)
         .expandableRow(
             enabled: !row.scoreProgression.isEmpty,
             isExpanded: expanded == row.ordinal,

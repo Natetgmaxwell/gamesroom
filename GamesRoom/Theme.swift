@@ -91,6 +91,18 @@ enum Theme {
         static let edgePadding: CGFloat = 16
         /// Vertical spacing between consecutive sections in a slot.
         static let sectionSpacing: CGFloat = 24
+
+        // Room page vertical rhythm (v1.2.1). Three steps, used
+        // everywhere on the room page so sections breathe evenly:
+        // rows inset 12, a header sits 8 above its first row (20 to
+        // the first row's text), and sections sit 32 apart.
+        /// Gap between consecutive room-page sections.
+        static let roomSectionGap: CGFloat = 32
+        /// Gap between a section header and its first row.
+        static let roomHeaderGap: CGFloat = 8
+        /// Vertical inset inside every list row (above and below,
+        /// hairline between rows).
+        static let roomRowInset: CGFloat = 12
         /// Min width for a host-scoring chip. 160 on iPad (table-distance
         /// tap target), 120 on iPhone.
         static func scoringChipMin(for hSize: UserInterfaceSizeClass?) -> CGFloat {

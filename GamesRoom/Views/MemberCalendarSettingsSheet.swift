@@ -256,15 +256,8 @@ struct CalendarVoiceLineRow: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(Theme.Layout.cardInset)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Theme.Palette.hairline, lineWidth: 1)
-                )
-        )
+        // v1.2.1 — flat, matching the notification ask beside it.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(isPresented: $showSettings) {
             // The settings sheet reads `room` from the briefing
             // context — but the voice line doesn't carry a
