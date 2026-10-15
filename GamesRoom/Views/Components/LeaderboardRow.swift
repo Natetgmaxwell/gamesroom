@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - LeaderboardRow
 //
-// A single row of the standings board. Renders a rank badge (1–N), a member
+// A single row of the standings board. Renders a rank (1–N), a member
 // name, the current season score, last delta, and sessions played. Tapping
 // the row expands it to reveal the trajectory sparkline behind it.
 //
@@ -40,24 +40,14 @@ struct LeaderboardRow: View {
                 .accessibilityHint(Text(isExpanded ? "Tap to collapse trajectory." : "Tap to expand trajectory."))
 
             if isExpanded {
-                Divider().overlay(Theme.Palette.hairline)
                 TrajectorySparkline(values: trajectory)
                     .frame(height: 32)
-                    .padding(.top, Theme.Layout.cardInset)
-                    .padding(.bottom, Theme.Layout.cardInset)
+                    .padding(.vertical, Theme.Layout.cardInset)
                     .accessibilityLabel(Text("Trajectory sparkline for \(name)"))
                     .accessibilityValue(Text(trajectoryAccessibilityDescription))
             }
         }
         .padding(.vertical, 8)
-        .background(isYou ? Theme.Palette.accent.opacity(0.06) : .clear)
-        .overlay(alignment: .leading) {
-            if isYou {
-                Rectangle()
-                    .fill(Theme.Palette.accent)
-                    .frame(width: 2)
-            }
-        }
     }
 
     // MARK: Header subview
@@ -65,67 +55,53 @@ struct LeaderboardRow: View {
     private var header: some View {
         HStack(spacing: 12) {
             rankBadge
-            Text(name)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText)
-                .lineLimit(1)
-            if isRecentlyCorrected {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 8, height: 8)
-                    .accessibilityLabel(Text("Score recently corrected"))
-                    .transition(.opacity.combined(with: .scale))
-            }
-            if isYou {
-                Text("you")
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(name)
+                        .font(Theme.Typography.body.weight(isYou ? .semibold : .regular))
+                        .foregroundStyle(Theme.Palette.primaryText)
+                        .lineLimit(1)
+                    if isRecentlyCorrected {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 8, height: 8)
+                            .accessibilityLabel(Text("Score recently corrected"))
+                            .transition(.opacity.combined(with: .scale))
+                    }
+                    if isYou {
+                        Text("you")
+                            .font(Theme.Typography.footnote)
+                            .foregroundStyle(Theme.Palette.accent)
+                    }
+                }
+                Text("\(sessionsPlayed) sessions")
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.accent)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(Theme.Palette.accent, lineWidth: 0.5)
-                    )
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityHidden(true)
             }
             Spacer(minLength: 8)
             scoreColumn
             chevron
         }
-        .padding(.horizontal, Theme.Layout.cardInset)
     }
 
     private var rankBadge: some View {
         Text("\(rank)")
-            .font(Theme.Typography.footnote)
-            .foregroundStyle(Theme.Palette.primaryText)
-            .frame(width: 24, height: 24)
-            .background(
-                Circle()
-                    .fill(rank == 1 ? Theme.Palette.accent.opacity(0.18) : Theme.Palette.surface)
-            )
-            .overlay(
-                Circle()
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
+            .font(Theme.Typography.monoCaption)
+            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            .frame(width: 24, alignment: .leading)
             .accessibilityLabel(Text("Rank \(rank)"))
     }
 
     private var scoreColumn: some View {
-        VStack(alignment: .trailing, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(deltaLabel)
+                .font(Theme.Typography.monoCaption)
+                .foregroundStyle(deltaColor)
             Text("\(score)")
                 .font(Theme.Typography.mono)
                 .foregroundStyle(Theme.Palette.primaryText)
-            HStack(spacing: 6) {
-                Text(deltaLabel)
-                    .font(Theme.Typography.monoFootnote)
-                    .foregroundStyle(deltaColor)
-                Text("·")
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
-                Text("\(sessionsPlayed) sessions")
-                    .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            }
+                .frame(minWidth: 72, alignment: .trailing)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(score) points, last delta \(deltaLabel), \(sessionsPlayed) sessions"))
@@ -142,13 +118,14 @@ struct LeaderboardRow: View {
     // MARK: Helpers
 
     private var deltaLabel: String {
-        let prefix = lastDelta > 0 ? "+" : ""
-        return "\(prefix)\(lastDelta)"
+        if lastDelta > 0 { return "+\(lastDelta)" }
+        if lastDelta < 0 { return "−\(-lastDelta)" }
+        return "0"
     }
 
     private var deltaColor: Color {
-        if lastDelta > 0 { return Theme.Palette.accent }
-        if lastDelta < 0 { return Theme.Palette.primaryText.opacity(0.55) }
+        if lastDelta > 0 { return Theme.Palette.gain }
+        if lastDelta < 0 { return Theme.Palette.loss }
         return Theme.Palette.primaryText.opacity(0.4)
     }
 

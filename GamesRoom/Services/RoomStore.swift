@@ -518,6 +518,19 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         return rows
     }
 
+    /// `get_season_grid(p_room_id, p_season_id)` (migration 101).
+    /// Until 101 is deployed this throws; the Seasons section then
+    /// keeps level 0 and the past-season traces, which need no grid.
+    func fetchSeasonGrid(roomId: UUID, seasonId: UUID?) async throws -> [SeasonGridRow] {
+        var params = ["p_room_id": roomId.uuidString]
+        if let seasonId { params["p_season_id"] = seasonId.uuidString }
+        let rows: [SeasonGridRow] = try await SupabaseClientProvider.shared
+            .rpc("get_season_grid", params: params)
+            .execute()
+            .value
+        return rows
+    }
+
     // MARK: Room packs (M4)
 
     /// The live RPC `get_room_packs(p_room_id)` (migration 041)

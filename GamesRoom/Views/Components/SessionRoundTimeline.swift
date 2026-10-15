@@ -208,7 +208,7 @@ private struct SessionRoundTimelineRow: View {
         ),
         EventRound(
             id: UUID(), eventId: eventId, roomId: roomId,
-            packSlug: "pluto_chess", roundIndex: 2,
+            packSlug: "monopoly_deal", roundIndex: 2,
             entries: [ScoreEntry(memberId: bob, pointsDelta: -2)],
             createdBy: userId, createdAt: Date(),
             correctionOf: UUID()

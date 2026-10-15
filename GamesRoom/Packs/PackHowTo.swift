@@ -143,24 +143,6 @@ enum PackHowToCatalog {
                     body: "The current model is single-winner. A future version may add multi-winner scoring (e.g. for tournaments) - deferred per the V0.9 roadmap Q-MONOPOLY-MULTIWINNER."
                 )
             ]
-        ),
-        "pluto_chess": PackHowTo(
-            headline: "How to play Pluto Chess",
-            summary: "Chess-variant pack. Winner of the game earns one point on the season score.",
-            sections: [
-                PackHowTo.Section(
-                    title: "Setup",
-                    body: "Use a physical chess board. Pick a colour. The app does not run the game; the board does."
-                ),
-                PackHowTo.Section(
-                    title: "Play",
-                    body: "Standard chess rules apply. The pack supports one game per round; the round's winner is the player who checkmates the opponent."
-                ),
-                PackHowTo.Section(
-                    title: "Score",
-                    body: "Single-winner scoring: the host picks the round's winner from the member list. Draws are recorded as a 0-0 (no winner) and no win-point is awarded."
-                )
-            ]
         )
     ]
 }

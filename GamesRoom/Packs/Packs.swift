@@ -2,7 +2,8 @@
 //  Packs.swift
 //  GamesRoom
 //
-//  Track P0.3 — the four V0.8 pack definitions.
+//  Track P0.3 — the active pack definitions (migration 097
+//  deactivates retired packs server-side).
 //
 //  Each pack is a frozen value-type conforming to `PackDefinition`.
 //  The picker in `AddEventSheet` reads from `PackRegistry.shared`,
@@ -74,21 +75,6 @@ struct MonopolyDealPack: PackDefinition {
     static let displayName = "Monopoly Deal"
     static let description = "Card-based Monopoly. Winner takes the pot."
     static let iconSystemName = "creditcard.fill"
-    static let scoringType: PackScoringType = .singleWinner
-
-    /// One win-point per round.
-    static let winPoints: Int = 1
-}
-
-// MARK: - Pluto Chess
-
-/// V0.8 Pluto Chess pack. `single_winner` scoring type — winner of
-/// the game earns one point.
-struct PlutoChessPack: PackDefinition {
-    static let slug = "pluto_chess"
-    static let displayName = "Pluto Chess"
-    static let description = "Chess-variant pack."
-    static let iconSystemName = "crown.fill"
     static let scoringType: PackScoringType = .singleWinner
 
     /// One win-point per round.

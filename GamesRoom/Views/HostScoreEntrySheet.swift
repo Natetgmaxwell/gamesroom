@@ -6,7 +6,7 @@
 //
 //  Presented from `RoomDetailView`'s at-play slot when the host
 //  wants to record a round for a `single_winner` pack (Monopoly
-//  Deal, Pluto Chess) or the new `count_based` pack (Cards
+//  Deal) or the new `count_based` pack (Cards
 //  Against Humanity). The chip tray shows every member in the
 //  cached roster; tapping a chip selects that member as a
 //  winner, tapping again deselects. Submitting routes through

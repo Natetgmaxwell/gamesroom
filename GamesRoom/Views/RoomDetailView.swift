@@ -555,7 +555,6 @@ struct RoomDetailView: View {
                         entries: leaderboard,
                         currentUserId: currentUserId
                     )
-                    .sectionCard(.standard)
                 }
                 // V0.79 — one-time notification opt-in prompt. Shows
                 // once per room (per device) while opt-in is off;
@@ -599,27 +598,28 @@ struct RoomDetailView: View {
                         rounds: roomService.cachedEventRounds(eventId: event.id),
                         members: roomService.cachedMembers(roomId: room.id)
                     )
-                    .sectionCard(.standard)
                 }
                 // W-05 — previous-seasons comparison (US-10).
                 // Renders only when the room has ended seasons; the
                 // section is member-visible (read surface).
                 if !roomService.cachedSeasonHistory(roomId: room.id).isEmpty {
-                    SeasonHistorySection(
+                    SeasonsSection(
+                        roomId: room.id,
+                        youId: currentUserId,
                         rows: roomService.cachedSeasonHistory(roomId: room.id),
-                        currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0
+                        currentScore: leaderboard.first(where: { $0.userId == currentUserId })?.seasonScore ?? 0,
+                        currentNights: currentUserId.flatMap { me in
+                            roomService.cachedSeasonGrid(roomId: room.id, seasonId: nil)?.cumulative(for: me)
+                        } ?? []
                     )
-                    .sectionCard(.standard)
                 }
                 CollapsibleSection(title: "Packs", caption: "Games-night rules your room is set up for.") {
                     PackShelfReadOnly(room: room)
                         .environmentObject(casinoService)
                 }
-                .sectionCard(.standard)
                 CollapsibleSection(title: "Members", caption: "Everyone with a seat at the table.") {
                     MemberRosterReadOnly(room: room)
                 }
-                .sectionCard(.standard)
                 MascotFooterCaption(
                     room: liveRoom,
                     activeEvent: activeEvent,
@@ -1215,7 +1215,12 @@ struct RoomDetailView: View {
         // every refresh so a host declaring a season-close in
         // another tab surfaces the new ended-season row on the
         // next pull-to-refresh.
-        _ = await roomService.loadSeasonHistory(roomId: room.id, force: force)
+        let history = await roomService.loadSeasonHistory(roomId: room.id, force: force)
+        // v1.2 slice 2c — the active season's grid feeds the
+        // Seasons dual trace. Quiet no-op until migration 101.
+        if !history.isEmpty {
+            await roomService.loadSeasonGrid(roomId: room.id, seasonId: nil, force: force)
+        }
     }
 
     private func loadMembersIfNeeded(force: Bool = false) async {
@@ -1615,7 +1620,7 @@ struct RoomDetailView: View {
     }
 
     /// V0.68 — "Score a round" is only meaningful for single-winner
-    /// packs (Monopoly Deal, Pluto Chess) whose scoring surface is
+    /// packs (Monopoly Deal) whose scoring surface is
     /// `HostScoreEntrySheet`/dashboard. For `.withdrawReturn` (casino)
     /// and `.countBased` (CAH) the primary settle CTA already opens
     /// the same sheet, so the host-only button is gated off there.
@@ -2300,10 +2305,6 @@ private struct WitnessSlot: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
             HStack(spacing: 12) {
-                Image(systemName: Theme.Icon.circleHexagongridFill)
-                    .accessibilityHidden(true)
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.accent)
                 Text(headerTitle)
                     .font(Theme.Typography.title.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -2559,44 +2560,64 @@ private struct CeremonialCard: View {
     let onSubmitMemberNote: ((String) -> Void)?
     let onSkipMemberNote: (() -> Void)?
 
-    /// V0.84 C2 — local UI state for the inline picker. Empty
-    /// string means "no member selected yet"; picker only
-    /// submits when a member is selected.
-    @State private var pickerSelectedMemberId: UUID?
-    @State private var pickerSelectedCategory: TonightStarOverrideCategory = .bestPlay
-    @State private var pickerCustomText: String = ""
+    /// V0.84 C2 — host-only. Presents `TonightStarCallSheet`.
+    @State private var showingCallSheet = false
 
     /// V0.84 C5 — local UI state for the one-line drop text field.
     @State private var memberNoteDraft: String = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Text(chapterLine?.title ?? event.name)
-                .font(Theme.Typography.display)
-                .foregroundStyle(Theme.Palette.primaryText)
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(chapterLine?.title ?? event.name)
+                    .font(Theme.Typography.title)
+                    .foregroundStyle(Theme.Palette.primaryText)
 
-            if let settledAt = event.settledAt {
-                Text("Settled \(settledAt, format: .relative(presentation: .named))")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            }
+                if let settledAt = event.settledAt {
+                    Text("Settled \(settledAt, format: .relative(presentation: .named))")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
 
-            if let teaser = chapterLine?.nextEpisodeTeaser, !teaser.isEmpty {
-                HStack(spacing: 6) {
-                    Text("↳ Next:")
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                    Text(teaser)
+                if let teaser = chapterLine?.nextEpisodeTeaser, !teaser.isEmpty {
+                    Text("Next: \(teaser)")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .padding(.top, 6)
                 }
             }
+            .accessibilityElement(children: .combine)
 
             // V0.84 C2 — Tonight's Star section. Hidden when
             // `tonightStarCard == nil` (no host pick AND no
             // chip-swing winner — matches the 067 empty case).
-            if let card = tonightStarCard {
-                TonightStarSection(card: card)
+            // The host's "Make a call" sits trailing on the same
+            // row and opens the pick-member + reason sheet.
+            HStack(alignment: .lastTextBaseline) {
+                if let card = tonightStarCard {
+                    TonightStarSection(card: card)
+                }
+                if isHost, let onTonightStarPick, !hostPickMembers.isEmpty {
+                    Spacer(minLength: 12)
+                    Button { showingCallSheet = true } label: {
+                        HStack(spacing: 4) {
+                            Text("Make a call")
+                            Image(systemName: Theme.Icon.chevronRight)
+                                .accessibilityHidden(true)
+                        }
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("make-a-call")
+                    .sheet(isPresented: $showingCallSheet) {
+                        TonightStarCallSheet(
+                            members: hostPickMembers,
+                            currentCard: tonightStarCard,
+                            onSave: onTonightStarPick
+                        )
+                    }
+                }
             }
 
             // V0.84 C5 — one-line drop prompt. Member-only, gated on
@@ -2623,33 +2644,11 @@ private struct CeremonialCard: View {
                 )
             }
 
-            // V0.84 C2 — host-only inline picker. Sits below the
-            // member-visible star section. Gated on `isHost` AND a
-            // non-nil `onTonightStarPick` callback (parents don't
-            // wire the callback when the room has no members).
-            if isHost, let onTonightStarPick, !hostPickMembers.isEmpty {
-                HostTonightStarPickerSection(
-                    members: hostPickMembers,
-                    currentCard: tonightStarCard,
-                    selectedMemberId: $pickerSelectedMemberId,
-                    selectedCategory: $pickerSelectedCategory,
-                    customText: $pickerCustomText,
-                    onSave: {
-                        guard let memberId = pickerSelectedMemberId else { return }
-                        let category = pickerSelectedCategory
-                        let text: String?
-                        if category == .custom {
-                            let trimmed = pickerCustomText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !trimmed.isEmpty else { return }
-                            text = trimmed
-                        } else {
-                            text = nil
-                        }
-                        onTonightStarPick(memberId, category, text)
-                    }
-                )
+            if let line = tonightStarCard?.heroFootLine {
+                Text(line)
+                    .font(Theme.Typography.caption.italic())
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
-
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
@@ -2670,30 +2669,26 @@ private struct CeremonialCard: View {
 // MARK: - Tonight's Star section (V0.84 C2)
 
 /// V0.84 C2 — Tonight's Star read section on the ceremonial card.
-/// Renders the winner (display name) + the category line (mascot
-/// voice when the host picked a category; plain "the night's
-/// biggest swing" when the chip-swing fallback is in play). The
-/// `custom_text` from a `.custom` host pick is rendered alongside
-/// (not inside) the mascot line, per the spec.
+/// Renders the winner (display name) plus the host's `custom_text`
+/// when present. The category line (mascot voice, or the plain
+/// chip-swing fallback) sits at the card's foot via `heroFootLine`.
 private struct TonightStarSection: View {
     let card: TonightStarCard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Tonight's Star")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             HStack(spacing: 6) {
                 Image(systemName: "star.fill")
-                    .font(Theme.Typography.body.weight(.semibold))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent)
-                Text("Tonight's Star")
+                    .accessibilityHidden(true)
+                Text(card.memberDisplayName)
                     .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
+                    .foregroundStyle(Theme.Palette.primaryText)
             }
-            Text(card.memberDisplayName)
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
-            Text(categoryLine)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.75))
             if let custom = card.customText, !custom.isEmpty {
                 Text("“\(custom)”")
                     .font(Theme.Typography.body)
@@ -2702,10 +2697,12 @@ private struct TonightStarSection: View {
         }
         .accessibilityElement(children: .combine)
     }
+}
 
-    private var categoryLine: String {
-        if let category = card.overrideCategory {
-            return category.mascotLine(winnerName: card.memberDisplayName)
+private extension TonightStarCard {
+    var heroFootLine: String {
+        if let category = overrideCategory {
+            return category.mascotLine(winnerName: memberDisplayName)
         }
         return "The night's biggest swing."
     }
@@ -2762,126 +2759,85 @@ private struct MemberNotePromptSection: View {
     }
 }
 
-// MARK: - Host Tonight's Star picker (V0.84 C2)
+// MARK: - Tonight's Star call sheet (V0.84 C2 host)
 
-/// V0.84 C2 — host-only inline picker for Tonight's Star. Member
-/// menu + category chips row + custom text field (visible only
-/// when `.custom`, required) + Save. No body header line — the
-/// category chips row is the picker's first affordance.
-private struct HostTonightStarPickerSection: View {
+/// V0.84 C2 — host-only. "Make a call" on the ceremonial card opens
+/// this sheet: pick a member, pick a reason (custom needs a line),
+/// Save. Mirrors `PackPayoutSheet`'s shape (NavigationStack + Form +
+/// Cancel/Save toolbar).
+private struct TonightStarCallSheet: View {
     let members: [Member]
-    let currentCard: TonightStarCard?
-    @Binding var selectedMemberId: UUID?
-    @Binding var selectedCategory: TonightStarOverrideCategory
-    @Binding var customText: String
-    let onSave: () -> Void
+    let onSave: (UUID, TonightStarOverrideCategory, String?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var memberId: UUID?
+    @State private var category: TonightStarOverrideCategory
+    @State private var customText: String
+
+    init(members: [Member], currentCard: TonightStarCard?, onSave: @escaping (UUID, TonightStarOverrideCategory, String?) -> Void) {
+        self.members = members
+        self.onSave = onSave
+        let current = members.first { $0.userId == currentCard?.memberId }
+            ?? members.first { $0.displayName == currentCard?.memberDisplayName }
+        _memberId = State(initialValue: current?.userId)
+        _category = State(initialValue: currentCard?.overrideCategory ?? .bestPlay)
+        _customText = State(initialValue: currentCard?.customText ?? "")
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                ForEach(TonightStarOverrideCategory.allCases, id: \.self) { cat in
-                    Button(action: { selectedCategory = cat }) {
-                        Text(cat.shortLabel)
-                            .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(
-                                selectedCategory == cat
-                                    ? Theme.Palette.background
-                                    : Theme.Palette.primaryText.opacity(0.75)
-                            )
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                selectedCategory == cat
-                                    ? Theme.Palette.accent
-                                    : Theme.Palette.surface
-                            )
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+        NavigationStack {
+            Form {
+                Section("Member") {
+                    Picker("Member", selection: $memberId) {
+                        ForEach(members, id: \.userId) { member in
+                            Text(member.displayName).tag(Optional(member.userId))
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+                Section("Reason") {
+                    Picker("Reason", selection: $category) {
+                        ForEach(TonightStarOverrideCategory.allCases, id: \.self) { cat in
+                            Text(cat.shortLabel).tag(cat)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    if category == .custom {
+                        TextField("Custom line", text: $customText)
+                    }
                 }
             }
-            MemberMenuPicker(
-                members: members,
-                selection: $selectedMemberId
-            )
-            if selectedCategory == .custom {
-                TextField(
-                    "",
-                    text: $customText,
-                    prompt: Text("Custom line")
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
-                )
-                .textFieldStyle(.plain)
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText)
-                .padding(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
-            }
-            Button(action: onSave) {
-                Text("Save the call")
-                    .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSave)
-        }
-        .onAppear {
-            if selectedMemberId == nil {
-                selectedMemberId = currentCard?.memberId ?? members.first?.userId
+            .textCase(nil)
+            .scrollContentBackground(.hidden)
+            .background(Theme.Palette.background)
+            .navigationTitle("Tonight's Star")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(Theme.Palette.primaryText)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        guard let memberId else { return }
+                        onSave(memberId, category, category == .custom ? trimmedCustomText : nil)
+                        dismiss()
+                    }
+                    .disabled(!canSave)
+                }
             }
         }
+        .tint(Theme.Palette.accent)
+    }
+
+    private var trimmedCustomText: String {
+        customText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var canSave: Bool {
-        guard selectedMemberId != nil else { return false }
-        if selectedCategory == .custom {
-            return !customText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        return true
-    }
-}
-
-// MARK: - Member menu picker (V0.84 C2 host)
-
-/// V0.84 C2 — host-only member picker. SwiftUI `Menu` driven by
-/// the room's `Member` roster so the host can re-point Tonight's
-/// Star at any room member, not just the chip-swing default.
-private struct MemberMenuPicker: View {
-    let members: [Member]
-    @Binding var selection: UUID?
-
-    var body: some View {
-        Menu {
-            ForEach(members, id: \.userId) { member in
-                Button(member.displayName) { selection = member.userId }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Text(currentLabel)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Image(systemName: Theme.Icon.chevronDown)
-                    .accessibilityHidden(true)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
-        }
-    }
-
-    private var currentLabel: String {
-        guard let selection,
-              let member = members.first(where: { $0.userId == selection }) else {
-            return "Pick a member"
-        }
-        return member.displayName
+        memberId != nil && (category != .custom || !trimmedCustomText.isEmpty)
     }
 }
 
@@ -3124,7 +3080,7 @@ private struct SystemBanner: View {
                 HStack(spacing: 10) {
                     Image(systemName: iconFor(event.kind))
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.accent)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(event.kind.displayName)
                             .font(Theme.Typography.body.weight(.semibold))
@@ -3240,16 +3196,28 @@ private struct HostWithdrawalsSection: View {
 
 // MARK: - Standings section (always-on, below the slot)
 
+/// Slice 2a (Hearth) — the flat section title: small, grey,
+/// sentence case. Hierarchy comes from type, not a card.
+struct SectionTitle: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(Theme.Typography.caption.weight(.semibold))
+            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 private struct StandingsSection: View {
     let entries: [LeaderboardEntry]
     let currentUserId: UUID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Standings")
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
+        VStack(alignment: .leading, spacing: 0) {
+            SectionTitle(text: "Standings")
             ForEach(Array(entries.enumerated()), id: \.element.id) { idx, entry in
+                if idx > 0 { Divider().overlay(Theme.Palette.hairline) }
                 LeaderboardRow(
                     rank: idx + 1,
                     name: entry.displayName,
@@ -3295,11 +3263,8 @@ private struct RoundBreakdownSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Round history")
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
-
+        VStack(alignment: .leading, spacing: 0) {
+            SectionTitle(text: "Round history")
             ForEach(rounds) { round in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -3325,7 +3290,7 @@ private struct RoundBreakdownSection: View {
                         }
                     }
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, 10)
                 if round.id != rounds.last?.id {
                     Divider().overlay(Theme.Palette.hairline)
                 }
@@ -3336,159 +3301,6 @@ private struct RoundBreakdownSection: View {
 
     private func deltaText(_ delta: Int64) -> String {
         delta >= 0 ? "+\(delta)" : "\(delta)"
-    }
-}
-
-// MARK: - Season history (W-05, US-10)
-
-/// Previous-seasons comparison — the "improving over time" view.
-/// Renders one row per ended season with the caller's total, the
-/// delta vs the active season, and a sparkline of the caller's
-/// intra-season arc. Member-visible read surface; hidden entirely
-/// when the room has no ended seasons.
-private struct SeasonHistorySection: View {
-    let rows: [SeasonHistoryEntry]
-    let currentScore: Int64
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Past seasons")
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
-            Text("Your standing each season — how the current arc compares.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-
-            VStack(spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
-                    seasonRow(row)
-                    if idx != rows.count - 1 {
-                        Divider()
-                            .overlay(Theme.Palette.hairline)
-                            .padding(.horizontal, Theme.Layout.edgePadding)
-                    }
-                }
-            }
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func seasonRow(_ row: SeasonHistoryEntry) -> some View {
-        let d = row.delta(against: currentScore)
-        let primaryText = row.subtitle.isEmpty ? dateRange(row) : row.subtitle
-        let showCaption = !row.subtitle.isEmpty
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(primaryText)
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.primaryText)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if showCaption {
-                        Text(dateRange(row))
-                            .font(Theme.Typography.monoFootnote)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("\(row.callerTotal)")
-                        .font(Theme.Typography.monoSemiboldTitle)
-                        .foregroundStyle(Theme.Palette.primaryText)
-                    deltaCluster(d)
-                }
-                .fixedSize(horizontal: true, vertical: false)
-            }
-            if row.scoreProgression.count >= 2 {
-                TrendSparkline(points: row.scoreProgression, color: trendColor(for: d))
-                    .frame(height: 22)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.vertical, Theme.Layout.cardInset)
-        .padding(.horizontal, Theme.Layout.edgePadding)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            Text("\(primaryText), \(row.callerTotal) points, \(deltaLabel(d)) versus the current season")
-        )
-    }
-
-    private func deltaCluster(_ d: Int64) -> some View {
-        let color: Color = d > 0
-            ? Theme.Palette.accent
-            : (d < 0 ? Theme.Palette.primaryText.opacity(0.6) : Theme.Palette.primaryText.opacity(0.45))
-        let arrow: String? = d == 0 ? nil : (d > 0 ? "arrow.up" : "arrow.down")
-        return HStack(spacing: 3) {
-            if let arrowName = arrow {
-                Image(systemName: arrowName)
-                    .font(Theme.Typography.footnote.weight(.semibold))
-            }
-            Text(deltaLabel(d))
-                .font(Theme.Typography.monoCaptionSemibold)
-        }
-        .foregroundStyle(color)
-    }
-
-    private func trendColor(for d: Int64) -> Color {
-        d > 0
-            ? Theme.Palette.accent
-            : (d < 0 ? Theme.Palette.primaryText.opacity(0.6) : Theme.Palette.primaryText.opacity(0.45))
-    }
-
-    private func dateRange(_ row: SeasonHistoryEntry) -> String {
-        if let ended = row.endedAt {
-            return "\(row.startedAt.formatted(.dateTime.month().day().year())) – \(ended.formatted(.dateTime.month().day().year()))"
-        }
-        return row.startedAt.formatted(date: .abbreviated, time: .omitted)
-    }
-
-    private func deltaLabel(_ d: Int64) -> String {
-        d >= 0 ? "+\(d)" : "\(d)"
-    }
-}
-
-/// Hand-rolled polyline sparkline for `SeasonHistoryEntry.scoreProgression`.
-/// No Swift Charts import — the codebase has zero Charts precedent and
-/// the parse-check environment must keep working.
-private struct TrendSparkline: View {
-    let points: [SeasonScorePoint]
-    let color: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            let totalMin = points.map(\.total).min() ?? 0
-            let totalMax = points.map(\.total).max() ?? 0
-            let range = totalMax - totalMin
-            let denom = max(Double(points.count - 1), 1)
-            let path = Path { p in
-                for (i, point) in points.enumerated() {
-                    let x = geo.size.width * (Double(i) / denom)
-                    let normalized: Double
-                    if range == 0 {
-                        normalized = 0.5
-                    } else {
-                        normalized = Double(point.total - totalMin) / Double(range)
-                    }
-                    let y = geo.size.height * (1 - normalized)
-                    if i == 0 {
-                        p.move(to: CGPoint(x: x, y: y))
-                    } else {
-                        p.addLine(to: CGPoint(x: x, y: y))
-                    }
-                }
-            }
-            path
-                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-        }
-        .accessibilityHidden(true)
     }
 }
 
@@ -3532,23 +3344,13 @@ private struct PackShelfReadOnly: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            VStack(spacing: 0) {
-                ForEach(Array(packs.enumerated()), id: \.offset) { idx, pack in
-                    packRow(pack)
-                    if idx != packs.count - 1 {
-                        Divider()
-                            .overlay(Theme.Palette.hairline)
-                            .padding(.horizontal, Theme.Layout.edgePadding)
-                    }
+        VStack(spacing: 0) {
+            ForEach(Array(packs.enumerated()), id: \.offset) { idx, pack in
+                packRow(pack)
+                if idx != packs.count - 1 {
+                    Divider().overlay(Theme.Palette.hairline)
                 }
             }
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(item: Binding<AnyPackType?>(
@@ -3601,7 +3403,7 @@ private struct PackShelfReadOnly: View {
             Image(systemName: pack.iconSystemName)
                 .accessibilityHidden(true)
                 .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.accent)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(pack.displayName)
@@ -3613,8 +3415,8 @@ private struct PackShelfReadOnly: View {
                     .lineLimit(2)
                 if pack.scoringType == .singleWinner || pack.scoringType == .countBased {
                     Text(payoutCaption(for: pack))
-                        .font(Theme.Typography.footnote.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
+                        .font(Theme.Typography.footnote)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         .padding(.top, 2)
                 }
             }
@@ -3625,8 +3427,7 @@ private struct PackShelfReadOnly: View {
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
             }
         }
-        .padding(.vertical, Theme.Layout.cardInset)
-        .padding(.horizontal, Theme.Layout.edgePadding)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
         .onTapGesture {
             guard isHost else { return }
@@ -3866,8 +3667,9 @@ private struct MemberRosterReadOnly: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+        VStack(alignment: .leading, spacing: 0) {
             inviteSection
+            Divider().overlay(Theme.Palette.hairline)
             let members = roomService.cachedMembers(roomId: room.id)
             if members.isEmpty {
                 Text("No members yet — share your join code to get the table set.")
@@ -3879,18 +3681,10 @@ private struct MemberRosterReadOnly: View {
                     ForEach(Array(members.enumerated()), id: \.element.id) { idx, member in
                         memberRow(member)
                         if idx != members.count - 1 {
-                            Divider()
-                                .overlay(Theme.Palette.hairline)
-                                .padding(.horizontal, Theme.Layout.edgePadding)
+                            Divider().overlay(Theme.Palette.hairline)
                         }
                     }
                 }
-                .background(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3915,7 +3709,7 @@ private struct MemberRosterReadOnly: View {
     /// quota-limited) + a tier-3 invitee-scoped code field.
     @ViewBuilder
     private var inviteSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+        VStack(alignment: .leading, spacing: 0) {
             // V0.76 — reward banner. Shows when a friend has joined
             // via the caller's code and the +50 has landed. The
             // success haptic fires once (rewardHapticFired) so the
@@ -3955,14 +3749,7 @@ private struct MemberRosterReadOnly: View {
                     }
                     .accessibilityLabel(Text("Copy invite code"))
                 }
-                .padding(.vertical, Theme.Layout.cardInset)
-                .padding(.horizontal, Theme.Layout.edgePadding)
-                .background(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.vertical, 12)
             }
 
             if isHost {
@@ -3995,14 +3782,7 @@ private struct MemberRosterReadOnly: View {
             }
             Spacer()
         }
-        .padding(.vertical, Theme.Layout.cardInset)
-        .padding(.horizontal, Theme.Layout.edgePadding)
-        .background(Theme.Palette.accent.opacity(0.08))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Theme.Palette.accent.opacity(0.3), lineWidth: 0.5)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 12)
     }
 
     /// V0.55 — host "Invite a friend" row. Generates a tier-1 host
@@ -4020,20 +3800,14 @@ private struct MemberRosterReadOnly: View {
         } label: {
             HStack {
                 Image(systemName: Theme.Icon.person2Fill)
-                    .foregroundStyle(Theme.Palette.accent)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityHidden(true)
                 Text("Invite a friend")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
                 Spacer()
             }
-            .padding(.vertical, Theme.Layout.cardInset)
-            .padding(.horizontal, Theme.Layout.edgePadding)
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 12)
         }
         .buttonStyle(.plain)
     }
@@ -4076,14 +3850,7 @@ private struct MemberRosterReadOnly: View {
                     .padding(.vertical, 6)
                 }
             }
-            .padding(.vertical, Theme.Layout.cardInset)
-            .padding(.horizontal, Theme.Layout.edgePadding)
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 12)
         }
     }
 
@@ -4102,20 +3869,14 @@ private struct MemberRosterReadOnly: View {
         } label: {
             HStack {
                 Image(systemName: Theme.Icon.person2Fill)
-                    .foregroundStyle(Theme.Palette.accent)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityHidden(true)
                 Text("Invite a friend")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
                 Spacer()
             }
-            .padding(.vertical, Theme.Layout.cardInset)
-            .padding(.horizontal, Theme.Layout.edgePadding)
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 12)
         }
         .buttonStyle(.plain)
     }
@@ -4149,14 +3910,7 @@ private struct MemberRosterReadOnly: View {
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
                     }
-                    .padding(.vertical, Theme.Layout.cardInset)
-                    .padding(.horizontal, Theme.Layout.edgePadding)
-                    .background(Theme.Palette.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.vertical, 12)
                 }
                 if let inviteeUserId {
                     Button {
@@ -4227,8 +3981,7 @@ private struct MemberRosterReadOnly: View {
             }
             Spacer(minLength: 8)
         }
-        .padding(.vertical, Theme.Layout.cardInset)
-        .padding(.horizontal, Theme.Layout.edgePadding)
+        .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(member.displayName), \(member.role == .host ? "host" : "member")"))
     }
@@ -4248,15 +4001,13 @@ private struct CollapsibleSection<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
             } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(Theme.Typography.title)
-                            .foregroundStyle(Theme.Palette.primaryText)
+                        SectionTitle(text: title)
                         Text(caption)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
@@ -4461,14 +4212,9 @@ private struct MascotFooterCaption: View {
                 "\(room.mascotName) the mascot, \(resolvedRoomState.rawValue) room state"
             ))
 
-            Text(MascotTypography.transformedText(
-                caption,
-                for: room.mascotPoliticalIdeology
-            ))
-            .font(MascotTypography.caption(
-                for: room.mascotPoliticalIdeology
-            ).font)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            Text(caption)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 // 2026-08-10 feedback round — the caption was cut off at
                 // one line. The mascot comment is the room's voice; let
                 // it wrap so the whole comment is readable.

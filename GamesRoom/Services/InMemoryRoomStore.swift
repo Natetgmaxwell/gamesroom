@@ -89,24 +89,32 @@ actor InMemoryRoomStore: RoomStore {
     /// the other rooms stay empty.
     private var seasonHistoryByRoom: [UUID: [SeasonHistoryEntry]]
 
+    /// v1.2 slice 2c — `seasonId → get_season_grid rows`. Carwoola's
+    /// active season and both prior seasons are seeded; the caller's
+    /// column in each past grid replays that season's
+    /// `scoreProgression` night for night.
+    private var seasonGridBySeason: [UUID: [SeasonGridRow]] = [:]
+
     /// Map of `roomId → system events queue`. M4. Drives the
     /// briefing slot's "System" section.
     private var roomSystemEvents: [UUID: [RoomSystemEvent]]
 
     /// Default pack set every room starts with when there's no
-    /// explicit override. Matches the V0.8 brief's "all 4 packs
-    /// pre-installed" position.
+    /// explicit override. Every registered pack pre-installed
+    /// (V0.8 brief).
     private static let defaultInstalledPacks: [String] = [
         "casino",
         "cards_against_humanity",
-        "monopoly_deal",
-        "pluto_chess"
+        "monopoly_deal"
     ]
 
     /// M4 — public read accessor for the default. Callers that
     /// receive an empty `fetchRoomPacks` array use this as the
     /// fallback shelf.
     nonisolated var defaultInstalledPacks: [String] { Self.defaultInstalledPacks }
+
+    /// Matches `AuthService.injectStubUserForScreenshots()`.
+    static let screenshotCallerId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
 
     /// V0.106 — Question Box + Currently Into state (QuestionBoxStore.swift).
     var questionBox = InMemoryQuestionBoxState()
@@ -179,9 +187,8 @@ actor InMemoryRoomStore: RoomStore {
         // `userRole = .member` so the screenshot pipeline can capture
         // a non-host member's view of the ceremonial card. Without
         // this, `isHost` resolves true (the seed is `userRole: .host`)
-        // and the V0.84 C2 host picker — Best play / Good sport /
-        // Held the room / Showed up / Custom pills + member picker +
-        // "Save the call" CTA — renders on the `.justSettled`
+        // and the V0.84 C2 host "Make a call" action renders on the
+        // `.justSettled`
         // capture, which is what surface #4 (Ceremonial card) is NOT
         // supposed to show. The picker itself is host-only (gated on
         // `isHost && onTonightStarPick` in RoomDetailView); this
@@ -215,9 +222,9 @@ actor InMemoryRoomStore: RoomStore {
             maxSeats: 6,
             memberInviteQuota: 3
         )
-        let pluto = Room(
+        let dealSundays = Room(
             id: UUID(),
-            name: "Pluto Chess Sundays",
+            name: "Deal Sundays",
             mascotName: "Felix",
             mascotPersonality: .friendly,
             mascotPoliticalIdeology: .centrist,
@@ -261,7 +268,7 @@ actor InMemoryRoomStore: RoomStore {
         // This is the room the iPad empty-room content UI test
         // taps to assert the state machine resolves past
         // `.loading` to `.readStandings`. Without it, every
-        // seeded room carries at least a season (Felt / Pluto)
+        // seeded room carries at least a season (Felt / Deal Sundays)
         // or events + leaderboard (Carwoola) so the `.readStandings`
         // branch was unreachable from the test harness.
         let testSandbox = Room(
@@ -318,7 +325,12 @@ actor InMemoryRoomStore: RoomStore {
 
         let carwoolaLeaderboard: [LeaderboardEntry] = [
             LeaderboardEntry(
-                userId: carwoola.createdBy,
+                // Screenshot mode seats the stub user (AuthService's
+                // deterministic 0…01 id) as this row, so the caller's
+                // own score drives the Seasons comparison (slice 2c).
+                userId: CommandLine.arguments.contains("-screenshots-bypass-auth")
+                    ? Self.screenshotCallerId
+                    : carwoola.createdBy,
                 displayName: "Host",
                 role: "host",
                 pointsBalance: 1_200,
@@ -361,7 +373,7 @@ actor InMemoryRoomStore: RoomStore {
             )
         ]
 
-        self.rooms = [carwoola, pluto, felt, testSandbox]
+        self.rooms = [carwoola, dealSundays, felt, testSandbox]
         self.events = [carwoola.id: carwoolaEvent]
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
@@ -387,8 +399,8 @@ actor InMemoryRoomStore: RoomStore {
                 roomId: carwoola.id, enabled: false,
                 chipColorMap: [:], standardPresets: true
             ),
-            pluto.id: CasinoConfig(
-                roomId: pluto.id, enabled: false,
+            dealSundays.id: CasinoConfig(
+                roomId: dealSundays.id, enabled: false,
                 chipColorMap: [:], standardPresets: true
             ),
             felt.id: CasinoConfig(
@@ -399,11 +411,11 @@ actor InMemoryRoomStore: RoomStore {
 
         // M1.1 — seed every room with an active season so the
         // V0State resolver has a season to read. Seed two rooms
-        // (pluto + felt) with `status = .ended` to exercise the
+        // (dealSundays + felt) with `status = .ended` to exercise the
         // `.seasonClose` branch on RoomDetailView.
-        let plutoSeason = Season(
+        let dealSundaysSeason = Season(
             id: UUID(),
-            roomId: pluto.id,
+            roomId: dealSundays.id,
             ordinal: 1,
             subtitle: "The Long River",
             status: .ended,
@@ -430,7 +442,7 @@ actor InMemoryRoomStore: RoomStore {
         )
         self.currentSeasons = [
             carwoola.id: carwoolaSeason,
-            pluto.id: plutoSeason,
+            dealSundays.id: dealSundaysSeason,
             felt.id: feltSeason
         ]
 
@@ -443,12 +455,12 @@ actor InMemoryRoomStore: RoomStore {
         let otherMemberId = UUID()
         let hostUserId = carwoola.createdBy
         self.seasonAwards = [
-            plutoSeason.id: [
+            dealSundaysSeason.id: [
                 SeasonAward(
                     id: UUID(),
-                    seasonId: plutoSeason.id,
-                    roomId: pluto.id,
-                    recipientUserId: pluto.createdBy,
+                    seasonId: dealSundaysSeason.id,
+                    roomId: dealSundays.id,
+                    recipientUserId: dealSundays.createdBy,
                     recipientDisplayName: "Felix",
                     awardType: .veteran,
                     caption: "Played every Sunday for 8 weeks.",
@@ -456,8 +468,8 @@ actor InMemoryRoomStore: RoomStore {
                 ),
                 SeasonAward(
                     id: UUID(),
-                    seasonId: plutoSeason.id,
-                    roomId: pluto.id,
+                    seasonId: dealSundaysSeason.id,
+                    roomId: dealSundays.id,
                     recipientUserId: otherMemberId,
                     recipientDisplayName: "Sam",
                     awardType: .drowning,
@@ -496,7 +508,7 @@ actor InMemoryRoomStore: RoomStore {
         // Operations sub-sheet's updateRoomPacks call.
         self.roomPacks = [
             carwoola.id: Self.defaultInstalledPacks,
-            pluto.id: Self.defaultInstalledPacks,
+            dealSundays.id: Self.defaultInstalledPacks,
             felt.id: Self.defaultInstalledPacks
         ]
         self.roomSystemEvents = [:]
@@ -556,34 +568,70 @@ actor InMemoryRoomStore: RoomStore {
         // Points sit inside the season window and the last point
         // matches `callerTotal`, matching the migration-057
         // contract.
+        // v1.2 slice 2c — each season is seeded as a nights x members
+        // grid (get_season_grid rows); the caller's history entry is
+        // derived from it, so the bars, traces and grid agree.
+        // Current season: every column sums to that member's
+        // seasonScore. The Comeback ran eight nights, Genesis seven.
+        let hostId = carwoolaLeaderboard[0].userId
+        let alexId = carwoolaLeaderboard[1].userId
+        let samId = carwoolaLeaderboard[2].userId
+        func seedGrid(daysAgo: [Double], _ columns: [(UUID, String, [Int64?])]) -> [SeasonGridRow] {
+            let nights = daysAgo.map { (UUID(), Date().addingTimeInterval(-86_400 * $0)) }
+            return columns.flatMap { member, name, points in
+                points.enumerated().compactMap { i, p in
+                    p.map { SeasonGridRow(sessionId: nights[i].0, playedAt: nights[i].1, memberId: member, displayName: name, points: $0) }
+                }
+            }
+        }
+        func history(_ rows: [SeasonGridRow], for member: UUID) -> [SeasonScorePoint] {
+            var running: Int64 = 0
+            return rows.filter { $0.memberId == member }
+                .sorted { $0.playedAt < $1.playedAt }
+                .map { running += $0.points; return SeasonScorePoint(at: $0.playedAt, total: running) }
+        }
+        let currentGrid = seedGrid(daysAgo: [28, 24, 19, 14, 9, 3], [
+            (hostId, "Host", [150, 280, -40, 120, 370, 320]),
+            (alexId, "Alex", [200, -60, 300, 60, 300, 180]),
+            (samId, "Sam", [100, 400, 300, -60, nil, nil])
+        ])
+        let comebackGrid = seedGrid(daysAgo: [58, 54, 50, 46, 42, 38, 34, 31], [
+            (hostId, "Host", [100, 100, 200, -80, 180, 120, 260, 100]),
+            (alexId, "Alex", [200, -100, 150, 300, -50, 100, 200, 100]),
+            (samId, "Sam", [-60, 300, nil, 250, -120, 80, nil, 200])
+        ])
+        let genesisGrid = seedGrid(daysAgo: [115, 107, 99, 91, 83, 75, 66], [
+            (hostId, "Host", [-50, 120, 80, 150, -60, 200, 200]),
+            (alexId, "Alex", [100, 200, 150, -80, 250, 100, 60]),
+            (samId, "Sam", [300, -100, 200, 50, 120, nil, 150])
+        ])
+        let comebackId = UUID()
+        let genesisId = UUID()
+        self.seasonGridBySeason = [
+            carwoolaSeason.id: currentGrid,
+            comebackId: comebackGrid,
+            genesisId: genesisGrid
+        ]
         self.seasonHistoryByRoom[carwoola.id] = [
             SeasonHistoryEntry(
-                seasonId: UUID(),
+                seasonId: comebackId,
                 ordinal: 2,
                 subtitle: "The Comeback",
                 startedAt: Date().addingTimeInterval(-86_400 * 60),
                 endedAt: Date().addingTimeInterval(-86_400 * 30),
                 callerTotal: 980,
                 callerRank: 1,
-                scoreProgression: [
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 55), total: 200),
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 45), total: 600),
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 32), total: 980)
-                ]
+                scoreProgression: history(comebackGrid, for: hostId)
             ),
             SeasonHistoryEntry(
-                seasonId: UUID(),
+                seasonId: genesisId,
                 ordinal: 1,
                 subtitle: "Genesis",
                 startedAt: Date().addingTimeInterval(-86_400 * 120),
                 endedAt: Date().addingTimeInterval(-86_400 * 61),
                 callerTotal: 640,
                 callerRank: 3,
-                scoreProgression: [
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 110), total: 150),
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 90), total: 400),
-                    SeasonScorePoint(at: Date().addingTimeInterval(-86_400 * 65), total: 640)
-                ]
+                scoreProgression: history(genesisGrid, for: hostId)
             )
         ]
 
@@ -716,7 +764,7 @@ actor InMemoryRoomStore: RoomStore {
             // push lands on the ended-season room. Mirror
             // carwoola's leaderboard into felt so the state
             // machine doesn't fall through to `.loading`.
-            rooms = [felt, carwoola, pluto]
+            rooms = [felt, carwoola, dealSundays]
             leaderboards[felt.id] = leaderboards[carwoola.id]
 
         case "empty":
@@ -1253,6 +1301,14 @@ actor InMemoryRoomStore: RoomStore {
     /// auth context).
     func fetchSeasonHistory(roomId: UUID) async throws -> [SeasonHistoryEntry] {
         return seasonHistoryByRoom[roomId] ?? []
+    }
+
+    /// In-memory mirror of `get_season_grid` (migration 101). nil
+    /// season = the active one.
+    func fetchSeasonGrid(roomId: UUID, seasonId: UUID?) async throws -> [SeasonGridRow] {
+        let key = seasonId ?? currentSeasons[roomId]?.id
+        guard let key else { return [] }
+        return seasonGridBySeason[key] ?? []
     }
 
     // MARK: Room packs (M4)

@@ -26,7 +26,7 @@ import Foundation
 final class PackRegistry: @unchecked Sendable {
 
     /// The production registry instance. Pre-populated with the
-    /// four V0.8 packs.
+    /// active packs.
     static let shared = PackRegistry()
 
     /// Every pack registered for V0.8. Insertion order matches
@@ -37,13 +37,13 @@ final class PackRegistry: @unchecked Sendable {
         self.allPacks = allPacks
     }
 
-    /// The four V0.8 packs in picker order. New packs go in here.
-    /// Mirrors the migration 034 seed ordering.
+    /// The active packs in picker order. New packs go in here.
+    /// Mirrors the active rows of the migration 034 seed ordering
+    /// (see migration 097 for retired packs).
     static let defaultPacks: [any PackDefinition.Type] = [
         CasinoPack.self,
         CardsAgainstHumanityPack.self,
-        MonopolyDealPack.self,
-        PlutoChessPack.self
+        MonopolyDealPack.self
     ]
 
     /// Looks up a pack by slug. Returns `nil` if the slug doesn't
@@ -55,8 +55,7 @@ final class PackRegistry: @unchecked Sendable {
         allPacks.first { $0.slug == slug }
     }
 
-    /// True when the slug is one of the four registered V0.8
-    /// packs. Used by the picker to refuse unknown slugs at
+    /// True when the slug is one of the registered packs. Used by the picker to refuse unknown slugs at
     /// submit time so the server doesn't error on `create_event`.
     func isRegistered(slug: String) -> Bool {
         definition(for: slug) != nil
@@ -70,7 +69,6 @@ final class PackRegistry: @unchecked Sendable {
         switch slug {
         case CardsAgainstHumanityPack.slug: return CardsAgainstHumanityPack.winPoints
         case MonopolyDealPack.slug:         return MonopolyDealPack.winPoints
-        case PlutoChessPack.slug:           return PlutoChessPack.winPoints
         case CasinoPack.slug:               return 0
         default:                            return 1
         }

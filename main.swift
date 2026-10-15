@@ -148,9 +148,9 @@ runner.run("StorageKeys.keepScanPhotos round-trips") {
 
 // MARK: - PackRegistry tests
 
-runner.run("PackRegistry default registry holds four V0.8 packs") {
+runner.run("PackRegistry default registry holds three packs (Pluto Chess retired)") {
     let slugs = PackRegistry.shared.allPacks.map { $0.slug }
-    runner.assertEqual(slugs, ["casino", "cards_against_humanity", "monopoly_deal", "pluto_chess"])
+    runner.assertEqual(slugs, ["casino", "cards_against_humanity", "monopoly_deal"])
 }
 
 runner.run("PackRegistry isRegistered rejects legacy / unknown slugs") {
@@ -159,7 +159,8 @@ runner.run("PackRegistry isRegistered rejects legacy / unknown slugs") {
     runner.assertFalse(PackRegistry.shared.isRegistered(slug: ""))
     runner.assertFalse(PackRegistry.shared.isRegistered(slug: "unknown-pack"))
     runner.assertTrue(PackRegistry.shared.isRegistered(slug: "casino"))
-    runner.assertTrue(PackRegistry.shared.isRegistered(slug: "pluto_chess"))
+    runner.assertFalse(PackRegistry.shared.isRegistered(slug: "pluto_chess"))
+    runner.assertTrue(PackRegistry.shared.isRegistered(slug: "monopoly_deal"))
 }
 
 runner.run("Pack scoring types match migration 034 / V0.34 count-based CAH") {
@@ -171,7 +172,6 @@ runner.run("Pack scoring types match migration 034 / V0.34 count-based CAH") {
     runner.assertEqual(CasinoPack.scoringType, .withdrawReturn)
     runner.assertEqual(CardsAgainstHumanityPack.scoringType, .countBased)
     runner.assertEqual(MonopolyDealPack.scoringType, .singleWinner)
-    runner.assertEqual(PlutoChessPack.scoringType, .singleWinner)
 }
 
 runner.run("PackScoringType.countBased raw value is 'count_based' and Codable round-trips") {
@@ -200,7 +200,6 @@ runner.run("PackScoringType displayLabel covers all three families") {
 runner.run("PackRegistry winPoints single-winner packs return 1") {
     runner.assertEqual(PackRegistry.shared.winPoints(for: "cards_against_humanity"), 1)
     runner.assertEqual(PackRegistry.shared.winPoints(for: "monopoly_deal"), 1)
-    runner.assertEqual(PackRegistry.shared.winPoints(for: "pluto_chess"), 1)
     runner.assertEqual(PackRegistry.shared.winPoints(for: "casino"), 0)
     runner.assertEqual(PackRegistry.shared.winPoints(for: "unknown"), 1)
 }
@@ -245,7 +244,7 @@ runner.run("PackScoringResolver multiWinner empty list produces no entries") {
         winnerMemberIds: [],
         winPoints: 1
     )
-    let entries = PackScoringResolver.resolve(input, packSlug: "pluto_chess")
+    let entries = PackScoringResolver.resolve(input, packSlug: "monopoly_deal")
     runner.assertEqual(entries.count, 0)
 }
 
@@ -798,8 +797,8 @@ runner.run("PackHowToCatalog returns bundled content for casino") {
     runner.assertTrue(howTo?.sections.count ?? 0 >= 3)
 }
 
-runner.run("PackHowToCatalog returns bundled content for all four V0.8 packs") {
-    let slugs = ["casino", "cards_against_humanity", "monopoly_deal", "pluto_chess"]
+runner.run("PackHowToCatalog returns bundled content for every registered pack") {
+    let slugs = ["casino", "cards_against_humanity", "monopoly_deal"]
     for slug in slugs {
         runner.assertNotNil(
             PackHowToCatalog.howTo(forSlug: slug),
@@ -810,6 +809,7 @@ runner.run("PackHowToCatalog returns bundled content for all four V0.8 packs") {
 
 runner.run("PackHowToCatalog returns nil for unknown slugs") {
     runner.assertNil(PackHowToCatalog.howTo(forSlug: "no_such_pack"))
+    runner.assertNil(PackHowToCatalog.howTo(forSlug: "pluto_chess"))
     runner.assertNil(PackHowToCatalog.howTo(forSlug: ""))
 }
 
@@ -842,7 +842,6 @@ runner.run("PackDefinition default howToSlug falls back to slug") {
     runner.assertEqual(CasinoPack.howToSlug, "casino")
     runner.assertEqual(CardsAgainstHumanityPack.howToSlug, "cards_against_humanity")
     runner.assertEqual(MonopolyDealPack.howToSlug, "monopoly_deal")
-    runner.assertEqual(PlutoChessPack.howToSlug, "pluto_chess")
 }
 
 // MARK: - EventRSVP (2026-08-10 feedback round)
@@ -1057,7 +1056,7 @@ runner.run("RoomPackConfig defaults missing win_points to 1") {
     let json = """
     {
       "room_id": "33333333-3333-3333-3333-333333333333",
-      "pack_slug": "pluto_chess"
+      "pack_slug": "monopoly_deal"
     }
     """
     let decoded = try JSONDecoder().decode(RoomPackConfig.self, from: json.data(using: .utf8)!)
@@ -1104,7 +1103,7 @@ runner.run("EventRound defaults missing entries to empty") {
       "id": "11111111-1111-1111-1111-111111111111",
       "event_id": "22222222-2222-2222-2222-222222222222",
       "room_id": "33333333-3333-3333-3333-333333333333",
-      "pack_slug": "pluto_chess",
+      "pack_slug": "monopoly_deal",
       "round_index": 1,
       "created_by": "66666666-6666-6666-6666-666666666666",
       "created_at": "2026-08-10T12:00:00Z"
@@ -1338,7 +1337,7 @@ runner.run("CatchUpMessage upcoming event voices the claim prompt and appends st
 
 runner.run("CatchUpMessage claimed state does not nudge") {
     let body = CatchUpMessage.body(
-        eventName: "Pluto Chess Sunday",
+        eventName: "Monopoly Deal Sunday",
         playedAt: Date().addingTimeInterval(86_400),
         mascotName: "Felty",
         leaderboardSummary: "",
@@ -1770,6 +1769,224 @@ runner.run("SeasonHistoryEntry.delta(against:) is positive when climbed since th
     runner.assertEqual(past.delta(against: 80), -20)
 }
 
+// MARK: - Season comparison (v1.2 slice 2c)
+
+runner.run("SeasonComparison.barScale takes the largest magnitude, never zero") {
+    runner.assertEqual(SeasonComparison.barScale(current: 1_200, pastTotals: [980, 640]), 1_200)
+    runner.assertEqual(SeasonComparison.barScale(current: 300, pastTotals: [980, -1_500]), 1_500)
+    runner.assertEqual(SeasonComparison.barScale(current: nil, pastTotals: [640]), 640)
+    runner.assertEqual(SeasonComparison.barScale(current: 0, pastTotals: []), 1)
+}
+
+runner.run("SeasonComparison.barFraction is proportional, sign-blind and clamped") {
+    runner.assertEqual(SeasonComparison.barFraction(600, scale: 1_200), 0.5)
+    runner.assertEqual(SeasonComparison.barFraction(-300, scale: 1_200), 0.25)
+    runner.assertEqual(SeasonComparison.barFraction(2_000, scale: 1_200), 1.0)
+    runner.assertEqual(SeasonComparison.barFraction(10, scale: 0), 0.0)
+}
+
+runner.run("SeasonComparison current-bar sentence reads the tick as words") {
+    runner.assertEqual(
+        SeasonComparison.currentBarSentence(score: 1_200, lastSeasonFinal: 980),
+        "This season, 1200 so far, 220 past where last season ended."
+    )
+    runner.assertEqual(
+        SeasonComparison.currentBarSentence(score: 500, lastSeasonFinal: 980),
+        "This season, 500 so far, 480 short of where last season ended."
+    )
+    runner.assertEqual(
+        SeasonComparison.currentBarSentence(score: 980, lastSeasonFinal: 980),
+        "This season, 980 so far, level with where last season ended."
+    )
+    runner.assertEqual(SeasonComparison.currentBarSentence(score: 40, lastSeasonFinal: nil), "This season, 40 so far.")
+}
+
+runner.run("SeasonComparison past-bar sentence is told from this season") {
+    runner.assertEqual(
+        SeasonComparison.pastBarSentence(name: "The Comeback", total: 980, currentScore: 1_200),
+        "The Comeback, finished on 980. This season is 220 ahead."
+    )
+    runner.assertEqual(
+        SeasonComparison.pastBarSentence(name: "Genesis", total: 640, currentScore: 500),
+        "Genesis, finished on 640. This season is 140 behind."
+    )
+    runner.assertEqual(SeasonComparison.signed(-40), "\u{2212}40")
+    runner.assertEqual(SeasonComparison.signed(220), "+220")
+}
+
+func gridRow(_ night: Int, _ day: Double, _ member: Int, _ name: String, _ pts: Int64) -> SeasonGridRow {
+    SeasonGridRow(
+        sessionId: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", night))!,
+        playedAt: Date(timeIntervalSince1970: 1_800_000_000 + day * 86_400),
+        memberId: UUID(uuidString: String(format: "00000000-0000-0000-0001-%012d", member))!,
+        displayName: name,
+        points: pts
+    )
+}
+
+runner.run("SeasonGrid orders nights oldest first and members by total") {
+    let grid = SeasonGrid(rows: [
+        gridRow(2, 7, 1, "Ana", 100), gridRow(1, 0, 1, "Ana", -50),
+        gridRow(1, 0, 2, "Ben", 300), gridRow(2, 7, 2, "Ben", 20),
+        gridRow(3, 14, 1, "Ana", 400)
+    ])
+    runner.assertEqual(grid.nights.count, 3)
+    runner.assertTrue(grid.nights[0].playedAt < grid.nights[1].playedAt, "oldest first")
+    runner.assertEqual(grid.members.map(\.name), ["Ana", "Ben"])
+    runner.assertEqual(grid.members.map(\.total), [450, 320])
+    runner.assertNil(grid.points(night: grid.nights[2].id, member: grid.members[1].id), "Ben sat out night 3")
+}
+
+runner.run("SeasonGrid.cumulative skips nights the member sat out") {
+    let grid = SeasonGrid(rows: [
+        gridRow(1, 0, 1, "Ana", -50), gridRow(1, 0, 2, "Ben", 300),
+        gridRow(2, 7, 1, "Ana", 100), gridRow(3, 14, 2, "Ben", 20)
+    ])
+    let ana = grid.members.first { $0.name == "Ana" }!.id
+    let ben = grid.members.first { $0.name == "Ben" }!.id
+    runner.assertEqual(grid.cumulative(for: ana), [-50, 50])
+    runner.assertEqual(grid.cumulative(for: ben), [300, 320])
+    runner.assertEqual(grid.cumulative(for: UUID()), [])
+}
+
+runner.run("SeasonComparison.nightTotals keeps one point per night") {
+    let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+    let pts = [
+        SeasonScorePoint(at: t0, total: 100),
+        SeasonScorePoint(at: t0, total: 160),
+        SeasonScorePoint(at: t0.addingTimeInterval(86_400), total: 90)
+    ]
+    runner.assertEqual(SeasonComparison.nightTotals(pts), [160, 90])
+    runner.assertEqual(SeasonComparison.nightTotals([]), [])
+}
+
+runner.run("SeasonComparison.traceGap compares at the same night, or the ghost's finish") {
+    runner.assertEqual(SeasonComparison.traceGap(current: [150, 430, 390], previous: [100, 200, 400, 320]), -10)
+    runner.assertEqual(SeasonComparison.traceGap(current: [100, 200, 300], previous: [50]), 250)
+    runner.assertNil(SeasonComparison.traceGap(current: [], previous: [50]))
+    runner.assertNil(SeasonComparison.traceGap(current: [10], previous: []))
+}
+
+runner.run("SeasonComparison trace sentences read the gap in plain words") {
+    runner.assertEqual(
+        SeasonComparison.currentTraceSentence(
+            current: [150, 430, 390, 510, 880, 1_200],
+            previous: [100, 200, 400, 320, 500, 620, 880, 980]
+        ),
+        "Ahead of last season by 580 after six nights. Last season ran two more nights."
+    )
+    runner.assertEqual(
+        SeasonComparison.currentTraceSentence(current: [100, 150], previous: [200, 400]),
+        "Behind last season by 250 after two nights."
+    )
+    runner.assertEqual(
+        SeasonComparison.currentTraceSentence(current: [100], previous: [100, 300]),
+        "Level with last season after one night. Last season ran one more night."
+    )
+    runner.assertEqual(SeasonComparison.currentTraceSentence(current: [], previous: [1]), "No nights scored yet this season.")
+    runner.assertEqual(
+        SeasonComparison.currentTraceSentence(current: [40], previous: []),
+        "40 after one night. Nothing from last season to compare."
+    )
+    runner.assertEqual(SeasonComparison.pastTraceSentence(season: [200, 980], before: [640]), "Finished 340 ahead of the season before.")
+    runner.assertEqual(SeasonComparison.pastTraceSentence(season: [100], before: [640]), "Finished 540 behind the season before.")
+    runner.assertEqual(SeasonComparison.pastTraceSentence(season: [640], before: []), "First season here. Finished on 640.")
+    runner.assertEqual(SeasonComparison.number(12), "12")
+}
+
+runner.run("SeasonGrid.relativeLabel reads nights as days, weeks, months") {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-3_600), now: now), "today")
+    runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-86_400 * 5), now: now), "5d ago")
+    runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-86_400 * 22), now: now), "3w ago")
+    runner.assertEqual(SeasonGrid.relativeLabel(now.addingTimeInterval(-86_400 * 100), now: now), "3mo ago")
+}
+
+runner.run("SeasonGrid tap sentences read the verbatim numbers") {
+    let grid = SeasonGrid(rows: [
+        gridRow(1, 0, 1, "Ana", -50), gridRow(1, 0, 2, "Ben", 300),
+        gridRow(2, 7, 1, "Ana", 400), gridRow(2, 7, 2, "Ben", 20)
+    ])
+    let ana = grid.members.first { $0.name == "Ana" }!.id
+    let now = Date(timeIntervalSince1970: 1_800_000_000 + 21 * 86_400)
+    runner.assertEqual(grid.runningTotal(member: ana, through: grid.nights[1].id), 350)
+    runner.assertEqual(grid.cellSentence(night: grid.nights[1].id, member: ana, now: now), "Ana, 2w ago: +400. 350 so far.")
+    runner.assertEqual(grid.cellSentence(night: grid.nights[0].id, member: ana, now: now), "Ana, 3w ago: \u{2212}50. \u{2212}50 so far.")
+    let sitOut = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(2, 7, 2, "Ben", 20)])
+    let anaId = sitOut.members.first { $0.name == "Ana" }!.id
+    runner.assertEqual(sitOut.cellSentence(night: sitOut.nights[1].id, member: anaId, now: now), "Ana sat out, 2w ago.")
+}
+
+runner.run("SeasonGrid strips run oldest to newest: won, lost, even, gap for sat out") {
+    // Rows arrive newest first to prove the strip sorts by date, not input order.
+    let grid = SeasonGrid(rows: [
+        gridRow(4, 21, 1, "Ana", 0),
+        gridRow(3, 14, 2, "Ben", 90),
+        gridRow(2, 7, 1, "Ana", -40), gridRow(2, 7, 2, "Ben", 40),
+        gridRow(1, 0, 1, "Ana", 250), gridRow(1, 0, 2, "Ben", -250)
+    ])
+    let ana = grid.members.first { $0.name == "Ana" }!.id
+    let ben = grid.members.first { $0.name == "Ben" }!.id
+    runner.assertEqual(grid.strip(for: ana), [.won, .lost, .satOut, .even])
+    runner.assertEqual(grid.strip(for: ben), [.lost, .won, .won, .satOut])
+    runner.assertEqual(grid.strip(for: ana).count, grid.nights.count)
+    runner.assertEqual(grid.mark(night: grid.nights[0].id, member: ana), .won)
+    runner.assertEqual(grid.mark(night: grid.nights[2].id, member: ana), .satOut)
+    runner.assertEqual(grid.mark(night: grid.nights[3].id, member: ana), .even)
+    runner.assertEqual(grid.strip(for: UUID()), [.satOut, .satOut, .satOut, .satOut])
+}
+
+runner.run("SeasonGrid row sentences read a member's strip for VoiceOver") {
+    let grid = SeasonGrid(rows: [
+        gridRow(1, 0, 1, "Sam", 300), gridRow(2, 7, 1, "Sam", -60), gridRow(3, 14, 1, "Sam", 250),
+        gridRow(1, 0, 2, "Kim", -120), gridRow(4, 21, 2, "Kim", 0),
+        gridRow(4, 21, 1, "Sam", 0)
+    ])
+    let sam = grid.members.first { $0.name == "Sam" }!.id
+    let kim = grid.members.first { $0.name == "Kim" }!.id
+    runner.assertEqual(grid.rowSentence(member: sam), "Sam: 2 nights won, 1 lost, 1 even, 490 total.")
+    runner.assertEqual(grid.rowSentence(member: kim), "Kim: 0 nights won, 1 lost, 1 even, 2 sat out, \u{2212}120 total.")
+    let one = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(2, 7, 2, "Ben", 20)])
+    let ana = one.members.first { $0.name == "Ana" }!.id
+    runner.assertEqual(one.rowSentence(member: ana), "Ana: 1 night won, 0 lost, 1 sat out, 10 total.")
+}
+
+runner.run("SeasonGrid summary names who won the most nights and the biggest night") {
+    let decided = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(1, 0, 2, "Ben", 5), gridRow(2, 7, 1, "Ana", 30)])
+    runner.assertEqual(decided.summarySentence(), "Two nights. Ana won the most nights, two. Biggest night: Ana, +30.")
+    // Won = finished the night up, matching the green marks: Ben's two
+    // small wins out-count Ana's one big night.
+    let counted = SeasonGrid(rows: [
+        gridRow(1, 0, 1, "Ana", 400), gridRow(1, 0, 2, "Ben", 20),
+        gridRow(2, 7, 1, "Ana", -50), gridRow(2, 7, 2, "Ben", 30)
+    ])
+    runner.assertEqual(counted.summarySentence(), "Two nights. Ben won the most nights, two. Biggest night: Ana, +400.")
+    let tied = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(2, 7, 2, "Ben", 20)])
+    runner.assertEqual(tied.summarySentence(), "Two nights. Biggest night: Ben, +20.")
+    let allDown = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", -10)])
+    runner.assertEqual(allDown.summarySentence(), "One night.")
+    runner.assertEqual(SeasonGrid(rows: []).summarySentence(), "No nights scored.")
+}
+
+runner.runAsync("InMemoryRoomStore season grid sums to each member's season totals") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    let board = try await store.fetchLeaderboard(roomId: room.id)
+    let current = SeasonGrid(rows: try await store.fetchSeasonGrid(roomId: room.id, seasonId: nil))
+    runner.assertTrue(current.nights.count >= 5, "current season seeded with nights")
+    for entry in board {
+        let total = current.members.first { $0.id == entry.userId }?.total
+        runner.assertEqual(total, entry.seasonScore)
+    }
+    let history = try await store.fetchSeasonHistory(roomId: room.id)
+    for season in history {
+        let grid = SeasonGrid(rows: try await store.fetchSeasonGrid(roomId: room.id, seasonId: season.seasonId))
+        runner.assertTrue(!grid.isEmpty, "past season grid seeded")
+        let host = board.first { $0.role == "host" }!.userId
+        runner.assertEqual(grid.cumulative(for: host), SeasonComparison.nightTotals(season.scoreProgression))
+    }
+}
+
 // MARK: - Casino config (W-06, US-26)
 
 runner.runAsync("InMemoryRoomStore casino config defaults to standard presets") {
@@ -1838,8 +2055,8 @@ runner.run("Array<EventRound>.nextRoundIndex stays monotonic after a delete") {
     let roomId = UUID()
     let userId = UUID()
     let rounds: [EventRound] = [
-        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "pluto_chess", roundIndex: 1, entries: [], createdBy: userId, createdAt: Date()),
-        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "pluto_chess", roundIndex: 3, entries: [], createdBy: userId, createdAt: Date())
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "monopoly_deal", roundIndex: 1, entries: [], createdBy: userId, createdAt: Date()),
+        EventRound(id: UUID(), eventId: eventId, roomId: roomId, packSlug: "monopoly_deal", roundIndex: 3, entries: [], createdBy: userId, createdAt: Date())
     ]
     runner.assertEqual(rounds.nextRoundIndex, 4)
 }
@@ -1872,7 +2089,7 @@ runner.run("EventRound defaults correctionOf to nil when absent") {
       "id": "11111111-1111-1111-1111-111111111111",
       "event_id": "22222222-2222-2222-2222-222222222222",
       "room_id": "33333333-3333-3333-3333-333333333333",
-      "pack_slug": "pluto_chess",
+      "pack_slug": "monopoly_deal",
       "round_index": 1,
       "entries": [],
       "created_by": "66666666-6666-6666-6666-666666666666",
@@ -2147,7 +2364,7 @@ runner.run("MascotEngine.recentWinners ignores non-winner entries") {
     let rounds: [EventRound] = [
         EventRound(
             id: UUID(), eventId: eventId, roomId: UUID(),
-            packSlug: "pluto_chess", roundIndex: 1,
+            packSlug: "monopoly_deal", roundIndex: 1,
             entries: [
                 ScoreEntry(memberId: alice, pointsDelta: -20, meta: [:])
             ],
@@ -2244,7 +2461,7 @@ runner.run("MascotEngine.lastWinnerDelta returns nil when no winner") {
     let rounds = [
         EventRound(
             id: UUID(), eventId: eventId, roomId: UUID(),
-            packSlug: "pluto_chess", roundIndex: 1,
+            packSlug: "monopoly_deal", roundIndex: 1,
             entries: [
                 ScoreEntry(memberId: alice, pointsDelta: -20, meta: [:])
             ],

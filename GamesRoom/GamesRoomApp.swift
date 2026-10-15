@@ -50,6 +50,7 @@ struct GamesRoomApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .textCase(nil)
                 .environmentObject(auth)
                 .environmentObject(roomService)
                 .environmentObject(casinoService)

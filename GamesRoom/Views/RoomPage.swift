@@ -635,10 +635,10 @@ struct RoomPage: View {
 
     private func sectionHeader(_ title: String) -> some View {
         HStack {
-            Text(title.uppercased())
-                .font(Theme.Typography.monoCaptionSemibold)
-                .tracking(1.2)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            Text(title)
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             Text("\(roomService.rooms.count)")
                 .font(Theme.Typography.monoFootnote)

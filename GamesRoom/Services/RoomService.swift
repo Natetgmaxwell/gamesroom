@@ -147,6 +147,10 @@ final class RoomService: ObservableObject {
     /// season first per the SQL `ORDER BY ordinal DESC`.
     @Published private(set) var seasonHistoryByRoom: [UUID: [SeasonHistoryEntry]] = [:]
 
+    /// v1.2 slice 2c — season grids keyed `roomId:seasonId` (or
+    /// `roomId:current`). nil entry = not loaded or unavailable.
+    @Published private(set) var seasonGrids: [String: SeasonGrid] = [:]
+
     /// Enabled pack slugs per room. Populated lazily by
     /// `loadRoomPacks(roomId:)`; consumed by the Operations sub-sheet's
     /// Packs toggle section. Empty array means "use the default
@@ -1396,6 +1400,35 @@ final class RoomService: ObservableObject {
     /// Consumed by the US-10 previous-seasons comparison surface.
     func cachedSeasonHistory(roomId: UUID) -> [SeasonHistoryEntry] {
         seasonHistoryByRoom[roomId] ?? []
+    }
+
+    private func seasonGridKey(_ roomId: UUID, _ seasonId: UUID?) -> String {
+        "seasonGrid:\(roomId.uuidString):\(seasonId?.uuidString ?? "current")"
+    }
+
+    /// v1.2 slice 2c — loads one season's nights x members grid
+    /// (`seasonId` nil = active season). Failures stay quiet: until
+    /// migration 101 ships the RPC is missing, and the Seasons
+    /// section simply keeps the levels that need no grid.
+    @discardableResult
+    func loadSeasonGrid(roomId: UUID, seasonId: UUID?, force: Bool = false) async -> SeasonGrid? {
+        let key = seasonGridKey(roomId, seasonId)
+        if !force, isFresh(key) { return seasonGrids[key] }
+        do {
+            let rows = try await Perf.span("rpc get_season_grid") {
+                try await store.fetchSeasonGrid(roomId: roomId, seasonId: seasonId)
+            }
+            let grid = SeasonGrid(rows: rows)
+            seasonGrids[key] = grid.isEmpty ? nil : grid
+            cacheTimestamps[key] = Date()
+            return seasonGrids[key]
+        } catch {
+            return seasonGrids[key]
+        }
+    }
+
+    func cachedSeasonGrid(roomId: UUID, seasonId: UUID?) -> SeasonGrid? {
+        seasonGrids[seasonGridKey(roomId, seasonId)]
     }
 
     /// Cached enabled pack slugs for `roomId`. Falls back to the

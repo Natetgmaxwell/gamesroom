@@ -27,8 +27,8 @@
 > Games Room is a private games-night app for self-hosted
 > tables. You bring your people — friends, family, your weekly
 > poker group, your book club — and a host sets the rhythm.
-> Four packs ship pre-installed: Casino, Cards Against
-> Humanity, Monopoly Deal, and Pluto Chess. Seasons give each
+> Three packs ship pre-installed: Casino, Cards Against
+> Humanity, and Monopoly Deal. Seasons give each
 > pack a score arc; the chapter title tracks the high water
 > mark. The mascot voices the page with the personality and
 > political ideology you picked at room-create, and the
