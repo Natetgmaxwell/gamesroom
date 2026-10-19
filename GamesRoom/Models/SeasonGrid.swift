@@ -151,11 +151,12 @@ struct SeasonGrid: Hashable {
     /// same green marks the strips show (nights finished up).
     func summarySentence() -> String {
         guard !nights.isEmpty else { return "No nights scored." }
-        var parts = ["\(SeasonComparison.nightsPhrase(nights.count).capitalizedFirst)."]
+        let headline = SeasonComparison.nightsPhrase(nights.count).capitalizedFirst
         let wins = members.map { m in (m, strip(for: m.id).filter { $0 == .won }.count) }
+        var clauses: [String] = []
         if let most = wins.map(\.1).max(), most > 0,
            let top = wins.filter({ $0.1 == most }).onlyElement {
-            parts.append("\(top.0.name) won the most nights, \(SeasonComparison.number(most)).")
+            clauses.append("\(top.0.name) took \(SeasonComparison.number(most)) of them")
         }
         var best: (member: Member, points: Int64)?
         for night in nights {
@@ -166,9 +167,14 @@ struct SeasonGrid: Hashable {
             }
         }
         if let best {
-            parts.append("Biggest night: \(best.member.name), \(SeasonComparison.signed(best.points)).")
+            if clauses.isEmpty {
+                clauses.append("the biggest night was \(best.member.name)'s \(SeasonComparison.signed(best.points))")
+            } else {
+                clauses.append("\(best.member.name)'s biggest was \(SeasonComparison.signed(best.points))")
+            }
         }
-        return parts.joined(separator: " ")
+        guard !clauses.isEmpty else { return "\(headline)." }
+        return "\(headline) in; " + clauses.joined(separator: " and ") + "."
     }
 
     /// A total with a true minus sign and no plus: "490", "−120".

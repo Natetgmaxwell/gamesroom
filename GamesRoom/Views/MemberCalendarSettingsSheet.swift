@@ -22,7 +22,7 @@
 //  UI flow:
 //   - First-time tap: triggers `requestAccess()` (the system
 //     permission prompt), then writes the toggle ON if granted. A
-//     denial flips a "Denied — open Settings to change" row so the
+//     denial flips a "Denied. Open Settings to change" row so the
 //     user can grant later without losing the toggle intent.
 //   - Subsequent toggles: write the toggle directly; the next
 //     event create / edit that the member does will mirror the row.
@@ -181,7 +181,7 @@ struct MemberCalendarSettingsSheet: View {
         case .fullAccess, .authorized, .writeOnly:
             return "Allowed"
         case .denied, .restricted:
-            return "Denied — open Settings to change"
+            return "Denied. Open Settings to change"
         case .notDetermined:
             return "Not yet asked"
         @unknown default:

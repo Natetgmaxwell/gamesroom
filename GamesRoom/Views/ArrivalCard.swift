@@ -101,7 +101,7 @@ struct ArrivalCard: View {
                 Button {
                     Task { await onSkipTexted(candidate) }
                 } label: {
-                    Text("Skip — texted")
+                    Text("Skip: texted")
                         .font(Theme.Typography.caption.weight(.semibold))
                         .foregroundStyle(Theme.Palette.accent)
                         .padding(.horizontal, 12)
@@ -112,11 +112,11 @@ struct ArrivalCard: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Return \(candidate.displayName)'s deposit — they were texted"))
+                .accessibilityLabel(Text("Return \(candidate.displayName)'s deposit because they were texted"))
                 Button {
                     Task { await onSkipAway(candidate) }
                 } label: {
-                    Text("Skip — away")
+                    Text("Skip: away")
                         .font(Theme.Typography.caption.weight(.semibold))
                         .foregroundStyle(Theme.Palette.accent)
                         .padding(.horizontal, 12)
@@ -127,7 +127,7 @@ struct ArrivalCard: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Return \(candidate.displayName)'s deposit — they were away"))
+                .accessibilityLabel(Text("Return \(candidate.displayName)'s deposit because they were away"))
             }
         }
         .padding(Theme.Layout.cardInset)

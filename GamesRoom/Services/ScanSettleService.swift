@@ -46,11 +46,11 @@ final class ScanSettleService: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .offline:
-                return "You're offline — check your connection and try again."
+                return "You're offline. Check your connection and try again."
             case .rateLimited(let attemptsUsed):
                 return "Scan limit reached (\(attemptsUsed) per night). Wait for the next night's event or ask your host to record it server-side."
             case .modelDeclined, .unreadable:
-                return "Couldn't read the table — improve lighting and retake."
+                return "Couldn't read the table. Improve lighting and retake."
             case .serviceDown:
                 return "Scanning is briefly unavailable. Try again in a moment."
             case .unauthorized:
@@ -216,7 +216,7 @@ final class ScanSettleService: ObservableObject {
             throw ScanSettleError.serviceDown
         default:
             let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
-            throw ScanSettleError.server("HTTP \(http.statusCode)\(body?.detail.map { " — \($0)" } ?? "")")
+            throw ScanSettleError.server("HTTP \(http.statusCode)\(body?.detail.map { ": \($0)" } ?? "")")
         }
     }
 }

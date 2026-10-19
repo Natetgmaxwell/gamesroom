@@ -144,7 +144,7 @@ struct ChipScanSheet: View {
             .frame(maxHeight: .infinity)
 
             VStack(spacing: 8) {
-                Text("Settling your Casino hand — you brought \(withdrawn) pts. Scan what's left on the table.")
+                Text("Settling your Casino hand, you brought \(withdrawn) pts. Scan what's left on the table.")
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent)
                 Text("Point at your chip stack")

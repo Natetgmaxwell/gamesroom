@@ -124,7 +124,7 @@ struct QuestionTurn: Identifiable, Codable, Hashable {
 
     var answerFirstLine: String? {
         guard let name = answerFirstDisplayName, !name.isEmpty else { return nil }
-        return "Pick who answers first — maybe \(name)?"
+        return "Pick who answers first, maybe \(name)?"
     }
 }
 

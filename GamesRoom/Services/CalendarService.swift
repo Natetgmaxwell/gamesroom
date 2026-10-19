@@ -66,7 +66,7 @@ final class CalendarService: ObservableObject {
 
     /// V0.86 — returns the current EKEventStore authorization status
     /// so the settings UI can render the right row ("Allowed" /
-    /// "Denied — open Settings to change"). Reads
+    /// "Denied. Open Settings to change"). Reads
     /// `EKEventStore.authorizationStatus(for: .event)` which is the
     /// system truth; the toggle's RPC lives separately.
     func authorizationStatus() -> EKAuthorizationStatus {

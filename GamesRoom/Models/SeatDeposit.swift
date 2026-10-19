@@ -185,7 +185,7 @@ enum ArrivalPromptVoice {
         displayName: String,
         depositAmount: Int
     ) -> String {
-        "\(mascotName): \(displayName) hasn't checked in. \(displayName)'s \(depositAmount) CC deposit is still held — forfeit it?"
+        "\(mascotName): \(displayName) hasn't checked in. \(displayName)'s \(depositAmount) CC deposit is still held. Forfeit it?"
     }
 
     /// Confirmation caption rendered after the host taps Forfeit.
@@ -195,7 +195,7 @@ enum ArrivalPromptVoice {
         displayName: String,
         depositAmount: Int
     ) -> String {
-        "\(mascotName): \(depositAmount) CC forfeited — \(displayName)'s deposit is gone."
+        "\(mascotName): \(depositAmount) CC forfeited. \(displayName)'s deposit is gone."
     }
 
     /// Confirmation caption for Skip — `reason` is one of
@@ -210,11 +210,11 @@ enum ArrivalPromptVoice {
     ) -> String {
         switch reason {
         case "away":
-            return "\(mascotName): Got it — \(displayName) was away. Deposit returned."
+            return "\(mascotName): Got it, \(displayName) was away. Deposit returned."
         case "texted":
-            return "\(mascotName): Got it — \(displayName) was texted. Deposit returned."
+            return "\(mascotName): Got it, \(displayName) was texted. Deposit returned."
         default:
-            return "\(mascotName): Got it — \(displayName)'s deposit returned."
+            return "\(mascotName): Got it. \(displayName)'s deposit returned."
         }
     }
 

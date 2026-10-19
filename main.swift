@@ -1953,16 +1953,16 @@ runner.run("SeasonGrid row sentences read a member's strip for VoiceOver") {
 
 runner.run("SeasonGrid summary names who won the most nights and the biggest night") {
     let decided = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(1, 0, 2, "Ben", 5), gridRow(2, 7, 1, "Ana", 30)])
-    runner.assertEqual(decided.summarySentence(), "Two nights. Ana won the most nights, two. Biggest night: Ana, +30.")
+    runner.assertEqual(decided.summarySentence(), "Two nights in; Ana took two of them and Ana's biggest was +30.")
     // Won = finished the night up, matching the green marks: Ben's two
     // small wins out-count Ana's one big night.
     let counted = SeasonGrid(rows: [
         gridRow(1, 0, 1, "Ana", 400), gridRow(1, 0, 2, "Ben", 20),
         gridRow(2, 7, 1, "Ana", -50), gridRow(2, 7, 2, "Ben", 30)
     ])
-    runner.assertEqual(counted.summarySentence(), "Two nights. Ben won the most nights, two. Biggest night: Ana, +400.")
+    runner.assertEqual(counted.summarySentence(), "Two nights in; Ben took two of them and Ana's biggest was +400.")
     let tied = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", 10), gridRow(2, 7, 2, "Ben", 20)])
-    runner.assertEqual(tied.summarySentence(), "Two nights. Biggest night: Ben, +20.")
+    runner.assertEqual(tied.summarySentence(), "Two nights in; the biggest night was Ben's +20.")
     let allDown = SeasonGrid(rows: [gridRow(1, 0, 1, "Ana", -10)])
     runner.assertEqual(allDown.summarySentence(), "One night.")
     runner.assertEqual(SeasonGrid(rows: []).summarySentence(), "No nights scored.")
@@ -4002,7 +4002,7 @@ runner.run("ArrivalPromptVoice.promptLine carries mascot + display name + amount
     runner.assertTrue(line.contains("Felty"), "mascot attribution")
     runner.assertTrue(line.contains("Chontel"), "display name")
     runner.assertTrue(line.contains("200"), "deposit amount")
-    runner.assertTrue(line.contains("forfeit"), "the decision verb")
+    runner.assertTrue(line.contains("Forfeit"), "the decision verb")
 }
 
 runner.run("ArrivalPromptVoice skipLine picks the right reason variant (V0.85)") {
@@ -4983,7 +4983,7 @@ runner.run("V0.106 anonymity: get_question_box_state shape has no author id, ask
     let turn = try decoder.decode(QuestionTurn.self, from: Data(json.utf8))
     runner.assertNil(turn.askedBy)
     runner.assertTrue(turn.isReader)
-    runner.assertEqual(turn.answerFirstLine, "Pick who answers first — maybe Alex?")
+    runner.assertEqual(turn.answerFirstLine, "Pick who answers first, maybe Alex?")
     runner.assertEqual(QuestionTurn.ritualLine, "Question from the box:")
     // The member-facing RPC contract must not carry any author identifier.
     let keys = Set(Mirror(reflecting: turn).children.compactMap(\.label))

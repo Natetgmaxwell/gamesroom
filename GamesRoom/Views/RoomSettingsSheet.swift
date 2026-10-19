@@ -437,7 +437,7 @@ struct RoomSettingsSheet: View {
                         settingsRow(
                             icon: Theme.Icon.circleHexagongridFill,
                             title: "Casino chips",
-                            detail: "Chip values — standard or per-room"
+                            detail: "Chip values: standard or per-room"
                         )
                     }
                 }
@@ -790,7 +790,7 @@ struct RoomSettingsSocialSheet: View {
                                          : Theme.Palette.primaryText.opacity(0.45))
                 }
             } footer: {
-                Text("A short note visible only to hosts — venue quirks, recurring house rules, who's hosting next.")
+                Text("A short note visible only to hosts: venue quirks, recurring house rules, who's hosting next.")
             }
         }
         .scrollContentBackground(.hidden)
@@ -898,7 +898,7 @@ struct RoomSettingsOperationsSheet: View {
             } header: {
                 Text("Seat deposit")
             } footer: {
-                Text("Escrow holds each member's deposit from claim until they tap I'm here. A no-show is yours to call at session start — forfeit it and the deposit is gone, or hand it back.")
+                Text("Escrow holds each member's deposit from claim until they tap I'm here. A no-show is yours to call at session start. Forfeit it and the deposit is gone, or hand it back.")
             }
 
             Section("Features") {
@@ -1471,7 +1471,7 @@ struct RoomSettingsCasinoSheet: View {
                     } header: {
                         Text("Per-room values")
                     } footer: {
-                        Text("Colors you leave at their standard value keep it — only the changed ones are saved.")
+                        Text("Colors you leave at their standard value keep it. Only the changed ones are saved.")
                     }
                 }
 

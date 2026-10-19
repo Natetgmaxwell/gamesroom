@@ -426,7 +426,7 @@ enum MascotEngine {
         case .professional:
             return "The seat is open. Claim it to lock it in."
         case .friendly:
-            return "There's still a seat with your name on it — claim it."
+            return "There's still a seat with your name on it. Claim it."
         case .snarky:
             return "Your seat's still there, waiting. Claim it before the table fills."
         case .sarcastic:
@@ -2600,7 +2600,7 @@ enum MascotEngine {
         case .showedUp:
             return "\(winnerName) showed up and slotted right in. The table's better for it."
         case .custom:
-            return "\(winnerName). The host's call."
+            return "The host picked \(winnerName)."
         }
     }
 }

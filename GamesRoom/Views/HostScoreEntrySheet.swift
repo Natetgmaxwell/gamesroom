@@ -131,7 +131,7 @@ struct HostScoreEntrySheet: View {
                     if isCountBased {
                         Text("The judge's pick wins the round and keeps the black card. Enter how many cards the winner takes (usually 1).")
                     } else {
-                        Text("\(packDisplayName) — \(winPointsText). Tap a member to mark them as a winner; tap again to remove.")
+                        Text("\(packDisplayName): \(winPointsText). Tap a member to mark them as a winner; tap again to remove.")
                     }
                 }
 

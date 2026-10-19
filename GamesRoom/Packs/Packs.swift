@@ -54,7 +54,7 @@ struct CasinoPack: PackDefinition {
 struct CardsAgainstHumanityPack: PackDefinition {
     static let slug = "cards_against_humanity"
     static let displayName = "Cards Against Humanity"
-    static let description = "Card-judging party game. The judge's pick wins the round and keeps the black card — score is cards won."
+    static let description = "Card-judging party game. The judge's pick wins the round and keeps the black card. Score is cards won."
     static let iconSystemName = "rectangle.stack.fill"
     static let scoringType: PackScoringType = .countBased
 

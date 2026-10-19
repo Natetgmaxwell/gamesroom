@@ -884,7 +884,7 @@ struct RoomDetailView: View {
                         // play on, win/lose, count again). Empty
                         // hand → nothing to settle.
                         if myWorkingHand == 0 {
-                            return .done("Nothing to settle — withdraw to play")
+                            return .done("Nothing to settle. Withdraw to play")
                         }
                         return .scan
                     }(),
@@ -1065,11 +1065,11 @@ struct RoomDetailView: View {
                     Text(isHost ? "No nights on the books yet" : "Standings")
                         .font(Theme.Typography.title)
                         .foregroundStyle(Theme.Palette.primaryText)
-                    Text(isHost
-                         ? "Schedule your first night to kick the ledger off."
-                         : "The ledger fills in after your first night.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    if !isHost {
+                        Text("The ledger fills in after your first night.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
                     if isHost {
                         Button {
                             showingAddEvent = true
@@ -1939,11 +1939,11 @@ private struct BriefingSlot: View {
                        room.seatDepositTrigger == .escrow,
                        event.playedAt <= Date(),
                        let onCheckIn {
-                        Text("Tap when you walk in — your deposit comes straight back.")
+                        Text("Tap when you walk in and your deposit comes straight back.")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         Button(action: onCheckIn) {
-                            Text("I'm here — reclaim \(deposit.amount) CC")
+                            Text("I'm here. Reclaim \(deposit.amount) CC")
                                 .font(Theme.Typography.body.weight(.semibold))
                                 .foregroundStyle(Theme.Palette.background)
                                 .frame(maxWidth: .infinity)
@@ -2333,7 +2333,7 @@ private struct WitnessSlot: View {
                 if hasScanned, let scannedValue, scannedValue == workingHand {
                     HStack(spacing: 6) {
                         Image(systemName: Theme.Icon.checkmarkCircleFill)
-                        Text("Counted: \(scannedValue) pts — settled")
+                        Text("Counted: \(scannedValue) pts, settled")
                     }
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent)
@@ -2341,7 +2341,7 @@ private struct WitnessSlot: View {
                     .padding(.vertical, 6)
                     .background(Theme.Palette.accent.opacity(0.12))
                     .clipShape(Capsule())
-                    .accessibilityLabel(Text("Chips counted: \(scannedValue) points — settled"))
+                    .accessibilityLabel(Text("Chips counted: \(scannedValue) points, settled"))
                     .padding(.top, 4)
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 } else {
@@ -2940,7 +2940,7 @@ private struct AwardsCard: View {
                 ShareLink(
                     item: ShareableImage(image: cardImage),
                     preview: SharePreview(
-                        "\(statCard.memberName) — Season \(statCard.seasonOrdinal)",
+                        "\(statCard.memberName), Season \(statCard.seasonOrdinal)",
                         image: Image(uiImage: cardImage)
                     )
                 ) {
@@ -3451,7 +3451,7 @@ private struct PackShelfReadOnly: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(pack.displayName) — \(pack.description)"))
+        .accessibilityLabel(Text("\(pack.displayName). \(pack.description)"))
         .accessibilityHint(Text(accessibilityHint(for: pack)))
     }
 
@@ -3679,7 +3679,7 @@ private struct MemberRosterReadOnly: View {
             }
             let members = roomService.cachedMembers(roomId: room.id)
             if members.isEmpty {
-                Text("No members yet — share your join code to get the table set.")
+                Text("No members yet. Share your join code to get the table set.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     .padding(.vertical, Theme.Layout.roomRowInset)
@@ -3751,7 +3751,7 @@ private struct MemberRosterReadOnly: View {
                     // V0.76 — native share sheet with a prefilled
                     // message, so inviting is one tap (not copy-paste).
                     ShareLink(
-                        item: "Join me in Games Room — use code \(code) to get 200 pts to start!",
+                        item: "Join me in Games Room. Use code \(code) to get 200 pts to start!",
                         preview: SharePreview("Join me in Games Room")
                     ) {
                         Image(systemName: "square.and.arrow.up")
@@ -3791,8 +3791,8 @@ private struct MemberRosterReadOnly: View {
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(rewards.friendsJoined == 1
-                     ? "1 friend joined — +\(rewards.totalReward) pts"
-                     : "\(rewards.friendsJoined) friends joined — +\(rewards.totalReward) pts")
+                     ? "1 friend joined, +\(rewards.totalReward) pts"
+                     : "\(rewards.friendsJoined) friends joined, +\(rewards.totalReward) pts")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }

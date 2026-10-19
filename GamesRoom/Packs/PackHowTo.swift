@@ -110,7 +110,7 @@ enum PackHowToCatalog {
                 ),
                 PackHowTo.Section(
                     title: "Score",
-                    body: "Count-based scoring: the host enters the number of cards the winner takes per round (usually 1). The winner's card count goes up by that amount. The room's payout override does not apply — the count IS the score."
+                    body: "Count-based scoring: the host enters the number of cards the winner takes per round (usually 1). The winner's card count goes up by that amount. The room's payout override does not apply. The count is the score."
                 ),
                 PackHowTo.Section(
                     title: "Rounds",

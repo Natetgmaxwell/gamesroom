@@ -115,7 +115,7 @@ struct MascotConfigSection: View {
         } header: {
             Text("Mascot")
         } footer: {
-            Text("The mascot narrates recaps and surfaces briefings. Pick a face — or reset to the default Tally.")
+            Text("The mascot narrates recaps and surfaces briefings. Pick a face, or reset to the default Tally.")
         }
     }
 }
