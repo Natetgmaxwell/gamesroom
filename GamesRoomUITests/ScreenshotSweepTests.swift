@@ -195,17 +195,17 @@ final class ScreenshotSweepTests: XCTestCase {
             claim.waitForExistence(timeout: 10),
             "BriefingSlot never rendered for the upcoming partial event."
         )
-        // The who's-coming surface is one aggregate caption line
-        // ("Host, Alex +1 more have claimed seats" — see
-        // SocialProof.claimedSeatsCaption); seat cells render
-        // initials only. Match by CONTAINS so the assertion still
-        // proves the seeded RSVP rows are being read.
-        let comingCaption = app.staticTexts.matching(
+        // v1.2 S2 — the aggregate who's-coming caption is gone. The
+        // Who's-coming list names every claimant (no "+N more"
+        // aggregation); seat cells render initials only. Match by
+        // CONTAINS so the assertion still proves the seeded RSVP
+        // rows are being read.
+        let comingRow = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'Alex'")
         ).firstMatch
         XCTAssertTrue(
-            comingCaption.waitForExistence(timeout: 5),
-            "Who's-coming caption never named Alex — the partial seat grid seed is not being read."
+            comingRow.waitForExistence(timeout: 5),
+            "Who's-coming rows never named Alex — the partial seat grid seed is not being read."
         )
 
         snap(app, "04-room-page-upcoming-event-partial-seats")
@@ -285,7 +285,7 @@ final class ScreenshotSweepTests: XCTestCase {
         )
         XCTAssertTrue(
             app.buttons["Can't make it"].firstMatch.waitForExistence(timeout: 5),
-            "Decline CTA missing next to Claim seat."
+            "Decline CTA missing under Claim seat."
         )
 
         snap(app, "08-claim-seat-card")
@@ -509,9 +509,12 @@ final class ScreenshotSweepTests: XCTestCase {
             claim.waitForExistence(timeout: 10),
             "BriefingSlot never rendered for the briefing seed."
         )
+        // v1.2 S2 — the "N seats left" count row is gone (the seat
+        // grid is the count). The briefing still renders date/venue/
+        // notes; assert the venue line from the briefing seed.
         XCTAssertTrue(
-            app.staticTexts["5 seats left"].firstMatch.waitForExistence(timeout: 5),
-            "Briefing seat-count row missing (expected '5 seats left' from the 1-of-6 briefing seed)."
+            app.staticTexts["The dining room"].firstMatch.waitForExistence(timeout: 5),
+            "Briefing venue line missing (expected 'The dining room' from the briefing seed)."
         )
 
         snap(app, "16-briefing")

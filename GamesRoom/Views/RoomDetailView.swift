@@ -638,6 +638,13 @@ struct RoomDetailView: View {
         // Dense text scrolls under the glass toolbar; the default soft
         // edge left it legible behind the room pill and buttons.
         .scrollEdgeEffectStyle(.hard, for: .top)
+        // v1.2 S2 — the floating tab bar's glass capsule tops out
+        // ~83pt from the screen bottom while the automatic safe-area
+        // inset reserves only the ~34pt home-indicator zone, so the
+        // last ~49pt of content rested under the bar. This margin
+        // stacks on the automatic inset (safe-area-aware); iPad's
+        // sidebar layout just gains end-of-scroll breathing room.
+        .contentMargins(.bottom, 64, for: .scrollContent)
     }
 
     // MARK: - State resolution
@@ -1813,7 +1820,8 @@ private struct BriefingSlot: View {
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText)
 
-            Text("\(event.playedAt, format: .dateTime.weekday().day().month().hour().minute()) · \(event.maxSeats) seats")
+            // v1.2 S2 — seat count lives in the tile grid below.
+            Text("\(event.playedAt, format: .dateTime.weekday().day().month().hour().minute())")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 
@@ -1830,9 +1838,8 @@ private struct BriefingSlot: View {
                     .padding(.top, 8)
             }
 
-            if let briefing {
-                BriefingSeatCount(summary: briefing, isHost: isHost)
-            }
+            // v1.2 S2 — seat-count text row deleted: the tile grid
+            // is the count, the Who's-coming list is the named version.
 
             // W2.4 — member-side event edit. Any member can adjust
             // the note + venue while the event is still in the
@@ -1862,21 +1869,15 @@ private struct BriefingSlot: View {
             if event.maxSeats > 0 {
                 SeatGridRow(maxSeats: event.maxSeats, rsvps: rsvps, currentUserId: currentUserId)
                     .padding(.top, 4)
-                if event.startedAt == nil,
-                   let caption = SocialProof.claimedSeatsCaption(
-                       claimedNames: rsvps
-                           .filter { $0.state == .claimed }
-                           .map { $0.displayName }
-                   ) {
-                    Text(caption)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                }
+                // v1.2 S2 — aggregate claimant caption deleted; the
+                // Who's-coming list below names every claimant.
             }
 
             switch myRSVP {
             case .unclaimed:
-                HStack(spacing: 12) {
+                // v1.2 S2 — one primary per card state; the decline is
+                // a trailing plain-text secondary, not an outlined peer.
+                VStack(alignment: .leading, spacing: 8) {
                     Button(action: onClaim) {
                         Text("Claim seat")
                             .font(Theme.Typography.body.weight(.semibold))
@@ -1887,15 +1888,7 @@ private struct BriefingSlot: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .pressScale()
-                    Button(action: onDecline) {
-                        Text("Can't make it")
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
-                    }
-                    .pressScale()
+                    TrailingTextAction(title: "Can't make it", action: onDecline)
                 }
                 .padding(.top, 8)
 
@@ -1957,16 +1950,10 @@ private struct BriefingSlot: View {
                     // 2026-08-10 feedback round — a claimed seat is
                     // not terminal: the member can release it and
                     // the seat returns to the open pool.
+                    // v1.2 S2 — plain-text secondary; the reclaim
+                    // above is this state's only primary.
                     if let onRelease {
-                        Button(action: onRelease) {
-                            Text("Release my seat")
-                                .font(Theme.Typography.body)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
-                        }
-                        .buttonStyle(.plain)
+                        TrailingTextAction(title: "Release my seat", action: onRelease)
                     }
                 }
                 .padding(.top, 8)
@@ -2025,34 +2012,51 @@ private struct V0StateReEntryPills: View {
     let onReDecline: () -> Void
 
     var body: some View {
+        // v1.2 S2 — one primary per card state: Re-accept carries
+        // the fill; Re-decline is the trailing text secondary.
         VStack(alignment: .leading, spacing: 8) {
             Text("You said you can\'t make it.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            HStack(spacing: 12) {
-                Button(action: onReAccept) {
-                    Text("Re-accept")
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                Button(action: onReDecline) {
-                    Text("Re-decline")
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
-                }
+            Button(action: onReAccept) {
+                Text("Re-accept")
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.background)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Theme.Palette.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+            TrailingTextAction(title: "Re-decline", action: onReDecline)
         }
     }
 }
 
-// MARK: - Briefing seat-count row
+/// v1.2 S2 — the plain grey text action every card state uses for
+/// its non-primary verb: trailing-aligned, chevron, no box chrome.
+/// Exactly one brass-filled primary per card state; everything
+/// else on the card is this.
+private struct TrailingTextAction: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        HStack {
+            Spacer()
+            Button(action: action) {
+                HStack(spacing: 4) {
+                    Text(title)
+                    Image(systemName: Theme.Icon.chevronRight)
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .accessibilityHidden(true)
+                }
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
 
 // MARK: - Unconsumed member notes (V0.84 C5 — host pre-event)
 
@@ -2072,27 +2076,28 @@ private struct UnconsumedMemberNotesSection: View {
     @State private var capturedIds: [UUID] = []
 
     var body: some View {
+        // v1.2 S2 — flattened: a labelled text block on the card
+        // background, no outlined sub-box per note.
         VStack(alignment: .leading, spacing: 10) {
             Text("Notes for next time")
                 .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Palette.accent)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
             ForEach(notes, id: \.id) { note in
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(room.mascotName): \(note.memberDisplayName) left a note for next time.")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     Text(note.noteText)
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
                 }
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
             }
+            // v1.2 S2 — "Done reading" is a plain tertiary text
+            // action; it still marks the notes consumed.
             Button(action: { onDone(capturedIds) }) {
                 Text("Done reading")
-                    .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
             .buttonStyle(.plain)
         }
@@ -2104,47 +2109,18 @@ private struct UnconsumedMemberNotesSection: View {
     }
 }
 
-private struct BriefingSeatCount: View {
-    let summary: BriefingSummary
-    /// Decline visibility (V0.9): only the host sees who declined.
-    /// Members see claimed + total only — a declined seat reads as
-    /// simply open. Server enforces this too (migration 064); this
-    /// gate covers the optimistic-update flash before the RPC lands.
-    let isHost: Bool
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text("\(summary.seatsLeft) seats left")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText)
-            Text("·")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
-            Text("\(summary.seatsClaimed) claimed")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            if isHost, summary.seatsDeclined > 0 {
-                Text("·")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
-                Text("\(summary.seatsDeclined) declined")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            }
-            Spacer()
-        }
-        .padding(.top, 4)
-    }
-}
-
 // MARK: - Seat grid row (2026-08-10 feedback round)
 
 /// The "chairs coloured in" seat indicator on the briefing slot.
-/// Renders `maxSeats` cells: claimed seats fill with the member's
-/// initial, open seats render an outline chair labelled "open", and
-/// the current user's seat is highlighted with the brass accent.
-/// The grid adapts its column count to the seat total so 4, 6, and
-/// 8-seat tables all read cleanly.
+/// Renders `maxSeats` cells: claimed seats show the member's
+/// initial, open seats render an outline chair, and the current
+/// user's seat is tinted with the brass accent. The grid adapts
+/// its column count to the seat total so 4, 6, and 8-seat tables
+/// all read cleanly.
+///
+/// v1.2 S2 — flattened: tiles render directly on the card
+/// background with hairline rules between them; no per-cell box
+/// chrome and the outer edge stays open (the card is the box).
 private struct SeatGridRow: View {
     let maxSeats: Int
     let rsvps: [EventRSVP]
@@ -2156,18 +2132,38 @@ private struct SeatGridRow: View {
     @State private var justClaimed: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var columnCount: Int { SeatGrid.columnCount(for: maxSeats) }
+
+    private var rowCount: Int {
+        Int(ceil(Double(maxSeats) / Double(columnCount)))
+    }
+
     private var columns: [GridItem] {
-        let count = SeatGrid.columnCount(for: maxSeats)
-        return Array(
-            repeating: GridItem(.flexible(), spacing: 8),
-            count: count
+        Array(
+            repeating: GridItem(.flexible(), spacing: 0),
+            count: columnCount
         )
     }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 8) {
+        LazyVGrid(columns: columns, spacing: 0) {
             ForEach(SeatGrid.cells(maxSeats: maxSeats, rsvps: rsvps)) { cell in
                 seatCell(cell)
+                    .padding(.vertical, 10)
+                    .overlay(alignment: .trailing) {
+                        if hasTrailingHairline(cell.id) {
+                            Rectangle()
+                                .fill(Theme.Palette.hairline)
+                                .frame(width: 0.5)
+                        }
+                    }
+                    .overlay(alignment: .bottom) {
+                        if hasBottomHairline(cell.id) {
+                            Rectangle()
+                                .fill(Theme.Palette.hairline)
+                                .frame(height: 0.5)
+                        }
+                    }
             }
         }
         .onChange(of: rsvps) { _, newValue in
@@ -2178,6 +2174,17 @@ private struct SeatGridRow: View {
                 Task { try? await Task.sleep(for: .milliseconds(500)); justClaimed = false }
             }
         }
+    }
+
+    /// Vertical rule after every cell that is not in the last
+    /// column; horizontal rule under every cell that is not in the
+    /// last row. Contiguous cells join into full grid lines.
+    private func hasTrailingHairline(_ index: Int) -> Bool {
+        (index + 1) % columnCount != 0
+    }
+
+    private func hasBottomHairline(_ index: Int) -> Bool {
+        index / columnCount < rowCount - 1
     }
 
     @ViewBuilder
@@ -2195,15 +2202,6 @@ private struct SeatGridRow: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, minHeight: 52)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isYours ? Theme.Palette.accent.opacity(0.16) : Theme.Palette.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isYours ? Theme.Palette.accent : Theme.Palette.hairline,
-                            lineWidth: isYours ? 1.0 : 0.5)
-            )
             .overlay {
                 if isYours && justClaimed {
                     ConfettiBurst()
@@ -2220,14 +2218,6 @@ private struct SeatGridRow: View {
                     .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, minHeight: 52)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Theme.Palette.surface.opacity(0.5))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Theme.Palette.hairline.opacity(0.6), lineWidth: 0.5)
-            )
             .accessibilityElement()
             .accessibilityLabel(Text("open seat"))
         }
