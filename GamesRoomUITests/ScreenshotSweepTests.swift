@@ -195,11 +195,17 @@ final class ScreenshotSweepTests: XCTestCase {
             claim.waitForExistence(timeout: 10),
             "BriefingSlot never rendered for the upcoming partial event."
         )
-        // Two of the three claimed members must be listed as coming
-        // (the third is the host row).
+        // The who's-coming surface is one aggregate caption line
+        // ("Host, Alex +1 more have claimed seats" — see
+        // SocialProof.claimedSeatsCaption); seat cells render
+        // initials only. Match by CONTAINS so the assertion still
+        // proves the seeded RSVP rows are being read.
+        let comingCaption = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS 'Alex'")
+        ).firstMatch
         XCTAssertTrue(
-            app.staticTexts["Alex"].firstMatch.waitForExistence(timeout: 5),
-            "Who's-coming row for Alex never rendered — the partial seat grid seed is not being read."
+            comingCaption.waitForExistence(timeout: 5),
+            "Who's-coming caption never named Alex — the partial seat grid seed is not being read."
         )
 
         snap(app, "04-room-page-upcoming-event-partial-seats")
