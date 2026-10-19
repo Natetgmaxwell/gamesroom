@@ -427,7 +427,7 @@ actor InMemoryRoomStore: RoomStore {
             id: UUID(),
             roomId: felt.id,
             ordinal: 4,
-            subtitle: "Felt Faction — Season 4",
+            subtitle: "Felt Faction, Season 4",
             status: .ended,
             startedAt: Date().addingTimeInterval(-86_400 * 200),
             endedAt: Date().addingTimeInterval(-86_400 * 7)
@@ -549,7 +549,7 @@ actor InMemoryRoomStore: RoomStore {
                     roomId: carwoola.id,
                     memberId: seedNoteMember,
                     memberDisplayName: "Alex",
-                    noteText: "Friday worked — let's do the same again next week.",
+                    noteText: "Friday worked. Let's do the same again next week.",
                     createdAt: Date().addingTimeInterval(-3600),
                     consumedByHostAt: nil
                 )
