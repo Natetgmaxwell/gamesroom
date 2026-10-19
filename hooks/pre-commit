@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Games Room pre-commit gates (binds agents AND humans; see hooks/README.md)
+# 1. TOKEN CAP / RATCHET: .swift files cap at 5,000 tokens (~bytes/4 = 20,000 bytes).
+#    - New files over cap: blocked.
+#    - Existing over-cap files: may not grow (shrinking/splitting always allowed).
+# 2. GHOST-DUP REJECT: iCloud duplicate pattern "* N.ext" never commits (any file type).
+set -u
+
+CAP_BYTES=20000
+FAIL=0
+
+while IFS= read -r -d '' f; do
+  case "$f" in
+    .worktrees/*|build/*|.archive/*) continue ;;
+  esac
+
+  # iCloud ghost duplicate: "Name 2.swift", "concept 3.png", etc.
+  if [[ "$f" =~ [[:space:]][0-9]+\.[A-Za-z0-9]+$ ]]; then
+    echo "GHOST DUP: '$f' matches the iCloud regrowth pattern ('Name N.ext')."
+    echo "  Fix: cmp against the original, then git rm --cached -- '$f' and delete the file."
+    FAIL=1
+    continue
+  fi
+
+  case "$f" in
+    *.swift) ;;
+    *) continue ;;
+  esac
+  [ -f "$f" ] || continue
+
+  size=$(wc -c < "$f")
+  [ "$size" -gt "$CAP_BYTES" ] || continue
+
+  head_size=$(git cat-file -s "HEAD:$f" 2>/dev/null) || head_size=0
+  if [ "${head_size:-0}" -eq 0 ]; then
+    echo "TOKEN CAP: new file '$f' is ~$((size / 4)) tokens (cap 5,000 = 20,000 bytes)."
+    echo "  Split before committing: SwiftUI -> extract subviews/sections into their own files; move types/extensions out."
+    FAIL=1
+  elif [ "$size" -gt "$head_size" ]; then
+    echo "TOKEN RATCHET: '$f' grew to ~$((size / 4)) tokens (was ~$((head_size / 4)) at HEAD)."
+    echo "  Over-cap files cannot grow. Split or shrink it (splitting is the exit)."
+    FAIL=1
+  fi
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+
+exit $FAIL
