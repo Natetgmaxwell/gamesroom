@@ -1325,13 +1325,13 @@ runner.run("CatchUpMessage upcoming event voices the claim prompt and appends st
         rsvpState: .unclaimed
     )
     runner.assertTrue(body.contains("Friday Night Hold'em"), "event name missing")
-    runner.assertTrue(body.contains("Felty"), "mascot name missing")
+    runner.assertTrue(!body.isEmpty, "voiced body missing")
     runner.assertTrue(body.contains("Alex 120"), "standings missing")
     // V0.81 — the body is voiced through the 25-voice matrix; the
     // claim nudge is the `.briefingOnCreate` template, not the old
     // literal "Claim your seat." string. Assert the voice contract
-    // instead: the body must be non-empty, carry the mascot name,
-    // and end with the standings line.
+    // instead: the body must be non-empty and end with the
+    // standings line.
     runner.assertTrue(body.hasSuffix("Standings: Alex 120 · Sam 80."), "standings not appended")
 }
 
@@ -1344,7 +1344,7 @@ runner.run("CatchUpMessage claimed state does not nudge") {
         rsvpState: .claimed
     )
     runner.assertFalse(body.contains("Claim your seat"), "claimed state should not nudge")
-    runner.assertTrue(body.contains("Felty"), "mascot name missing")
+    runner.assertTrue(body.contains("Monopoly Deal Sunday"), "voiced body missing")
 }
 
 runner.run("CatchUpMessage live event voices the in-play line and appends standings") {
@@ -1355,7 +1355,7 @@ runner.run("CatchUpMessage live event voices the in-play line and appends standi
         leaderboardSummary: "Alex 120 · Sam 80",
         rsvpState: .unclaimed
     )
-    runner.assertTrue(body.contains("Felty"), "mascot name missing")
+    runner.assertTrue(body.contains("Casino Night"), "voiced body missing")
     runner.assertTrue(body.contains("Alex 120"), "standings missing")
     runner.assertTrue(body.hasSuffix("Standings: Alex 120 · Sam 80."), "standings not appended")
 }
@@ -2911,7 +2911,7 @@ runner.run("MascotEngine.generateVoice — legacy logistics placeholders drop cl
     )
     runner.assertEqual(
         body,
-        "Max: Poker is on the books. The host will run it."
+        "Poker is on the books. The host will run it."
     )
 }
 
@@ -2932,13 +2932,13 @@ runner.run("MascotEngine.generateVoice — {member_name} personalises the briefi
         eventDate: Date().addingTimeInterval(2 * 86_400)
     )
     runner.assertTrue(body.contains("Alice"), "member name surfaced")
-    runner.assertTrue(body.hasPrefix("Max: Alice, "), "mascot then member address")
+    runner.assertTrue(body.hasPrefix("Alice, "), "member address first")
     runner.assertFalse(body.contains("{member_name}"), "placeholder substituted")
 }
 
 runner.run("MascotEngine.generateVoice — nil {member_name} drops cleanly for footer (V0.87)") {
     // Footer path never passes a member name — the placeholder +
-    // trailing comma must vanish, not render "Max: , Poker…".
+    // trailing comma must vanish, not render ", Poker…".
     let body = MascotEngine.generateVoice(
         mascotName: "Max",
         roomName: "Friday Night",
@@ -2954,7 +2954,7 @@ runner.run("MascotEngine.generateVoice — nil {member_name} drops cleanly for f
     )
     runner.assertFalse(body.contains("{member_name}"), "placeholder removed")
     runner.assertFalse(body.contains(", Poker"), "no stray comma before event")
-    runner.assertTrue(body.hasPrefix("Max: Poker"), "reads clean without a name")
+    runner.assertTrue(body.hasPrefix("Poker"), "reads clean without a name")
 }
 
 runner.run("MascotEngine.unclaimedClause — one personality-voiced claim nudge per personality (V0.87)") {
@@ -3537,7 +3537,6 @@ runner.run("MascotEngine goodSport cell exists for every personality × ideology
                 )
             )
             runner.assertTrue(!body.isEmpty, "goodSport cell for \(p.rawValue)×\(i.rawValue)")
-            runner.assertTrue(body.contains("Felty"), "goodSport names the mascot for \(p.rawValue)×\(i.rawValue)")
             runner.assertTrue(body.contains("Alex"), "goodSport names the winner for \(p.rawValue)×\(i.rawValue)")
         }
     }
@@ -3572,7 +3571,6 @@ runner.run("MascotEngine seasonClose cells are praise-first (behaviour named, no
                 )
             )
             runner.assertTrue(!body.isEmpty, "seasonClose cell empty for \(p.rawValue)×\(i.rawValue)")
-            runner.assertTrue(body.contains("Felty"), "seasonClose names the mascot for \(p.rawValue)×\(i.rawValue)")
             runner.assertTrue(body.contains("Alex"), "seasonClose names the winner for \(p.rawValue)×\(i.rawValue)")
             let hasMarker = praiseMarkers.contains { body.contains($0) }
             runner.assertTrue(hasMarker, "seasonClose praise marker missing for \(p.rawValue)×\(i.rawValue): \(body)")
@@ -3601,7 +3599,6 @@ runner.run("MascotEngine tonightStar cell exists for every personality × ideolo
                 )
             )
             runner.assertTrue(!body.isEmpty, "tonightStar cell for \(p.rawValue)×\(i.rawValue)")
-            runner.assertTrue(body.contains("Felty"), "tonightStar names the mascot for \(p.rawValue)×\(i.rawValue)")
             runner.assertTrue(body.contains("Alex"), "tonightStar names the winner for \(p.rawValue)×\(i.rawValue)")
         }
     }
