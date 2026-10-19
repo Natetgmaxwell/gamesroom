@@ -37,13 +37,14 @@ actor InMemoryRoomStore: RoomStore {
     /// Map of `roomId → active event`. The first seeded room has a
     /// future-dated event so the Briefing slot renders against real
     /// data; the others stay empty until the host creates one.
-    private var events: [UUID: Event]
+    // private dropped for InMemorySweepSeeds (file at token cap).
+    var events: [UUID: Event]
 
     /// Map of `eventId → briefing summary`.
-    private var briefings: [UUID: BriefingSummary]
+    var briefings: [UUID: BriefingSummary]
 
     /// Map of `roomId → leaderboard rows`.
-    private var leaderboards: [UUID: [LeaderboardEntry]]
+    var leaderboards: [UUID: [LeaderboardEntry]]
 
     /// Map of `roomId → current season`. M1.1 — every seeded room
     /// starts with an active season; the V0.8 brief's
@@ -57,7 +58,7 @@ actor InMemoryRoomStore: RoomStore {
 
     /// Map of `eventId → chapter line`. W2.6 — written at settle,
     /// rendered on the ceremonial card.
-    private var chapterLines: [UUID: ChapterLine]
+    var chapterLines: [UUID: ChapterLine]
 
     /// V0.91 — map of `roomId → mutable roster` backing
     /// `fetchRoomMembers` + `transferHostRole`. Lazy: the first
@@ -120,7 +121,7 @@ actor InMemoryRoomStore: RoomStore {
     var questionBox = InMemoryQuestionBoxState()
 
     /// Map of `(eventId, memberId) → rsvp state`.
-    private var rsvps: [UUID: [UUID: MemberRSVPState]]
+    var rsvps: [UUID: [UUID: MemberRSVPState]]
 
     /// V0.85 — per-event list of unresolved arrival candidates,
     /// mirrored from the in-memory `list_arrival_candidates`
@@ -771,10 +772,7 @@ actor InMemoryRoomStore: RoomStore {
             rooms = []
 
         default:
-            // Leave the V0.92 default: startedAt = -30 min,
-            // playedAt = +2d. Resolves to `.upcoming` per the
-            // current state machine.
-            break
+            applyAuditSweepSeeds(key: screenState, carwoola: carwoola, carwoolaEvent: carwoolaEvent)
         }
     }
 
@@ -2040,7 +2038,7 @@ actor InMemoryRoomStore: RoomStore {
     /// persistence mirror. Pre-populated with one synthetic
     /// host_pick on the first seeded event so previews exercise
     /// the ceremonial-card star surface end-to-end.
-    private var tonightStarCards: [UUID: TonightStarCard]
+    var tonightStarCards: [UUID: TonightStarCard]
 
     /// Map of `roomId → unconsumed notes`. Pre-populated with one
     /// synthetic member note on the first seeded room so the
