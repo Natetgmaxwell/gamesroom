@@ -1,78 +1,11 @@
 //
 //  ScreenshotSweepTests.swift
-//  GamesRoomUITests
 //
-//  V1.2.1 design-audit sweep (branch polish/audit-harness).
+//  16-state design-audit sweep (see originals/2026-10-19-games-room-detail-audit).
+//  Each test launches with -screenshots-bypass-auth + -screenshots-state=<key>,
+//  waits for a real element (no thin fixtures), and attaches one full-screen
+//  shot via snap(_:). Runs on iPhone sims; attachments export from the xcresult.
 //
-//  One full-state screenshot per key screen/state of the phone
-//  matrix, so a design audit can score real renders instead of
-//  descriptions. Every test launches the app FRESH with
-//  `-screenshots-bypass-auth` (the GamesRoomApp DEBUG seam that
-//  swaps the live Supabase store for `InMemoryRoomStore.shared`)
-//  plus the seed argument that selects the state, waits for the
-//  target surface with an explicit predicate (never a sleep),
-//  navigates by accessibility identifier or button label where
-//  needed, and attaches ONE full-screen `XCTAttachment`
-//  (`.keepAlways`) named with the stable state id.
-//
-//  State matrix (16):
-//    01-first-launch-empty                     RoomPage empty state
-//    02-join-with-code                         JoinRoomSheet
-//    03-room-page-empty-host                   readStandings host (Test Sandbox)
-//    04-room-page-upcoming-event-partial-seats BriefingSlot, 3-of-6 grid
-//    05-room-page-tonight-live                 WitnessSlot `.tonightEvent`
-//    06-room-page-settled-last-night           CeremonialCard `.justSettled`
-//    07-room-detail-member-idle                readStandings member
-//    08-claim-seat-card                        BriefingSlot unclaimed CTA
-//    09-host-scoring-dashboard-live            HostScoreEntrySheet (phone
-//                                              form of the host scoring
-//                                              surface; the full
-//                                              HostScoringDashboard chrome
-//                                              is iPad-regular-only by
-//                                              design — showScoringDashboard)
-//    10-question-box-reader-card               QuestionReaderCard (large-type
-//                                              reader mode, auto-presented
-//                                              by the host opener turn)
-//    11-casino-chip-scan-sheet                 ChipScanSheet (host settle
-//                                              path on a casino+side-pack
-//                                              night)
-//    12-settled-view-with-deltas               CeremonialCard + standings
-//                                              scrolled into frame (mixed
-//                                              green/red deltas, comeback
-//                                              + blowout rows, mocking-case
-//                                              star quote)
-//    13-season-person-rows-winloss             SeasonGridSheet "Every night"
-//                                              (two prior seasons seeded)
-//    14-awards-ceremonial-card                 AwardsCard `.seasonClose`
-//    15-room-settings-members-sheet            RoomSettingsMembersSheet
-//    16-briefing                               BriefingSlot (App Store key)
-//
-//  Seed arguments (see InMemoryRoomStore's `-screenshots-state=`
-//  switch; existing keys reused where they already fit):
-//    01/02  -screenshots-state=empty            (existing)
-//    03     default seed → "Test Sandbox" room  (existing room)
-//    04     -screenshots-state=upcoming-partial (new)
-//    05     -screenshots-state=tonight-live     (new)
-//    06/12  -screenshots-state=settled-rich     (new)
-//    07     -screenshots-as-member + -screenshots-state=member-idle (new)
-//    08     -screenshots-state=claim-card       (new)
-//    09     -screenshots-state=score-live       (new)
-//    10     -question-box-seed=live + minute/poll scale args (existing)
-//    11     -screenshots-state=chip-scan        (new)
-//    13     default seed (two prior seasons + grids) (existing)
-//    14     -screenshots-state=awards           (existing)
-//    15     default seed → Carwoola Crew        (existing room)
-//    16     -screenshots-state=briefing         (existing)
-//
-//  Run (regenerate the project first — the UITest target globs
-//  this directory, so no project.yml change is needed):
-//    xcodegen generate
-//    xcodebuild test -project GamesRoom.xcodeproj -scheme GamesRoom \
-//      -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
-//      -derivedDataPath /tmp/gr-dd \
-//      -only-testing:GamesRoomUITests/ScreenshotSweepTests
-//  Attachments land in the .xcresult bundle (report → attachments),
-//  one per state, named 01…16 exactly as the matrix above.
 //
 
 import XCTest
@@ -195,11 +128,7 @@ final class ScreenshotSweepTests: XCTestCase {
             claim.waitForExistence(timeout: 10),
             "BriefingSlot never rendered for the upcoming partial event."
         )
-        // v1.2 S2 — the aggregate who's-coming caption is gone. The
-        // Who's-coming list names every claimant (no "+N more"
-        // aggregation); seat cells render initials only. Match by
-        // CONTAINS so the assertion still proves the seeded RSVP
-        // rows are being read.
+        // v1.2 S2: aggregate caption gone; CONTAINS proves the RSVP rows are read.
         let comingRow = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'Alex'")
         ).firstMatch
@@ -209,6 +138,9 @@ final class ScreenshotSweepTests: XCTestCase {
         )
 
         snap(app, "04-room-page-upcoming-event-partial-seats")
+        // S2 gate: end state must clear the floating tab bar.
+        for _ in 0..<4 { app.swipeUp() }
+        snap(app, "04b-upcoming-scrolled-end")
     }
 
     // MARK: - 05 Room page, tonight live
@@ -518,5 +450,8 @@ final class ScreenshotSweepTests: XCTestCase {
         )
 
         snap(app, "16-briefing")
+        // S2 gate: end state must clear the floating tab bar.
+        for _ in 0..<4 { app.swipeUp() }
+        snap(app, "16b-briefing-scrolled-end")
     }
 }
