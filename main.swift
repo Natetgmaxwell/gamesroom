@@ -5082,6 +5082,84 @@ runner.runAsync("V0.106 in-memory store: host opener, fixed interval, Pass hands
     runner.assertNil(try await store.fetchQuestionBoxState(eventId: eventId))
 }
 
+// MARK: - BroughtBy (V0.107 — brought-by caption)
+
+runner.run("BroughtBy.caption joins all three parts in order") {
+    runner.assertEqual(
+        BroughtBy.caption(anchorName: "Alex", firstNight: true,
+                          currentlyInto: "bouldering", enabled: true),
+        "with Alex · first night · into bouldering")
+}
+
+runner.run("BroughtBy.caption anchor only") {
+    runner.assertEqual(
+        BroughtBy.caption(anchorName: "Alex", firstNight: false,
+                          currentlyInto: nil, enabled: true),
+        "with Alex")
+}
+
+runner.run("BroughtBy.caption first night only (no inviter)") {
+    runner.assertEqual(
+        BroughtBy.caption(anchorName: nil, firstNight: true,
+                          currentlyInto: nil, enabled: true),
+        "first night")
+}
+
+runner.run("BroughtBy.caption nil when there is nothing to say") {
+    runner.assertNil(
+        BroughtBy.caption(anchorName: nil, firstNight: false,
+                          currentlyInto: nil, enabled: true))
+    runner.assertNil(
+        BroughtBy.caption(anchorName: "   ", firstNight: false,
+                          currentlyInto: "", enabled: true))
+}
+
+runner.run("BroughtBy.caption setting off hides anchor and first night") {
+    runner.assertEqual(
+        BroughtBy.caption(anchorName: "Alex", firstNight: true,
+                          currentlyInto: "bouldering", enabled: false),
+        "into bouldering")
+    runner.assertNil(
+        BroughtBy.caption(anchorName: "Alex", firstNight: true,
+                          currentlyInto: nil, enabled: false))
+}
+
+runner.run("BroughtBy.caption never doubles a member's own into prefix") {
+    runner.assertEqual(
+        BroughtBy.caption(anchorName: nil, firstNight: false,
+                          currentlyInto: "Into bouldering", enabled: true),
+        "Into bouldering")
+    runner.assertEqual(
+        BroughtBy.caption(anchorName: "Alex", firstNight: false,
+                          currentlyInto: "  into bouldering ", enabled: true),
+        "with Alex · into bouldering")
+}
+
+runner.run("BroughtBy.caption drops a separator with its part") {
+    // Settled night: anchor, then Currently Into, no first night.
+    runner.assertEqual(
+        BroughtBy.caption(anchorName: "Alex", firstNight: false,
+                          currentlyInto: "bouldering", enabled: true),
+        "with Alex · into bouldering")
+    // No anchor (inviter gone): first night carries the line alone.
+    runner.assertEqual(
+        BroughtBy.caption(anchorName: nil, firstNight: true,
+                          currentlyInto: "bouldering", enabled: true),
+        "first night · into bouldering")
+}
+
+runner.run("BroughtBy.seatLabel appends the anchor behind a name") {
+    runner.assertEqual(
+        BroughtBy.seatLabel(name: "Sam", anchorName: "Alex", enabled: true),
+        "Sam, with Alex")
+    runner.assertEqual(
+        BroughtBy.seatLabel(name: "Sam", anchorName: nil, enabled: true),
+        "Sam")
+    runner.assertEqual(
+        BroughtBy.seatLabel(name: "Sam", anchorName: "Alex", enabled: false),
+        "Sam")
+}
+
 // MARK: - Summary
 
 print("")

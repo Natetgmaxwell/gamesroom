@@ -27,6 +27,7 @@ SRC_FILES=(main.swift
            GamesRoom/Services/InMemoryRoomStore.swift
            GamesRoom/Services/InMemorySweepSeeds.swift
            GamesRoom/Services/QuestionBoxStore.swift
+           GamesRoom/Services/BroughtBy.swift
            GamesRoom/Services/CalendarService.swift
            GamesRoom/Services/MascotEngine.swift
            GamesRoom/Services/MascotFaceEngine.swift
