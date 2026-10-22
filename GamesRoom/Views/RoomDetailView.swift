@@ -1068,40 +1068,67 @@ struct RoomDetailView: View {
                 // event" CTA that the in-room toolbar already
                 // surfaces; members get the legacy "wait for the
                 // host to schedule" copy.
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(isHost ? "No nights on the books yet" : "Standings")
-                        .font(Theme.Typography.title)
-                        .foregroundStyle(Theme.Palette.primaryText)
-                    if !isHost {
-                        Text("The ledger fills in after your first night.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    }
-                    if isHost {
-                        Button {
-                            showingAddEvent = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: Theme.Icon.plus)
-                                Text("Add an event")
-                            }
-                            .font(Theme.Typography.body.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.background)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 16)
-                            .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                //
+                // S3 T4 — that copy is only true while the room is
+                // empty. `StandingsSection` sits further down the
+                // same page, so a populated leaderboard rendered the
+                // empty-state block ABOVE a real table: "No nights
+                // on the books yet" on a room with nights, and the
+                // member caption contradicting the rows under it.
+                // Now: empty leaderboard keeps today's block; a
+                // populated one drops the copy entirely for members
+                // (the standings table IS the content) and keeps only
+                // the host's "Add an event" action, which stays true
+                // at any night count.
+                if leaderboard.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(isHost ? "No nights on the books yet" : "Standings")
+                            .font(Theme.Typography.title)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                        if !isHost {
+                            Text("The ledger fills in after your first night.")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         }
-                        .buttonStyle(.plain)
-                        .padding(.top, 4)
+                        if isHost {
+                            addEventCTA
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .sectionCard(.hero)
+                } else if isHost {
+                    addEventCTA
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .sectionCard(.hero)
+                } else {
+                    EmptyView()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .sectionCard(.hero)
             }
         }
         .transition(.opacity)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: state)
+    }
+
+    /// Host-only "Add an event" CTA for the `.readStandings` hero.
+    /// S3 T4 — extracted so the populated-leaderboard host path can
+    /// render the action alone, without the empty-state title.
+    private var addEventCTA: some View {
+        Button {
+            showingAddEvent = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: Theme.Icon.plus)
+                Text("Add an event")
+            }
+            .font(Theme.Typography.body.weight(.semibold))
+            .foregroundStyle(Theme.Palette.background)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(Theme.Palette.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
     }
 
     // MARK: - Data operations
