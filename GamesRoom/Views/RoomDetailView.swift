@@ -2576,6 +2576,35 @@ private struct CeremonialCard: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// V0.84 C2 — host-only. `nil` unless the host actually has a
+    /// pick to make; drives whether "Make a call" renders at all.
+    private var canMakeACall: Bool {
+        isHost && onTonightStarPick != nil && !hostPickMembers.isEmpty
+    }
+
+    /// V0.84 C2 — host-only caption-size action that opens
+    /// `TonightStarCallSheet`. Rendered inside `TonightStarSection`'s
+    /// label row when there is a star, on its own trailing row when
+    /// there isn't. No chrome of its own — same type scale, same grey.
+    private var makeACallAction: (() -> Void)? {
+        guard canMakeACall else { return nil }
+        return { showingCallSheet = true }
+    }
+
+    private var makeACallButton: some View {
+        Button { showingCallSheet = true } label: {
+            HStack(spacing: 4) {
+                Text("Make a call")
+                Image(systemName: Theme.Icon.chevronRight)
+                    .accessibilityHidden(true)
+            }
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("make-a-call")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
@@ -2594,32 +2623,30 @@ private struct CeremonialCard: View {
             // V0.84 C2 — Tonight's Star section. Hidden when
             // `tonightStarCard == nil` (no host pick AND no
             // chip-swing winner — matches the 067 empty case).
-            // The host's "Make a call" sits trailing on the same
-            // row and opens the pick-member + reason sheet.
-            HStack(alignment: .lastTextBaseline) {
+            // The host's "Make a call" rides the label row inside
+            // `TonightStarSection` so the quote gets the full card
+            // width; with no star to sit beside it, it keeps a row
+            // of its own.
+            Group {
                 if let card = tonightStarCard {
-                    TonightStarSection(card: card)
+                    TonightStarSection(
+                        card: card,
+                        onMakeACall: makeACallAction
+                    )
+                } else if canMakeACall {
+                    HStack {
+                        Spacer(minLength: 12)
+                        makeACallButton
+                    }
                 }
-                if isHost, let onTonightStarPick, !hostPickMembers.isEmpty {
-                    Spacer(minLength: 12)
-                    Button { showingCallSheet = true } label: {
-                        HStack(spacing: 4) {
-                            Text("Make a call")
-                            Image(systemName: Theme.Icon.chevronRight)
-                                .accessibilityHidden(true)
-                        }
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("make-a-call")
-                    .sheet(isPresented: $showingCallSheet) {
-                        TonightStarCallSheet(
-                            members: hostPickMembers,
-                            currentCard: tonightStarCard,
-                            onSave: onTonightStarPick
-                        )
-                    }
+            }
+            .sheet(isPresented: $showingCallSheet) {
+                if let onTonightStarPick {
+                    TonightStarCallSheet(
+                        members: hostPickMembers,
+                        currentCard: tonightStarCard,
+                        onSave: onTonightStarPick
+                    )
                 }
             }
 
@@ -2673,12 +2700,33 @@ private struct CeremonialCard: View {
 /// chip-swing fallback) sits at the card's foot via `heroFootLine`.
 private struct TonightStarSection: View {
     let card: TonightStarCard
+    /// V0.84 C2 — host-only. When non-nil, "Make a call" rides
+    /// trailing on the label row so the quote below keeps the full
+    /// card width. `nil` for members and for a host with nobody to
+    /// pick.
+    var onMakeACall: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Tonight's Star")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            HStack(alignment: .firstTextBaseline) {
+                Text("Tonight's Star")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                if let onMakeACall {
+                    Spacer(minLength: 12)
+                    Button(action: onMakeACall, label: {
+                        HStack(spacing: 4) {
+                            Text("Make a call")
+                            Image(systemName: Theme.Icon.chevronRight)
+                                .accessibilityHidden(true)
+                        }
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    })
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("make-a-call")
+                }
+            }
             HStack(spacing: 6) {
                 Image(systemName: "star.fill")
                     .font(Theme.Typography.caption)
@@ -2688,13 +2736,19 @@ private struct TonightStarSection: View {
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
             }
+            .accessibilityElement(children: .combine)
             if let custom = card.customText, !custom.isEmpty {
                 Text("“\(custom)”")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .accessibilityElement(children: .combine)
+        // `.contain` rather than `.combine`: the label row now hosts
+        // the host's "Make a call", and combining would fold that
+        // button out of the accessibility tree.
+        .accessibilityElement(children: .contain)
     }
 }
 
