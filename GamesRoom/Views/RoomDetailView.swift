@@ -1842,39 +1842,47 @@ private struct BriefingSlot: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            Text(event.name)
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
+        // v1.2.2 S6 T2 — the card body is ONE stack on two spacing
+        // steps and nothing else: groups sit `cardGroupGap` apart,
+        // and the lines that belong together inside the header
+        // block sit `cardLineGap` apart. The ad-hoc `.padding(.top,
+        // N)` nudges that used to sit between groups are gone —
+        // this stack's spacing is the only gap a group boundary
+        // gets.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            // (1) header block — title, date, place. These lines
+            // belong together, so they sit `cardLineGap` apart.
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                Text(event.name)
+                    .font(Theme.Typography.title)
+                    .foregroundStyle(Theme.Palette.primaryText)
 
-            // v1.2 S2 — seat count lives in the tile grid below.
-            Text("\(event.playedAt, format: .dateTime.weekday().day().month().hour().minute())")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                // v1.2 S2 — seat count lives in the tile grid below.
+                Text("\(event.playedAt, format: .dateTime.weekday().day().month().hour().minute())")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 
-            if let venue = event.venue, !venue.isEmpty {
-                Text(venue)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                if let venue = event.venue, !venue.isEmpty {
+                    Text(venue)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                }
             }
 
+            // (2) description — what the host wants said about the night.
             if let hostNote = event.hostNote, !hostNote.isEmpty {
                 Text(hostNote)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
-                    .padding(.top, 8)
             }
 
-            // v1.2 S2 — seat-count text row deleted: the tile grid
-            // is the count, the Who's-coming list is the named version.
-
-            // W2.4 — member-side event edit. Any member can adjust
-            // the note + venue while the event is still in the
-            // future; the affordance sits next to the briefing
-            // content, not in a settings tab.
+            // (3) "Edit details" — W2.4 member-side event edit.
+            // Host-only: the parent passes `onEdit` for the host
+            // and nil for everyone else. The affordance sits with
+            // the briefing content, not in a settings tab.
             if let onEdit {
                 Button(action: onEdit) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Theme.Layout.cardLineGap) {
                         Image(systemName: Theme.Icon.infoCircle)
                             .accessibilityHidden(true)
                         Text("Edit details")
@@ -1883,7 +1891,6 @@ private struct BriefingSlot: View {
                     .foregroundStyle(Theme.Palette.accent)
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 2)
             }
 
             // 2026-08-10 feedback round — the seat grid is the
@@ -1894,21 +1901,22 @@ private struct BriefingSlot: View {
             // maxSeats count, even before the per-member RSVP rows
             // load (the grid then shows all-open seats).
             if event.maxSeats > 0 {
-                // V0.107 — the room id rides in so a claimed seat's
-                // VoiceOver label can name who brought the member
-                // (spec §2, A8).
-                SeatGridRow(maxSeats: event.maxSeats, roomId: room.id,
-                            rsvps: rsvps, currentUserId: currentUserId)
-                    .padding(.top, 4)
+                // (4) the seat grid. V0.107 — the room id rides in so a
+                // claimed seat's VoiceOver label can name who brought the
+                // member (spec §2, A8).
+                //
                 // v1.2 S2 — aggregate claimant caption deleted; the
                 // Who's-coming list below names every claimant.
+                SeatGridRow(maxSeats: event.maxSeats, roomId: room.id,
+                            rsvps: rsvps, currentUserId: currentUserId)
             }
 
+            // (5) actions — one group per RSVP state. v1.2 S2 — one
+            // primary per card state; the decline is a plain-text
+            // secondary, never an outlined peer.
             switch myRSVP {
             case .unclaimed:
-                // v1.2 S2 — one primary per card state; the decline is
-                // a trailing plain-text secondary, not an outlined peer.
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
                     Button(action: onClaim) {
                         Text("Claim seat")
                             .font(Theme.Typography.body.weight(.semibold))
@@ -1919,13 +1927,31 @@ private struct BriefingSlot: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .pressScale()
-                    TrailingTextAction(title: "Can't make it", action: onDecline)
+                    // v1.2.2 S6 T2 — the decline is a caption-grey
+                    // text button centred under the full-width
+                    // primary, same action and same accessibility
+                    // label as before. It used to be a
+                    // `TrailingTextAction`, which right-aligned it
+                    // with a chevron while everything else on the
+                    // card was left-aligned. That component stays
+                    // untouched — the other card states still use
+                    // it.
+                    Button(action: onDecline) {
+                        Text("Can't make it")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Can't make it"))
                 }
-                .padding(.top, 8)
 
             case .claimed:
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+                    // v1.2.2 S6 T2 — icon and its own label belong together,
+                    // so they sit `cardLineGap` apart (was an ad-hoc 6).
+                    HStack(spacing: Theme.Layout.cardLineGap) {
                         Image(systemName: Theme.Icon.checkmarkCircleFill)
                             .foregroundStyle(Theme.Palette.accent)
                         Text("You're in.")
@@ -1987,14 +2013,12 @@ private struct BriefingSlot: View {
                         TrailingTextAction(title: "Release my seat", action: onRelease)
                     }
                 }
-                .padding(.top, 8)
 
             case .declined:
                 V0StateReEntryPills(
                     onReAccept: onReAccept ?? {},
                     onReDecline: onReDecline ?? {}
                 )
-                .padding(.top, 8)
             }
 
             // V0.106 — who's coming, with each claimed member's
@@ -2009,14 +2033,14 @@ private struct BriefingSlot: View {
 
             // V0.84 C5 — host-only notes for next time. v1.1 — sits
             // under the RSVP buttons so Claim seat is the first
-            // action; "Done reading" is a text button.
+            // action; "Done reading" is a text button. (S6 T5 lifts
+            // this out of the card; S6 T3 deletes the list above.)
             if isHost, !unconsumedNotes.isEmpty, let onMarkNotesConsumed {
                 UnconsumedMemberNotesSection(
                     room: room,
                     notes: unconsumedNotes,
                     onDone: { ids in onMarkNotesConsumed(ids) }
                 )
-                .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
