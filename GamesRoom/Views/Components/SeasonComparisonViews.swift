@@ -9,7 +9,8 @@
 //  Level 1 (tap a row) is the dual trace: that season night by night
 //  over the season before it as a grey ghost, plus one sentence.
 //  Level 2 ("Every night") is one row per member with a strip of the
-//  season's nights: green finished up, red down, a gap sat out.
+//  season's nights: green finished up, red down, an outline sat out,
+//  under one line that says so.
 //
 
 import SwiftUI
@@ -415,8 +416,9 @@ struct GridSheetItem: Identifiable {
 /// The season, one row per member: the Members list idiom (monogram,
 /// name, total on the right) with a strip of the season's nights in
 /// place of the caption, oldest on the left. Green = finished the
-/// night up, red = down, a gap = sat out. Sign only, never size. No
-/// axes, legend or dates; tap a mark for its numbers and date.
+/// night up, red = down, an outline = sat out. Sign only, never size.
+/// One grey key line, no axes or dates; tap a mark for its numbers
+/// and date.
 struct SeasonGridSheet: View {
     let title: String
     let grid: SeasonGrid
@@ -444,6 +446,12 @@ struct SeasonGridSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.bottom, 4)
                         .accessibilityIdentifier("season-grid-summary")
+                    Text("Each mark is a night. Green won, red lost, outline sat out.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 4)
+                        .accessibilityIdentifier("season-grid-key")
                     ForEach(Array(grid.members.enumerated()), id: \.element.id) { r, member in
                         if r > 0 { Divider().overlay(Theme.Palette.hairline) }
                         memberRow(r, member)
@@ -517,12 +525,14 @@ struct SeasonGridSheet: View {
         HStack(spacing: 3) {
             ForEach(Array(grid.nights.enumerated()), id: \.element.id) { c, night in
                 let cell = Cell(night: night.id, member: member.id)
+                let mark = grid.mark(night: night.id, member: member.id)
+                let ring = ring(mark, cell)
                 Button { select(cell) } label: {
                     RoundedRectangle(cornerRadius: 2.5)
-                        .fill(fill(grid.mark(night: night.id, member: member.id)))
+                        .fill(fill(mark))
                         .overlay(
                             RoundedRectangle(cornerRadius: 2.5)
-                                .stroke(Theme.Palette.primaryText, lineWidth: selected == cell ? 1.5 : 0)
+                                .stroke(ring.color, lineWidth: ring.width)
                         )
                         .frame(minWidth: 4, maxWidth: 10)
                         .frame(height: 14)
@@ -549,6 +559,14 @@ struct SeasonGridSheet: View {
         case .even: return Theme.Palette.primaryText.opacity(0.3)
         case .satOut: return .clear
         }
+    }
+
+    /// Selection wins. Otherwise a sat-out night keeps a 1pt hairline
+    /// on the same shape and size, so the slot reads as a night that
+    /// was sat out rather than as a rendering gap.
+    private func ring(_ mark: SeasonGrid.Mark, _ cell: Cell) -> (color: Color, width: CGFloat) {
+        if selected == cell { return (Theme.Palette.primaryText, 1.5) }
+        return mark == .satOut ? (Theme.Palette.hairline, 1) : (.clear, 0)
     }
 
     private func initials(_ name: String) -> String {
