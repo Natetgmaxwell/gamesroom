@@ -2562,6 +2562,20 @@ private struct CeremonialCard: View {
     /// V0.84 C5 — local UI state for the one-line drop text field.
     @State private var memberNoteDraft: String = ""
 
+    /// Settled date and next-episode teaser on ONE caption tier,
+    /// so the header stops saying the same thing in two type sizes.
+    /// `nil` when the event has neither.
+    private var settledCaption: String? {
+        var parts: [String] = []
+        if let settledAt = event.settledAt {
+            parts.append("Settled \(settledAt.formatted(.relative(presentation: .named)))")
+        }
+        if let teaser = chapterLine?.nextEpisodeTeaser, !teaser.isEmpty {
+            parts.append("Next: \(teaser)")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
@@ -2569,17 +2583,10 @@ private struct CeremonialCard: View {
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText)
 
-                if let settledAt = event.settledAt {
-                    Text("Settled \(settledAt, format: .relative(presentation: .named))")
+                if let settledCaption {
+                    Text(settledCaption)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                }
-
-                if let teaser = chapterLine?.nextEpisodeTeaser, !teaser.isEmpty {
-                    Text("Next: \(teaser)")
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                        .padding(.top, 6)
                 }
             }
             .accessibilityElement(children: .combine)
