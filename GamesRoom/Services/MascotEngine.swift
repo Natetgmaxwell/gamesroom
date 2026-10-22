@@ -1366,7 +1366,7 @@ enum MascotEngine {
             case .roomStale:
                 return "{room} hasn't played in {days_quiet} days. The host says 'soon.' I've heard that before."
             case .standings:
-                return "{room} has no event on the books. {leader} is 'winning.' The host says so."
+                return "{room} has no event on the books. {leader} leads for now."
             case .tonightEvent:
                 return "{event} is happening. {leader} leads. The host calls it a night; we call it a suggestion."
             case .inPlayWithWithdrawal:
@@ -1724,7 +1724,7 @@ enum MascotEngine {
             case .roomWelcome:
                 return "The host has 'planned' nothing for {room}. A bold strategy."
             case .inPlay:
-                return "{event} is happening. {leader} is 'winning.' The host says so."
+                return "{event} is happening. {leader} leads for now."
             case .roomStale:
                 return "The host has 'scheduled' nothing for {room} in {days_quiet} days. A bold strategy."
             case .standings:
