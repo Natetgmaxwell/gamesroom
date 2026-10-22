@@ -194,18 +194,19 @@ final class ScreenshotSweepTests: XCTestCase {
 
         openRoom(app, named: "Carwoola Crew")
 
-        // S3 T4: the `member-idle` seed only drops the active event —
-        // the room keeps its standings rows, so `.readStandings` now
-        // renders NOTHING in the hero (no "The ledger fills in" line
-        // above a populated table) and the real standings own the page.
+        // S3 T4: the `member-idle` seed keeps its standings rows, so
+        // `.readStandings` renders nothing in the hero. Wait for the
+        // real Standings header (the room loads async), THEN assert the
+        // empty-state copy is absent. Asserting absence first passed
+        // vacuously on the loading screen and the swipes overshot.
+        let standings = app.staticTexts["Standings"].firstMatch
+        XCTAssertTrue(
+            standings.waitForExistence(timeout: 10),
+            "Member readStandings branch never rendered — the standings section is missing."
+        )
         XCTAssertFalse(
             app.staticTexts["The ledger fills in after your first night."].firstMatch.exists,
             "Empty-state copy rendered above populated standings (S3 T4 regression)."
-        )
-        let standings = app.staticTexts["Standings"].firstMatch
-        XCTAssertTrue(
-            scrollUntilHittable(app, element: standings),
-            "Member readStandings branch never rendered — the standings section is missing."
         )
 
         snap(app, "07-room-detail-member-idle")
