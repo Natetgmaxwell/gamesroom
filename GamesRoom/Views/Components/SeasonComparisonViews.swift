@@ -6,6 +6,8 @@
 //  level 0 is one bar per season (no tap), with a ghost tick on the
 //  current bar where last season ended. No axes, no legend: grey is
 //  the past, accent is now, and the numbers sit beside the bars.
+//  Each bar carries the count of nights behind it, so the length is
+//  never read on its own.
 //  Level 1 (tap a row) is the dual trace: that season night by night
 //  over the season before it as a grey ghost, plus one sentence.
 //  Level 2 ("Every night") is one row per member with a strip of the
@@ -39,6 +41,14 @@ struct SeasonsSection: View {
 
     private func nights(_ row: SeasonHistoryEntry) -> [Int64] {
         SeasonComparison.nightTotals(row.scoreProgression)
+    }
+
+    /// What a bar's score was made over, in the fewest words. Empty
+    /// when the season has no night data yet: a bar with no honest
+    /// label is better than one with a wrong one.
+    private func nightsCaption(_ count: Int) -> String {
+        guard count > 0 else { return "" }
+        return count == 1 ? "1 night" : "\(count) nights"
     }
 
     private func toggle(_ key: Int) {
@@ -100,7 +110,8 @@ struct SeasonsSection: View {
                 fraction: SeasonComparison.barFraction(currentScore, scale: scale),
                 color: currentScore < 0 ? Theme.Palette.loss : Theme.Palette.accent,
                 tick: lastSeasonFinal.map { SeasonComparison.barFraction($0, scale: scale) },
-                grown: grown
+                grown: grown,
+                caption: nightsCaption(currentNights.count)
             )
         }
         .padding(.vertical, Theme.Layout.roomRowInset)
@@ -151,7 +162,8 @@ struct SeasonsSection: View {
                 fraction: SeasonComparison.barFraction(row.callerTotal, scale: scale),
                 color: Theme.Palette.primaryText.opacity(0.28),
                 tick: nil,
-                grown: grown
+                grown: grown,
+                caption: nightsCaption(nights(row).count)
             )
         }
         .padding(.vertical, Theme.Layout.roomRowInset)
@@ -208,27 +220,43 @@ struct SeasonsSection: View {
 
 /// One season as a bar. `tick` marks where last season ended, drawn
 /// as a thin grey line crossing the bar, so "am I past it?" is read
-/// by position, not by numbers.
+/// by position, not by numbers. `caption` says how many nights the
+/// bar's score was made over, so no bar sits there unexplained. The
+/// caption column is always reserved, even when empty, so every bar in
+/// the section starts at the same x and lengths stay comparable.
 struct SeasonBar: View {
     let fraction: Double
     let color: Color
     let tick: Double?
     let grown: Bool
+    var caption: String = ""
+
+    /// Same column and width as `scoreText`, so the caption under a
+    /// bar lines up with the number above it.
+    private static let captionWidth: CGFloat = 72
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(color)
-                    .frame(width: max(geo.size.width * (grown ? fraction : 0), fraction > 0 ? 2 : 0), height: 6)
-                if let tick {
-                    Rectangle()
-                        .fill(Theme.Palette.primaryText.opacity(0.6))
-                        .frame(width: 1.5, height: 14)
-                        .offset(x: min(geo.size.width * tick, geo.size.width - 1.5))
+        HStack(spacing: Theme.Layout.roomHeaderGap) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(color)
+                        .frame(width: max(geo.size.width * (grown ? fraction : 0), fraction > 0 ? 2 : 0), height: 6)
+                    if let tick {
+                        Rectangle()
+                            .fill(Theme.Palette.primaryText.opacity(0.6))
+                            .frame(width: 1.5, height: 14)
+                            .offset(x: min(geo.size.width * tick, geo.size.width - 1.5))
+                    }
                 }
+                .frame(height: 14)
             }
             .frame(height: 14)
+            Text(caption)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .lineLimit(1)
+                .frame(width: Self.captionWidth, alignment: .trailing)
         }
         .frame(height: 14)
         .accessibilityHidden(true)
