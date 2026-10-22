@@ -23,3 +23,16 @@
 - [ ] **T3 — Member switch in the app.** Add `fetchAnchorPushEnabled(roomId:)` / `setAnchorPushEnabled(roomId:on:)` through the store protocol, Supabase store (RPCs from T1; bare Bool, nil → true) and `InMemoryRoomStore` (default true), following how S5a wired `fetchShowBroughtBy`. In the member's room notification settings (where the room notifications toggle lives), add `Toggle("Remind me when someone I brought is coming", ...)`, shown to every member, disabled (greyed) while room notifications are off. Save failures surface like the existing toggles; never revert silently. Add one unit test for the in-memory round trip in `main.swift`. Gate iOS. Commit `S5b T3: member switch for the anchor push`.
 
 - [ ] **T4 — Report.** Run both deno test commands and `bash .maestro/gate.sh`; see every PASS yourself. Write `.maestro/S5B_REPORT.md`: test tails, `git diff --stat 827d117..HEAD`, and for A11 and A12 how each rule is enforced (file:line) and what is NOT tested. List every assumption you made about table/column names. Commit `S5b T4: report`.
+
+---
+
+### Notes — T1 (migration 105)
+
+- Tracked at lowercase `supabase/migrations/105_anchor_push.sql` (case-insensitive FS would have recorded `Supabase/`; S5a's review fixed 103 to lowercase, so the index path was set explicitly). The file on disk is the same directory.
+- `event_rsvps.member_id` is a **user id**, not a membership id — confirmed from the 033 RLS policies (`member_id = auth.uid()`).
+- Fail-closed ordering is deliberate: the pg_net extension check and the vault secret read happen **before** the `anchor_nudges` insert, so a send that never happened does not consume the one allowed nudge. When the secret is finally set, the next claim still sends.
+- The trigger's release branch is guarded by `tg_op = 'UPDATE'`. `OLD` is unassigned on INSERT and the 033 default state is `unclaimed`, so an `unclaimed` row arriving fresh would otherwise raise.
+- Self-invite (`invited_by = user_id`) is rejected in the inviter lookup.
+- Night count = `events.settled_at is not null` in the room with a claimed RSVP held by the newcomer (033 added `settled_at`).
+- `set_anchor_push_enabled` raises `not_a_member` (42501) when the caller has no active membership; no host check, because the predicate is the guard.
+- No gate was run for T1 — the playbook names gates only for T2 (`deno test`) and T3 (`.maestro/gate.sh`). Nothing was applied, deployed, or set against Supabase.
