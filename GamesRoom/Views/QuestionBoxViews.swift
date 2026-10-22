@@ -4,7 +4,9 @@
 //
 //  V0.106 — every Question Box / Currently Into surface:
 //    • ClaimedCardAskField      — the one optional line under "You're in."
-//    • WhosComingList           — Briefing who's-coming + Currently Into
+//    • WhosComingList           — Briefing who's-coming + the
+//                                 brought-by caption (anchor · first
+//                                 night · Currently Into, V0.107)
 //    • QuestionReaderCard       — the reader's full-screen card
 //    • HostQuestionFallback     — the host's quiet "Sam's asking" line
 //    • QuestionBoxSettingsView  — host settings + question editor
@@ -123,12 +125,59 @@ struct ClaimedCardAskField: View {
 // MARK: - Briefing who's-coming (spec §2.3)
 
 struct WhosComingList: View {
+    /// The room the event belongs to. Needed to resolve the anchor
+    /// (`Member.invitedBy` against the active roster), the first-night
+    /// signal (the leaderboard) and the room's switch.
+    let roomId: UUID
     let eventId: UUID
     let rsvps: [EventRSVP]
 
     @EnvironmentObject private var questionBox: QuestionBoxService
+    @EnvironmentObject private var roomService: RoomService
 
     private var claimed: [EventRSVP] { rsvps.filter { $0.state == .claimed } }
+
+    /// The grey line under a name: anchor, first night, Currently
+    /// Into, in that order (spec §2). All three parts are optional
+    /// and a missing one drops out with its separator, so the room
+    /// with nothing to say still renders no line at all.
+    ///
+    /// The Currently Into part comes from `currentlyIntoLine`, which
+    /// is nil for a stale or empty value, so the staleness rule V0.106
+    /// shipped is unchanged; `BroughtBy` only prefixes the "into ".
+    private func caption(for rsvp: EventRSVP) -> String? {
+        var anchorName: String?
+        if let member = member(for: rsvp) {
+            anchorName = roomService.anchorName(for: member, roomId: roomId)
+        }
+        return BroughtBy.caption(
+            anchorName: anchorName,
+            firstNight: isFirstNight(rsvp.memberId),
+            currentlyInto: questionBox.currentlyIntoLine(eventId: eventId, memberId: rsvp.memberId),
+            enabled: roomService.cachedShowBroughtBy(roomId: roomId)
+        )
+    }
+
+    /// `EventRSVP.memberId` is the member's user id (migration 066
+    /// selects `rm.user_id as member_id`), so it matches
+    /// `Member.userId` directly. Nil for a member who is not on the
+    /// active roster, which is also what keeps a kicked member's name
+    /// off the page.
+    private func member(for rsvp: EventRSVP) -> Member? {
+        roomService.cachedMembers(roomId: roomId).first { $0.userId == rsvp.memberId }
+    }
+
+    /// First night = no settled session in this room yet, so the
+    /// leaderboard's all-time `sessionsPlayed` is 0 (spec §4).
+    /// The board lists every active member, so a member missing from
+    /// it means the board has not loaded yet on this path: treat
+    /// that as "not a newcomer" rather than labelling the whole room
+    /// first-night on a cold open.
+    private func isFirstNight(_ userId: UUID) -> Bool {
+        roomService.cachedLeaderboard(roomId: roomId)
+            .first { $0.userId == userId }?
+            .sessionsPlayed == 0
+    }
 
     var body: some View {
         if !claimed.isEmpty {
@@ -141,11 +190,12 @@ struct WhosComingList: View {
                         Text(rsvp.displayName)
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Palette.primaryText)
-                        if let line = questionBox.currentlyIntoLine(eventId: eventId, memberId: rsvp.memberId) {
+                        if let line = caption(for: rsvp) {
                             Text(line)
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.5))
                                 .accessibilityIdentifier("currently-into-\(rsvp.displayName)")
+                                .accessibilityIdentifier("brought-by-\(rsvp.displayName)")
                         }
                     }
                 }

@@ -1995,9 +1995,13 @@ private struct BriefingSlot: View {
 
             // V0.106 — who's coming, with each claimed member's
             // Currently Into as grey secondary text (fresh only).
+            // V0.107 — that line is now the brought-by caption
+            // ("with Alex · first night · into bouldering"), built by
+            // `WhosComingList` from the roster, leaderboard and room
+            // switch it reads off the room service.
             // v1.1 — below the RSVP buttons so Claim seat stays
             // above the fold.
-            WhosComingList(eventId: event.id, rsvps: rsvps)
+            WhosComingList(roomId: room.id, eventId: event.id, rsvps: rsvps)
 
             // V0.84 C5 — host-only notes for next time. v1.1 — sits
             // under the RSVP buttons so Claim seat is the first
