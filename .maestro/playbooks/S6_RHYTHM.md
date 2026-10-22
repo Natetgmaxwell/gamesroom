@@ -19,7 +19,7 @@
 
 ## Tasks
 
-- [ ] **T1 — Card tokens.** In `GamesRoom/Theme.swift` `enum Layout`, after `roomRowInset`, add `static let cardLineGap: CGFloat = 4` ("lines that belong together inside a card: title, date, place") and `static let cardGroupGap: CGFloat = 16` ("groups inside a card: header block, description, seats, actions"). Gate, restore pbxproj, stage, commit `S6 T1: card line and group gap tokens`.
+- [x] **T1 — Card tokens.** In `GamesRoom/Theme.swift` `enum Layout`, after `roomRowInset`, add `static let cardLineGap: CGFloat = 4` ("lines that belong together inside a card: title, date, place") and `static let cardGroupGap: CGFloat = 16` ("groups inside a card: header block, description, seats, actions"). Gate, restore pbxproj, stage, commit `S6 T1: card line and group gap tokens`.
 
 - [ ] **T2 — Event card rhythm.** In `BriefingSlot`, restructure the card body into one `VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap)` whose children are groups, in order: (1) header block = title, date, place as a `VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap)`; (2) description text; (3) "Edit details" (host only); (4) the seat grid; (5) actions = the primary button and "Can't make it". Remove the ad-hoc `.padding(.top, N)` / `.padding(.vertical, N)` and literal `spacing:` values between these groups (keep paddings INSIDE a button label or a grid cell). Make "Can't make it" a plain caption-grey text button centred under the full-width primary button (`frame(maxWidth: .infinity)`), no chevron, same action, same accessibility label. Do not change `TrailingTextAction` itself (other screens use it). Gate, restore pbxproj, stage, commit `S6 T2: event card on two spacing steps; secondary action centred`.
 

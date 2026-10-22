@@ -103,6 +103,17 @@ enum Theme {
         /// Vertical inset inside every list row (above and below,
         /// hairline between rows).
         static let roomRowInset: CGFloat = 12
+
+        // Inside a card (v1.2.2). Two steps and nothing else, so a
+        // card's lines breathe as a block and its groups breathe as
+        // a block: lines that belong together sit 4 apart (title,
+        // date, place), groups sit 16 apart (header block,
+        // description, seats, actions).
+        /// Lines that belong together inside a card: title, date, place.
+        static let cardLineGap: CGFloat = 4
+        /// Groups inside a card: header block, description, seats, actions.
+        static let cardGroupGap: CGFloat = 16
+
         /// Min width for a host-scoring chip. 160 on iPad (table-distance
         /// tap target), 120 on iPhone.
         static func scoringChipMin(for hSize: UserInterfaceSizeClass?) -> CGFloat {
