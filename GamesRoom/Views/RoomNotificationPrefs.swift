@@ -121,12 +121,100 @@ struct RoomNotifSettingsSection: View {
             if liveRoom.notificationsEnabled, let event = activeEvent {
                 EventMuteRow(event: event, currentUserId: auth.currentUser?.id)
             }
+
+            // V0.107 §2b — the member's OWN anchor-push switch. Every
+            // role sees it (it is about their phone, not about the
+            // room), and it is greyed while the room's notifications
+            // are off because the server drops the nudge then
+            // anyway — migration 105 checks `notifications_enabled`
+            // before it ever queues one.
+            AnchorPushRow(
+                room: room,
+                notificationsOn: liveRoom.notificationsEnabled
+            )
         } header: {
             Text("My notifications")
         } footer: {
             Text(liveRoom.notificationsEnabled
                  ? "Mute a single night below. Declining a seat also mutes that night."
-                 : "Turn on to get a nudge when \(liveRoom.name) schedules a night.")
+                 : "Turn on to get a nudge when \(liveRoom.name) schedules a night. The reminder for someone you brought waits behind it.")
+        }
+    }
+}
+
+/// V0.107 §2b — "Remind me when someone I brought is coming", the
+/// member switch that gates the anchor push. Self-contained (own
+/// `.task` to load, own error row) so it seeds the same way the
+/// per-event mute row does, rather than relying on a host-only
+/// settings sheet lifecycle.
+///
+/// The toggle is NOT optimistically flipped: its `get` reads the
+/// service cache, which is only written once the server accepted
+/// the save. A failed save therefore leaves the switch on the last
+/// acknowledged value AND shows the reason beside it — the member
+/// is never left believing a nudge is coming when none will.
+private struct AnchorPushRow: View {
+    @EnvironmentObject private var roomService: RoomService
+    let room: Room
+    let notificationsOn: Bool
+
+    @State private var saveError: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: Binding(
+                get: { roomService.cachedAnchorPushEnabled(roomId: room.id) },
+                set: { newValue in
+                    Task { await save(newValue) }
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Remind me when someone I brought is coming")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Text("A nudge when they claim a seat and you haven't — while they're new.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
+            }
+            .tint(Theme.Palette.accent)
+            // Greyed, not hidden: the switch is part of "My
+            // notifications" whatever the room switch says, and
+            // the room switch is right above it.
+            .disabled(!notificationsOn)
+            .accessibilityIdentifier("anchor-push-enabled-toggle")
+            // Full width so the switch lands on the trailing edge
+            // like the two toggles above it — this row carries the
+            // error line too, so it cannot rely on the Form row's
+            // own layout to push the switch out.
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let saveError {
+                HStack(spacing: 8) {
+                    Image(systemName: Theme.Icon.exclamationmarkTriangleFill)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.red.opacity(0.85))
+                        .accessibilityHidden(true)
+                    Text("Couldn't save that reminder: \(saveError)")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.red.opacity(0.85))
+                }
+                .accessibilityIdentifier("anchor-push-enabled-error")
+            }
+        }
+        .task {
+            _ = await roomService.loadAnchorPushEnabled(roomId: room.id)
+        }
+    }
+
+    private func save(_ on: Bool) async {
+        do {
+            try await roomService.setAnchorPushEnabled(roomId: room.id, on: on)
+            saveError = nil
+            Haptics.light()
+        } catch {
+            saveError = (error as NSError).localizedDescription
+            Haptics.warning()
         }
     }
 }

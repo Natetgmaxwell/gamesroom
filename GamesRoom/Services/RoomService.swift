@@ -138,6 +138,17 @@ final class RoomService: ObservableObject {
     /// default, on.
     @Published private(set) var showBroughtByByRoom: [UUID: Bool] = [:]
 
+    /// V0.107 §2b — per-room "Remind me when someone I brought is
+    /// coming" switch, keyed by roomId. This is the MEMBER's own
+    /// preference, not a room setting, but it is stored on the
+    /// member's row so it reads through the same
+    /// `(room_id, current_user_id())` shape the rest of the member
+    /// prefs use. Populated by `loadAnchorPushEnabled` from the
+    /// notification settings section; consumed by
+    /// `cachedAnchorPushEnabled`. Absent means the
+    /// `anchor_push_enabled` column default, on.
+    @Published private(set) var anchorPushEnabledByRoom: [UUID: Bool] = [:]
+
     /// Current season cache keyed by roomId. Populated lazily by
     /// `loadCurrentSeason(roomId:)`; consumed by `RoomDetailView`
     /// to drive the `.seasonClose` V0State branch.
@@ -1404,6 +1415,62 @@ final class RoomService: ObservableObject {
         try await store.setShowBroughtBy(roomId: roomId, on: on)
         self.showBroughtByByRoom[roomId] = on
         cacheTimestamps.removeValue(forKey: "showBroughtBy:\(roomId.uuidString)")
+        self.lastError = nil
+    }
+
+    /// Cached `anchor_push_enabled` switch for `roomId`. Defaults
+    /// to `true` (the column default) when the room has never been
+    /// read, so a cold open shows the switch where the server says
+    /// it should be rather than inventing a "muted" state the
+    /// member never chose.
+    func cachedAnchorPushEnabled(roomId: UUID) -> Bool {
+        anchorPushEnabledByRoom[roomId] ?? true
+    }
+
+    /// Loads the caller's own anchor-push switch for `roomId` into
+    /// the cache. Returns the cached value so the notification
+    /// settings row can ignore it; the view reads
+    /// `cachedAnchorPushEnabled`. Not loaded with the roster: the
+    /// switch only renders in notification settings, so it is
+    /// loaded when that surface appears.
+    @discardableResult
+    func loadAnchorPushEnabled(roomId: UUID, force: Bool = false) async -> Bool {
+        let key = "anchorPushEnabled:\(roomId.uuidString)"
+        if !force, isFresh(key) { return cachedAnchorPushEnabled(roomId: roomId) }
+        do {
+            let on = try await store.fetchAnchorPushEnabled(roomId: roomId)
+            self.anchorPushEnabledByRoom[roomId] = on
+            self.cacheTimestamps[key] = Date()
+            self.lastError = nil
+            return on
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return cachedAnchorPushEnabled(roomId: roomId)
+        }
+    }
+
+    /// Persists the caller's own anchor-push switch through
+    /// `set_anchor_push_enabled` (migration 105), then mirrors the
+    /// persisted value into the cache so the toggle re-renders
+    /// without a refetch.
+    ///
+    /// The cache is written only AFTER the server accepted the
+    /// write, so a failed save leaves the toggle on the last
+    /// acknowledged value and the caller shows the error next to it
+    /// — the switch is never optimistically flipped and never
+    /// quietly flipped back. Throws on the RPC's `not_a_member`
+    /// (42501); `lastError` is set from that failure first, so the
+    /// service-level sink carries it even if the view only guards
+    /// its own row.
+    func setAnchorPushEnabled(roomId: UUID, on: Bool) async throws {
+        do {
+            try await store.setAnchorPushEnabled(roomId: roomId, on: on)
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            throw error
+        }
+        self.anchorPushEnabledByRoom[roomId] = on
+        cacheTimestamps.removeValue(forKey: "anchorPushEnabled:\(roomId.uuidString)")
         self.lastError = nil
     }
 

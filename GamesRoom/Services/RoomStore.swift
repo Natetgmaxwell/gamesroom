@@ -1202,4 +1202,41 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .execute()
             .value as Void
     }
+
+    // MARK: - Anchor push (V0.107 §2b — the "Sam's coming Friday. Are you?" push)
+
+    /// The live RPC is `get_anchor_push_enabled(p_room_id)`
+    /// (migration 105, not yet applied). Self-scoped to the caller
+    /// with no host check. `returns boolean`, so PostgREST sends a
+    /// bare JSON `true` / `false`; `null` for a caller with no
+    /// active membership folds into the column default (`true`),
+    /// exactly as `fetchShowBroughtBy` above folds its null — a
+    /// member whose read missed must not be shown as muted.
+    func fetchAnchorPushEnabled(roomId: UUID) async throws -> Bool {
+        let raw: Bool? = try await SupabaseClientProvider.shared
+            .rpc("get_anchor_push_enabled", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return raw ?? true
+    }
+
+    /// The live RPC is `set_anchor_push_enabled(p_room_id, p_on)`
+    /// (migration 105, not yet applied). Scoped by its own predicate
+    /// to the caller's active membership — raises `not_a_member`
+    /// (42501) rather than 403, and there is no host check because
+    /// a member may only ever write their own switch. Returns void;
+    /// the caller mirrors the value into its cache. Bool params go
+    /// over the wire as their Postgres text form, matching
+    /// `setShowBroughtBy` above.
+    func setAnchorPushEnabled(roomId: UUID, on: Bool) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_anchor_push_enabled", params: [
+                "p_room_id": roomId.uuidString,
+                "p_on": String(on)
+            ])
+            .execute()
+            .value as Void
+    }
 }

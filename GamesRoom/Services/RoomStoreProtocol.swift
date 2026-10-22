@@ -533,6 +533,34 @@ protocol RoomStore: Sendable {
     /// (migration 103, not yet deployed) — host check via
     /// `is_room_host(p_room_id, current_user_id())` (migration 095).
     func setShowBroughtBy(roomId: UUID, on: Bool) async throws
+
+    // MARK: - Anchor push (V0.107 §2b — "Sam's coming Friday. Are you?")
+
+    /// Reads the CALLER'S own `anchor_push_enabled` switch for one
+    /// room — the member switch that decides whether they receive
+    /// the push when someone they brought claims a seat and they
+    /// have not. Self-scoped, so any active member may read it (the
+    /// switch is about their own phone, not about the room).
+    ///
+    /// The RPC returns a bare JSON boolean, and `null` for a
+    /// non-member caller, so the store folds `null` into the column
+    /// default (`true`) rather than throwing: a null read must never
+    /// read as "muted" when the default is on.
+    ///
+    /// Server side: `get_anchor_push_enabled(p_room_id)`
+    /// (migration 105, not yet applied).
+    func fetchAnchorPushEnabled(roomId: UUID) async throws -> Bool
+
+    /// Turns the caller's own anchor-push switch on or off. Scoped
+    /// to the caller's active membership by the RPC's own predicate —
+    /// there is no host check and no way to write another member's
+    /// switch. Raises `not_a_member` (42501) when the caller holds
+    /// no active membership. Idempotent. Returns void, so the
+    /// caller mirrors the value into its cache.
+    ///
+    /// Server side: `set_anchor_push_enabled(p_room_id, p_on)`
+    /// (migration 105, not yet applied).
+    func setAnchorPushEnabled(roomId: UUID, on: Bool) async throws
 }
 
 /// V0.91 — the action the host applies to a room member via

@@ -5286,6 +5286,22 @@ runner.runAsync("InMemoryRoomStore show_brought_by is per room, not global") {
     runner.assertTrue(try await store.fetchShowBroughtBy(roomId: rooms[1].id))
 }
 
+runner.runAsync("InMemoryRoomStore anchor_push_enabled round-trips both ways from the column default") {
+    // V0.107 §2b. Defaults on (the `anchor_push_enabled` column
+    // default), then round-trips off and back on. Re-saving the same
+    // value is a no-op: the member's switch is the one thing they
+    // own here, so a repeat save must not flip it.
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    runner.assertTrue(try await store.fetchAnchorPushEnabled(roomId: room.id))
+    try await store.setAnchorPushEnabled(roomId: room.id, on: false)
+    runner.assertFalse(try await store.fetchAnchorPushEnabled(roomId: room.id))
+    try await store.setAnchorPushEnabled(roomId: room.id, on: false)
+    runner.assertFalse(try await store.fetchAnchorPushEnabled(roomId: room.id))
+    try await store.setAnchorPushEnabled(roomId: room.id, on: true)
+    runner.assertTrue(try await store.fetchAnchorPushEnabled(roomId: room.id))
+}
+
 // MARK: - Summary
 
 print("")

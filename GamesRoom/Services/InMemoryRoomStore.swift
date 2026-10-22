@@ -189,6 +189,13 @@ actor InMemoryRoomStore: RoomStore {
     /// `boolean not null default true`.
     private var showBroughtByByRoom: [UUID: Bool]
 
+    /// V0.107 §2b — per-member anchor-push switch, keyed by roomId.
+    /// Mirrors `room_memberships.anchor_push_enabled` (migration
+    /// 105). Absent means the column default (`true`): a member
+    /// hears about someone they brought bringing a newcomer until
+    /// they turn it off themselves.
+    private var anchorPushEnabledByRoom: [UUID: Bool]
+
     init() {
         // V0.97+ screenshot bypass — `-screenshots-as-member` flips
         // carwoola (the seeded BriefingSlot target room) to
@@ -401,6 +408,10 @@ actor InMemoryRoomStore: RoomStore {
         // V0.107 — no explicit switch seeded: every room reads the
         // `show_brought_by` column default (on) until a host saves.
         self.showBroughtByByRoom = [:]
+        // V0.107 §2b — same reasoning for the member's own anchor
+        // push switch: no explicit seed, so every room reads the
+        // `anchor_push_enabled` column default (on).
+        self.anchorPushEnabledByRoom = [:]
         // W-06 — seed every room with a default casino config so
         // the host's settings sheet reads a non-nil initial state.
         // `standardPresets == true` with an empty map is the
@@ -1387,6 +1398,24 @@ actor InMemoryRoomStore: RoomStore {
         showBroughtByByRoom[roomId] = on
     }
 
+    /// In-memory mirror of `get_anchor_push_enabled(p_room_id)`
+    /// (migration 105). An absent entry is the
+    /// `anchor_push_enabled` column default, so every seeded room
+    /// reads `true` until the member saves — the same
+    /// fold-null-to-default the live store does for a non-member.
+    func fetchAnchorPushEnabled(roomId: UUID) async throws -> Bool {
+        return anchorPushEnabledByRoom[roomId] ?? true
+    }
+
+    /// In-memory mirror of `set_anchor_push_enabled(p_room_id,
+    /// p_on)` (migration 105). Self-scoped server-side by the
+    /// membership predicate; here the synthetic caller is a member
+    /// of every seeded room, so a tap never trips a synthetic
+    /// `not_a_member` and the cache stays the only state. Idempotent.
+    func setAnchorPushEnabled(roomId: UUID, on: Bool) async throws {
+        anchorPushEnabledByRoom[roomId] = on
+    }
+
     /// M4 — returns the room's unread system events. Empty
     /// array when no events. The live impl queries
     /// `public.room_system_events` filtered by `acknowledged_at
@@ -1770,6 +1799,7 @@ actor InMemoryRoomStore: RoomStore {
         seasonHistoryByRoom.removeValue(forKey: roomId)
         casinoConfigs.removeValue(forKey: roomId)
         showBroughtByByRoom.removeValue(forKey: roomId)
+        anchorPushEnabledByRoom.removeValue(forKey: roomId)
     }
 
     func updateRoom(
