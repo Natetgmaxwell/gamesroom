@@ -73,6 +73,16 @@ struct RoomSettingsSheet: View {
     @State private var joinStartingBonus: Int
     @State private var briefing48hEnabled: Bool
     @State private var socialPreferencesEnabled: Bool
+    // V0.107 — "brought by" host switch. The column is not on the
+    // `Room` model (migration 103 ships its own RPC, not a
+    // `update_room_settings` field), so there is nothing to seed in
+    // `init`: the open-time seed comes from `RoomService` on the
+    // stack's `.task` below. `seededShowBroughtBy` holds the value
+    // that seed/wire actually persisted so opening settings never
+    // reads as an edit (the same guard the W2.6 subtitle bumper
+    // uses) while a host tap always does.
+    @State private var showBroughtBy: Bool = true
+    @State private var seededShowBroughtBy: Bool?
     @State private var autoCloseHours: Int
     @State private var seatDepositAmount: Int
     @State private var seatDepositTrigger: SeatDepositTrigger
@@ -200,11 +210,20 @@ struct RoomSettingsSheet: View {
         .task {
             // W2.6 — seed the subtitle field from the current
             // season once the environment object is available.
-            // Remember what we seeded so the bumper doesn't treat
-            // the seed as an edit (spurious write on open).
+            // Remember what we seeded so the bumper doesn't treat the
+            // seed as an edit (spurious write on open).
             if seasonSubtitle.isEmpty {
                 seededSeasonSubtitle = roomService.cachedCurrentSeason(roomId: room.id)?.subtitle ?? ""
                 seasonSubtitle = seededSeasonSubtitle
+            }
+            // V0.107 — seed the brought-by switch. `cachedShowBroughtBy`
+            // defaults to true so a cold open (the RPC has not landed
+            // yet) still shows the switch where the column default
+            // says it should be.
+            if seededShowBroughtBy == nil {
+                let on = await roomService.loadShowBroughtBy(roomId: room.id)
+                seededShowBroughtBy = on
+                showBroughtBy = on
             }
         }
         .tint(Theme.Palette.accent)
@@ -267,6 +286,13 @@ struct RoomSettingsSheet: View {
             .onChange(of: joinStartingBonus) { _, _ in bumpDraft() }
             .onChange(of: briefing48hEnabled) { _, _ in bumpDraft() }
             .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
+            .onChange(of: showBroughtBy) { _, newValue in
+                // The open-time seed is not an edit. A tap that lands
+                // back on the persisted value is an edit: the seed
+                // moves with every successful write, so it only ever
+                // equals the last value the server acknowledged.
+                if newValue != seededShowBroughtBy { bumpDraft() }
+            }
             .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
             .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
             .onChange(of: seatDepositTrigger) { _, _ in bumpDraft() }
@@ -367,11 +393,17 @@ struct RoomSettingsSheet: View {
                     NavigationLink {
                         RoomSettingsOperationsSheet(
                             roomId: room.id,
+                            // V0.107 — the brought-by switch is host
+                            // only; the sheet itself is member-reachable
+                            // (V0.79 made the gear member-visible), so
+                            // the gate is passed down explicitly.
+                            isHost: room.userRole == .host,
                             maxSeats: $maxSeats,
                             memberInviteQuota: $memberInviteQuota,
                             joinStartingBonus: $joinStartingBonus,
                             briefing48hEnabled: $briefing48hEnabled,
                             socialPreferencesEnabled: $socialPreferencesEnabled,
+                            showBroughtBy: $showBroughtBy,
                             autoCloseHours: $autoCloseHours,
                             seatDepositAmount: $seatDepositAmount,
                             seatDepositTrigger: $seatDepositTrigger,
@@ -714,6 +746,14 @@ struct RoomSettingsSheet: View {
                     seatDepositTrigger: seatDepositTrigger,
                     seatDepositGraceMinutes: seatDepositGraceMinutes
                 )
+                // V0.107 — the brought-by switch rides this write.
+                // `update_room_settings` does not own the column
+                // (migration 103 added a host-only RPC for it), so
+                // call it alongside; skipping it would leave the
+                // switch visibly off with nothing persisted.
+                let broughtBy = showBroughtBy
+                try await roomService.setShowBroughtBy(roomId: room.id, on: broughtBy)
+                seededShowBroughtBy = broughtBy
                 let trimmedJournal = hostJournal.trimmingCharacters(in: .whitespacesAndNewlines)
                 _ = try await roomService.updateHostJournal(
                     roomId: room.id,
@@ -811,11 +851,18 @@ struct RoomSettingsSocialSheet: View {
 /// NavigationLink in the member-visible section.
 struct RoomSettingsOperationsSheet: View {
     let roomId: UUID
+    /// V0.107 — the brought-by switch is host only (spec §3). The
+    /// sheet is member-reachable, so the hub passes the resolved role
+    /// down rather than the sub-sheet reading it back off the room.
+    let isHost: Bool
     @Binding var maxSeats: Int
     @Binding var memberInviteQuota: Int
     @Binding var joinStartingBonus: Int
     @Binding var briefing48hEnabled: Bool
     @Binding var socialPreferencesEnabled: Bool
+    /// V0.107 — hoisted to the hub so its autosave write rides the
+    /// same debounce as every other field.
+    @Binding var showBroughtBy: Bool
     @Binding var autoCloseHours: Int
     @Binding var seatDepositAmount: Int
     @Binding var seatDepositTrigger: SeatDepositTrigger
@@ -834,11 +881,13 @@ struct RoomSettingsOperationsSheet: View {
 
     init(
         roomId: UUID = UUID(),
+        isHost: Bool = false,
         maxSeats: Binding<Int>,
         memberInviteQuota: Binding<Int>,
         joinStartingBonus: Binding<Int>,
         briefing48hEnabled: Binding<Bool>,
         socialPreferencesEnabled: Binding<Bool>,
+        showBroughtBy: Binding<Bool>,
         autoCloseHours: Binding<Int>,
         seatDepositAmount: Binding<Int>,
         seatDepositTrigger: Binding<SeatDepositTrigger>,
@@ -847,11 +896,13 @@ struct RoomSettingsOperationsSheet: View {
         isGeneratingCode: Binding<Bool>
     ) {
         self.roomId = roomId
+        self.isHost = isHost
         _maxSeats = maxSeats
         _memberInviteQuota = memberInviteQuota
         _joinStartingBonus = joinStartingBonus
         _briefing48hEnabled = briefing48hEnabled
         _socialPreferencesEnabled = socialPreferencesEnabled
+        _showBroughtBy = showBroughtBy
         _autoCloseHours = autoCloseHours
         _seatDepositAmount = seatDepositAmount
         _seatDepositTrigger = seatDepositTrigger
@@ -904,6 +955,21 @@ struct RoomSettingsOperationsSheet: View {
             Section("Features") {
                 Toggle("Mid-week reminder push", isOn: $briefing48hEnabled)
                 Toggle("Members can set preferences", isOn: $socialPreferencesEnabled)
+            }
+
+            // V0.107 — who brought newcomers. Its own section so the
+            // footer reads as this switch's caption and not the two
+            // feature toggles' (spec §3: beside the social-preferences
+            // switch). Off hides the anchor and first-night text on
+            // every surface in this room (A7); `cachedShowBroughtBy`
+            // is the single gate those surfaces read.
+            if isHost {
+                Section {
+                    Toggle("Show who brought newcomers", isOn: $showBroughtBy)
+                        .accessibilityIdentifier("show-brought-by-toggle")
+                } footer: {
+                    Text("Shows \"with Alex\" under a newcomer's name so the room knows who they came with.")
+                }
             }
 
             Section {

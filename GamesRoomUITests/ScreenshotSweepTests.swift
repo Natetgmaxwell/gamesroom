@@ -438,6 +438,97 @@ final class ScreenshotSweepTests: XCTestCase {
         snap(app, "15-room-settings-members-sheet")
     }
 
+    // MARK: - 15b Room settings brought-by switch (V0.107)
+
+    func test_15b_room_settings_brought_by_switch() throws {
+        let app = launchSweep(arguments: [])
+
+        openRoom(app, named: "Carwoola Crew")
+
+        let gear = app.buttons["Room settings"].firstMatch
+        XCTAssertTrue(
+            gear.waitForExistence(timeout: 10),
+            "Room-settings toolbar gear never appeared on the room detail."
+        )
+        gear.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Room settings"].firstMatch.waitForExistence(timeout: 10),
+            "RoomSettingsSheet never presented."
+        )
+
+        let opsRow = app.staticTexts["Operations"].firstMatch
+        XCTAssertTrue(
+            opsRow.waitForExistence(timeout: 5),
+            "Operations row missing in Room settings."
+        )
+        opsRow.tap()
+
+        XCTAssertTrue(
+            app.navigationBars["Operations"].firstMatch.waitForExistence(timeout: 10),
+            "RoomSettingsOperationsSheet never pushed."
+        )
+
+        // V0.107 — the switch sits below the Features section, so on a
+        // compact iPhone it starts under the fold.
+        let broughtBy = app.switches["Show who brought newcomers"]
+        XCTAssertTrue(
+            scrollUntilHittable(app, element: broughtBy),
+            "Host-only brought-by switch never became hittable in Operations."
+        )
+        XCTAssertEqual(
+            broughtBy.value as? String,
+            "1",
+            "Brought-by switch should open on (the rooms.show_brought_by column default)."
+        )
+
+        // The switch lands on the last rendered cell of the form,
+        // where its centre sits just past the bottom edge, so give it
+        // one more swipe to bring the whole section into the frame
+        // before anything reads or touches it.
+        app.swipeUp()
+        XCTAssertTrue(
+            broughtBy.waitForExistence(timeout: 5) && broughtBy.isHittable,
+            "Brought-by switch is not reachable after scrolling into it."
+        )
+
+        snap(app, "15b-room-settings-brought-by")
+
+        // Tapping must move the switch, not bounce it back: the
+        // binding is hoisted so the hub's autosave write captures it.
+        // Aim at the trailing control: the row's centre is over the
+        // label, which this Toggle does not take a tap on.
+        broughtBy.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let turnedOff = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == '0'"),
+            object: broughtBy
+        )
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [turnedOff], timeout: 5),
+            .completed,
+            "Tapping the brought-by switch did not turn it off."
+        )
+
+        // The caption sits directly under the switch row, and the
+        // switch itself can land on the last rendered cell of the
+        // form, so the footer is often one lazy-rendered row past
+        // the fold. Match on the tail of the sentence so a label
+        // normalisation cannot break it, and wait on existence
+        // (a form footer is not a tap target, so hittability is the
+        // wrong test).
+        let footer = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "so the room knows who they came with")
+        ).firstMatch
+        for _ in 0..<5 {
+            if footer.exists { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(
+            footer.waitForExistence(timeout: 5),
+            "Brought-by footer caption missing."
+        )
+    }
+
     // MARK: - 16 Briefing
 
     func test_16_briefing() throws {
