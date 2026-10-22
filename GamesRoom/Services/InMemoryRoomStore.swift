@@ -653,9 +653,6 @@ actor InMemoryRoomStore: RoomStore {
         // captures are reproducible without touching real data.
         //
         // Keys:
-        //   briefing  — `playedAt = +2d`, `startedAt = nil` →
-        //                `.upcoming` (BriefingSlot). Seat grid +
-        //                "Claim seat" CTA visible.
         //   witness   — `playedAt = 30 min ago`, `startedAt = 30
         //                min ago`, `settledAt = nil`, no working
         //                hand → `.tonightEvent` (WitnessSlot, the
@@ -670,6 +667,9 @@ actor InMemoryRoomStore: RoomStore {
         //                this init.
         //   empty     — empty rooms list → RoomPage empty state
         //                (Create-room hero CTA).
+        //   briefing  — lives in `InMemorySweepSeeds` with the rest of
+        //                its rows (V0.107): claimed seats, an anchored
+        //                newcomer and the board that proves zero nights.
         #if DEBUG
         // V0.106 — UI-test seeds for the Question Box. `briefing`:
         // upcoming night, Alex + Sam claimed, Alex's Currently Into is
@@ -735,14 +735,6 @@ actor InMemoryRoomStore: RoomStore {
         }
 
         switch screenState {
-        case "briefing":
-            // Pre-play future-dated, no startedAt → `.upcoming`.
-            events[carwoola.id] = rebuildCarwoolaEvent(
-                playedAt: Date().addingTimeInterval(86_400 * 2),
-                startedAt: nil,
-                settledAt: nil
-            )
-
         case "witness":
             // Just-started live, no working hand → `.tonightEvent`.
             events[carwoola.id] = rebuildCarwoolaEvent(
@@ -987,7 +979,17 @@ actor InMemoryRoomStore: RoomStore {
         // `notificationsEnabled = false` so the opt-in filter
         // reflects quiet-by-default out of the gate; the test only
         // checks the field is decodable.
-        let seeded: [Member] = [
+        let seeded = syntheticRoster(for: room)
+        membersByRoom[roomId] = seeded
+        return seeded.filter { !(kickedByRoom[roomId] ?? []).contains($0.userId) }
+    }
+
+    /// The one definition of the synthetic 3-row roster: the host,
+    /// then two members with fixed ids so seeds and tests can name
+    /// them. Shared by `fetchRoomMembers` (cache miss), `seedForKick`
+    /// (unfiltered re-derivation) and `seedInvite`.
+    private func syntheticRoster(for room: Room) -> [Member] {
+        return [
             Member(
                 id: "\(room.id.uuidString):\(room.createdBy.uuidString)",
                 roomId: room.id,
@@ -1016,8 +1018,40 @@ actor InMemoryRoomStore: RoomStore {
                 notificationsEnabled: false
             )
         ]
-        membersByRoom[roomId] = seeded
-        return seeded.filter { !(kickedByRoom[roomId] ?? []).contains($0.userId) }
+    }
+
+    /// V0.107 — sweep seam for who brought a member in
+    /// (`room_memberships.invited_by` + `invite_tier`, the two columns
+    /// migration 103 adds to the roster RPC). The synthetic roster has
+    /// no referral history, so the audit seeds stamp it here instead of
+    /// every roster read carrying it. Reachable only from
+    /// `applyAuditSweepSeeds` behind `-screenshots-bypass-auth`; no-ops
+    /// for an unknown room or user id.
+    func seedInvite(
+        roomId: UUID,
+        userId: UUID,
+        invitedBy: UUID,
+        inviteTier: Int? = nil
+    ) {
+        guard let room = rooms.first(where: { $0.id == roomId }) else { return }
+        var roster = membersByRoom[roomId] ?? syntheticRoster(for: room)
+        guard let idx = roster.firstIndex(where: { $0.userId == userId }) else { return }
+        let target = roster[idx]
+        roster[idx] = Member(
+            id: target.id,
+            roomId: target.roomId,
+            userId: target.userId,
+            role: target.role,
+            joinedAt: target.joinedAt,
+            lastSeenAt: target.lastSeenAt,
+            displayName: target.displayName,
+            socialPreference: target.socialPreference,
+            team: target.team,
+            notificationsEnabled: target.notificationsEnabled,
+            inviteTier: inviteTier ?? target.inviteTier,
+            invitedBy: invitedBy
+        )
+        membersByRoom[roomId] = roster
     }
 
     // MARK: Active event
@@ -1205,35 +1239,7 @@ actor InMemoryRoomStore: RoomStore {
         guard let room = rooms.first(where: { $0.id == roomId }) else {
             return []
         }
-        return [
-            Member(
-                id: "\(room.id.uuidString):\(room.createdBy.uuidString)",
-                roomId: room.id,
-                userId: room.createdBy,
-                role: .host,
-                joinedAt: room.createdAt,
-                displayName: "Host",
-                notificationsEnabled: false
-            ),
-            Member(
-                id: "\(room.id.uuidString):synthetic-member-2",
-                roomId: room.id,
-                userId: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-                role: .member,
-                joinedAt: room.createdAt.addingTimeInterval(86_400 * 7),
-                displayName: "Alex",
-                notificationsEnabled: false
-            ),
-            Member(
-                id: "\(room.id.uuidString):synthetic-member-3",
-                roomId: room.id,
-                userId: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
-                role: .member,
-                joinedAt: room.createdAt.addingTimeInterval(86_400 * 14),
-                displayName: "Sam",
-                notificationsEnabled: false
-            )
-        ]
+        return syntheticRoster(for: room)
     }
 
     /// In-memory mirror of `get_event_rounds` (migration 049).

@@ -65,6 +65,32 @@ final class ScreenshotSweepTests: XCTestCase {
         return element.exists && element.isHittable
     }
 
+    /// Same intent as `scrollUntilHittable`, but it decides from
+    /// frames instead of `isHittable`. XCUITest records a test
+    /// failure ("Activation point invalid and no suggested hit
+    /// points based on element frame") when `isHittable` is asked
+    /// about an element that is still below the fold, so that call
+    /// is only safe once the element is on screen. Use this one when
+    /// the target starts out of frame.
+    @discardableResult
+    private func scrollIntoFrame(
+        _ app: XCUIApplication,
+        element: XCUIElement,
+        maxSwipes: Int = 12
+    ) -> Bool {
+        let bounds = app.frame
+        for _ in 0..<maxSwipes {
+            guard element.exists else { return false }
+            let frame = element.frame
+            if frame.width > 0, frame.height > 0,
+               frame.midY > bounds.minY + 44, frame.midY < bounds.maxY - 44 {
+                return true
+            }
+            app.swipeUp()
+        }
+        return element.exists
+    }
+
     // MARK: - 01 First launch (empty)
 
     func test_01_first_launch_empty() throws {
@@ -553,5 +579,68 @@ final class ScreenshotSweepTests: XCTestCase {
         // S2 gate: end state must clear the floating tab bar.
         for _ in 0..<4 { app.swipeUp() }
         snap(app, "16b-briefing-scrolled-end")
+    }
+
+    // MARK: - 17 Briefing brought-by caption (V0.107)
+
+    func test_17_briefing_brought_by() throws {
+        let app = launchSweep(arguments: ["-screenshots-state=briefing"])
+
+        openRoom(app, named: "Carwoola Crew")
+
+        // The briefing seed claims three seats and anchors Sam to
+        // Alex at zero sessions, so Sam's grey line reads
+        // "with Alex · first night · into Bouldering".
+        let samCaption = app.staticTexts["brought-by-Sam"]
+        XCTAssertTrue(
+            samCaption.waitForExistence(timeout: 10),
+            "Brought-by caption never rendered under Sam — the briefing seed is not carrying an anchor."
+        )
+        let label = samCaption.label
+        XCTAssertTrue(
+            label.contains("with "),
+            "Caption \"\(label)\" is missing the anchor (spec §2, A2)."
+        )
+        XCTAssertTrue(
+            label.contains("first night"),
+            "Caption \"\(label)\" is missing first night (spec §4, A3)."
+        )
+
+        // Bring the line into the frame so the capture shows it
+        // rather than the top of the briefing card.
+        _ = scrollUntilHittable(app, element: samCaption)
+        snap(app, "17-briefing-brought-by")
+    }
+
+    // MARK: - 18 Host pending invites carry the anchor (V0.107)
+
+    func test_18_host_pending_invites_via() throws {
+        let app = launchSweep(arguments: ["-screenshots-state=briefing"])
+
+        openRoom(app, named: "Carwoola Crew")
+
+        // The Members section is collapsed on the room page; the plus
+        // on its header is the one-tap path in (it mints a code, so
+        // the section is also the host's invite surface).
+        let plus = app.buttons["members-invite"]
+        XCTAssertTrue(
+            scrollIntoFrame(app, element: plus),
+            "Members invite plus never scrolled into view on the room page."
+        )
+        plus.tap()
+
+        let pending = app.staticTexts["Pending invites"].firstMatch
+        XCTAssertTrue(
+            pending.waitForExistence(timeout: 10),
+            "Pending invites never rendered — Sam's tier-2 roster row is not being read."
+        )
+        let via = app.staticTexts["via Alex"].firstMatch
+        XCTAssertTrue(
+            via.waitForExistence(timeout: 5),
+            "Pending invite is missing the \"via Alex\" line (spec §2, A6)."
+        )
+
+        _ = scrollIntoFrame(app, element: via)
+        snap(app, "18-host-pending-invites-via")
     }
 }

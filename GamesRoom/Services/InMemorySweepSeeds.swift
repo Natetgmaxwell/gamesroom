@@ -16,6 +16,11 @@
 //  views, or networking are touched.
 //
 //  Keys (each drives one capture in the audit matrix):
+//    briefing           `.upcoming` two days out with three claimed
+//                       seats, Sam brought by Alex at tier 2, and a
+//                       board that gives Sam zero nights — the
+//                       brought-by caption's full line
+//                       ("with Alex · first night · into Bouldering").
 //    tonight-live       `.tonightEvent` witness hero; Question Box
 //                       disabled so the V0.106 opener turn cannot
 //                       cover the slot with the reader card.
@@ -108,6 +113,76 @@ extension InMemoryRoomStore {
         }
 
         switch key {
+        case "briefing":
+            // V0.107 — the pre-V0.107 briefing seed (a night two days
+            // out, no `startedAt` → `.upcoming`) plus the four rows a
+            // brought-by caption reads. Each one is load-bearing:
+            //   rsvps         claimed seats, so Who's coming renders
+            //   seedInvite    Sam came in with Alex, at tier 2 (the
+            //                 tier the host queue lists)
+            //   leaderboard   Sam at zero sessions — "first night" is
+            //                 read off the board's `sessions_played`,
+            //                 so with no board nobody reads as new
+            //   currentlyInto Sam's own fresh words, so the caption's
+            //                 third part renders too
+            let brief = upcomingEvent()
+            events[carwoola.id] = brief
+            rsvps[brief.id] = [
+                carwoola.createdBy: .claimed,
+                alex: .claimed,
+                sam: .claimed
+            ]
+            seedInvite(roomId: carwoola.id, userId: sam, invitedBy: alex, inviteTier: 2)
+            // Re-point the board at the roster's stable ids. The
+            // seeded carwoola board carries throwaway UUIDs on its
+            // member rows, so no row can match `Member.userId` and
+            // "first night" would read false for everyone. The host
+            // row stays as seeded: in screenshot mode that row IS the
+            // caller, and the room header reads their score from it.
+            var board = leaderboards[carwoola.id] ?? []
+            board.removeAll { !$0.isHost }
+            board.append(
+                LeaderboardEntry(
+                    userId: alex,
+                    displayName: "Alex",
+                    role: "member",
+                    pointsBalance: 980,
+                    seasonScore: 980,
+                    sessionsPlayed: 12,
+                    lastSessionAt: Date().addingTimeInterval(-86_400 * 3),
+                    lastSessionDelta: 180,
+                    trajectory: [
+                        SessionDelta(sessionId: UUID(), delta: 60),
+                        SessionDelta(sessionId: UUID(), delta: 180)
+                    ]
+                )
+            )
+            board.append(
+                LeaderboardEntry(
+                    userId: sam,
+                    displayName: "Sam",
+                    role: "member",
+                    pointsBalance: 0,
+                    seasonScore: 0,
+                    sessionsPlayed: 0,
+                    // nil reads "claimed a seat, never played".
+                    lastSessionAt: nil,
+                    lastSessionDelta: 0,
+                    trajectory: []
+                )
+            )
+            leaderboards[carwoola.id] = board
+            questionBox.currentlyInto[carwoola.id] = [
+                alex: CurrentlyInto(
+                    text: "Learning the banjo",
+                    updatedAt: Date().addingTimeInterval(-2 * 86_400)
+                ),
+                sam: CurrentlyInto(
+                    text: "Bouldering",
+                    updatedAt: Date().addingTimeInterval(-86_400)
+                )
+            ]
+
         case "tonight-live":
             events[carwoola.id] = liveEvent(
                 name: carwoolaEvent.name,
