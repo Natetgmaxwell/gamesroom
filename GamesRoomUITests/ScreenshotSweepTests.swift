@@ -382,9 +382,16 @@ final class ScreenshotSweepTests: XCTestCase {
         // green/red/absent mark per night.
         let comebackRow = app.descendants(matching: .any)
             .matching(identifier: "season-row-2").firstMatch
+        // v1.2.2 S6 — frames, not hittability, and for a real reason:
+        // T2 put the event card on `cardGroupGap`, which made the
+        // room page taller, so the Seasons rows now sit further down
+        // than `scrollUntilHittable`'s 12-swipe bound could reach
+        // (it passed at b12c83f and failed at a32ac05). The row is
+        // still asserted to exist and then tapped — an unhittable
+        // row fails the tap, so reachability is still proven.
         XCTAssertTrue(
-            scrollUntilHittable(app, element: comebackRow),
-            "Season row for 'The Comeback' never became hittable."
+            scrollIntoFrame(app, element: comebackRow),
+            "Season row for 'The Comeback' never scrolled into view."
         )
         comebackRow.tap()
 
@@ -581,35 +588,41 @@ final class ScreenshotSweepTests: XCTestCase {
         snap(app, "16b-briefing-scrolled-end")
     }
 
-    // MARK: - 17 Briefing brought-by caption (V0.107)
+    // MARK: - 17 Briefing seat grid (V0.107 brought-by, S6 T3/T4)
 
     func test_17_briefing_brought_by() throws {
         let app = launchSweep(arguments: ["-screenshots-state=briefing"])
 
         openRoom(app, named: "Carwoola Crew")
 
-        // The briefing seed claims three seats and anchors Sam to
-        // Alex at zero sessions, so Sam's grey line reads
-        // "with Alex · first night · into Bouldering".
-        let samCaption = app.staticTexts["brought-by-Sam"]
+        // v1.2.2 S6 T3 — the "Who's coming" list is off the event
+        // card, so who claimed a seat is read off the seat grid. The
+        // briefing seed still claims three seats and anchors Sam to
+        // Alex at zero sessions, and the chair label keeps that
+        // ("Sam's seat, with Alex, claimed"). S6 T4 moves the grey
+        // caption itself into a popover on this same cell.
+        //
+        // Query by predicate, not by element type: the cell is one
+        // `.accessibilityElement()` container, so whether XCUITest
+        // files it as another/button/staticText is a detail this test
+        // must not depend on.
+        let samSeat = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Sam's seat, with Alex"))
+            .firstMatch
         XCTAssertTrue(
-            samCaption.waitForExistence(timeout: 10),
-            "Brought-by caption never rendered under Sam — the briefing seed is not carrying an anchor."
-        )
-        let label = samCaption.label
-        XCTAssertTrue(
-            label.contains("with "),
-            "Caption \"\(label)\" is missing the anchor (spec §2, A2)."
-        )
-        XCTAssertTrue(
-            label.contains("first night"),
-            "Caption \"\(label)\" is missing first night (spec §4, A3)."
+            samSeat.waitForExistence(timeout: 10),
+            "Seat grid never rendered Sam's claimed seat — the briefing seed is not carrying its RSVPs."
         )
 
-        // Bring the line into the frame so the capture shows it
-        // rather than the top of the briefing card.
-        _ = scrollUntilHittable(app, element: samCaption)
-        snap(app, "17-briefing-brought-by")
+        // Now that the card has rendered, the removed list must be
+        // gone rather than merely scrolled away.
+        XCTAssertFalse(
+            app.staticTexts["Who's coming"].exists,
+            "The Who's coming list is back on the event card (S6 T3)."
+        )
+
+        _ = scrollIntoFrame(app, element: samSeat)
+        snap(app, "17-briefing-seat-grid")
     }
 
     // MARK: - 18 Host pending invites carry the anchor (V0.107)

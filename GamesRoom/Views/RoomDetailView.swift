@@ -1800,6 +1800,10 @@ private struct BriefingSlot: View {
     // V0.79 — notification toggle params removed. Preferences moved
     // to the one-time RoomNotifPromptCard (main room page) and
     // RoomSettingsSheet's "My notifications" section.
+    /// v1.2.2 S6 T3 — the event's Currently Into rows, for the
+    /// brought-by caption under a claimed seat (S6 T4). Read from
+    /// the root `environmentObject`, as `ClaimedCardAskField` does.
+    @EnvironmentObject private var questionBox: QuestionBoxService
 
     init(
         event: Event,
@@ -2021,20 +2025,10 @@ private struct BriefingSlot: View {
                 )
             }
 
-            // V0.106 — who's coming, with each claimed member's
-            // Currently Into as grey secondary text (fresh only).
-            // V0.107 — that line is now the brought-by caption
-            // ("with Alex · first night · into bouldering"), built by
-            // `WhosComingList` from the roster, leaderboard and room
-            // switch it reads off the room service.
-            // v1.1 — below the RSVP buttons so Claim seat stays
-            // above the fold.
-            WhosComingList(roomId: room.id, eventId: event.id, rsvps: rsvps)
-
             // V0.84 C5 — host-only notes for next time. v1.1 — sits
             // under the RSVP buttons so Claim seat is the first
             // action; "Done reading" is a text button. (S6 T5 lifts
-            // this out of the card; S6 T3 deletes the list above.)
+            // this out of the card.)
             if isHost, !unconsumedNotes.isEmpty, let onMarkNotesConsumed {
                 UnconsumedMemberNotesSection(
                     room: room,
@@ -2051,6 +2045,13 @@ private struct BriefingSlot: View {
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
         )
         .appearTransition()
+        // v1.2.2 S6 T3 — the "Who's coming" list that used to sit
+        // here also owned the load of the event's Currently Into
+        // rows. The rows still drive the brought-by caption, which
+        // S6 T4 moves into the seat popover, so the load moves up
+        // onto the card that owns the event: `currentlyIntoLine`
+        // then reads the cached dictionary, exactly as before.
+        .task(id: event.id) { await questionBox.loadEventCurrentlyInto(eventId: event.id) }
     }
 
 }

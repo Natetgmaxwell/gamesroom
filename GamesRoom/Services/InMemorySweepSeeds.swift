@@ -117,7 +117,8 @@ extension InMemoryRoomStore {
             // V0.107 — the pre-V0.107 briefing seed (a night two days
             // out, no `startedAt` → `.upcoming`) plus the four rows a
             // brought-by caption reads. Each one is load-bearing:
-            //   rsvps         claimed seats, so Who's coming renders
+            //   rsvps         claimed seats, so the seat grid shows
+            //                 who is in
             //   seedInvite    Sam came in with Alex, at tier 2 (the
             //                 tier the host queue lists)
             //   leaderboard   Sam at zero sessions — "first night" is

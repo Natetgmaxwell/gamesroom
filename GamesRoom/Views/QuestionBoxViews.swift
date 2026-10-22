@@ -4,12 +4,15 @@
 //
 //  V0.106 — every Question Box / Currently Into surface:
 //    • ClaimedCardAskField      — the one optional line under "You're in."
-//    • WhosComingList           — Briefing who's-coming + the
-//                                 brought-by caption (anchor · first
-//                                 night · Currently Into, V0.107)
 //    • QuestionReaderCard       — the reader's full-screen card
 //    • HostQuestionFallback     — the host's quiet "Sam's asking" line
 //    • QuestionBoxSettingsView  — host settings + question editor
+//
+//  v1.2.2 S6 T3 — `WhosComingList` (the briefing who's-coming list and
+//  the brought-by caption it carried) is deleted: who claimed a seat
+//  is read off the seat grid, and the caption moves into the seat
+//  popover on `SeatGridRow` (S6 T4). The event's Currently Into rows
+//  it loaded are still loaded — the card now owns that `.task`.
 //
 //  Design bar (spec §0): no new member screens except the reader card,
 //  skipping is the default, never two optional fields at once.
@@ -118,77 +121,6 @@ struct ClaimedCardAskField: View {
         Task {
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             withAnimation { savedFlash = false }
-        }
-    }
-}
-
-// MARK: - Briefing who's-coming (spec §2.3)
-
-struct WhosComingList: View {
-    /// The room the event belongs to. Needed to resolve the anchor
-    /// (`Member.invitedBy` against the active roster), the first-night
-    /// signal (the leaderboard) and the room's switch.
-    let roomId: UUID
-    let eventId: UUID
-    let rsvps: [EventRSVP]
-
-    @EnvironmentObject private var questionBox: QuestionBoxService
-    @EnvironmentObject private var roomService: RoomService
-
-    private var claimed: [EventRSVP] { rsvps.filter { $0.state == .claimed } }
-
-    /// The grey line under a name: anchor, first night, Currently
-    /// Into, in that order (spec §2). All three parts are optional
-    /// and a missing one drops out with its separator, so the room
-    /// with nothing to say still renders no line at all.
-    ///
-    /// The Currently Into part comes from `currentlyIntoLine`, which
-    /// is nil for a stale or empty value, so the staleness rule V0.106
-    /// shipped is unchanged; `BroughtBy` only prefixes the "into ".
-    private func caption(for rsvp: EventRSVP) -> String? {
-        return BroughtBy.caption(
-            anchorName: roomService.anchorName(forUserId: rsvp.memberId, roomId: roomId),
-            firstNight: isFirstNight(rsvp.memberId),
-            currentlyInto: questionBox.currentlyIntoLine(eventId: eventId, memberId: rsvp.memberId),
-            enabled: roomService.cachedShowBroughtBy(roomId: roomId)
-        )
-    }
-
-    /// First night = no settled session in this room yet, so the
-    /// leaderboard's all-time `sessionsPlayed` is 0 (spec §4).
-    /// The board lists every active member, so a member missing from
-    /// it means the board has not loaded yet on this path: treat
-    /// that as "not a newcomer" rather than labelling the whole room
-    /// first-night on a cold open.
-    private func isFirstNight(_ userId: UUID) -> Bool {
-        roomService.cachedLeaderboard(roomId: roomId)
-            .first { $0.userId == userId }?
-            .sessionsPlayed == 0
-    }
-
-    var body: some View {
-        if !claimed.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Who's coming")
-                    .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                ForEach(claimed) { rsvp in
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(rsvp.displayName)
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        if let line = caption(for: rsvp) {
-                            Text(line)
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.5))
-                                .accessibilityIdentifier("currently-into-\(rsvp.displayName)")
-                                .accessibilityIdentifier("brought-by-\(rsvp.displayName)")
-                        }
-                    }
-                }
-            }
-            .padding(.top, 4)
-            .task(id: eventId) { await questionBox.loadEventCurrentlyInto(eventId: eventId) }
         }
     }
 }
