@@ -510,6 +510,29 @@ protocol RoomStore: Sendable {
     /// Server side: `mark_member_notes_consumed(p_room_id,
     /// p_note_ids uuid[])` (migration 083).
     func markMemberNotesConsumed(roomId: UUID, noteIds: [UUID]) async throws
+
+    // MARK: - Brought By (V0.107 — who brought the newcomer)
+
+    /// Reads the room's `show_brought_by` switch. Any active
+    /// member may read it (the switch decides whether THIS room
+    /// shows anchor captions, so hiding it would hide the reason
+    /// a line is absent). The RPC returns a bare JSON boolean,
+    /// and `null` for a non-member caller, so the store folds
+    /// `null` into the column default (`true`) rather than
+    /// throwing: a null read must never turn the captions off.
+    ///
+    /// Server side: `get_show_brought_by(p_room_id)`
+    /// (migration 103, not yet deployed).
+    func fetchShowBroughtBy(roomId: UUID) async throws -> Bool
+
+    /// Host-only. Turns the room's anchor captions on or off for
+    /// every surface in that room. Idempotent. Throws
+    /// `not_authorized` (42501) for a non-host caller.
+    ///
+    /// Server side: `set_show_brought_by(p_room_id, p_on)`
+    /// (migration 103, not yet deployed) — host check via
+    /// `is_room_host(p_room_id, current_user_id())` (migration 095).
+    func setShowBroughtBy(roomId: UUID, on: Bool) async throws
 }
 
 /// V0.91 — the action the host applies to a room member via

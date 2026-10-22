@@ -1164,4 +1164,42 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .value
         return rows.first
     }
+
+    // MARK: - Brought By (V0.107 — who brought the newcomer)
+
+    /// The live RPC is `get_show_brought_by(p_room_id)`
+    /// (migration 103, not yet deployed). `returns boolean`, so
+    /// PostgREST sends a bare JSON `true` / `false` — the same
+    /// shape `fetchCurrentMemberRSVP` reads above, which is why
+    /// this decodes to an OPTIONAL Bool: the function is
+    /// `security definer` over a select that yields no row for a
+    /// non-member, and a non-member must read as the column
+    /// default rather than as "captions off".
+    func fetchShowBroughtBy(roomId: UUID) async throws -> Bool {
+        let raw: Bool? = try await SupabaseClientProvider.shared
+            .rpc("get_show_brought_by", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return raw ?? true
+    }
+
+    /// Host-only. The live RPC is `set_show_brought_by(p_room_id,
+    /// p_on)` (migration 103, not yet deployed). Raises
+    /// `not_authorized` (42501) for a non-host caller — the guard
+    /// is `is_room_host(p_room_id, current_user_id())`, never
+    /// `rooms.created_by`. Returns void, so there is nothing to
+    /// read back; the caller mirrors the value into its cache.
+    /// Bool params go over the wire as their Postgres text form,
+    /// matching `update_room_settings` above.
+    func setShowBroughtBy(roomId: UUID, on: Bool) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("set_show_brought_by", params: [
+                "p_room_id": roomId.uuidString,
+                "p_on": String(on)
+            ])
+            .execute()
+            .value as Void
+    }
 }

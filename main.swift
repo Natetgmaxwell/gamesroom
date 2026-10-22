@@ -5160,6 +5160,114 @@ runner.run("BroughtBy.seatLabel appends the anchor behind a name") {
         "Sam")
 }
 
+// MARK: - Brought By data plumbing (V0.107 T3)
+
+runner.run("Member decodes invited_by and invite_tier off the V0.107 roster shape") {
+    // Migration 103 appends invited_by / invite_tier to the live
+    // get_room_members columns. A2's anchor depends on both keys
+    // landing, so pin the wire shape here.
+    let json = """
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "room_id": "11111111-1111-1111-1111-111111111111",
+      "user_id": "44444444-4444-4444-4444-444444444444",
+      "role": "member",
+      "display_name": "Sam",
+      "points_balance": 120,
+      "season_score": 90,
+      "team": null,
+      "joined_at": "2026-10-20T00:00:00Z",
+      "last_seen_at": "2026-10-21T00:00:00Z",
+      "preferences_social": "quiet",
+      "preferences_conversation_prompt": "bouldering",
+      "preferences_default_set": true,
+      "notifications_enabled": false,
+      "invited_by": "22222222-2222-2222-2222-222222222222",
+      "invite_tier": 2
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let member = try decoder.decode(Member.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(member.invitedBy?.uuidString, "22222222-2222-2222-2222-222222222222")
+    runner.assertEqual(member.inviteTier, 2)
+}
+
+runner.run("Member invited_by is nil when the inviter is gone (roster left join)") {
+    // The SQL left-joins the inviter only while they hold an
+    // ACTIVE membership, so a left or kicked inviter arrives as an
+    // explicit null. A5 needs that to mean "no anchor", never a
+    // stale name.
+    let json = """
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "room_id": "11111111-1111-1111-1111-111111111111",
+      "user_id": "44444444-4444-4444-4444-444444444444",
+      "role": "member",
+      "display_name": "Sam",
+      "joined_at": "2026-10-20T00:00:00Z",
+      "invited_by": null,
+      "invite_tier": 2
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let member = try decoder.decode(Member.self, from: json.data(using: .utf8)!)
+    runner.assertNil(member.invitedBy)
+    runner.assertEqual(member.inviteTier, 2)
+}
+
+runner.run("Member still decodes a pre-V0.107 roster row (keys absent)") {
+    // Migration 103 is written but NOT applied. Until the
+    // orchestrator applies it, the live RPC returns neither key,
+    // and every surface must keep working with the defaults.
+    let json = """
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "room_id": "11111111-1111-1111-1111-111111111111",
+      "user_id": "44444444-4444-4444-4444-444444444444",
+      "role": "member",
+      "display_name": "Sam",
+      "joined_at": "2026-10-20T00:00:00Z"
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let member = try decoder.decode(Member.self, from: json.data(using: .utf8)!)
+    runner.assertNil(member.invitedBy)
+    runner.assertEqual(member.inviteTier, 3)
+}
+
+runner.runAsync("InMemoryRoomStore.fetchShowBroughtBy defaults to on (show_brought_by column default)") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    runner.assertTrue(try await store.fetchShowBroughtBy(roomId: room.id))
+}
+
+runner.runAsync("InMemoryRoomStore.setShowBroughtBy round-trips both ways and is idempotent") {
+    let store = InMemoryRoomStore()
+    let room = try await store.fetchRooms().first!
+    try await store.setShowBroughtBy(roomId: room.id, on: false)
+    runner.assertFalse(try await store.fetchShowBroughtBy(roomId: room.id))
+    // Re-saving the same value must not flip it back (A7's switch
+    // is the one thing the host owns).
+    try await store.setShowBroughtBy(roomId: room.id, on: false)
+    runner.assertFalse(try await store.fetchShowBroughtBy(roomId: room.id))
+    try await store.setShowBroughtBy(roomId: room.id, on: true)
+    runner.assertTrue(try await store.fetchShowBroughtBy(roomId: room.id))
+}
+
+runner.runAsync("InMemoryRoomStore show_brought_by is per room, not global") {
+    // A host turning captions off in their room must not silence
+    // the anchor line in every other room the member is in.
+    let store = InMemoryRoomStore()
+    let rooms = try await store.fetchRooms()
+    runner.assertTrue(rooms.count >= 2, "two seeded rooms for the isolation check")
+    try await store.setShowBroughtBy(roomId: rooms[0].id, on: false)
+    runner.assertFalse(try await store.fetchShowBroughtBy(roomId: rooms[0].id))
+    runner.assertTrue(try await store.fetchShowBroughtBy(roomId: rooms[1].id))
+}
+
 // MARK: - Summary
 
 print("")

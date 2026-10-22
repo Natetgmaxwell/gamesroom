@@ -130,6 +130,14 @@ final class RoomService: ObservableObject {
     /// `signOut()` via the upper layer.
     @Published private(set) var membersByRoom: [UUID: [Member]] = [:]
 
+    /// V0.107 — per-room "Show who brought newcomers" switch,
+    /// keyed by roomId. Populated alongside the roster in
+    /// `loadRoomMembers` (and by `loadShowBroughtBy`); consumed by
+    /// `cachedShowBroughtBy` from every surface that can render an
+    /// anchor caption. Absent means the `show_brought_by` column
+    /// default, on.
+    @Published private(set) var showBroughtByByRoom: [UUID: Bool] = [:]
+
     /// Current season cache keyed by roomId. Populated lazily by
     /// `loadCurrentSeason(roomId:)`; consumed by `RoomDetailView`
     /// to drive the `.seasonClose` V0State branch.
@@ -536,15 +544,27 @@ final class RoomService: ObservableObject {
     /// cached value (possibly empty). Called from `RoomDetailView.task`
     /// and from `RoomSettingsSheet` when the host opens the members
     /// section.
+    ///
+    /// V0.107 also refreshes the room's `show_brought_by` switch
+    /// here: the anchor caption needs the roster AND the setting,
+    /// and the roster is the read every surface already triggers,
+    /// so piggybacking on it means no surface can render a caption
+    /// before the setting is known. A failed roster load returns
+    /// early without touching the switch, so the roster's error
+    /// stays the one on `lastError`.
     @discardableResult
     func loadRoomMembers(roomId: UUID, force: Bool = false) async -> [Member] {
         let key = "roomMembers:\(roomId.uuidString)"
-        if !force, isFresh(key) { return membersByRoom[roomId] ?? [] }
+        if !force, isFresh(key) {
+            _ = await loadShowBroughtBy(roomId: roomId)
+            return membersByRoom[roomId] ?? []
+        }
         do {
             let rows = try await store.fetchRoomMembers(roomId: roomId)
             self.membersByRoom[roomId] = rows
             self.cacheTimestamps[key] = Date()
             self.lastError = nil
+            _ = await loadShowBroughtBy(roomId: roomId)
             return rows
         } catch {
             self.lastError = error.localizedDescription
@@ -1300,6 +1320,80 @@ final class RoomService: ObservableObject {
     /// the roster surface.
     func cachedMembers(roomId: UUID) -> [Member] {
         membersByRoom[roomId] ?? []
+    }
+
+    // MARK: - Brought By (V0.107 — who brought the newcomer)
+
+    /// Cached `show_brought_by` switch for `roomId`. Defaults to
+    /// `true` (the column default) when the room has never been
+    /// read, so the anchor caption renders on a cold open rather
+    /// than silently disappearing. Every surface that can show an
+    /// anchor gates on this.
+    func cachedShowBroughtBy(roomId: UUID) -> Bool {
+        showBroughtByByRoom[roomId] ?? true
+    }
+
+    /// The name the room should show for `member`'s anchor, or nil
+    /// when there is nothing to show.
+    ///
+    /// Resolves `Member.invitedBy` (the inviter's user id, decoded
+    /// from the roster RPC's `invited_by`) against the cached
+    /// ACTIVE roster for `roomId` and returns that member's display
+    /// name — the name the room already uses for them.
+    ///
+    /// Nil is the load-bearing answer, not a fallback: the roster
+    /// RPC left-joins the inviter only while they hold an active
+    /// membership, and `cachedMembers` is active-only on both the
+    /// live and the in-memory path. So a member who left or was
+    /// kicked resolves to nil here and the caption drops the
+    /// anchor, which is what spec rule 5 and acceptance check A5
+    /// ask for: a kicked member's name appears nowhere.
+    func anchorName(for member: Member, roomId: UUID) -> String? {
+        guard let inviterId = member.invitedBy, inviterId != member.userId else {
+            return nil
+        }
+        let roster = cachedMembers(roomId: roomId)
+        guard let anchor = roster.first(where: { $0.userId == inviterId }) else {
+            return nil
+        }
+        let name = anchor.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
+    }
+
+    /// Loads the room's `show_brought_by` switch into the cache.
+    /// Returns the cached value so a caller's `.task` can ignore
+    /// it; the view layer reads `cachedShowBroughtBy`. Loaded
+    /// alongside the roster (`loadRoomMembers`) because every
+    /// anchor caption needs both the setting and the member it
+    /// resolves through.
+    @discardableResult
+    func loadShowBroughtBy(roomId: UUID, force: Bool = false) async -> Bool {
+        let key = "showBroughtBy:\(roomId.uuidString)"
+        if !force, isFresh(key) { return cachedShowBroughtBy(roomId: roomId) }
+        do {
+            let on = try await store.fetchShowBroughtBy(roomId: roomId)
+            self.showBroughtByByRoom[roomId] = on
+            self.cacheTimestamps[key] = Date()
+            self.lastError = nil
+            return on
+        } catch {
+            self.lastError = (error as NSError).localizedDescription
+            return cachedShowBroughtBy(roomId: roomId)
+        }
+    }
+
+    /// Host-only. Persists the room's anchor-caption switch
+    /// through `set_show_brought_by` (migration 103), then mirrors
+    /// the persisted value into the cache so every surface
+    /// re-renders without a refetch. Throws on the live RPC's
+    /// `not_authorized` (42501); the caller surfaces the error —
+    /// the cache is only written after the server accepted it, so
+    /// a failed save never leaves the toggle reading the wrong way.
+    func setShowBroughtBy(roomId: UUID, on: Bool) async throws {
+        try await store.setShowBroughtBy(roomId: roomId, on: on)
+        self.showBroughtByByRoom[roomId] = on
+        cacheTimestamps.removeValue(forKey: "showBroughtBy:\(roomId.uuidString)")
+        self.lastError = nil
     }
 
     /// Cached current-member RSVP for `eventId`, defaulting to

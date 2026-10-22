@@ -182,6 +182,13 @@ actor InMemoryRoomStore: RoomStore {
     /// deletes the membership row.
     private var tierTwoJoinsByRoom: [UUID: [UUID]]
 
+    /// V0.107 — per-room "Show who brought newcomers" switch.
+    /// Mirrors `rooms.show_brought_by` (migration 103). Absent
+    /// means the column default (`true`): every room shows the
+    /// anchor until a host turns it off, matching the live
+    /// `boolean not null default true`.
+    private var showBroughtByByRoom: [UUID: Bool]
+
     init() {
         // V0.97+ screenshot bypass — `-screenshots-as-member` flips
         // carwoola (the seeded BriefingSlot target room) to
@@ -391,6 +398,9 @@ actor InMemoryRoomStore: RoomStore {
         self.joinCodeInvitees = [:]
         self.tierTwoJoinsByRoom = [:]
         self.seasonHistoryByRoom = [:]
+        // V0.107 — no explicit switch seeded: every room reads the
+        // `show_brought_by` column default (on) until a host saves.
+        self.showBroughtByByRoom = [:]
         // W-06 — seed every room with a default casino config so
         // the host's settings sheet reads a non-nil initial state.
         // `standardPresets == true` with an empty map is the
@@ -1350,6 +1360,27 @@ actor InMemoryRoomStore: RoomStore {
         roomPacks[roomId] = slugs
     }
 
+    // MARK: Brought By (V0.107 — who brought the newcomer)
+
+    /// In-memory mirror of `get_show_brought_by(p_room_id)`
+    /// (migration 103). An absent entry is the `show_brought_by`
+    /// column default, so every seeded room reads `true` until a
+    /// host saves — the same fold-null-to-default the live store
+    /// does for a non-member caller.
+    func fetchShowBroughtBy(roomId: UUID) async throws -> Bool {
+        return showBroughtByByRoom[roomId] ?? true
+    }
+
+    /// In-memory mirror of `set_show_brought_by(p_room_id, p_on)`
+    /// (migration 103). Host-only server-side via
+    /// `is_room_host`; here the synthetic caller is the host of
+    /// the first seeded room (`screenshotCallerId`), so a
+    /// host-only tap never trips a synthetic 42501 in previews
+    /// and the caller's own gate stays the UI's job. Idempotent.
+    func setShowBroughtBy(roomId: UUID, on: Bool) async throws {
+        showBroughtByByRoom[roomId] = on
+    }
+
     /// M4 — returns the room's unread system events. Empty
     /// array when no events. The live impl queries
     /// `public.room_system_events` filtered by `acknowledged_at
@@ -1732,6 +1763,7 @@ actor InMemoryRoomStore: RoomStore {
         packConfigs.removeValue(forKey: roomId)
         seasonHistoryByRoom.removeValue(forKey: roomId)
         casinoConfigs.removeValue(forKey: roomId)
+        showBroughtByByRoom.removeValue(forKey: roomId)
     }
 
     func updateRoom(
