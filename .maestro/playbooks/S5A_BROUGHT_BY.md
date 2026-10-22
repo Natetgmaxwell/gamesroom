@@ -36,7 +36,7 @@
 
 ## Tasks
 
-- [ ] **T1 — Migration 103 (write only, do not apply).** Create `supabase/migrations/103_brought_by.sql`, wrapped in `begin; ... commit;`:
+- [x] **T1 — Migration 103 (write only, do not apply).** Create `supabase/migrations/103_brought_by.sql`, wrapped in `begin; ... commit;`:
   1. `drop function if exists public.get_room_members(uuid);` then recreate it with the SAME columns as the live shape above PLUS two more at the end: `invited_by uuid`, `invite_tier int`. `invited_by` is the inviter's user id only when the inviter has an `active` membership in the same room, else null (left join `room_memberships i on i.room_id = m.room_id and i.user_id = m.invited_by and i.membership_status = 'active'`, select `i.user_id as invited_by`). Keep `language sql`, `stable`, `security definer`, `set search_path = ''`, the same where and order by. ADD a caller guard to the where clause: `and exists (select 1 from public.room_memberships c where c.room_id = p_room_id and c.user_id = public.current_user_id() and c.membership_status = 'active')`.
   2. `revoke all on function public.get_room_members(uuid) from public, anon;` `grant execute on function public.get_room_members(uuid) to authenticated;`
   3. `alter table public.rooms add column if not exists show_brought_by boolean not null default true;`
