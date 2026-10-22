@@ -107,7 +107,7 @@ as $$
 $$;
 
 revoke all on function public.get_room_members(uuid) from public, anon;
-grant execute on function public.get_room_members(uuid) to authenticated;
+grant execute on function public.get_room_members(uuid) to authenticated, service_role;
 
 comment on function public.get_room_members(uuid) is
   'Room roster, active members only, host first. V0.107 adds invited_by (null unless the inviter is still an active member of this room) and invite_tier, and closes the anon read: the caller must be an active member, execute is revoked from public and anon.';
