@@ -1,0 +1,28 @@
+# S4 — Chrome stragglers: mascot copy, duplicate room name, chip scan sheet, season bar labels
+
+## Context (read every task; each task runs in a fresh session)
+
+- Repo: `~/Projects/games-room` on the Mac Studio. Branch: `polish/s4-chrome` (already checked out, stacked on S3 `4b9c81a`). Stay on this branch. Never switch branches, merge, push or rebase.
+- App: Games Room, SwiftUI iOS. Design standard: calm hierarchy from type scale, weight and grey only (Things 3 / Apple Mail). No new cards, chips, pills, badges or colours. Use only existing `Theme.Typography.*`, `Theme.Palette.*`, `Theme.Layout.*` tokens.
+- Copy rules: no em dashes, no quote-mark sarcasm, plain short sentences, dry and warm, never dramatic.
+- Files you may edit: `GamesRoom/Services/MascotEngine.swift`, `GamesRoom/Views/RoomDetailView.swift`, `GamesRoom/Views/ChipScanSheet.swift`, `GamesRoom/Views/Components/SeasonComparisonViews.swift`, `main.swift` and files under `Tests/` ONLY to update an assertion that matches a string you deliberately changed, `GamesRoomUITests/ScreenshotSweepTests.swift` ONLY for the same reason. Do not create new files.
+- If you edit a UI test: wait for the element with `waitForExistence(timeout: 10)` BEFORE asserting anything is absent. Asserting absence first passes on the loading screen and proves nothing.
+- Before every commit run `git checkout -- GamesRoom.xcodeproj/project.pbxproj`. Stage by explicit path only. Never `git add -A` / `git add .`. Never add files ending in a space plus a number (iCloud ghosts).
+- No migrations, Supabase calls, version bumps or deploys. Never touch Maestro or opencode config or processes.
+- Gate (~4 min): `bash .maestro/gate.sh`. Last line must be `GATE: PASS`. Read only the last 15 lines. If it fails, fix and rerun; never commit on a FAIL, never claim PASS you did not see.
+- Big files: use `grep -n` to find lines, read ~60 lines around them. Never read a whole file.
+- One task per session: do it, gate, commit with the given message, tick the box, stop.
+
+## Tasks
+
+- [ ] **T1 — Mascot lines without quote-mark sarcasm.** In `GamesRoom/Services/MascotEngine.swift`, `grep -n "'winning.'"`. Two templates read `"{room} has no event on the books. {leader} is 'winning.' The host says so."` and `"{event} is happening. {leader} is 'winning.' The host says so."`. On screen the quote marks render broken ("is 'winning. ' The host says so."). Replace them with `"{room} has no event on the books. {leader} leads for now."` and `"{event} is happening. {leader} leads for now."`. Then `grep -rn "'winning" GamesRoom main.swift Tests 2>/dev/null` and update any test assertion that matched the old text. Gate, restore pbxproj, stage the changed files by path, commit `S4 T1: mascot leader lines without quote-mark sarcasm`.
+
+- [ ] **T2 — Room name shown once.** In `GamesRoom/Views/RoomDetailView.swift`, the room page sets `.navigationTitle(liveRoom.name)` (grep it) AND shows `RoomSwitcherMenu` (grep `struct RoomSwitcherMenu`) in the toolbar, whose label also prints the room name, so the name appears twice. Keep the large navigation title. Change the `RoomSwitcherMenu` label to an icon-only button: `Image(systemName: "chevron.up.chevron.down")` in `Theme.Palette.primaryText.opacity(0.7)`, with `.accessibilityLabel("Switch room")`. Keep its menu contents and behaviour unchanged. If a UI test looked for the room name inside the switcher, update it to the accessibility label. Gate, restore pbxproj, stage, commit `S4 T2: room name once; switcher is icon-only`.
+
+- [ ] **T3 — Chip scan sheet edges.** In `GamesRoom/Views/ChipScanSheet.swift`, the accent-coloured line at the top is clipped at the left screen edge and the primary button runs edge to edge. Give the sheet's main content a horizontal padding of `Theme.Layout.cardInset` (or the padding other sheets in this repo use: `grep -rn "padding(.horizontal" GamesRoom/Views/*Sheet*.swift | head`), so the accent line and the button both sit inside the same margins. Do not change wording, logic or colours. Gate, restore pbxproj, stage, commit `S4 T3: chip scan sheet content inside sheet margins`.
+
+- [ ] **T4 — Season bars say what they measure.** In `GamesRoom/Views/Components/SeasonComparisonViews.swift`, read `struct SeasonBar` and where it is used. A bar with no visible label is ambiguous. Using only data already passed into `SeasonBar` (do not add new data plumbing), add one caption-size text at `Theme.Palette.primaryText.opacity(0.55)` that states what the bar shows, for example `"\(played) of \(total) nights"` or the score it represents, placed on the same row trailing or directly under the bar, whichever keeps the row one line. If `SeasonBar` has no data that can label it honestly, change nothing in code and write the reason in `.maestro/S4_REPORT.md` under "T4 skipped". Gate, restore pbxproj, stage, commit `S4 T4: season bars carry a one-line label`.
+
+- [ ] **T5 — CTA weight inventory (no code changes).** List every place where two buttons sit side by side or stacked with the SAME visual weight (both filled/prominent, or both accent). Search: `grep -rn "borderedProminent\|background(Theme.Palette.accent)" GamesRoom/Views`. For each, record file:line, the two labels, and which one is the likely primary action. Write the list to `.maestro/S4_REPORT.md` under "CTA pairs". Do not change Swift files. Stage `.maestro/S4_REPORT.md`, commit `S4 T5: CTA weight inventory`.
+
+- [ ] **T6 — Final gate and report.** Run `bash .maestro/gate.sh` on the tip and see `GATE: PASS` with your own eyes in the output. Run `git diff --stat 4b9c81a..HEAD` and confirm only allowed files changed. Append the gate's last 15 lines and the diff stat to `.maestro/S4_REPORT.md`, stage it, commit `S4 T6: gate report`.
