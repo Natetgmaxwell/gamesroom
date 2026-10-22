@@ -25,4 +25,4 @@
 
 - [x] **T5 — CTA weight inventory (no code changes).** List every place where two buttons sit side by side or stacked with the SAME visual weight (both filled/prominent, or both accent). Search: `grep -rn "borderedProminent\|background(Theme.Palette.accent)" GamesRoom/Views`. For each, record file:line, the two labels, and which one is the likely primary action. Write the list to `.maestro/S4_REPORT.md` under "CTA pairs". Do not change Swift files. Stage `.maestro/S4_REPORT.md`, commit `S4 T5: CTA weight inventory`.
 
-- [ ] **T6 — Final gate and report.** Run `bash .maestro/gate.sh` on the tip and see `GATE: PASS` with your own eyes in the output. Run `git diff --stat 4b9c81a..HEAD` and confirm only allowed files changed. Append the gate's last 15 lines and the diff stat to `.maestro/S4_REPORT.md`, stage it, commit `S4 T6: gate report`.
+- [x] **T6 — Final gate and report.** Run `bash .maestro/gate.sh` on the tip and see `GATE: PASS` with your own eyes in the output. Run `git diff --stat 4b9c81a..HEAD` and confirm only allowed files changed. Append the gate's last 15 lines and the diff stat to `.maestro/S4_REPORT.md`, stage it, commit `S4 T6: gate report`.
