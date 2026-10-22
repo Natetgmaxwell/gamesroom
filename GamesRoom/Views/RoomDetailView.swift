@@ -2674,8 +2674,16 @@ private struct CeremonialCard: View {
                 )
             }
 
-            if let line = tonightStarCard?.heroFootLine {
-                Text(line)
+            // S3 T3 — the foot line only earns its place when it
+            // says something the name above it doesn't. Many mascot
+            // lines restate the winner ("The host picked Alex."),
+            // which reads as a double-say two lines under "Alex".
+            // Drop the line whenever it contains the winner's name;
+            // `heroFootLine` itself is untouched so the text the host
+            // sees in the picker is unchanged.
+            if let card = tonightStarCard,
+               !card.heroFootLine.contains(card.memberDisplayName) {
+                Text(card.heroFootLine)
                     .font(Theme.Typography.caption.italic())
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
