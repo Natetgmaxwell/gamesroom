@@ -1360,6 +1360,17 @@ final class RoomService: ObservableObject {
         return name.isEmpty ? nil : name
     }
 
+    /// The same answer for a surface that holds a user id rather
+    /// than a `Member` — an RSVP row, a seat cell. Resolves the
+    /// active roster first, so one implementation of the lookup
+    /// serves every anchor surface.
+    func anchorName(forUserId userId: UUID, roomId: UUID) -> String? {
+        guard let member = cachedMembers(roomId: roomId)
+            .first(where: { $0.userId == userId })
+        else { return nil }
+        return anchorName(for: member, roomId: roomId)
+    }
+
     /// Loads the room's `show_brought_by` switch into the cache.
     /// Returns the cached value so a caller's `.task` can ignore
     /// it; the view layer reads `cachedShowBroughtBy`. Loaded

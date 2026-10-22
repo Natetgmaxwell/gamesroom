@@ -73,6 +73,16 @@ enum BroughtBy {
         return "\(name), with \(anchor)"
     }
 
+    // MARK: - Pending invites
+
+    /// Caption under a pending invite's name: "via Alex". nil when
+    /// there is nothing to say, so the caller leaves the line out
+    /// rather than rendering an empty one.
+    static func viaLabel(anchorName: String?, enabled: Bool) -> String? {
+        guard enabled, let anchor = nonEmpty(anchorName) else { return nil }
+        return "via \(anchor)"
+    }
+
     // MARK: - Parts
 
     /// "into bouldering", or the member's own text when they already

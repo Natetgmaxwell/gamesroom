@@ -146,25 +146,12 @@ struct WhosComingList: View {
     /// is nil for a stale or empty value, so the staleness rule V0.106
     /// shipped is unchanged; `BroughtBy` only prefixes the "into ".
     private func caption(for rsvp: EventRSVP) -> String? {
-        var anchorName: String?
-        if let member = member(for: rsvp) {
-            anchorName = roomService.anchorName(for: member, roomId: roomId)
-        }
         return BroughtBy.caption(
-            anchorName: anchorName,
+            anchorName: roomService.anchorName(forUserId: rsvp.memberId, roomId: roomId),
             firstNight: isFirstNight(rsvp.memberId),
             currentlyInto: questionBox.currentlyIntoLine(eventId: eventId, memberId: rsvp.memberId),
             enabled: roomService.cachedShowBroughtBy(roomId: roomId)
         )
-    }
-
-    /// `EventRSVP.memberId` is the member's user id (migration 066
-    /// selects `rm.user_id as member_id`), so it matches
-    /// `Member.userId` directly. Nil for a member who is not on the
-    /// active roster, which is also what keeps a kicked member's name
-    /// off the page.
-    private func member(for rsvp: EventRSVP) -> Member? {
-        roomService.cachedMembers(roomId: roomId).first { $0.userId == rsvp.memberId }
     }
 
     /// First night = no settled session in this room yet, so the

@@ -1894,7 +1894,11 @@ private struct BriefingSlot: View {
             // maxSeats count, even before the per-member RSVP rows
             // load (the grid then shows all-open seats).
             if event.maxSeats > 0 {
-                SeatGridRow(maxSeats: event.maxSeats, rsvps: rsvps, currentUserId: currentUserId)
+                // V0.107 — the room id rides in so a claimed seat's
+                // VoiceOver label can name who brought the member
+                // (spec §2, A8).
+                SeatGridRow(maxSeats: event.maxSeats, roomId: room.id,
+                            rsvps: rsvps, currentUserId: currentUserId)
                     .padding(.top, 4)
                 // v1.2 S2 — aggregate claimant caption deleted; the
                 // Who's-coming list below names every claimant.
@@ -2154,8 +2158,12 @@ private struct UnconsumedMemberNotesSection: View {
 /// chrome and the outer edge stays open (the card is the box).
 private struct SeatGridRow: View {
     let maxSeats: Int
+    /// V0.107 — the room the event belongs to. Read for the roster
+    /// (to resolve the anchor) and the room's brought-by switch.
+    let roomId: UUID
     let rsvps: [EventRSVP]
     let currentUserId: UUID?
+    @EnvironmentObject private var roomService: RoomService
 
     /// V0.42 — fires only for the current user's claim, not every
     /// grid render. Reset to false after ~500ms so the burst is a
@@ -2260,10 +2268,21 @@ private struct SeatGridRow: View {
         return String(first).uppercased()
     }
 
+    /// V0.107 — the anchor rides in the label, not on the chair:
+    /// "Sam's seat, with Alex, claimed". The chair cell itself is
+    /// an initial, so there is nowhere else to put it (spec §2).
+    /// `BroughtBy.seatLabel` owns the wording and the room-switch
+    /// check, so switching it off drops the anchor here exactly the
+    /// way it drops it from the caption under the grid (A7).
     private func accessibilityLabel(for rsvp: EventRSVP) -> String {
         let isYours = rsvp.memberId == currentUserId
         let owner = isYours ? "your seat" : "\(rsvp.displayName)'s seat"
-        return "\(owner), claimed"
+        let seat = BroughtBy.seatLabel(
+            name: owner,
+            anchorName: roomService.anchorName(forUserId: rsvp.memberId, roomId: roomId),
+            enabled: roomService.cachedShowBroughtBy(roomId: roomId)
+        )
+        return "\(seat), claimed"
     }
 }
 
@@ -3906,9 +3925,25 @@ private struct MemberRosterReadOnly: View {
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 ForEach(tierTwo) { member in
                     HStack {
-                        Text(member.displayName)
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(member.displayName)
+                                .font(Theme.Typography.body)
+                                .foregroundStyle(Theme.Palette.primaryText)
+                            // V0.107 — "via Alex" under the name, so
+                            // the host can place a newcomer before
+                            // they say anything (spec §2, A6). The
+                            // same grey as the briefing caption, and
+                            // gone with the room switch (A7). nil
+                            // when nobody brought them.
+                            if let via = BroughtBy.viaLabel(
+                                anchorName: roomService.anchorName(for: member, roomId: room.id),
+                                enabled: roomService.cachedShowBroughtBy(roomId: room.id)
+                            ) {
+                                Text(via)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            }
+                        }
                         Spacer()
                         Button {
                             Task {

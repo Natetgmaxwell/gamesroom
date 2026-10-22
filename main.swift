@@ -5160,6 +5160,24 @@ runner.run("BroughtBy.seatLabel appends the anchor behind a name") {
         "Sam")
 }
 
+runner.run("BroughtBy.viaLabel names the inviter under a pending invite") {
+    runner.assertEqual(
+        BroughtBy.viaLabel(anchorName: "Alex", enabled: true),
+        "via Alex")
+    runner.assertEqual(
+        BroughtBy.viaLabel(anchorName: nil, enabled: true),
+        nil)
+    // A tier-1 host or a tier-3 open-code join has no anchor, so
+    // the pending row renders the name alone.
+    runner.assertEqual(
+        BroughtBy.viaLabel(anchorName: "   ", enabled: true),
+        nil)
+    // Room switch off: no anchor text on any surface (A7).
+    runner.assertEqual(
+        BroughtBy.viaLabel(anchorName: "Alex", enabled: false),
+        nil)
+}
+
 // MARK: - Brought By data plumbing (V0.107 T3)
 
 runner.run("Member decodes invited_by and invite_tier off the V0.107 roster shape") {
