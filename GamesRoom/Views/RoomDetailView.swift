@@ -4567,16 +4567,13 @@ private struct RoomSwitcherMenu: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(currentRoom.name)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText)
-                    .lineLimit(1)
-                Image(systemName: Theme.Icon.chevronDown)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .accessibilityHidden(true)
-            }
+            // S4 T2 - the room page already prints the room name as
+            // its large navigation title, so the switcher used to
+            // say it a second time. Icon-only now; the name stays
+            // reachable on `accessibilityValue` below.
+            Image(systemName: "chevron.up.chevron.down")
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
         }
         .accessibilityLabel(Text("Switch room"))
         .accessibilityValue(Text(currentRoom.name))
