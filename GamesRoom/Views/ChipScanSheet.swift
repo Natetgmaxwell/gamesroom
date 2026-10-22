@@ -175,6 +175,7 @@ struct ChipScanSheet: View {
                     .disabled(camera.state != .running)
                 }
             }
+            .padding(.horizontal, Theme.Layout.gutter)
             .padding(.bottom, 24)
         }
     }
