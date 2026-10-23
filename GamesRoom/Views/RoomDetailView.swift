@@ -2917,7 +2917,6 @@ private struct CeremonialCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Layout.cardInset)
         // M2.5 — state-driven hero wash. The CeremonialCard
         // (.justSettled) is always the active slot in its V0State,
         // so .hero is correct here. The hard-coded `.hero` on
@@ -3246,7 +3245,6 @@ private struct AwardsCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Layout.cardInset)
         .sectionCard(.hero)
     }
 
