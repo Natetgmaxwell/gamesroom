@@ -16,6 +16,8 @@
 //       scales the 20-minute default to 5 s.
 //    6. Currently Into older than 30 days does not render in the
 //       Briefing (Sam's is 40 days old; Alex's is 2 days old).
+//       Since S6 T3/T4 that is read from the seat popover on the
+//       event card, not from the removed who's-coming list.
 //
 //  Run:
 //    xcodebuild test -project GamesRoom.xcodeproj -scheme GamesRoom \
@@ -112,14 +114,53 @@ final class QuestionBoxAcceptanceTests: XCTestCase {
     func test_acceptance6_staleCurrentlyIntoHiddenInBriefing() throws {
         let app = launch(seed: "briefing")
 
-        // Who's coming lists both claimed members by name.
-        XCTAssertTrue(app.staticTexts["Alex"].firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Sam"].firstMatch.exists)
+        // v1.2.2 S6 T3/T4 — this used to read the who's-coming list on
+        // the event card, which listed both claimants' names at once.
+        // The list is gone; a claimed seat is a button and tapping it
+        // opens who claimed it plus the grey caption, so the two
+        // members are read one popover at a time.
+        let alexSeat = app.descendants(matching: .any)["seat-Alex"].firstMatch
+        XCTAssertTrue(alexSeat.waitForExistence(timeout: 10),
+                      "Alex's claimed seat never rendered on the seat grid")
+        alexSeat.tap()
 
-        // Fresh (2 days) renders; stale (40 days) does not.
-        XCTAssertTrue(app.staticTexts["Learning the banjo"].waitForExistence(timeout: 5),
-                      "Fresh Currently Into should render under Alex")
-        XCTAssertFalse(app.staticTexts["Sourdough starters"].exists,
+        // Fresh (2 days) renders. Match on the tail of the sentence:
+        // `BroughtBy` prefixes the member's own words with "into ", so
+        // the assertion is about the value, not the phrasing.
+        let alexCaption = app.descendants(matching: .any)["seat-popover-Alex"].firstMatch
+        XCTAssertTrue(alexCaption.waitForExistence(timeout: 10),
+                      "Seat popover never opened for Alex")
+        XCTAssertTrue(alexCaption.label.contains("Learning the banjo"),
+                      "Fresh Currently Into should render in Alex's seat popover, got '\(alexCaption.label)'")
+
+        // Dismiss Alex's popover (a tap low on the backdrop closes it)
+        // so Sam's seat can be tapped underneath.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)).tap()
+        let closed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: alexCaption
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [closed], timeout: 10), .completed,
+                       "Alex's seat popover never dismissed")
+
+        // Stale (40 days) does not: Sam's popover opens with his name
+        // and NO caption line at all, because every part of it is
+        // empty once the 30-day staleness rule drops his Currently
+        // Into.
+        let samSeat = app.descendants(matching: .any)["seat-Sam"].firstMatch
+        XCTAssertTrue(samSeat.waitForExistence(timeout: 10),
+                      "Sam's claimed seat never rendered on the seat grid")
+        samSeat.tap()
+        XCTAssertTrue(app.staticTexts["Sam"].firstMatch.waitForExistence(timeout: 10),
+                      "Sam's seat popover never opened")
+        XCTAssertFalse(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Sourdough starters")
+        ).firstMatch.exists,
                        "Currently Into older than 30 days must not render")
+        // Bounded wait so a late render cannot sneak past the
+        // assertion above: the caption must not appear late.
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertFalse(app.descendants(matching: .any)["seat-popover-Sam"].firstMatch.exists,
+                       "A stale Currently Into rendered a caption in Sam's seat popover")
     }
 }

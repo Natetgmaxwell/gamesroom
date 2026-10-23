@@ -8,11 +8,13 @@
 //    • HostQuestionFallback     — the host's quiet "Sam's asking" line
 //    • QuestionBoxSettingsView  — host settings + question editor
 //
-//  v1.2.2 S6 T3 — `WhosComingList` (the briefing who's-coming list and
-//  the brought-by caption it carried) is deleted: who claimed a seat
-//  is read off the seat grid, and the caption moves into the seat
-//  popover on `SeatGridRow` (S6 T4). The event's Currently Into rows
-//  it loaded are still loaded — the card now owns that `.task`.
+//  v1.2.2 S6 T3/T4 — `WhosComingList` (the briefing who's-coming list
+//  and the brought-by caption it carried) is deleted: who claimed a
+//  seat is read off the seat grid, and since T4 the caption lives in
+//  the seat popover on `SeatGridRow`, built by the same four inputs
+//  this file's list used. The event's Currently Into rows it loaded
+//  are still loaded — the event card owns that `.task`, and
+//  `SeatGridRow` reads the same cache.
 //
 //  Design bar (spec §0): no new member screens except the reader card,
 //  skipping is the default, never two optional fields at once.

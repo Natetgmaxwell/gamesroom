@@ -2189,11 +2189,22 @@ private struct SeatGridRow: View {
     let rsvps: [EventRSVP]
     let currentUserId: UUID?
     @EnvironmentObject private var roomService: RoomService
+    /// v1.2.2 S6 T4 — the event's Currently Into rows, for the seat
+    /// popover's caption. The event card owns the load
+    /// (`BriefingSlot.task`); this reads the same cached dictionary
+    /// the removed who's-coming list read, so the staleness rule
+    /// V0.106 shipped is unchanged.
+    @EnvironmentObject private var questionBox: QuestionBoxService
 
     /// V0.42 — fires only for the current user's claim, not every
     /// grid render. Reset to false after ~500ms so the burst is a
     /// single one-shot celebration.
     @State private var justClaimed: Bool = false
+    /// v1.2.2 S6 T4 — whose seat popover is open. One at a time: a
+    /// grid of buttons all sharing one presenter reads as "the grid
+    /// is open", not "this seat is open". The binding per cell is
+    /// built from this id.
+    @State private var popoverMemberId: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var columnCount: Int { SeatGrid.columnCount(for: maxSeats) }
@@ -2255,25 +2266,48 @@ private struct SeatGridRow: View {
     private func seatCell(_ cell: SeatGrid.Cell) -> some View {
         if let rsvp = cell.rsvp {
             let isYours = rsvp.memberId == currentUserId
-            VStack(spacing: 3) {
-                Image(systemName: Theme.Icon.chairFill)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
-                    .accessibilityHidden(true)
-                Text(initial(for: rsvp.displayName))
-                    .font(Theme.Typography.footnote.weight(.semibold))
-                    .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .overlay {
-                if isYours && justClaimed {
-                    ConfettiBurst()
+            // v1.2.2 S6 T4 — a claimed seat is a button: tapping it
+            // opens who claimed it and who brought them. The cell
+            // keeps its chair-and-initial look, so the button style
+            // is plain. Open seats below stay non-interactive — an
+            // empty chair has nobody to talk about.
+            Button {
+                Haptics.light()
+                popoverMemberId = rsvp.memberId
+            } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: Theme.Icon.chairFill)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
+                        .accessibilityHidden(true)
+                    Text(initial(for: rsvp.displayName))
+                        .font(Theme.Typography.footnote.weight(.semibold))
+                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
+                        .lineLimit(1)
                 }
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .overlay {
+                    if isYours && justClaimed {
+                        ConfettiBurst()
+                    }
+                }
+                .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: isYours)
             }
-            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: isYours)
-            .accessibilityElement()
+            .buttonStyle(.plain)
             .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
+            .accessibilityIdentifier("seat-\(rsvp.displayName)")
+            .popover(
+                isPresented: Binding(
+                    get: { popoverMemberId == rsvp.memberId },
+                    set: { if !$0 { popoverMemberId = nil } }
+                )
+            ) {
+                seatPopover(for: rsvp)
+                    // iPhone would turn this into a sheet by default;
+                    // the room asks for a popover so it stays anchored
+                    // to the seat that was tapped.
+                    .presentationCompactAdaptation(.popover)
+            }
         } else {
             VStack(spacing: 3) {
                 Image(systemName: Theme.Icon.chair)
@@ -2285,6 +2319,48 @@ private struct SeatGridRow: View {
             .accessibilityElement()
             .accessibilityLabel(Text("open seat"))
         }
+    }
+
+    /// v1.2.2 S6 T4 — the popover: the member's name, then the grey
+    /// caption the who's-coming list used to carry. Same inputs, same
+    /// order, same wording (`BroughtBy` owns the wording); only the
+    /// place it is read from changed.
+    private func seatPopover(for rsvp: EventRSVP) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+            Text(rsvp.displayName)
+                .font(Theme.Typography.body.weight(.semibold))
+                .foregroundStyle(Theme.Palette.primaryText)
+            if let line = caption(for: rsvp) {
+                Text(line)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .accessibilityIdentifier("seat-popover-\(rsvp.displayName)")
+            }
+        }
+        .padding(Theme.Layout.cardInset)
+    }
+
+    /// Anchor · first night · Currently Into, all optional. Same four
+    /// inputs the removed `WhosComingList` used, so nothing about the
+    /// wording or the staleness rule changes — only the surface.
+    private func caption(for rsvp: EventRSVP) -> String? {
+        return BroughtBy.caption(
+            anchorName: roomService.anchorName(forUserId: rsvp.memberId, roomId: roomId),
+            firstNight: isFirstNight(rsvp.memberId),
+            currentlyInto: questionBox.currentlyIntoLine(eventId: rsvp.eventId, memberId: rsvp.memberId),
+            enabled: roomService.cachedShowBroughtBy(roomId: roomId)
+        )
+    }
+
+    /// First night = no settled session in this room yet, so the
+    /// leaderboard's all-time `sessionsPlayed` is 0 (spec §4). A
+    /// member missing from the board means it has not loaded on this
+    /// path yet: treat that as "not a newcomer" rather than calling
+    /// the whole room first-night on a cold open.
+    private func isFirstNight(_ userId: UUID) -> Bool {
+        roomService.cachedLeaderboard(roomId: roomId)
+            .first { $0.userId == userId }?
+            .sessionsPlayed == 0
     }
 
     private func initial(for name: String) -> String {

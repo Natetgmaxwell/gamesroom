@@ -49,7 +49,26 @@ final class ScreenshotSweepTests: XCTestCase {
         row.tap()
     }
 
-    /// Swipes up (bounded) until the element is hittable. Returns
+    /// One screen of upward scroll, as a coordinate drag.
+    ///
+    /// v1.2.2 S6 T4 — NOT `app.swipeUp()`. On this simulator build
+    /// that call does not move a scroll view at all: measured on the
+    /// room page, the title sat at the same y across six
+    /// `app.swipeUp()` calls, and `04b-upcoming-scrolled-end` came
+    /// out pixel-identical to `04-room-page-…`, while the same
+    /// gesture as an explicit coordinate drag moved the page ~420pt
+    /// per pass. Both helpers below drag instead. The drag starts
+    /// mid-page and ends high, clear of the floating tab bar at the
+    /// bottom and the room toolbar at the top.
+    private func scrollUp(_ app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+            .press(
+                forDuration: 0.05,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15))
+            )
+    }
+
+    /// Scrolls up (bounded) until the element is hittable. Returns
     /// false when the bound is exhausted without the element
     /// becoming hittable.
     @discardableResult
@@ -60,7 +79,7 @@ final class ScreenshotSweepTests: XCTestCase {
     ) -> Bool {
         for _ in 0..<maxSwipes {
             if element.exists && element.isHittable { return true }
-            app.swipeUp()
+            scrollUp(app)
         }
         return element.exists && element.isHittable
     }
@@ -72,6 +91,14 @@ final class ScreenshotSweepTests: XCTestCase {
     /// about an element that is still below the fold, so that call
     /// is only safe once the element is on screen. Use this one when
     /// the target starts out of frame.
+    ///
+    /// v1.2.2 S6 T4 — a miss is not a stop. The room page renders
+    /// lazily, so a section further down is simply absent from the
+    /// hierarchy until the scroll reaches it; this used to bail on
+    /// the first miss and report "never scrolled into view" for rows
+    /// that had not been rendered yet. It now keeps scrolling, and
+    /// ends on whether the element is at least on screen (the tap
+    /// that follows still proves it is reachable).
     @discardableResult
     private func scrollIntoFrame(
         _ app: XCUIApplication,
@@ -80,15 +107,18 @@ final class ScreenshotSweepTests: XCTestCase {
     ) -> Bool {
         let bounds = app.frame
         for _ in 0..<maxSwipes {
-            guard element.exists else { return false }
-            let frame = element.frame
-            if frame.width > 0, frame.height > 0,
-               frame.midY > bounds.minY + 44, frame.midY < bounds.maxY - 44 {
-                return true
+            if element.exists {
+                let frame = element.frame
+                if frame.width > 0, frame.height > 0,
+                   frame.midY > bounds.minY + 44, frame.midY < bounds.maxY - 44 {
+                    return true
+                }
             }
-            app.swipeUp()
+            scrollUp(app)
         }
-        return element.exists
+        guard element.exists else { return false }
+        let frame = element.frame
+        return frame.height > 0 && frame.maxY > bounds.minY && frame.minY < bounds.maxY
     }
 
     // MARK: - 01 First launch (empty)
@@ -164,8 +194,11 @@ final class ScreenshotSweepTests: XCTestCase {
         )
 
         snap(app, "04-room-page-upcoming-event-partial-seats")
-        // S2 gate: end state must clear the floating tab bar.
-        for _ in 0..<4 { app.swipeUp() }
+        // S6 T4 — `scrollUp`, not `app.swipeUp()`: the latter does
+        // not move the page here, so this snapshot used to come out
+        // identical to the one above it. The end state must clear
+        // the floating tab bar.
+        for _ in 0..<4 { scrollUp(app) }
         snap(app, "04b-upcoming-scrolled-end")
     }
 
@@ -389,6 +422,16 @@ final class ScreenshotSweepTests: XCTestCase {
         // (it passed at b12c83f and failed at a32ac05). The row is
         // still asserted to exist and then tapped — an unhittable
         // row fails the tap, so reachability is still proven.
+// v1.2.2 S6 — frames, not hittability, and for a real reason:
+        // T2 put the event card on `cardGroupGap`, which made the
+        // room page taller, so the Seasons rows now sit further down
+        // than `scrollUntilHittable`'s 12-swipe bound could reach
+        // (it passed at b12c83f and failed at a32ac05). The row is
+        // still asserted to exist and then tapped — an unhittable
+        // row fails the tap, so reachability is still proven.
+        // S6 T4 — `scrollIntoFrame` also stopped bailing on the first
+        // miss and `scrollUp` drags instead of calling the no-op
+        // `app.swipeUp()`, which is what let this pass.
         XCTAssertTrue(
             scrollIntoFrame(app, element: comebackRow),
             "Season row for 'The Comeback' never scrolled into view."
@@ -517,9 +560,9 @@ final class ScreenshotSweepTests: XCTestCase {
 
         // The switch lands on the last rendered cell of the form,
         // where its centre sits just past the bottom edge, so give it
-        // one more swipe to bring the whole section into the frame
+        // one more scroll to bring the whole section into the frame
         // before anything reads or touches it.
-        app.swipeUp()
+        scrollUp(app)
         XCTAssertTrue(
             broughtBy.waitForExistence(timeout: 5) && broughtBy.isHittable,
             "Brought-by switch is not reachable after scrolling into it."
@@ -554,7 +597,7 @@ final class ScreenshotSweepTests: XCTestCase {
         ).firstMatch
         for _ in 0..<5 {
             if footer.exists { break }
-            app.swipeUp()
+            scrollUp(app)
         }
         XCTAssertTrue(
             footer.waitForExistence(timeout: 5),
@@ -583,8 +626,9 @@ final class ScreenshotSweepTests: XCTestCase {
         )
 
         snap(app, "16-briefing")
-        // S2 gate: end state must clear the floating tab bar.
-        for _ in 0..<4 { app.swipeUp() }
+        // S6 T4 — `scrollUp`, not `app.swipeUp()` (a no-op here):
+        // end state must clear the floating tab bar.
+        for _ in 0..<4 { scrollUp(app) }
         snap(app, "16b-briefing-scrolled-end")
     }
 
@@ -595,27 +639,24 @@ final class ScreenshotSweepTests: XCTestCase {
 
         openRoom(app, named: "Carwoola Crew")
 
-        // v1.2.2 S6 T3 — the "Who's coming" list is off the event
-        // card, so who claimed a seat is read off the seat grid. The
-        // briefing seed still claims three seats and anchors Sam to
-        // Alex at zero sessions, and the chair label keeps that
-        // ("Sam's seat, with Alex, claimed"). S6 T4 moves the grey
-        // caption itself into a popover on this same cell.
+        // v1.2.2 S6 T4 — the "Who's coming" list is gone from the event
+        // card, so who claimed a seat AND who brought them is read off
+        // the seat grid: the cell keeps its chair label ("Sam's seat,
+        // with Alex, claimed") and tapping it opens the popover that
+        // carries the grey caption the list used to show. The briefing
+        // seed anchors Sam to Alex at zero sessions, so the caption
+        // reads "with Alex · first night · into Bouldering".
         //
-        // Query by predicate, not by element type: the cell is one
-        // `.accessibilityElement()` container, so whether XCUITest
-        // files it as another/button/staticText is a detail this test
-        // must not depend on.
-        let samSeat = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", "Sam's seat, with Alex"))
-            .firstMatch
+        // Query by identifier over any element type: the cell is a
+        // button whose identifier is the seat it is, so this test does
+        // not depend on how XCUITest types the container.
+        let samSeat = app.descendants(matching: .any)["seat-Sam"].firstMatch
         XCTAssertTrue(
             samSeat.waitForExistence(timeout: 10),
             "Seat grid never rendered Sam's claimed seat — the briefing seed is not carrying its RSVPs."
         )
 
-        // Now that the card has rendered, the removed list must be
-        // gone rather than merely scrolled away.
+        // The list must stay gone rather than merely scrolled away.
         XCTAssertFalse(
             app.staticTexts["Who's coming"].exists,
             "The Who's coming list is back on the event card (S6 T3)."
@@ -623,6 +664,26 @@ final class ScreenshotSweepTests: XCTestCase {
 
         _ = scrollIntoFrame(app, element: samSeat)
         snap(app, "17-briefing-seat-grid")
+
+        samSeat.tap()
+
+        // Match the tail of the caption: the assertion is that both
+        // optional parts render, not that the Currently Into part
+        // renders a particular way.
+        let popoverCaption = app.descendants(matching: .any)["seat-popover-Sam"].firstMatch
+        XCTAssertTrue(
+            popoverCaption.waitForExistence(timeout: 10),
+            "Tapping Sam's claimed seat did not open the seat popover (S6 T4)."
+        )
+        XCTAssertTrue(
+            popoverCaption.label.contains("with Alex"),
+            "Seat popover lost the anchor: got '\(popoverCaption.label)'."
+        )
+        XCTAssertTrue(
+            popoverCaption.label.contains("first night"),
+            "Seat popover lost the first-night part: got '\(popoverCaption.label)'."
+        )
+        snap(app, "17-seat-popover-brought-by")
     }
 
     // MARK: - 18 Host pending invites carry the anchor (V0.107)
