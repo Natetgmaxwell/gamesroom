@@ -495,6 +495,23 @@ struct RoomDetailView: View {
             VStack(alignment: .leading, spacing: Theme.Layout.roomSectionGap) {
                 activeSlot
                     .frame(maxWidth: .infinity)
+                // v1.2.2 S6 T5 — the host's unread notes, lifted out
+                // of the event card and placed directly after it as
+                // their own room-page section. The card is the only
+                // box at the top of this page; notes that blur where
+                // the event ends were the other half of that blur.
+                // The gap above and below comes from the page
+                // stack's `roomSectionGap`, the same as every other
+                // section here.
+                if !unconsumedMemberNotes.isEmpty {
+                    UnconsumedMemberNotesSection(
+                        room: liveRoom,
+                        notes: unconsumedMemberNotes,
+                        onDone: { ids in
+                            Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
+                        }
+                    )
+                }
                 // V0.106 — Question Box live driver + host fallback.
                 if let event = questionBoxLiveEvent {
                     QuestionBoxLiveSection(event: event, isHost: isHost)
@@ -787,6 +804,24 @@ struct RoomDetailView: View {
         )
     }
 
+    /// v1.2.2 S6 T5 — the host's unread "Notes for next time".
+    ///
+    /// It now sits on the page rather than inside the event card,
+    /// but it renders in exactly the cases it used to: a host, with
+    /// something unread, and an event that has not started. The notes
+    /// are pre-event host prep, so they stay off the page once the
+    /// night is live or the event has settled — which is what the
+    /// three states that render `BriefingSlot` already meant.
+    private var unconsumedMemberNotes: [RoomMemberNote] {
+        guard isHost else { return [] }
+        switch state {
+        case .upcoming, .claimed, .declined:
+            return roomService.cachedUnconsumedMemberNotes(roomId: room.id)
+        default:
+            return []
+        }
+    }
+
     @ViewBuilder
     private var activeSlot: some View {
         Group {
@@ -811,12 +846,6 @@ struct RoomDetailView: View {
                     isHero: true,
                     onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
-                    unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
-                    onMarkNotesConsumed: isHost
-                        ? { ids in
-                            Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
-                        }
-                        : nil,
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
                     onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
                 )
@@ -834,12 +863,6 @@ struct RoomDetailView: View {
                     isHero: true,
                     onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
-                    unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
-                    onMarkNotesConsumed: isHost
-                        ? { ids in
-                            Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
-                        }
-                        : nil,
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
                     onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
                 )
@@ -861,13 +884,7 @@ struct RoomDetailView: View {
                     isHost: isHost,
                     isHero: true,
                     onEdit: isHost ? { editEvent = event } : nil,
-                    room: room,
-                    unconsumedNotes: isHost ? roomService.cachedUnconsumedMemberNotes(roomId: room.id) : [],
-                    onMarkNotesConsumed: isHost
-                        ? { ids in
-                            Task { await markMemberNotesConsumed(roomId: room.id, noteIds: ids) }
-                        }
-                        : nil
+                    room: room
                 )
 
             case .inPlay(let event):
@@ -1756,9 +1773,10 @@ private struct BriefingSlot: View {
     let myRSVP: MemberRSVPState
     let onClaim: () -> Void
     let onDecline: () -> Void
-    /// V0.84 C5 — the room the briefing belongs to. Read by the
-    /// host's notes section to surface the mascot name in the
-    /// "Mascot: Member left a note for next time" line.
+    /// V0.84 C5 — the room the briefing belongs to. Read for the
+    /// seat grid's room id and the deposit trigger. The host's
+    /// "Notes for next time" section, which also used to read the
+    /// mascot name off this, is a page section now (S6 T5).
     let room: Room
     /// V0.9 Wave 1 Slice 1.2 - when the member has already declined,
     /// the briefing slot surfaces a "Re-accept / Re-decline" pill so
@@ -1781,14 +1799,6 @@ private struct BriefingSlot: View {
     /// W2.4 — member-side event edit. Wired up only when the
     /// parent passes a non-nil callback.
     let onEdit: (() -> Void)?
-    /// V0.84 C5 — host-only unconsumed notes for the room's
-    /// pre-event host prep. Empty array (the default) means the
-    /// section is hidden.
-    let unconsumedNotes: [RoomMemberNote]
-    /// V0.84 C5 — host-only. Stamps the listed notes consumed so
-    /// the section clears. Wired up only when the parent passes
-    /// a non-nil callback.
-    let onMarkNotesConsumed: (([UUID]) -> Void)?
     /// V0.85 — the caller's seat deposit for the event, or nil.
     /// A held deposit renders the "I'm here" reclaim button on
     /// the chair card; nil keeps the claimed state as it was.
@@ -1820,8 +1830,6 @@ private struct BriefingSlot: View {
         isHero: Bool,
         onEdit: (() -> Void)? = nil,
         room: Room,
-        unconsumedNotes: [RoomMemberNote] = [],
-        onMarkNotesConsumed: (([UUID]) -> Void)? = nil,
         heldDeposit: SeatDeposit? = nil,
         onCheckIn: (() -> Void)? = nil
     ) {
@@ -1839,8 +1847,6 @@ private struct BriefingSlot: View {
         self.isHero = isHero
         self.onEdit = onEdit
         self.room = room
-        self.unconsumedNotes = unconsumedNotes
-        self.onMarkNotesConsumed = onMarkNotesConsumed
         self.heldDeposit = heldDeposit
         self.onCheckIn = onCheckIn
     }
@@ -2024,18 +2030,6 @@ private struct BriefingSlot: View {
                     onReDecline: onReDecline ?? {}
                 )
             }
-
-            // V0.84 C5 — host-only notes for next time. v1.1 — sits
-            // under the RSVP buttons so Claim seat is the first
-            // action; "Done reading" is a text button. (S6 T5 lifts
-            // this out of the card.)
-            if isHost, !unconsumedNotes.isEmpty, let onMarkNotesConsumed {
-                UnconsumedMemberNotesSection(
-                    room: room,
-                    notes: unconsumedNotes,
-                    onDone: { ids in onMarkNotesConsumed(ids) }
-                )
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.Layout.cardInset)
@@ -2120,12 +2114,19 @@ private struct TrailingTextAction: View {
 
 // MARK: - Unconsumed member notes (V0.84 C5 — host pre-event)
 
-/// V0.84 C5 — host-only section surfaced ABOVE the seat grid on
-/// the BriefingSlot when the room has unconsumed member notes.
-/// Per the spec: for each note — "<MascotName>: <Member> left a
+/// V0.84 C5 — host-only section for the room's unread member
+/// notes. Per the spec: for each note — "<MascotName>: <Member> left a
 /// note for next time." + the note text (body font). After render
 /// (onAppear of section), host taps "Done reading" ⇒
 /// `markMemberNotesConsumed` with the listed ids.
+///
+/// v1.2.2 S6 T5 — this used to sit inside the event card, under the
+/// RSVP buttons, which made the card taller and blurred where the
+/// event ended. It is now a room-page section directly after the
+/// card: the same `SectionTitle` header every other section on this
+/// page uses, the header's `roomHeaderGap`, the rows on the page
+/// background rather than the card background, and its space above
+/// and below from the page stack's `roomSectionGap`.
 private struct UnconsumedMemberNotesSection: View {
     let room: Room
     let notes: [RoomMemberNote]
@@ -2136,31 +2137,36 @@ private struct UnconsumedMemberNotesSection: View {
     @State private var capturedIds: [UUID] = []
 
     var body: some View {
-        // v1.2 S2 — flattened: a labelled text block on the card
-        // background, no outlined sub-box per note.
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Notes for next time")
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-            ForEach(notes, id: \.id) { note in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(room.mascotName): \(note.memberDisplayName) left a note for next time.")
+        VStack(alignment: .leading, spacing: 0) {
+            SectionTitle(text: "Notes for next time")
+                .padding(.bottom, Theme.Layout.roomHeaderGap)
+            // A note's two lines belong together (`cardLineGap`, as
+            // they were before); the notes themselves are groups, so
+            // they sit `cardGroupGap` apart, and "Done reading" takes
+            // the same step off the last note rather than the ad-hoc
+            // 10 this block used before.
+            VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+                ForEach(notes, id: \.id) { note in
+                    VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                        Text("\(room.mascotName): \(note.memberDisplayName) left a note for next time.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        Text(note.noteText)
+                            .font(Theme.Typography.body)
+                            .foregroundStyle(Theme.Palette.primaryText)
+                    }
+                }
+                // v1.2 S2 — "Done reading" is a plain tertiary text
+                // action; it still marks the notes consumed.
+                Button(action: { onDone(capturedIds) }) {
+                    Text("Done reading")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    Text(note.noteText)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText)
                 }
+                .buttonStyle(.plain)
             }
-            // v1.2 S2 — "Done reading" is a plain tertiary text
-            // action; it still marks the notes consumed.
-            Button(action: { onDone(capturedIds) }) {
-                Text("Done reading")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            }
-            .buttonStyle(.plain)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             if capturedIds.isEmpty {
                 capturedIds = notes.map(\.id)
