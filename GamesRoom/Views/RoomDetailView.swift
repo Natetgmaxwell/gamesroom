@@ -2491,13 +2491,26 @@ private struct WitnessSlot: View {
     var onWithdrawMore: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            HStack(spacing: 12) {
-                Text(headerTitle)
-                    .font(Theme.Typography.title.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Spacer()
-            }
+        // v1.2.2 S6 T7 — same rule `BriefingSlot` follows (S6 T2):
+        // the card body is ONE stack on two spacing steps and
+        // nothing else. Groups (header, working-hand badge, the
+        // attestation rows, the primary CTA, each secondary CTA)
+        // sit `cardGroupGap` apart; lines that belong together
+        // inside a group sit `cardLineGap`. The ad-hoc
+        // `.padding(.top, N)` nudges that used to sit at those
+        // group boundaries are gone — this stack's spacing is the
+        // only gap a group boundary gets.
+        //
+        // The header is ONE line today ("The night has started",
+        // "The game is on", "Count what's on the table"), so it has
+        // no `cardLineGap` step to show. It rides the full card
+        // width, leading-aligned, exactly where a multi-line
+        // header block would start.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            Text(headerTitle)
+                .font(Theme.Typography.title.weight(.semibold))
+                .foregroundStyle(Theme.Palette.primaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             // V0.46 — working-hand badge. Renders only when the
             // member has chips withdrawn (casino, post-withdraw);
@@ -2513,7 +2526,9 @@ private struct WitnessSlot: View {
             // counted, and the next scan settles the whole delta.
             if let workingHand, workingHand > 0 {
                 if hasScanned, let scannedValue, scannedValue == workingHand {
-                    HStack(spacing: 6) {
+                    // icon and its own label belong together, so
+                    // they sit `cardLineGap` apart (was an ad-hoc 6).
+                    HStack(spacing: Theme.Layout.cardLineGap) {
                         Image(systemName: Theme.Icon.checkmarkCircleFill)
                         Text("Counted: \(scannedValue) pts, settled")
                     }
@@ -2524,10 +2539,9 @@ private struct WitnessSlot: View {
                     .background(Theme.Palette.accent.opacity(0.12))
                     .clipShape(Capsule())
                     .accessibilityLabel(Text("Chips counted: \(scannedValue) points, settled"))
-                    .padding(.top, 4)
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 } else {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Theme.Layout.cardLineGap) {
                         Image(systemName: Theme.Icon.handPointUpFill)
                         Text("Working hand: \(workingHand) pts")
                     }
@@ -2538,13 +2552,19 @@ private struct WitnessSlot: View {
                     .background(Theme.Palette.accent.opacity(0.12))
                     .clipShape(Capsule())
                     .accessibilityLabel(Text("Working hand: \(workingHand) pts"))
-                    .padding(.top, 4)
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 }
             }
 
             if !attestations.isEmpty {
                 ForEach(attestations) { s in
+                    // v1.2.2 S6 T7 — one reading is one group, so
+                    // the rows keep `cardGroupGap` between them (via
+                    // the outer stack) and the `6` here is the row's
+                    // own vertical inset, not a step between groups.
+                    // The `8` inside the row is inert: it sits
+                    // either side of the `Spacer` that pushes the
+                    // amount to the trailing edge.
                     HStack(spacing: 8) {
                         Text(s.contextLabel)
                             .font(Theme.Typography.body)
@@ -2577,7 +2597,6 @@ private struct WitnessSlot: View {
                     .clipShape(Capsule())
                     .contentTransition(.opacity)
                     .animation(Theme.Motion.fade, value: cta)
-                    .padding(.top, 8)
                     .accessibilityLabel(Text(ctaTitle))
             } else {
             Button(action: ctaAction) {
@@ -2591,7 +2610,6 @@ private struct WitnessSlot: View {
                     .contentTransition(.opacity)
                     .animation(Theme.Motion.fade, value: cta)
             }
-            .padding(.top, 8)
             }
 
             // V0.68 — secondary "Withdraw more" CTA. Renders for casino
@@ -2611,7 +2629,6 @@ private struct WitnessSlot: View {
                 }
                 .buttonStyle(.plain)
                 .pressScale()
-                .padding(.top, 8)
                 .transition(.opacity.combined(with: .move(edge: .top)))
                 .accessibilityLabel(Text("Withdraw more"))
             }
@@ -2631,7 +2648,6 @@ private struct WitnessSlot: View {
                 }
                 .buttonStyle(.plain)
                 .pressScale()
-                .padding(.top, 8)
                 .transition(.opacity.combined(with: .move(edge: .top)))
                 .accessibilityLabel(Text("Count your CAH cards"))
             }
@@ -2641,6 +2657,11 @@ private struct WitnessSlot: View {
             // surface carries both the chip-withdraw entry point
             // AND the round-recording control without crowding the
             // dominant action. Members see nothing here.
+            //
+            // v1.2.2 S6 T7 — its `4` top nudge is gone, so it sits
+            // `cardGroupGap` below the primary CTA like every other
+            // group; the `.vertical, 12` stays because it is inside
+            // the button label (the control's own height).
             if let onScore {
                 Button(action: onScore) {
                     HStack {
@@ -2655,7 +2676,6 @@ private struct WitnessSlot: View {
                 }
                 .buttonStyle(.plain)
                 .pressScale()
-                .padding(.top, 4)
                 .accessibilityLabel(Text("Score a round (host)"))
             }
         }
@@ -2798,8 +2818,16 @@ private struct CeremonialCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
+        // v1.2.2 S6 T7 — the card rhythm `BriefingSlot` uses (S6 T2):
+        // groups (header block, Tonight's Star, the one-line drop,
+        // the mascot foot line) sit `cardGroupGap` apart, and the
+        // lines that belong together inside the header block sit
+        // `cardLineGap` apart. The ad-hoc `20` / `6` are gone — this
+        // stack's spacing is the only gap a group boundary gets.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            // (1) header block — title and the settled-date / teaser
+            // caption, which read as one caption tier.
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(chapterLine?.title ?? event.name)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -2812,7 +2840,8 @@ private struct CeremonialCard: View {
             }
             .accessibilityElement(children: .combine)
 
-            // V0.84 C2 — Tonight's Star section. Hidden when
+            // (2) Tonight's Star section — the host's pick (or the
+            // chip-swing winner) and their line. Hidden when
             // `tonightStarCard == nil` (no host pick AND no
             // chip-swing winner — matches the 067 empty case).
             // The host's "Make a call" rides the label row inside
@@ -2850,6 +2879,11 @@ private struct CeremonialCard: View {
             // drop arrives the next morning with the recap, NOT on
             // the post-session screen — the 12h cool-down gives
             // the member private space to reflect first.
+            //
+            // v1.2.2 S6 T7 — group (3). It is a self-contained
+            // subview, so its own internal steps stay its own (same
+            // call T2 made for `ClaimedCardAskField`); the only gap
+            // it inherits from here is this stack's `cardGroupGap`.
             if !isHost, memberNoteWindowOpen, memberNotePromptVisible, let onSubmitMemberNote, let onSkipMemberNote {
                 MemberNotePromptSection(
                     draft: $memberNoteDraft,
@@ -2873,6 +2907,8 @@ private struct CeremonialCard: View {
             // Drop the line whenever it contains the winner's name;
             // `heroFootLine` itself is untouched so the text the host
             // sees in the picker is unchanged.
+            //
+            // v1.2.2 S6 T7 — group (4).
             if let card = tonightStarCard,
                !card.heroFootLine.contains(card.memberDisplayName) {
                 Text(card.heroFootLine)
