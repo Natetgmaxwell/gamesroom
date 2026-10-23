@@ -244,6 +244,16 @@ struct HostQuestionFallback: View {
 
 /// Attached to the room page while the active event is live. Drives
 /// the lazy server tick and surfaces the host fallback.
+///
+/// v1.2.2 S6 T6 — the driver moved up to `RoomDetailView`, which is
+/// where it belongs now that the room page asks `hasContent` before
+/// adding this section at all: a container with nothing inside
+/// renders zero-height yet still claims a `roomSectionGap` above AND
+/// below it, which is what pushed the live card twice as far from
+/// Standings as every other section pair. The driver used to live
+/// here, so it could only run once the section was on the page —
+/// which it now is only once a turn exists to print. One driver,
+/// started by the page, before the section it feeds.
 struct QuestionBoxLiveSection: View {
     let event: Event
     let isHost: Bool
@@ -251,15 +261,34 @@ struct QuestionBoxLiveSection: View {
     @EnvironmentObject private var questionBox: QuestionBoxService
 
     var body: some View {
-        // A real container, not `Group`: Group modifiers apply per child,
-        // so with no turn yet (no child) the driver `.task` never ran.
         VStack(spacing: 0) {
-            if isHost, let turn = questionBox.turnByEvent[event.id], !turn.isReader {
+            if let turn = visibleTurn {
                 HostQuestionFallback(turn: turn)
             }
         }
         .frame(maxWidth: .infinity)
-        .task(id: event.id) { await questionBox.driveLiveEvent(eventId: event.id) }
+    }
+
+    /// The turn the host is being asked to read, or nil when there is
+    /// nothing to show. Same predicate as `hasContent`, so the page
+    /// and this card can never disagree about whether to render.
+    private var visibleTurn: QuestionTurn? {
+        guard Self.hasContent(event: event, isHost: isHost, turns: questionBox.turnByEvent)
+        else { return nil }
+        return questionBox.turnByEvent[event.id]
+    }
+
+    /// Whether the driver has a fallback to print for this event.
+    /// The room page needs this BEFORE it adds the section (see the
+    /// note above), which is why it is a static on the section and
+    /// not a property.
+    static func hasContent(
+        event: Event,
+        isHost: Bool,
+        turns: [UUID: QuestionTurn]
+    ) -> Bool {
+        guard isHost, let turn = turns[event.id] else { return false }
+        return !turn.isReader
     }
 }
 

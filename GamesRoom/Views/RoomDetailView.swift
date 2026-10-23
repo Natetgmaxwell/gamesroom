@@ -44,6 +44,10 @@ struct RoomDetailView: View {
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var casinoService: CasinoService
     @EnvironmentObject private var scoringService: ScoringService
+    /// v1.2.2 S6 T6 — the Question Box driver runs from this page
+    /// (see the `.task` on `body`), so the page reads the same turn
+    /// cache the section prints from.
+    @EnvironmentObject private var questionBox: QuestionBoxService
     /// W-04 — pops this pushed detail view when the host deletes the
     /// room from settings (the room is gone from the rooms list, so
     /// staying on the page would strand the user on a dead room).
@@ -313,6 +317,16 @@ struct RoomDetailView: View {
             }
         }
         .background(Theme.Palette.background.ignoresSafeArea())
+        // v1.2.2 S6 T6 — the one Question Box driver for this page,
+        // started above the section it feeds (the section only
+        // renders once a turn exists, so it can no longer be the
+        // thing that starts the polling loop). Covers both surfaces
+        // below: the scroll page and the host scoring dashboard,
+        // which used to start their own driver each.
+        .task(id: questionBoxLiveEvent?.id) {
+            guard let event = questionBoxLiveEvent else { return }
+            await questionBox.driveLiveEvent(eventId: event.id)
+        }
         .navigationTitle(liveRoom.name)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -513,7 +527,19 @@ struct RoomDetailView: View {
                     )
                 }
                 // V0.106 — Question Box live driver + host fallback.
-                if let event = questionBoxLiveEvent {
+                // v1.2.2 S6 T6 — added only when there is something
+                // to print. It used to be added for every live event,
+                // and with no turn yet it renders a zero-height
+                // container that still takes a `roomSectionGap` above
+                // AND below it: the live card sat 64pt from
+                // Standings where every other pair of sections gets
+                // 32. The gap between two sections now comes from
+                // `roomSectionGap` and nothing else. The driver moved
+                // up to `body` (one driver per page).
+                if let event = questionBoxLiveEvent,
+                   QuestionBoxLiveSection.hasContent(
+                       event: event, isHost: isHost, turns: questionBox.turnByEvent
+                   ) {
                     QuestionBoxLiveSection(event: event, isHost: isHost)
                 }
                 // V0.66 — host-only "Chips to dispense" cards during active
@@ -650,6 +676,11 @@ struct RoomDetailView: View {
                 )
             }
             .padding(.horizontal, Theme.Layout.edgePadding)
+            // v1.2.2 S6 T6 — this is the page's own inset from the
+            // screen edges (under the toolbar, above the tab bar), not
+            // a gap between two sections, so it stays. Everything
+            // between sections comes from the stack's `roomSectionGap`
+            // and nothing else.
             .padding(.vertical, Theme.Layout.sectionSpacing)
         }
         // Dense text scrolls under the glass toolbar; the default soft
@@ -827,6 +858,10 @@ struct RoomDetailView: View {
         Group {
             switch state {
             case .loading:
+                // v1.2.2 S6 T6 — this padding centres the spinner in
+                // an otherwise empty page. It is the only child of the
+                // stack while it renders, so it distorts no gap
+                // between two sections and stays as it is.
                 VStack { ProgressView().tint(Theme.Palette.accent) }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Layout.sectionSpacing * 2)
@@ -4188,8 +4223,18 @@ private struct MemberRosterReadOnly: View {
 
 // MARK: - Collapsible section (V0.40)
 
+/// v1.2.2 S6 T6 — one header style for every room-page section.
+/// Packs and Members print their title with `SectionTitle`, exactly
+/// as Standings and Seasons print theirs, sit the same distance above
+/// their content (`roomHeaderGap`), and put their trailing controls on
+/// the title's row. The grey sentence that used to sit under the title
+/// is gone from the page; it is not deleted — it moved into the
+/// toggle's accessibility hint, so it is still read out.
 private struct CollapsibleSection<Content: View, Accessory: View>: View {
     let title: String
+    /// v1.2.2 S6 T6 — no longer rendered. Kept as the toggle's
+    /// accessibility hint so the section keeps its one-line
+    /// description for anyone who cannot see the header.
     let caption: String
     @Binding var isExpanded: Bool
     @ViewBuilder let accessory: Accessory
@@ -4215,24 +4260,21 @@ private struct CollapsibleSection<Content: View, Accessory: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.roomHeaderGap) {
-            // Trailing controls sit on the title's baseline, not
-            // centred on the title + caption block.
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            // v1.2.2 S6 T6 — trailing controls sit centred on the
+            // title's row, the same row Standings and Seasons use.
+            // (They used to sit on the title's baseline, which only
+            // lined up while the header still carried a second line.)
+            HStack(alignment: .center, spacing: 12) {
                 Button(action: toggle) {
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            SectionTitle(text: title)
-                            Text(caption)
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                        }
+                    HStack(alignment: .center) {
+                        SectionTitle(text: title)
                         Spacer(minLength: 8)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(title))
-                .accessibilityHint(Text(isExpanded ? "Tap to collapse." : "Tap to expand."))
+                .accessibilityHint(hint)
 
                 accessory
 
@@ -4251,6 +4293,15 @@ private struct CollapsibleSection<Content: View, Accessory: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// v1.2.2 S6 T6 — "Tap to expand/collapse" was the whole hint,
+    /// which left the caption with nowhere to live once the visible
+    /// line came off. It rides along here instead of being deleted.
+    private var hint: Text {
+        let action = isExpanded ? "Tap to collapse." : "Tap to expand."
+        guard !caption.isEmpty else { return Text(action) }
+        return Text("\(action) \(caption)")
     }
 }
 
@@ -4280,8 +4331,10 @@ private struct MembersSection: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                // Full tap target, but only the glyph's height counts
-                // toward the header so the row stays as tall as Packs.
+                // v1.2.2 S6 T6 — still full 44pt tap target, but
+                // only the glyph's height counts toward the header,
+                // so Members' row is as tall as Packs' now that both
+                // are one title line.
                 .padding(.vertical, -16)
                 .accessibilityLabel(Text("Invite a friend"))
                 .accessibilityIdentifier("members-invite")
