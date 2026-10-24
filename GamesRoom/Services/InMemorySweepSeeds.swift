@@ -97,7 +97,7 @@ extension InMemoryRoomStore {
                 id: carwoolaEvent.id,
                 roomId: carwoola.id,
                 name: carwoolaEvent.name,
-                playedAt: Date().addingTimeInterval(86_400 * 2),
+                playedAt: sweepNextFridayEvening(),
                 createdAt: carwoolaEvent.createdAt,
                 venue: carwoolaEvent.venue,
                 hostNote: carwoolaEvent.hostNote,
@@ -235,7 +235,7 @@ extension InMemoryRoomStore {
                 memberId: alex,
                 memberDisplayName: "Alex",
                 overrideCategory: .custom,
-                customText: "nOtHiNg AbOuT tHaT wAs LeGaL",
+                customText: "Read the whole table all night.",
                 source: "host_pick"
             )
             leaderboards[carwoola.id] = [
@@ -365,4 +365,13 @@ extension InMemoryRoomStore {
             break
         }
     }
+}
+
+/// Upcoming sweep event: next Friday 7:30 pm local, at least a day out,
+/// so captures read like a real games night (App Store screenshots).
+func sweepNextFridayEvening(from now: Date = Date()) -> Date {
+    var cal = Calendar(identifier: .gregorian); cal.timeZone = .current
+    var c = DateComponents(); c.weekday = 6; c.hour = 19; c.minute = 30
+    let start = now.addingTimeInterval(86_400)
+    return cal.nextDate(after: start, matching: c, matchingPolicy: .nextTime) ?? start
 }

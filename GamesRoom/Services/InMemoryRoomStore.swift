@@ -220,7 +220,7 @@ actor InMemoryRoomStore: RoomStore {
         let carwoola = Room(
             id: UUID(),
             name: "Carwoola Crew",
-            mascotName: "Borat",
+            mascotName: "Tally",
             mascotPersonality: .snarky,
             mascotPoliticalIdeology: .anarchist,
             createdBy: UUID(),
