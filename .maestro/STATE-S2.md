@@ -1,6 +1,6 @@
 # STATE S2
 
-STATE: step 6 of 8 done. Next: step 7.
+STATE: step 7 of 8 done. Next: step 8.
 
 STEP 1 DONE (commit a1de6c1 `S2.1: port fix/notif-claimed-state (reconcileBriefing) onto febbae3`).
 The two upstream objects 04081cb and 5649888 were cherry-picked from refs/remotes/icloud/fix/notif-claimed-state and squashed into that single step commit (upstream SHAs and the conflict resolutions are recorded in the commit body).
@@ -52,6 +52,13 @@ STEP 6 DONE (commit 79e59c7 `S2.6: ask for reminders right after the first claim
 - RoomNotifPromptCard: the activeEvent == nil gate is removed; the card now steps aside only while the post-claim ask is showing, so the two never stack.
 - Room open (loadActiveIfNeeded): a host calls AppReconciler.reportRoomTimeZoneOnce(roomId:) -> rpc set_room_time_zone(p_room_id, p_tz: TimeZone.current.identifier). Fire and forget, try?, never surfaces an error; the per-room flag (StorageKeys.roomTimeZoneReported) is set only on success so a missing RPC (lane S2b) is retried on a later open.
 - Gate: --compile run, 326 cases, 326 passed; parse-check 66/66; BUILD SUCCEEDED; FASTGATE: PASS. No new unit test (view-only glue).
+
+STEP 7 DONE (commit 431b0e9 `S2.7: calendar rows for every member who claims`).
+- CalendarService rewritten around a per-device map: upsertEvent(_:createIfMissing:) adds or updates the EKEvent (title, start, 2h end, venue notes, url = gamesroom://event/<eventId>) and stores the EventKit identifier; removeEvent(eventId:) removes the row this device wrote and forgets it. The room/reportIdentifier parameters and every read of Event.eventCalendarIdentifier are gone.
+- CalendarRowStore (in StorageKeys.swift, key StorageKeys.calendarRowIdentifiers): UserDefaults dictionary eventId -> identifier, with an injectable defaults suite for tests.
+- RoomService: syncCalendarRow(eventId:claimed:) runs after a successful claim on both paths (upsertEventRSVP .claimed, and the escrow/deposit branch of claimSeat) when room.calendarAutoAdd is on; decline and release (upsertEventRSVP .declined/.unclaimed) remove the row; purgeRoom and deleteRoom remove by event id; a note/venue edit updates only a row this device already wrote (createIfMissing: false); addEvent keeps the host row via upsertEvent.
+- events.event_calendar_identifier is no longer read or written for lookups (RoomService.reportCalendarIdentifier and the store method stay, now uncalled; the column is not dropped).
+- Tests: 2 new (per-event map set/overwrite/remove in a scratch suite; the gamesroom:// URL). Gate (--compile): 328 cases, 328 passed; parse-check 66/66; BUILD SUCCEEDED; FASTGATE: PASS.
 
 BLOCKED: none
 
