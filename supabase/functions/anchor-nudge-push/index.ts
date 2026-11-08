@@ -10,17 +10,26 @@
 // Never the newcomer. Never the table. The request body names an event and a
 // newcomer; the recipient is read from public.anchor_nudges.inviter_user_id.
 //
-// Invocation: the trigger public.event_rsvps_anchor_push (migration 105)
-// POSTs {"event_id": "<uuid>", "newcomer_user_id": "<uuid>"} with header
-// X-Anchor-Push-Secret = vault secret 'anchor_push_secret'. That trigger only
-// posts after every rule in §2b has passed and only when the ledger row was
-// newly inserted, so this function never decides who is allowed a push.
+// Invocation: public.queue_anchor_nudge (migrations 105 and 110) POSTs
+// {"event_id": "<uuid>", "newcomer_user_id": "<uuid>"} with header
+// X-Anchor-Push-Secret = vault secret 'anchor_push_secret'. The trigger
+// writes the ledger row first and only posts when the room's local clock is
+// inside 09:00-20:00; the anchor-push-tick cron posts the rows that were
+// queued outside those hours. This function never decides who is allowed a
+// push, only when it goes.
 //
 // The rules themselves live in SQL (queue_anchor_nudge): first three nights
 // only, inviter active and not already seated, both switches on, event not
-// started, once per newcomer per event. Nothing here widens them. The one
-// rule re-checked here is the started event, because pg_net delivers
-// asynchronously and the event can start between the claim and the send.
+// started, once per newcomer per event. Nothing here widens them. The rules
+// re-checked here are the ones that can change between the queue and the
+// send: the event has not started, and the inviter is still not seated
+// (audit 01-notifications #13).
+//
+// The copy and the clock: the weekday is read in the room's own zone
+// (rooms.time_zone, migration 108), never in a hardcoded Australian zone.
+// The interruption level is "active", not "time-sensitive": the nudge asks
+// the inviter to claim a seat for a night that is days away, so it must not
+// break through a Focus mode they chose.
 //
 // Secrets (set by Nathan; never committed, never read by an agent):
 //   ANCHOR_PUSH_ENABLED   "true" to send. Anything else → 200
@@ -70,6 +79,21 @@ const deps: Deps = {
     if (error) throw new Error(error.message);
     return data;
   },
+  // The row is claimed before the send, so the trigger's post and the
+  // cron's post cannot both deliver it. The UPDATE is conditional on the
+  // row still being 'queued', so exactly one request wins.
+  async claimNudge(eventId, newcomerUserId) {
+    const { data, error } = await supabase
+      .from("anchor_nudges")
+      .update({ push_status: "sending" })
+      .eq("event_id", eventId)
+      .eq("newcomer_user_id", newcomerUserId)
+      .eq("push_status", "queued")
+      .select("event_id")
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data !== null;
+  },
   async loadEvent(eventId) {
     const { data, error } = await supabase
       .from("events")
@@ -89,6 +113,30 @@ const deps: Deps = {
       .maybeSingle();
     if (error) throw new Error(error.message);
     return data?.display_name ?? null;
+  },
+  // The room's clock. rooms.time_zone (migration 108) is an IANA name and
+  // is never null; the handler falls back to UTC if it cannot be read,
+  // which is honest rather than wrong.
+  async loadRoomTimeZone(roomId) {
+    const { data, error } = await supabase
+      .from("rooms")
+      .select("time_zone")
+      .eq("id", roomId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.time_zone ?? null;
+  },
+  // The inviter's seat, re-read at send time: they may have claimed one
+  // while the nudge was queued outside the waking hours.
+  async loadRsvpState(eventId, userId) {
+    const { data, error } = await supabase
+      .from("event_rsvps")
+      .select("state")
+      .eq("event_id", eventId)
+      .eq("member_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.state ?? null;
   },
   async loadTokens(userId) {
     const { data, error } = await supabase
@@ -120,11 +168,13 @@ const deps: Deps = {
   //     supplies its own key (one collapse group per event, the newcomer
   //     still named in the copy) under that name. It is a header only.
   //   * it hard-codes apns-expiration to ten minutes (a question is stale
-  //     after that). An anchor nudge for an event next week inherits the
-  //     same window, so a device that is unreachable for ten minutes
-  //     loses the nudge rather than receiving it hours later. Deliberate
-  //     for now: the alternative is editing shared APNs code, which this
-  //     slice does not do. Flagged for review in the S5b report.
+  //     after that). An anchor nudge is not a question, and now that it
+  //     is delivered inside the room's waking hours the ten minutes is
+  //     the wrong window: a device that is unreachable at 9am (commute,
+  //     lift, no signal) loses the nudge for good. The briefing-push copy
+  //     of apns.ts uses 24 hours for exactly this reason. Changing it
+  //     here means editing shared APNs code, which this slice does not
+  //     do, so it stays ten minutes and is flagged in the S2B report.
   send: (token, payload) => apns(token, { ...payload, turn_id: `anchor-${payload.event_id}` }),
 };
 
