@@ -453,7 +453,7 @@ actor InMemoryRoomStore: RoomStore {
             subtitle: "Felt Faction, Season 4",
             status: .ended,
             startedAt: Date().addingTimeInterval(-86_400 * 200),
-            endedAt: Date().addingTimeInterval(-86_400 * 7)
+            endedAt: Date().addingTimeInterval(-86_400 * 4)
         )
         let carwoolaSeason = Season(
             id: UUID(),

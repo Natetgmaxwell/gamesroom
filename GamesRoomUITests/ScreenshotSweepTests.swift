@@ -368,6 +368,15 @@ final class ScreenshotSweepTests: XCTestCase {
         )
         scoreCTA.tap()
 
+        // S1.4 - a night with two scorable packs asks which game before
+        // it opens a scoring sheet. Pick Casino for the scan.
+        let casinoChoice = app.buttons["Casino"].firstMatch
+        XCTAssertTrue(
+            casinoChoice.waitForExistence(timeout: 5),
+            "Score-game picker never offered the night's packs."
+        )
+        casinoChoice.tap()
+
         let sheetBar = app.navigationBars["Scan your chips"].firstMatch
         XCTAssertTrue(
             sheetBar.waitForExistence(timeout: 10),
