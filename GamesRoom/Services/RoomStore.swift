@@ -1080,6 +1080,23 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .value as Void
     }
 
+    /// S3.3 — member. The live RPC is
+    /// `release_seat(p_event_id, p_state)` (migration 113).
+    /// Releases or declines the caller's own seat: the RSVP moves
+    /// to `p_state` ('unclaimed' or 'declined') and a still-held
+    /// deposit returns to the balance in the same transaction.
+    /// Releasing a seat never fines the member who changed their
+    /// mind. Idempotent.
+    func releaseSeat(eventId: UUID, state: MemberRSVPState) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("release_seat", params: [
+                "p_event_id": eventId.uuidString,
+                "p_state": state.rawValue
+            ])
+            .execute()
+            .value as Void
+    }
+
     /// V0.85 — host-only. The live RPC is
     /// `claim_seat_waived(p_event_id, p_member_id)` (migration
     /// 085). Claims the seat for a broke member with a zero-amount

@@ -1967,24 +1967,81 @@ actor InMemoryRoomStore: RoomStore {
     // MARK: Seat deposit escrow (V0.85 — migration 085)
 
     /// In-memory mirror of `claim_seat_with_deposit(p_event_id)`
-    /// (migration 085). Claims the RSVP and inserts a held
-    /// deposit row of the room's amount. Idempotent per
-    /// (event, member): an existing row of any status
-    /// short-circuits. No balance math in the preview path — the
-    /// live server owns points_balance.
+    /// (migration 085, reworked by 113). Claims the RSVP and
+    /// inserts a held deposit row of the room's amount. Idempotent
+    /// per (event, member) while the deposit is still 'held': no
+    /// balance math in the preview path — the live server owns
+    /// points_balance.
+    ///
+    /// S3.3 — a released seat re-takes the deposit. The old mirror
+    /// short-circuited on ANY existing row, so a member who
+    /// released their seat (deposit returned) and changed their mind
+    /// got a claimed seat with no deposit behind it. Migration 113
+    /// only skips the insert while a deposit is still held.
     func claimSeatWithDeposit(eventId: UUID) async throws {
         guard let event = events.values.first(where: { $0.id == eventId }),
               let room = rooms.first(where: { $0.id == event.roomId }) else { return }
         rsvps[eventId, default: [:]][room.createdBy] = .claimed
-        guard seatDepositsByEventMember[eventId]?[room.createdBy] == nil else { return }
+        let existing = seatDepositsByEventMember[eventId]?[room.createdBy]
+        if let existing, existing.status == .held { return }
         guard room.seatDepositTrigger == .escrow, room.seatDepositAmount > 0 else { return }
         seatDepositsByEventMember[eventId, default: [:]][room.createdBy] = SeatDeposit(
-            id: UUID(), amount: room.seatDepositAmount, status: .held, heldAt: Date()
+            id: existing?.id ?? UUID(),
+            amount: room.seatDepositAmount,
+            status: .held,
+            heldAt: Date()
+        )
+    }
+
+    /// In-memory mirror of `release_seat(p_event_id, p_state)`
+    /// (migration 113). Moves the caller's own RSVP to `state`
+    /// ('unclaimed' or 'declined') and returns any held deposit to
+    /// the balance — a member who changes their mind is never
+    /// fined. Idempotent.
+    func releaseSeat(eventId: UUID, state: MemberRSVPState) async throws {
+        let memberId = currentSyntheticMemberId()
+        let previous = rsvps[eventId]?[memberId] ?? .unclaimed
+        rsvps[eventId, default: [:]][memberId] = state
+        adjustBriefingSeats(eventId: eventId, previous: previous, state: state)
+        resolveDeposit(eventId: eventId, memberId: memberId, status: .returned)
+    }
+
+    /// S3.3 — seat-count mirror for a release / decline. The
+    /// briefing summary drives the "N of M claimed" caption, so a
+    /// released chair comes off the claimed count and a declined
+    /// chair moves to the declined count. The unclaimed pool grows
+    /// only when a member who had answered goes back to silence.
+    private func adjustBriefingSeats(eventId: UUID, previous: MemberRSVPState, state: MemberRSVPState) {
+        guard let briefing = briefings[eventId] else { return }
+        var claimed = briefing.seatsClaimed
+        var declined = briefing.seatsDeclined
+        var unclaimed = briefing.seatsUnclaimed
+
+        switch previous {
+        case .claimed: claimed = max(0, claimed - 1)
+        case .declined: declined = max(0, declined - 1)
+        case .unclaimed: break
+        }
+        switch state {
+        case .claimed: claimed += 1
+        case .declined: declined += 1
+        case .unclaimed: break
+        }
+        if previous != .unclaimed && state == .unclaimed { unclaimed += 1 }
+        if previous == .unclaimed && state != .unclaimed { unclaimed = max(0, unclaimed - 1) }
+
+        briefings[eventId] = BriefingSummary(
+            eventId: briefing.eventId,
+            roomId: briefing.roomId,
+            seatsTotal: briefing.seatsTotal,
+            seatsClaimed: claimed,
+            seatsDeclined: declined,
+            seatsUnclaimed: unclaimed
         )
     }
 
     /// In-memory mirror of `claim_seat_waived(p_event_id,
-    /// p_member_id)` (migration 085). Claims the RSVP with a
+    /// p_member_id)` (migration 085). Claims the seat with a
     /// zero-amount held row — chip-neutral at every resolution.
     func claimSeatWaived(eventId: UUID, memberId: UUID) async throws {
         guard let event = events.values.first(where: { $0.id == eventId }) else { return }

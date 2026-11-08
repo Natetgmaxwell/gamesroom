@@ -5302,6 +5302,10 @@ runner.runAsync("InMemoryRoomStore anchor_push_enabled round-trips both ways fro
     runner.assertTrue(try await store.fetchAnchorPushEnabled(roomId: room.id))
 }
 
+// MARK: - S3 — common-sense flows (lane S3)
+
+runS3Tests(runner)
+
 // MARK: - Summary
 
 print("")

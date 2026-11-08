@@ -133,6 +133,19 @@ struct RoomDetailView: View {
     @State private var seatActionError: String?
     @State private var showSeatActionError: Bool = false
 
+    /// S3.3 — the nights this member found full. The server
+    /// refuses a claim on a full night (`night_full`, migration
+    /// 113) and the cached seat counts can still be stale, so the
+    /// refusal is remembered per event: the Claim seat button is
+    /// replaced with the grey "All N seats are taken." line until
+    /// the seat counts come back with a free chair.
+    @State private var nightFullEventIds: Set<UUID> = []
+
+    /// S3.3 — the release toast. Holds the event whose seat was
+    /// released so "Undo" can put it back. Five seconds, then it
+    /// goes.
+    @State private var seatReleaseToast: SeatReleaseToast?
+
     /// V0.100 — first-refresh gate. Flips to `true` after the
     /// initial `refresh()` in `.task` resolves. The state machine
     /// uses this to distinguish "data fetch in flight" (true
@@ -317,6 +330,29 @@ struct RoomDetailView: View {
             }
         }
         .background(Theme.Palette.background.ignoresSafeArea())
+        // S3.3 — the release toast. One line of quiet text and one
+        // plain-text action, parked at the bottom of the page for
+        // five seconds. The Undo window is the point: releasing a
+        // seat is instant and reversible.
+        .overlay(alignment: .bottom) {
+            if let toast = seatReleaseToast {
+                SeatReleaseToastView {
+                    undoRelease(toast)
+                }
+                .padding(.horizontal, Theme.Layout.edgePadding)
+                // The floating tab bar's glass capsule tops out
+                // ~83pt from the screen bottom; the toast clears it.
+                .padding(.bottom, 96)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .task(id: toast.id) {
+                    try? await Task.sleep(for: .seconds(5))
+                    guard seatReleaseToast?.id == toast.id else { return }
+                    withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                        seatReleaseToast = nil
+                    }
+                }
+            }
+        }
         // v1.2.2 S6 T6 — the one Question Box driver for this page,
         // started above the section it feeds (the section only
         // renders once a turn exists, so it can no longer be the
@@ -882,7 +918,8 @@ struct RoomDetailView: View {
                     onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
-                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
+                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } },
+                    nightFullOverride: nightFullEventIds.contains(event.id)
                 )
             case .claimed(let event):
                 BriefingSlot(
@@ -1486,27 +1523,46 @@ struct RoomDetailView: View {
     /// failure the previous state is preserved and the
     /// body-level `.alert` (`showSeatActionError`) presents the
     /// localized message (e.g. the 42501 balance-too-low error).
+    ///
+    /// S3.3 — a full night is not an error dialog: the server
+    /// raises `night_full` (migration 113), the optimistic claim
+    /// rolls back, and the card says "All N seats are taken."
     private func claimSeat(eventId: UUID) async {
         let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .claimed, currentUserId: currentUserId)
         do {
             _ = try await roomService.claimSeat(eventId: eventId)
             seatActionError = nil
+            nightFullEventIds.remove(eventId)
             Haptics.success()
+            await roomService.eventDidChange(eventId: eventId)
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
+            if RoomService.isNightFullError(error) {
+                nightFullEventIds.insert(eventId)
+                // The counts in the cache are the ones that sent us
+                // here: re-read them so the card agrees with the
+                // server about how many chairs are gone.
+                await roomService.loadEventRSVPs(eventId: eventId, force: true)
+                await roomService.loadBriefing(eventId: eventId, force: true)
+                return
+            }
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
         }
     }
 
-    /// Fires `RoomService.upsertEventRSVP(eventId, .declined)`.
-    /// Mirror of `claimSeat`.
+    /// S3.3 — "Can't make it". Routed through
+    /// `RoomService.releaseSeat(eventId:state:.declined)`, which
+    /// writes the RSVP through `release_seat` (migration 113): the
+    /// decline gives the held deposit back instead of leaving it in
+    /// escrow for the host to forfeit. Mirror of `claimSeat`.
     private func declineSeat(eventId: UUID) async {
         let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .declined, currentUserId: currentUserId)
         do {
-            _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .declined)
+            _ = try await roomService.releaseSeat(eventId: eventId, state: .declined)
             seatActionError = nil
             Haptics.light()
+            await roomService.eventDidChange(eventId: eventId)
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
@@ -1533,19 +1589,42 @@ struct RoomDetailView: View {
 
     /// 2026-08-10 feedback round — releases a claimed seat by
     /// flipping the RSVP back to `.unclaimed`, returning the seat to
-    /// the open pool. Same RPC as claim/decline; the server treats
-    /// `.unclaimed` as "no response" so the seat counts as open.
+    /// the open pool.
+    ///
+    /// S3.3 — the write goes through `release_seat` (migration 113),
+    /// so the held deposit comes back with the seat. It used to go
+    /// through the plain RSVP upsert, which left the deposit in
+    /// escrow until the host forfeited it: the considerate member
+    /// got fined for changing their mind.
+    ///
+    /// The release is instant and undoable: the bottom toast offers
+    /// "Undo" for five seconds, and Undo re-claims the seat.
     private func releaseSeat(eventId: UUID) async {
         let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .unclaimed, currentUserId: currentUserId)
         do {
-            _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .unclaimed)
+            _ = try await roomService.releaseSeat(eventId: eventId, state: .unclaimed)
             seatActionError = nil
             Haptics.light()
+            await roomService.eventDidChange(eventId: eventId)
+            withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                seatReleaseToast = SeatReleaseToast(eventId: eventId)
+            }
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
         }
+    }
+
+    /// S3.3 — "Undo" in the release toast puts the seat back. It
+    /// goes through the same claim path as the original claim, so a
+    /// night that filled up in the meantime says so instead of
+    /// quietly doing nothing.
+    private func undoRelease(_ toast: SeatReleaseToast) {
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            seatReleaseToast = nil
+        }
+        Task { await claimSeat(eventId: toast.eventId) }
     }
 
     /// V0.9 Wave 1 Slice 1.1 — fires the `set_drowning_opt_in` RPC
@@ -1842,6 +1921,11 @@ private struct BriefingSlot: View {
     /// instantly; the reclaim IS the check-in. Wired up only
     /// when the parent passes a non-nil callback.
     let onCheckIn: (() -> Void)?
+    /// S3.3 — the server refused a claim on this night
+    /// (`night_full`). The cached seat counts can still be stale,
+    /// so the parent remembers the refusal and the card keeps
+    /// saying the table is full until a chair frees up.
+    let nightFullOverride: Bool
     // V0.79 — notification toggle params removed. Preferences moved
     // to the one-time RoomNotifPromptCard (main room page) and
     // RoomSettingsSheet's "My notifications" section.
@@ -1866,7 +1950,8 @@ private struct BriefingSlot: View {
         onEdit: (() -> Void)? = nil,
         room: Room,
         heldDeposit: SeatDeposit? = nil,
-        onCheckIn: (() -> Void)? = nil
+        onCheckIn: (() -> Void)? = nil,
+        nightFullOverride: Bool = false
     ) {
         self.event = event
         self.briefing = briefing
@@ -1884,6 +1969,26 @@ private struct BriefingSlot: View {
         self.room = room
         self.heldDeposit = heldDeposit
         self.onCheckIn = onCheckIn
+        self.nightFullOverride = nightFullOverride
+    }
+
+    /// S3.3 — a table has a fixed number of chairs. The night is
+    /// full when every chair is taken and this member does not hold
+    /// one: the Claim seat button is replaced with a plain grey
+    /// line saying so, because there is no chair to take.
+    ///
+    /// The count comes from the server's briefing summary; the
+    /// seat-grid rows are the fallback while the summary is still
+    /// loading. `nightFullOverride` is the server's own refusal
+    /// (`night_full`), which wins over both.
+    private var isNightFull: Bool {
+        if nightFullOverride { return true }
+        guard event.maxSeats > 0, myRSVP != .claimed else { return false }
+        let claimed = max(
+            briefing?.seatsClaimed ?? 0,
+            rsvps.filter { $0.state == .claimed }.count
+        )
+        return claimed >= event.maxSeats
     }
 
     var body: some View {
@@ -1962,16 +2067,29 @@ private struct BriefingSlot: View {
             switch myRSVP {
             case .unclaimed:
                 VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
-                    Button(action: onClaim) {
-                        Text("Claim seat")
-                            .font(Theme.Typography.body.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.background)
+                    // S3.3 — a full night says so. The claim
+                    // button is gone (there is no chair to take)
+                    // and a plain grey line takes its place. The
+                    // decline below stays: saying "I can't make it"
+                    // is still the right answer on a full table.
+                    if isNightFull {
+                        Text("All \(event.maxSeats) seats are taken.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        Button(action: onClaim) {
+                            Text("Claim seat")
+                                .font(Theme.Typography.body.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.background)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Theme.Palette.accent)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .pressScale()
                     }
-                    .pressScale()
                     // v1.2.2 S6 T2 — the decline is a caption-grey
                     // text button centred under the full-width
                     // primary, same action and same accessibility
@@ -2144,6 +2262,51 @@ private struct TrailingTextAction: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+// MARK: - Seat release toast (S3.3)
+
+/// S3.3 — the state behind the "Seat released." toast. The token
+/// makes every release its own toast, so releasing twice in a row
+/// restarts the five-second Undo window instead of keeping the old
+/// one on screen.
+private struct SeatReleaseToast: Identifiable {
+    let eventId: UUID
+    let id: UUID = UUID()
+}
+
+/// S3.3 — the bottom toast after a seat is released. Quiet by
+/// default: one line of text and one plain-text action, no chrome
+/// beyond a hairline. The Undo window (five seconds) belongs to
+/// the caller.
+private struct SeatReleaseToastView: View {
+    let onUndo: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Layout.cardLineGap) {
+            Text("Seat released.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText)
+            Spacer(minLength: Theme.Layout.cardLineGap)
+            Button(action: onUndo) {
+                Text("Undo")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Undo the seat release"))
+        }
+        .padding(.horizontal, Theme.Layout.cardInset)
+        .padding(.vertical, Theme.Layout.cardLineGap)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Theme.Palette.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.Palette.hairline, lineWidth: 1)
+        )
     }
 }
 

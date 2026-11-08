@@ -829,20 +829,7 @@ final class RoomService: ObservableObject {
         let row = try await store.upsertEventRSVP(eventId: eventId, state: state)
         self.rsvpByEvent[eventId] = row.state
         self.lastError = nil
-        cacheTimestamps.removeValue(forKey: "eventRSVPs:\(eventId.uuidString)")
-        cacheTimestamps.removeValue(forKey: "briefing:\(eventId.uuidString)")
-        cacheTimestamps.removeValue(forKey: "currentMemberRSVP:\(eventId.uuidString)")
-        // Refresh the seat-grid rows + briefing summary so the
-        // BriefingSlot's seat grid and the briefing seat count
-        // re-render without a manual pull-to-refresh.
-        // `InMemoryRoomStore` mirrors the briefing on upsert but
-        // `LiveRoomStore` does not — without these reloads the
-        // live path would stay stale after every claim/decline/
-        // release. Both caches are `@Published`, so the view
-        // re-renders automatically.
-        async let rsvps = loadEventRSVPs(eventId: eventId)
-        async let briefing = loadBriefing(eventId: eventId)
-        _ = await (rsvps, briefing)
+        await refreshSeatCaches(eventId: eventId)
         // P1.3 — re-schedule with the new cadence. Reads the
         // matching event from the cache to surface the name +
         // playedAt; falls back to the row's roomId for the
@@ -850,43 +837,84 @@ final class RoomService: ObservableObject {
         // `optedInMemberIds` (room-level per-member opt-in) and
         // `mutedMemberIds` (per-event mute) so quiet members are
         // never reached.
-        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
-            let room = rooms.first(where: { $0.id == event.roomId })
-            let roster = membersByRoom[event.roomId] ?? []
-            var cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
-                acc[member.userId] = rsvpByEvent[event.id] ?? .unclaimed
-            }
-            // The just-upserted row is canonical — overwrite the
-            // caller's own cadence so the dispatcher fires for
-            // them, not against the stale `.unclaimed` default.
-            cadence[row.memberId] = row.state
-            let optedInMemberIds = Set(
-                roster.filter { $0.notificationsEnabled }.map(\.userId)
-            )
-            let mutedMemberIds = Set(
-                cachedEventRSVPs(eventId: event.id)
-                    .filter { $0.notificationsMuted }
-                    .map(\.memberId)
-            )
-            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
-            await NotificationDispatcher.shared.scheduleBriefingTrio(
-                eventId: event.id,
-                eventName: event.name,
-                playedAt: event.playedAt,
-                mascotName: room?.mascotName ?? "Your mascot",
-                perMemberCadence: cadence,
-                memberNameById: Dictionary(
-                    uniqueKeysWithValues: roster.map { ($0.userId, $0.displayName) }
-                ),
-                optedInMemberIds: optedInMemberIds,
-                mutedMemberIds: mutedMemberIds,
-                hostNote: event.hostNote,
-                mascotPersonality: room?.mascotPersonality ?? .friendly,
-                mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist,
-                mascotState: .idle
-            )
-        }
+        await rescheduleBriefingTrio(
+            eventId: eventId,
+            callerState: row.state,
+            callerMemberId: row.memberId
+        )
         return row
+    }
+
+    /// S3.3 — the seat-grid / briefing refresh that follows every
+    /// seat write. The caches are `@Published`, so the view
+    /// re-renders automatically; the timestamps are dropped so the
+    /// next read is a real fetch rather than a 30s-stale copy.
+    ///
+    /// `InMemoryRoomStore` mirrors the briefing on upsert but
+    /// `LiveRoomStore` does not — without these reloads the live
+    /// path would stay stale after every claim/decline/release.
+    func refreshSeatCaches(eventId: UUID) async {
+        cacheTimestamps.removeValue(forKey: "eventRSVPs:\(eventId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "briefing:\(eventId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "currentMemberRSVP:\(eventId.uuidString)")
+        async let rsvps = loadEventRSVPs(eventId: eventId)
+        async let briefing = loadBriefing(eventId: eventId)
+        _ = await (rsvps, briefing)
+    }
+
+    /// P1.3 — re-schedules the event's briefing trio (T-48h and
+    /// morning-of logistics nudges) with the current per-member
+    /// cadence. The dispatcher's `cancelBriefingTrio` followed by
+    /// `scheduleBriefingTrio` is idempotent at the UN layer (the
+    /// dispatcher uses stable per-(event, cadence, user)
+    /// identifiers).
+    ///
+    /// S3.3 — split out of `upsertEventRSVP` so the escrow paths
+    /// (which write through `claim_seat_with_deposit` /
+    /// `release_seat` and never touch `upsert_event_rsvp`) push the
+    /// same cadence the plain RSVP path pushes.
+    func rescheduleBriefingTrio(
+        eventId: UUID,
+        callerState: MemberRSVPState,
+        callerMemberId: UUID? = nil
+    ) async {
+        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }) else { return }
+        let room = rooms.first(where: { $0.id == event.roomId })
+        let roster = membersByRoom[event.roomId] ?? []
+        var cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
+            acc[member.userId] = rsvpByEvent[event.id] ?? .unclaimed
+        }
+        // The just-written state is canonical — overwrite the
+        // caller's own cadence so the dispatcher fires for them,
+        // not against the stale `.unclaimed` default.
+        if let callerMemberId {
+            cadence[callerMemberId] = callerState
+        }
+        let optedInMemberIds = Set(
+            roster.filter { $0.notificationsEnabled }.map(\.userId)
+        )
+        let mutedMemberIds = Set(
+            cachedEventRSVPs(eventId: event.id)
+                .filter { $0.notificationsMuted }
+                .map(\.memberId)
+        )
+        await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
+        await NotificationDispatcher.shared.scheduleBriefingTrio(
+            eventId: event.id,
+            eventName: event.name,
+            playedAt: event.playedAt,
+            mascotName: room?.mascotName ?? "Your mascot",
+            perMemberCadence: cadence,
+            memberNameById: Dictionary(
+                uniqueKeysWithValues: roster.map { ($0.userId, $0.displayName) }
+            ),
+            optedInMemberIds: optedInMemberIds,
+            mutedMemberIds: mutedMemberIds,
+            hostNote: event.hostNote,
+            mascotPersonality: room?.mascotPersonality ?? .friendly,
+            mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist,
+            mascotState: .idle
+        )
     }
 
     // MARK: - Event create
@@ -1992,16 +2020,82 @@ final class RoomService: ObservableObject {
     /// Falls back to the plain RSVP upsert when the room runs
     /// deposits off. On success refreshes the caller's deposit
     /// cache so the chair card renders the held state.
+    ///
+    /// S3.3 — the escrow branch also patches the cached RSVP and
+    /// reloads the seat grid + briefing. It used to skip both, so
+    /// the server said "claimed" while the room page still showed
+    /// an open chair until the next pull-to-refresh.
     func claimSeat(eventId: UUID) async throws -> MemberRSVP {
         if roomTriggeringEscrow(forEvent: eventId) {
             try await store.claimSeatWithDeposit(eventId: eventId)
             await loadMySeatDeposit(eventId: eventId, force: true)
+            self.rsvpByEvent[eventId] = .claimed
+            await refreshSeatCaches(eventId: eventId)
             return MemberRSVP(
                 id: UUID(), eventId: eventId, roomId: UUID(), memberId: UUID(),
                 state: .claimed, respondedAt: Date()
             )
         }
         return try await upsertEventRSVP(eventId: eventId, state: .claimed)
+    }
+
+    /// S3.3 — member. Releases or declines the caller's own seat.
+    ///
+    /// In an escrow room this is routed through `release_seat`
+    /// (migration 113), which moves the RSVP and returns a still-held
+    /// seat deposit to the balance in one transaction. Releasing a
+    /// seat used to write the RSVP only, so the deposit sat in
+    /// escrow until the host forfeited it: the considerate member
+    /// got fined for changing their mind.
+    ///
+    /// A room that runs deposits off has no deposit to return, so it
+    /// keeps the plain RSVP upsert. A room the cache cannot resolve
+    /// is treated as an escrow room: a stranded deposit is worse
+    /// than one extra RPC.
+    ///
+    /// The plain `upsert_event_rsvp` path is also kept for a
+    /// `.claimed` state (the host answering for somebody else),
+    /// which the release RPC does not cover.
+    @discardableResult
+    func releaseSeat(eventId: UUID, state: MemberRSVPState) async throws -> MemberRSVP {
+        guard state == .unclaimed || state == .declined else {
+            return try await upsertEventRSVP(eventId: eventId, state: state)
+        }
+        guard roomRunsEscrow(forEvent: eventId) != false else {
+            return try await upsertEventRSVP(eventId: eventId, state: state)
+        }
+        try await store.releaseSeat(eventId: eventId, state: state)
+        self.lastError = nil
+        self.rsvpByEvent[eventId] = state
+        // The deposit came back with the seat, so the chair card
+        // must stop offering the reclaim.
+        await loadMySeatDeposit(eventId: eventId, force: true)
+        await refreshSeatCaches(eventId: eventId)
+        return MemberRSVP(
+            id: UUID(), eventId: eventId, roomId: UUID(), memberId: UUID(),
+            state: state, respondedAt: Date()
+        )
+    }
+
+    /// S3.3 — does the event's room run the seat-deposit escrow?
+    /// `nil` means the room could not be resolved from the cache, so
+    /// the caller must assume the worst rather than strand a held
+    /// deposit.
+    private func roomRunsEscrow(forEvent eventId: UUID) -> Bool? {
+        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }),
+              let room = rooms.first(where: { $0.id == event.roomId }) else { return nil }
+        return room.seatDepositTrigger == .escrow && room.seatDepositAmount > 0
+    }
+
+    /// S3.3 — true when the server refused a claim because every
+    /// chair is taken. Migration 113 raises `P0001` with the message
+    /// `night_full` from `claim_seat_with_deposit` and
+    /// `upsert_event_rsvp`, so the client shows "All N seats are
+    /// taken." instead of a raw error.
+    nonisolated static func isNightFullError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let text = "\(nsError.localizedDescription) \(String(describing: error))"
+        return text.lowercased().contains("night_full")
     }
 
     /// V0.85 — host-only. The broke-member claim: seat claimed

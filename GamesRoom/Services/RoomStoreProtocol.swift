@@ -411,6 +411,15 @@ protocol RoomStore: Sendable {
     /// (event, member).
     func claimSeatWithDeposit(eventId: UUID) async throws
 
+    /// S3.3 — member. Releases or declines the caller's own seat:
+    /// the RSVP moves to `state` ('unclaimed' or 'declined') and,
+    /// when the caller still holds a deposit for that night, the
+    /// deposit returns to the balance in the same transaction.
+    /// Mirrors `release_seat(p_event_id, p_state)` (migration
+    /// 113). Releasing never costs a member their deposit.
+    /// Idempotent.
+    func releaseSeat(eventId: UUID, state: MemberRSVPState) async throws
+
     /// V0.85 — host-only broke-member path. Claims the seat with
     /// a zero-amount held deposit row so the arrival card still
     /// tracks the seat. Mirrors `claim_seat_waived(p_event_id,
