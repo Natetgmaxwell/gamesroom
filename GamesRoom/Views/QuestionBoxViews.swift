@@ -149,6 +149,7 @@ struct QuestionReaderCard: View {
                 .foregroundStyle(Theme.Palette.accent)
                 .accessibilityIdentifier("reader-card-title")
             Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
             VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(QuestionTurn.ritualLine)
                     .font(Theme.Typography.body.weight(.semibold))
@@ -159,6 +160,10 @@ struct QuestionReaderCard: View {
                     .minimumScaleFactor(0.5)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("reader-card-question")
+            }
+            // TARS review: the question and its meta lines are two groups,
+            // so "Pick who answers first" no longer sits on the question.
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 if let askedBy = turn.askedBy {
                     Text("asked by \(askedBy)")
                         .font(Theme.Typography.caption)
@@ -169,6 +174,7 @@ struct QuestionReaderCard: View {
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.labelText)
                 }
+            }
             }
             Spacer(minLength: 0)
             // v1.2.4 S4.7 — one primary action per screen: Done is the
