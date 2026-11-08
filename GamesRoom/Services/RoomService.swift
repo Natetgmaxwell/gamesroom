@@ -465,6 +465,14 @@ final class RoomService: ObservableObject {
         return settledAt
     }
 
+    /// S1.5 — the optimistic settle and its Undo. Stamps (or clears)
+    /// `settledAt` on the cached event only; nothing is sent. The
+    /// room page flips to the recap at once and back on Undo.
+    func setCachedSettledAt(eventId: UUID, _ settledAt: Date?) {
+        guard let entry = activeEventByRoom.first(where: { $0.value.id == eventId }) else { return }
+        activeEventByRoom[entry.key] = entry.value.withSettledAt(settledAt)
+    }
+
     /// Loads the briefing summary for one event into the cache.
     /// Returns the cached value. Called from `RoomDetailView.task`
     /// when an active event is present.

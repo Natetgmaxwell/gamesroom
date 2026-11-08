@@ -10,7 +10,6 @@
 //    1. .loading            — first open with no data yet
 //    2. .justSettled        — settledAt within 24h, no new event
 //    3. .inPlay             — activeEvent.isLive && withdrawals exist
-//    4. .settleRound        — host finalized, not all members scanned
 //    5. .upcoming           — playedAt > now, RSVP == .unclaimed
 //    6. .claimed            — playedAt > now, RSVP == .claimed
 //    7. .declined           — playedAt > now, RSVP == .declined
@@ -103,6 +102,13 @@ struct RoomDetailView: View {
     /// S1.4 — "Score which game?" when the night has more than one
     /// scorable pack.
     @State private var scoreChoice: ScoreChoice?
+    /// S1.5 — the settle waiting out its 5 s Undo window. The cached
+    /// event already reads as settled; nothing has been sent yet.
+    @State private var pendingSettle: PendingSettle?
+    /// S1.5 — the last settle RPC failed; the live card says so.
+    @State private var settleFailed: Bool = false
+    /// S1.5 — "Plan the next night" seeds AddEventSheet's date.
+    @State private var addEventInitialPlayedAt: Date?
 
     // B1.3 — host-only "+ Add an event" CTA in the in-room
     // toolbar. The `AddEventSheet` has shipped since P0.3 (comment
@@ -269,7 +275,7 @@ struct RoomDetailView: View {
         hostWithdrawals.filter { !$0.isDispensed }
     }
 
-    /// V0.51 — active casino play (`.inPlay` or `.settleRound`): the
+    /// V0.51 — active casino play (`.tonightEvent` or `.inPlay`): the
     /// event has started, is not settled, and the room is running
     /// the casino pack. Drives the render gate for the "Chips on
     /// the table" section.
@@ -402,9 +408,12 @@ struct RoomDetailView: View {
             EditEventSheet(event: event)
                 .environmentObject(roomService)
         }
-        .sheet(isPresented: $showingAddEvent) {
+        .sheet(isPresented: $showingAddEvent, onDismiss: {
+            addEventInitialPlayedAt = nil
+        }) {
             AddEventSheet(
                 roomId: room.id,
+                initialPlayedAt: addEventInitialPlayedAt,
                 onSaved: { _ in
                     showingAddEvent = false
                     justClosedSeason = nil
@@ -511,6 +520,33 @@ struct RoomDetailView: View {
                 }
             }
         }
+        // S1.5 — "Night settled." with Undo, for the 5 s before the
+        // settle is sent.
+        .overlay(alignment: .bottom) {
+            if pendingSettle != nil {
+                HStack(spacing: Theme.Layout.cardLineGap) {
+                    Text("Night settled.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Spacer()
+                    Button("Undo") { undoSettle() }
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                        .accessibilityHint(Text("Puts the night back live"))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Theme.Palette.surface)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.hairline, lineWidth: 1))
+                )
+                .padding(.horizontal, Theme.Layout.edgePadding)
+                .padding(.bottom, 96)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : Theme.Motion.fade, value: pendingSettle != nil)
         .alert("Seat action failed", isPresented: $showSeatActionError) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -752,9 +788,6 @@ struct RoomDetailView: View {
                s > Date().addingTimeInterval(-86_400) {
                 return .justSettled(event)
             }
-            if isLive && event.hostFinalized {
-                return .settleRound(event)
-            }
             // M1.1 — `.tonightEvent` is the play-just-started
             // moment: live, member hasn't moved chips yet, the
             // host hasn't finalised. Distinct from `.inPlay` so
@@ -964,10 +997,8 @@ struct RoomDetailView: View {
                         Task { await setDrowningOptIn(newValue) }
                     }
                 )
-            case .settleRound(let event):
-                liveCard(event: event, headerMode: .settleRound)
-
             case .justSettled(let event):
+                VStack(spacing: Theme.Layout.cardGroupGap) {
                 CeremonialCard(
                     event: event,
                     chapterLine: roomService.cachedEventChapterLine(eventId: event.id),
@@ -990,6 +1021,23 @@ struct RoomDetailView: View {
                         ? { skipMemberNotePrompt(for: event.id) }
                         : nil
                 )
+                // S1.5 — the host plans the next night from the
+                // recap. This state only renders while no future
+                // night is known (the room allows one), so the plan
+                // never offers a second upcoming night.
+                if NightPlan.plan(for: nightInput(for: event)).primary == .planNextNight {
+                    Button { planNextNight(after: event) } label: {
+                        Text("Plan the next night")
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.background)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Theme.Palette.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .pressScale()
+                }
+                }
 
             case .readStandings:
                 // V0.100 — branch the empty-state copy on host vs
@@ -1743,15 +1791,64 @@ struct RoomDetailView: View {
             headerMode: headerMode,
             workingHand: inHand,
             hasScanned: myScanState.hasScanned,
-            scannedValue: myScanState.scannedValue
+            scannedValue: myScanState.scannedValue,
+            note: settleFailed && isHost ? "Couldn't settle. Try again." : nil
         )
     }
 
-    /// S1.4 — wired in S1.5.
-    private func settleNight(event: Event) {}
+    /// S1.5 — "Settle the night". Optimistic: the cached night reads
+    /// as settled at once (the recap renders) and "Night settled."
+    /// offers Undo for 5 s. Only after 5 s without Undo does the
+    /// settle go to the server.
+    private func settleNight(event: Event) {
+        settleFailed = false
+        pendingSettle?.task.cancel()
+        roomService.setCachedSettledAt(eventId: event.id, Date())
+        let task = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            await commitSettle(event: event)
+        }
+        pendingSettle = PendingSettle(event: event, task: task)
+    }
 
-    /// S1.4 — wired in S1.5.
-    private func planNextNight(after event: Event) {}
+    /// S1.5 — Undo: the night goes back live and nothing is sent.
+    private func undoSettle() {
+        guard let pending = pendingSettle else { return }
+        pending.task.cancel()
+        roomService.setCachedSettledAt(eventId: pending.event.id, nil)
+        pendingSettle = nil
+    }
+
+    /// S1.5 — the settle itself, once the Undo window has passed.
+    private func commitSettle(event: Event) async {
+        pendingSettle = nil
+        do {
+            _ = try await roomService.settleEvent(eventId: event.id)
+            Haptics.success()
+            ScoreLiveActivityDriver.endNight(roomName: room.name)
+            async let active: Event? = roomService.loadActiveEvent(roomId: room.id, force: true)
+            async let board: [LeaderboardEntry] = roomService.loadLeaderboard(roomId: room.id, force: true)
+            async let season: () = loadSeasonIfNeeded(force: true)
+            _ = await (active, board, season)
+        } catch {
+            roomService.setCachedSettledAt(eventId: event.id, nil)
+            settleFailed = true
+        }
+    }
+
+    /// S1.5 — "Plan the next night": AddEventSheet seeded 7 days
+    /// after tonight, same time.
+    private func planNextNight(after event: Event) {
+        addEventInitialPlayedAt = Calendar.current.date(byAdding: .day, value: 7, to: event.playedAt)
+        showingAddEvent = true
+    }
+}
+
+/// S1.5 — a settle waiting out its Undo window.
+private struct PendingSettle {
+    let event: Event
+    let task: Task<Void, Never>
 }
 
 /// S1.4 — the host's chosen pack for "Score a round".
@@ -1780,7 +1877,6 @@ private enum V0State: Equatable {
     /// lands.
     case tonightEvent(Event)
     case inPlay(Event)
-    case settleRound(Event)
     case upcoming(Event)
     case claimed(Event)
     case declined(Event)
@@ -2428,7 +2524,7 @@ private struct WitnessSlot: View {
     /// ("The night has started") from `.inPlay`
     /// ("The game is on"). The same `WitnessSlot`
     /// component renders both — only the title changes.
-    enum HeaderMode { case inPlay, tonightEvent, settleRound }
+    enum HeaderMode { case inPlay, tonightEvent }
 
     /// S1.4 — one line of the night plan. The primary renders as the
     /// full-width accent button (or a grey caption when it is a
@@ -2460,6 +2556,9 @@ private struct WitnessSlot: View {
     var hasScanned: Bool = false
     /// V0.72 (072) — the member's latest scanned value, when known.
     var scannedValue: Int? = nil
+    /// S1.5 — grey caption under the primary ("Couldn't settle.
+    /// Try again.").
+    var note: String? = nil
 
     var body: some View {
         // v1.2.2 S6 T7 — same rule `BriefingSlot` follows (S6 T2):
@@ -2583,6 +2682,14 @@ private struct WitnessSlot: View {
                 }
             }
 
+            if let note {
+                Text(note)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
             // S1.4 — secondaries: grey caption text centred under
             // the primary, never a second tinted button (02-workflows
             // #19).
@@ -2624,13 +2731,11 @@ private struct WitnessSlot: View {
     /// M1.1 — copy variant for the witness header. Each variant
     /// carries the V0.8 brief's intent: `.tonightEvent` is
     /// play-just-started (no withdrawals yet), `.inPlay` is the
-    /// canonical mid-game copy, `.settleRound` is the host-finalised
-    /// "phones face-down — count what's on the table" copy.
+    /// canonical mid-game copy.
     private var headerTitle: String {
         switch headerMode {
         case .inPlay:       return "The game is on"
         case .tonightEvent: return "The night has started"
-        case .settleRound:  return "Count what's on the table"
         }
     }
 }
