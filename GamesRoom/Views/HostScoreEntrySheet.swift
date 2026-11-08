@@ -17,8 +17,8 @@
 //  V0.34 — count-based scoring. The sheet branches on the pack's
 //  `scoringType`:
 //   - `.singleWinner` / `.multiWinner`: chip tray is multi-select
-//     (tapping toggles), stepper picks round index, payout is
-//     `effectiveWinPoints`.
+//     (tapping toggles), payout is `effectiveWinPoints`. S1.6: the
+//     round is seeded (highest scored round + 1), never a stepper.
 //   - `.countBased` (CAH): chip tray is single-select (the
 //     judge's pick is the only winner), steppers pick round index
 //     + cards won (default 1, range 1...20). The round's score is
@@ -61,7 +61,12 @@ struct HostScoreEntrySheet: View {
     @EnvironmentObject private var scoringService: ScoringService
 
     @State private var selectedMemberIds: Set<UUID> = []
+    /// S1.6 — seeded from the night's scored rounds (every pack):
+    /// the highest round so far plus one, so a save never lands on a
+    /// round that already has a result.
     @State private var roundIndex: Int = 1
+    @State private var lastRoundLine: String?
+    @State private var hasSeededRound: Bool = false
     /// V0.34 — for count-based scoring packs (CAH) the host also
     /// enters the number of cards the winner takes per round. Default
     /// 1; range 1...20 covers any reasonable CAH per-round count.
@@ -108,11 +113,19 @@ struct HostScoreEntrySheet: View {
                     } else {
                         memberChipTray
                     }
-                    Stepper(
-                        "Round \(roundIndex)",
-                        value: $roundIndex,
-                        in: 1...50
-                    )
+                    // S1.6 — the round is the next one, not a
+                    // stepper the host can wind back onto a scored
+                    // round.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Round \(roundIndex)")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        if let lastRoundLine {
+                            Text(lastRoundLine)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        }
+                    }
                     // V0.34 — count-based packs (CAH) get a
                     // "cards won" stepper below the round index.
                     // The judge's pick keeps the black card; the
@@ -162,6 +175,25 @@ struct HostScoreEntrySheet: View {
             }
         }
         .tint(Theme.Palette.accent)
+        .onAppear { seedRound() }
+        .task {
+            await roomService.loadEventRounds(eventId: eventId, force: true)
+            hasSeededRound = false
+            seedRound()
+        }
+    }
+
+    /// S1.6 — start on the round after the night's highest scored
+    /// round. Seeds once per read so a host mid-entry is not moved.
+    private func seedRound() {
+        guard !hasSeededRound, !isSaving else { return }
+        hasSeededRound = true
+        let next = NextRound.after(roomService.cachedEventRounds(eventId: eventId))
+        roundIndex = next.index
+        let names = next.lastWinnerIds.map { id in
+            members.first(where: { $0.userId == id })?.displayName ?? "Someone"
+        }
+        lastRoundLine = NextRound.lastLine(winnerNames: names, round: next.index)
     }
 
     // MARK: - Chip tray

@@ -174,3 +174,48 @@ struct NightPlan: Equatable {
         }
     }
 }
+
+// MARK: - Next round (S1.6)
+
+/// Where the host's score sheet starts: the round after the highest
+/// round already scored for the night, across every pack, so a save
+/// never lands on a round that already has a result.
+struct NextRound: Equatable {
+    /// The round the sheet scores. 1 when nothing is scored yet.
+    let index: Int
+    /// Who won the round before it (positive points), in the order
+    /// they were entered. Empty for round 1 or a round with no
+    /// winner recorded.
+    let lastWinnerIds: [UUID]
+
+    /// The next round for a night, from the night's scored rounds
+    /// (every pack). A corrected round counts once: its latest row
+    /// names the winners.
+    static func after(_ rounds: [EventRound]) -> NextRound {
+        guard let last = rounds.map(\.roundIndex).max() else {
+            return NextRound(index: 1, lastWinnerIds: [])
+        }
+        let latest = rounds
+            .filter { $0.roundIndex == last }
+            .max { $0.createdAt < $1.createdAt }
+        var seen: Set<UUID> = []
+        let winners = (latest?.entries ?? [])
+            .filter { $0.pointsDelta > 0 }
+            .map(\.memberId)
+            .filter { seen.insert($0).inserted }
+        return NextRound(index: last + 1, lastWinnerIds: winners)
+    }
+
+    /// The caption under "Round {n}": "Last: Sam won round 2".
+    /// nil for round 1, or when the last round has no named winner.
+    static func lastLine(winnerNames: [String], round: Int) -> String? {
+        guard round > 1, !winnerNames.isEmpty else { return nil }
+        let names: String
+        if winnerNames.count == 1 {
+            names = winnerNames[0]
+        } else {
+            names = winnerNames.dropLast().joined(separator: ", ") + " and " + winnerNames[winnerNames.count - 1]
+        }
+        return "Last: \(names) won round \(round - 1)"
+    }
+}

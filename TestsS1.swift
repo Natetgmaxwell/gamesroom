@@ -234,6 +234,66 @@ func runS1Tests(_ runner: TestRunner) {
         runner.assertNil(plan.primary, "the night has not started")
         runner.assertEqual(plan.secondaries, [])
     }
+    runS1NextRoundTests(runner)
+}
+
+// MARK: - S1.6 next round
+
+func runS1NextRoundTests(_ runner: TestRunner) {
+    let eventId = UUID()
+    let roomId = UUID()
+    let host = UUID()
+    let sam = UUID()
+    let alex = UUID()
+    func round(_ pack: String, _ index: Int, winners: [UUID], at offset: TimeInterval = 0) -> EventRound {
+        EventRound(
+            id: UUID(),
+            eventId: eventId,
+            roomId: roomId,
+            packSlug: pack,
+            roundIndex: index,
+            entries: winners.map { ScoreEntry(memberId: $0, pointsDelta: 3) },
+            createdBy: host,
+            createdAt: nightBase.addingTimeInterval(offset)
+        )
+    }
+
+    runner.run("S1.6: a night with no rounds starts on round 1") {
+        let next = NextRound.after([])
+        runner.assertEqual(next.index, 1)
+        runner.assertEqual(next.lastWinnerIds, [])
+        runner.assertNil(NextRound.lastLine(winnerNames: ["Sam"], round: next.index))
+    }
+
+    runner.run("S1.6: the next round follows the highest round across every pack") {
+        // Monopoly Deal reached round 3, CAH only round 1: a CAH save
+        // must not land on round 2 and overwrite nothing it can see.
+        let rounds = [
+            round("monopoly_deal", 1, winners: [alex]),
+            round("monopoly_deal", 3, winners: [sam], at: 60),
+            round("cards_against_humanity", 1, winners: [alex], at: 30),
+        ]
+        let next = NextRound.after(rounds)
+        runner.assertEqual(next.index, 4)
+        runner.assertEqual(next.lastWinnerIds, [sam])
+    }
+
+    runner.run("S1.6: a corrected round names the winners from its latest row") {
+        let rounds = [
+            round("monopoly_deal", 2, winners: [alex], at: 0),
+            round("monopoly_deal", 2, winners: [sam], at: 120),
+        ]
+        let next = NextRound.after(rounds)
+        runner.assertEqual(next.index, 3)
+        runner.assertEqual(next.lastWinnerIds, [sam])
+    }
+
+    runner.run("S1.6: the last-round caption names one, two or more winners") {
+        runner.assertEqual(NextRound.lastLine(winnerNames: ["Sam"], round: 3), "Last: Sam won round 2")
+        runner.assertEqual(NextRound.lastLine(winnerNames: ["Sam", "Alex"], round: 2), "Last: Sam and Alex won round 1")
+        runner.assertEqual(NextRound.lastLine(winnerNames: ["Sam", "Alex", "Jo"], round: 5), "Last: Sam, Alex and Jo won round 4")
+        runner.assertNil(NextRound.lastLine(winnerNames: [], round: 4))
+    }
 }
 
 // MARK: - NightPlan fixtures
