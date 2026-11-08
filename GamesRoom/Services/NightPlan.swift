@@ -132,6 +132,13 @@ struct NightPlan: Equatable {
         let primary: NightAction
         if input.arrivedCount == 0 {
             primary = .waitingForTable(arrived: input.arrivedCount, claimed: input.claimedCount)
+            // TARS — a room without seat deposits has no arrival signal,
+            // so "nobody has arrived" is a guess, not a fact. The host
+            // must still be able to record a round; the line above is
+            // information, not a gate.
+            if !scorable.isEmpty {
+                secondaries.append(.scoreRound(packs: scorable))
+            }
         } else if input.roundsScored == 0 {
             primary = scorable.isEmpty ? .settleNight : .scoreRound(packs: scorable)
         } else {
