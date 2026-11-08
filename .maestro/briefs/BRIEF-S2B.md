@@ -1,0 +1,50 @@
+# Games Room 1.2.4 finish train: lane S2B (s2b/notif-server)
+
+Read this whole file at the start of EVERY iteration. Your progress lives in `.maestro/STATE-S2B.md`.
+
+## Where you are
+- Repo = this worktree (cwd). Branch `s2b/notif-server` is already checked out, based on `main` @ febbae3 (shipped 1.2.3). Four other lanes work in parallel on sibling branches; TARS integrates them. Never switch branch, merge, rebase, push, or touch `main` or any other worktree.
+- Reference (read-only): `docs/audit/2026-11-08/` holds 00-SYNTHESIS.md, 01-notifications.md, 02-workflows.md, 03-spacing.md, 04-interconnect.md (findings with file:line on febbae3) and `live-functions.sql` (LIVE Postgres function bodies pulled 2026-11-08). **When you rewrite an RPC, start from its live body in live-functions.sql, never from an older migration.**
+
+## Product rules (never violate)
+- One primary action per screen; secondary actions are plain grey caption text centred under it.
+- Optimistic UI + Undo instead of confirmation alerts. Destructive actions (cancel a night, forfeit/keep a deposit, leave a room, kick) DO confirm with a `confirmationDialog`.
+- No chips, pills or decorative cards. Quiet by default. Never a push to the whole table.
+- Copy: Australian spelling, no em dashes, no emojis, short and dry. Use the exact strings this brief gives.
+
+## HARD RULES
+1. **One step per iteration**: read STATE, do the NEXT unticked step only, run its gate, commit with the exact message given, tick it in STATE and rewrite the STATE line, commit STATE, EXIT.
+2. **Allowed files** are listed below. New files only at the exact paths given. Never `git add` a name matching `* [0-9]*.*` (iCloud ghost copies): delete those instead.
+3. **Gate per step**: `bash .maestro/fastgate.sh` must end with `FASTGATE: PASS`. The LAST step uses `bash .maestro/fastgate.sh --compile`. Never run `.maestro/gate.sh`, never boot a simulator, never run xcodebuild test: other lanes share this machine and TARS runs the full gate.
+4. xcodegen dirties `GamesRoom.xcodeproj/project.pbxproj`: run `git checkout -- GamesRoom.xcodeproj/project.pbxproj` before every commit.
+5. Tests: never delete or weaken an existing test. New Foundation-only logic goes in its own file under `GamesRoom/Services/` and MUST be added to `SRC_FILES` in `build-and-run-tests.sh`; its tests go in a new root file `TestsS2B.swift`, also added to `SRC_FILES` and registered in `main.swift` the same way existing test groups are (grep main.swift for how a test function is registered before writing yours).
+6. **Migrations: write them, NEVER apply them.** No `supabase db push/query/link`, no deploys, no network calls to Supabase. Every new SECURITY DEFINER function: `set search_path = public`, ends with `revoke all on function ... from public, anon;` and `grant execute on function ... to authenticated;`. Host checks use `public.is_room_host(<room_id>, public.current_user_id())`, never `rooms.created_by`. Every membership-derived query filters `membership_status = 'active'`. Changing a RETURNS TABLE shape needs `drop function if exists` first (42P13 otherwise); drop the wrapper before `__inner` and recreate both.
+7. Never touch Maestro/opencode config or any process you did not start. If tooling misbehaves, note it in STATE and carry on.
+8. Big files: `grep -n` for the anchor, then read about 80 lines around it. Never read RoomDetailView.swift (about 4,700 lines) whole.
+
+## STOP AND REPORT (do not guess)
+Write the question under `BLOCKED:` in STATE, commit STATE, exit, when:
+- a live function body contradicts this brief;
+- a fix needs a file outside ALLOWED FILES;
+- an existing test fails for a reason unrelated to your change.
+
+## Goal
+Server-side pieces so reminders reach members who never open the app, server pushes land at waking hours, the Question Box waits for people to arrive, and kicked members stop seeing events. Everything ships OFF and unapplied.
+
+## Live facts (2026-11-08)
+pg_cron and pg_net are installed on live. `device_tokens(user_id, device_token, platform, environment, is_active, ...)`. `rooms` has no time_zone column. The push pattern to mirror: `Supabase/functions/question-turn-push/` (apns.ts, handler.ts) and migrations 097/105 (vault secret, pg_net call, shared-secret header gate that fails closed). The `events` RLS read policy today: `exists(room_memberships m where m.room_id = events.room_id and m.user_id = current_user_id()) and not (current_user_id() = any(hidden_from_user_ids))`; update/delete policies use `rooms.created_by`.
+
+## ALLOWED FILES
+`Supabase/migrations/108_room_time_zone.sql`, `109_briefing_push.sql`, `110_anchor_push_waking_hours.sql`, `111_question_box_timing.sql`, `112_events_rls_active.sql` (all new), `Supabase/functions/briefing-push/**` (new), `Supabase/functions/anchor-nudge-push/**`, `Supabase/functions/mascot-voice/**`, `docs/S2B_SERVER_PUSH.md` (new), `.maestro/STATE-S2B.md`, `.maestro/S2B_REPORT.md`. No Swift.
+
+## Extra gate for this lane
+After fastgate, also run `deno check` and `deno test` for every function directory you touched; both must pass.
+
+## Steps
+- [ ] **1. 108 room time zone.** `alter table rooms add column time_zone text not null default 'Australia/Brisbane'`. RPC `set_room_time_zone(p_room_id uuid, p_tz text) returns void`: host only; reject a tz not in `pg_timezone_names`. Commit `S2B.1: rooms.time_zone + set_room_time_zone`.
+- [ ] **2. 109 briefing push (SQL).** Table `briefing_push_ledger(event_id uuid, user_id uuid, kind text, sent_at timestamptz default now(), primary key(event_id, user_id, kind))`, RLS on, no client policies. SECURITY DEFINER `briefing_push_due(p_now timestamptz) returns table(event_id, room_id, user_id, kind, rsvp_state, event_name, played_at, host_note, time_zone, mascot_name)`. Kinds and times, computed in the room's time zone: `on_create` (event created within the last 60 min; non-host members; unclaimed only); `t168h` = 7 days before the event day at 18:00; `t48h` = 3 days before at 18:00; `morning_of` = earlier of 09:00 on the day and played_at - 3h, never before 07:00; `host_headcount` = to each host at the t48h time. Same skip rules as the client: a slot is due when its time is in (p_now - 20 min, p_now]; skip t168h/t48h within 24h after created_at, morning_of within 2h after created_at, t48h within 24h of t168h. Eligibility: active membership, room notifications enabled for that member, event not muted for that member (find the mute table in migrations), not hidden, event unsettled and in the future, rsvp not declined, no ledger row yet, user has an active device token. Schedule `cron.schedule('briefing-push-tick', '*/15 * * * *', ...)` calling the edge function via pg_net with the vault shared secret, exactly like 097. Commit `S2B.2: briefing push ledger, due query and cron tick`.
+- [ ] **3. briefing-push edge function.** `plan.ts` (pure copy composer, unit-tested) + `handler.ts` + `apns.ts` (copy from question-turn-push, do not import across function dirs) + `index.ts`. Returns 200 doing nothing unless env `BRIEFING_PUSH_ENABLED === "true"`; shared-secret header gate fails closed (401). Copy, title `{mascot_name}: {event_name}`: claimed = logistics only and NEVER the word `claim` (`See you {weekday} at {time}.` plus ` Host's note: {note}` when present); unclaimed t168h `{event_name} is next {weekday}. Your seat's waiting.`; unclaimed t48h `{weekday} at {time}. Still a seat with your name on it.`; morning_of unclaimed `Tonight at {time}. There's still a seat.`; on_create `{event_name}, {weekday} {date} at {time}. Open the room to grab a seat.`; host_headcount `{claimed} in, {unanswered} haven't said. {weekday} {time}.`. Interruption level `active`. Insert the ledger row before sending; mark tokens inactive on 410/BadDeviceToken. deno tests: claimed bodies contain no "claim" (case-insensitive), weekday computed in the room tz. Commit `S2B.3: briefing-push edge function (ships disabled)`.
+- [ ] **4. 110 anchor push in waking hours.** Start from the 105 migration bodies and `anchor-nudge-push`. The trigger queues instead of sending when the room-local time is outside 09:00-20:00; a cron job every 15 min delivers queued rows at the next window, never later than played_at - 24h (drop if that passed); re-check at send time that the inviter is still unseated; interruption level `active`; weekday in the room's time zone (remove the hardcoded Australia/Brisbane). Commit `S2B.4: anchor push waits for waking hours`.
+- [ ] **5. 111 Question Box timing.** Start from live `question_box_advance` / `question_box_host` in live-functions.sql. Opener waits until 3 distinct members have arrived (a withdrawal transaction on the event, or a checked-in seat deposit) or played_at + 30 min, whichever first. The no-bank fallback rotation uses arrived members only. Stop creating turns when settled, when now > played_at + auto_close_hours, or when no turn was read or passed in the last 60 min. Skip readers with no active device token. Commit `S2B.5: question box waits for the table and stops when the night does`.
+- [ ] **6. 112 RLS + mascot-voice.** Events read policy adds `m.membership_status = 'active'`; update/delete policies use `is_room_host(events.room_id, current_user_id())`. mascot-voice (04 F5): if the client passes `event_id`, use that event; otherwise use `get_active_event__inner` semantics (hidden filter included); season-close message only when the newest season by ordinal is ended or ended within 3 days; leader and member counts filter `membership_status = 'active'`. deno check. Commit `S2B.6: active-only events RLS; mascot voice reads what the UI renders`.
+- [ ] **7. Rollout doc + report.** `docs/S2B_SERVER_PUSH.md`: apply order 108-112, secrets by NAME only (`BRIEFING_PUSH_ENABLED`, the shared secret, APNs vars reused), deploy commands with `--no-verify-jwt`, how to verify (unauthenticated probe = 401), and the dedupe plan: once server push is on, the client stops scheduling local t168h/t48h/morning_of (TARS wires that flag at integration). Run all gates. Write `.maestro/S2B_REPORT.md`. Commit `S2B.7: rollout doc + report`.
