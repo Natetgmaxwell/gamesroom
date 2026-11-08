@@ -1,6 +1,6 @@
 # STATE S2
 
-STATE: step 7 of 8 done. Next: step 8.
+STATE: step 8 of 8 done. Next: none (lane complete).
 
 STEP 1 DONE (commit a1de6c1 `S2.1: port fix/notif-claimed-state (reconcileBriefing) onto febbae3`).
 The two upstream objects 04081cb and 5649888 were cherry-picked from refs/remotes/icloud/fix/notif-claimed-state and squashed into that single step commit (upstream SHAs and the conflict resolutions are recorded in the commit body).
@@ -59,6 +59,9 @@ STEP 7 DONE (commit 431b0e9 `S2.7: calendar rows for every member who claims`).
 - RoomService: syncCalendarRow(eventId:claimed:) runs after a successful claim on both paths (upsertEventRSVP .claimed, and the escrow/deposit branch of claimSeat) when room.calendarAutoAdd is on; decline and release (upsertEventRSVP .declined/.unclaimed) remove the row; purgeRoom and deleteRoom remove by event id; a note/venue edit updates only a row this device already wrote (createIfMissing: false); addEvent keeps the host row via upsertEvent.
 - events.event_calendar_identifier is no longer read or written for lookups (RoomService.reportCalendarIdentifier and the store method stay, now uncalled; the column is not dropped).
 - Tests: 2 new (per-event map set/overwrite/remove in a scratch suite; the gamesroom:// URL). Gate (--compile): 328 cases, 328 passed; parse-check 66/66; BUILD SUCCEEDED; FASTGATE: PASS.
+
+STEP 8 DONE (commit 2b638f1 `S2.8: report`).
+- bash .maestro/fastgate.sh --compile: Ran 328 cases: 328 passed, 0 failed; parse-check 66/66; FASTGATE: PASS. Report at .maestro/S2_REPORT.md.
 
 BLOCKED: none
 
