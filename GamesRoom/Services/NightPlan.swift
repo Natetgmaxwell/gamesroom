@@ -219,3 +219,49 @@ struct NextRound: Equatable {
         return "Last: \(names) won round \(round - 1)"
     }
 }
+
+// MARK: - Recap above the next night (S1.7)
+
+extension NightPlan {
+    /// The settled night that renders as its own section above the
+    /// next night's card: settled inside the recap window, and the
+    /// active event is a different night that has not been settled
+    /// (the next one is on the books, or under way). When the active
+    /// event IS the settled night, the recap is the page's slot and
+    /// this returns nil.
+    static func recapAboveNextNight(recent: Event?, active: Event?, now: Date) -> Event? {
+        guard let recent, let settledAt = recent.settledAt else { return nil }
+        guard settledAt > now.addingTimeInterval(-recapWindow) else { return nil }
+        guard let active, active.id != recent.id, active.settledAt == nil else { return nil }
+        return recent
+    }
+}
+
+// MARK: - Season awards window (S1.7)
+
+/// Which closed season's awards every member sees: the most recently
+/// ended season, for 7 days after it ended, until the member taps
+/// Done.
+enum SeasonAwardsWindow {
+    /// 7 days.
+    static let window: TimeInterval = 7 * 86_400
+
+    /// UserDefaults key for "this member dismissed these awards".
+    static func dismissedKey(seasonId: UUID) -> String {
+        "seasonAwardsDismissed-\(seasonId.uuidString)"
+    }
+
+    /// The most recently ended season, if it ended inside the window
+    /// and has not been dismissed. Only the latest season counts: an
+    /// older season never comes back when the latest is dismissed.
+    static func seasonToShow(_ seasons: [Season], now: Date, isDismissed: (UUID) -> Bool) -> Season? {
+        let ended = seasons.compactMap { season -> (Season, Date)? in
+            guard let endedAt = season.endedAt else { return nil }
+            return (season, endedAt)
+        }
+        guard let latest = ended.max(by: { $0.1 < $1.1 }) else { return nil }
+        guard latest.1 > now.addingTimeInterval(-window) else { return nil }
+        guard !isDismissed(latest.0.id) else { return nil }
+        return latest.0
+    }
+}

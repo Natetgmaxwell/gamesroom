@@ -109,6 +109,9 @@ struct RoomDetailView: View {
     @State private var settleFailed: Bool = false
     /// S1.5 — "Plan the next night" seeds AddEventSheet's date.
     @State private var addEventInitialPlayedAt: Date?
+    /// S1.7 — flips when the awards are dismissed so SwiftUI
+    /// re-renders (UserDefaults isn't observed).
+    @State private var seasonAwardsDismissedFlip: Bool = false
 
     // B1.3 — host-only "+ Add an event" CTA in the in-room
     // toolbar. The `AddEventSheet` has shipped since P0.3 (comment
@@ -559,6 +562,42 @@ struct RoomDetailView: View {
     private var scrollBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Layout.roomSectionGap) {
+                // S1.7 — the season that just closed, for every
+                // member, for 7 days or until they tap Done. Its own
+                // section: the next night's card stays under it.
+                if let season = seasonToCelebrate {
+                    let awards = awardsForPrivacy(seasonId: season.id)
+                    VStack(spacing: Theme.Layout.cardGroupGap) {
+                        AwardsCard(
+                            season: season,
+                            awards: awards,
+                            currentUserId: authService.currentUser?.id,
+                            isHost: room.userRole == .host,
+                            currentUserOptedIn: room.memberDrowningOptIn,
+                            statCard: currentUserStatCard(season: season, awards: awards),
+                            onToggleDrowningOptIn: { newValue in
+                                Task { await setDrowningOptIn(newValue) }
+                            }
+                        )
+                        Button { dismissSeasonAwards(season) } label: {
+                            Text("Done")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Done"))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                // S1.7 (TARS) — the night just settled, while the next
+                // night is already on the books: the recap sits above
+                // the next night's card for 24h after the settle.
+                if let recap = recapAboveNextNight {
+                    recapCard(event: recap)
+                        .frame(maxWidth: .infinity)
+                }
                 activeSlot
                     .frame(maxWidth: .infinity)
                 // v1.2.2 S6 T5 — the host's unread notes, lifted out
@@ -759,7 +798,7 @@ struct RoomDetailView: View {
         // flips after the first `refresh()` resolves; below that,
         // trust the spinner; after that, the room has *loaded*
         // and any empty sub-state must fall through to `.readStandings`,
-        // `.seasonClose`, or the active-event branches — never
+        // or the active-event branches — never
         // spinner-on-forever.
         //
         // The legacy `if activeEvent == nil && briefing == nil &&
@@ -769,17 +808,9 @@ struct RoomDetailView: View {
         if !hasLoadedInitialData {
             return .loading
         }
-        // M1.1 — season-close takes priority over active-event
-        // branches. When the current season has ended, the page
-        // should render the awards card regardless of whether the
-        // room has a recently-settled or in-play event — the
-        // awards card IS the hero for that period.
-        if let closed = justClosedSeason {
-            return .seasonClose(closed, awardsForPrivacy(seasonId: closed.id))
-        }
-        if let season = currentSeason, season.status == .ended {
-            return .seasonClose(season, seasonAwardsForPrivacy)
-        }
+        // S1.7 — the season awards are their own section above
+        // this slot (`seasonToCelebrate`); they never replace the
+        // claim or live card (02-workflows #12, #13).
         if let event = activeEvent {
             let isLive = event.playedAt <= Date()
             let isSettled = event.settledAt != nil
@@ -980,47 +1011,9 @@ struct RoomDetailView: View {
             case .tonightEvent(let event):
                 liveCard(event: event, headerMode: .tonightEvent)
 
-            // M1.1 — `.seasonClose` renders the awards card with the
-            // privacy-filtered awards for the current user. The
-            // drowning row stays visible only to the recipient / host /
-            // opted-in members; the AwardsCard renders the drowning row
-            // through DrowningBadge when it appears.
-            case .seasonClose(let season, let awards):
-                AwardsCard(
-                    season: season,
-                    awards: awards,
-                    currentUserId: authService.currentUser?.id,
-                    isHost: room.userRole == .host,
-                    currentUserOptedIn: room.memberDrowningOptIn,
-                    statCard: currentUserStatCard(season: season, awards: awards),
-                    onToggleDrowningOptIn: { newValue in
-                        Task { await setDrowningOptIn(newValue) }
-                    }
-                )
             case .justSettled(let event):
                 VStack(spacing: Theme.Layout.cardGroupGap) {
-                CeremonialCard(
-                    event: event,
-                    chapterLine: roomService.cachedEventChapterLine(eventId: event.id),
-                    tonightStarCard: roomService.cachedTonightStarCard(eventId: event.id),
-                    hostPickMembers: roomService.cachedMembers(roomId: room.id),
-                    isHost: isHost,
-                    memberNoteWindowOpen: memberNoteWindowOpen(for: event),
-                    memberNotePromptVisible: memberNotePromptVisible(for: event.id),
-                    onTonightStarPick: isHost
-                        ? { memberId, category, custom in
-                            Task { await setTonightStarPick(event: event, memberId: memberId, category: category, customText: custom) }
-                        }
-                        : nil,
-                    onSubmitMemberNote: !isHost
-                        ? { text in
-                            Task { await submitMemberNote(roomId: room.id, text: text) }
-                        }
-                        : nil,
-                    onSkipMemberNote: !isHost
-                        ? { skipMemberNotePrompt(for: event.id) }
-                        : nil
-                )
+                recapCard(event: event)
                 // S1.5 — the host plans the next night from the
                 // recap. This state only renders while no future
                 // night is known (the room allows one), so the plan
@@ -1119,7 +1112,7 @@ struct RoomDetailView: View {
     /// the active event, the briefing summary, the leaderboard,
     /// the current member's RSVP, the open attestations, the room
     /// members (for the P1.1 roster surface), and the current
-    /// season + awards (for the M1.1 `.seasonClose` slot).
+    /// season + awards (for the S1.7 season awards section).
     /// Called from `.task` and `.refreshable`.
     private func refresh(force: Bool = false) async {
         Perf.event("refresh start force=\(force)")
@@ -1181,6 +1174,11 @@ struct RoomDetailView: View {
     /// ceremonial card renders the written title + call-forward.
     /// No-op when there's no active event.
     private func loadChapterLineIfNeeded(force: Bool = false) async {
+        // S1.7 — the recap above the next night reads its own line.
+        if let recap = roomService.cachedRecentlySettledEvent(roomId: room.id),
+           recap.id != activeEvent?.id {
+            await roomService.loadEventChapterLine(eventId: recap.id, force: force)
+        }
         guard let event = activeEvent else { return }
         await roomService.loadEventChapterLine(eventId: event.id, force: force)
     }
@@ -1189,6 +1187,10 @@ struct RoomDetailView: View {
     /// the ceremonial-card star section renders. No-op when there's
     /// no active event.
     private func loadTonightStarCardIfNeeded(force: Bool = false) async {
+        if let recap = roomService.cachedRecentlySettledEvent(roomId: room.id),
+           recap.id != activeEvent?.id {
+            await roomService.loadTonightStarCard(eventId: recap.id, force: force)
+        }
         guard let event = activeEvent else { return }
         await roomService.loadTonightStarCard(eventId: event.id, force: force)
     }
@@ -1242,6 +1244,11 @@ struct RoomDetailView: View {
         // Seasons dual trace. Quiet no-op until migration 101.
         if !history.isEmpty {
             await roomService.loadSeasonGrid(roomId: room.id, seasonId: nil, force: force)
+        }
+        // S1.7 — awards for the season every member is shown (the
+        // current season is open again once one closes).
+        if let season = seasonToCelebrate, season.id != roomService.cachedCurrentSeason(roomId: room.id)?.id {
+            await roomService.loadSeasonAwards(seasonId: season.id, force: force)
         }
     }
 
@@ -1796,6 +1803,91 @@ struct RoomDetailView: View {
         )
     }
 
+    // MARK: Season awards + recap sections (S1.7)
+
+    /// S1.7 — every ended season the page knows about: the one the
+    /// host just closed here, the current season if it has ended,
+    /// and the room's ended seasons from the history read.
+    private var endedSeasons: [Season] {
+        var seasons: [Season] = []
+        if let closed = justClosedSeason {
+            seasons.append(closed.endedAt == nil
+                ? Season(id: closed.id, roomId: closed.roomId, ordinal: closed.ordinal,
+                         subtitle: closed.subtitle, status: .ended,
+                         startedAt: closed.startedAt, endedAt: Date())
+                : closed)
+        }
+        if let current = currentSeason, current.status == .ended {
+            seasons.append(current)
+        }
+        for row in roomService.cachedSeasonHistory(roomId: room.id) {
+            seasons.append(Season(
+                id: row.seasonId, roomId: room.id, ordinal: row.ordinal,
+                subtitle: row.subtitle, status: .ended,
+                startedAt: row.startedAt, endedAt: row.endedAt
+            ))
+        }
+        return seasons
+    }
+
+    /// S1.7 — the season whose awards the page shows: the most
+    /// recently ended one, within 7 days, not dismissed here.
+    private var seasonToCelebrate: Season? {
+        _ = seasonAwardsDismissedFlip
+        return SeasonAwardsWindow.seasonToShow(
+            endedSeasons,
+            now: Date(),
+            isDismissed: { UserDefaults.standard.bool(forKey: SeasonAwardsWindow.dismissedKey(seasonId: $0)) }
+        )
+    }
+
+    /// S1.7 — "Done" on the awards: gone for this member, this device.
+    private func dismissSeasonAwards(_ season: Season) {
+        UserDefaults.standard.set(true, forKey: SeasonAwardsWindow.dismissedKey(seasonId: season.id))
+        if justClosedSeason?.id == season.id { justClosedSeason = nil }
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            seasonAwardsDismissedFlip.toggle()
+        }
+    }
+
+    /// S1.7 (TARS) — the settled night that renders as its own section
+    /// above the next night's card. nil when the active event is the
+    /// settled night itself (`.justSettled` renders it as the slot).
+    private var recapAboveNextNight: Event? {
+        NightPlan.recapAboveNextNight(
+            recent: roomService.cachedRecentlySettledEvent(roomId: room.id),
+            active: activeEvent,
+            now: Date()
+        )
+    }
+
+    /// The settled night's recap card. Shared by `.justSettled` and
+    /// the recap section above the next night.
+    private func recapCard(event: Event) -> some View {
+        CeremonialCard(
+            event: event,
+            chapterLine: roomService.cachedEventChapterLine(eventId: event.id),
+            tonightStarCard: roomService.cachedTonightStarCard(eventId: event.id),
+            hostPickMembers: roomService.cachedMembers(roomId: room.id),
+            isHost: isHost,
+            memberNoteWindowOpen: memberNoteWindowOpen(for: event),
+            memberNotePromptVisible: memberNotePromptVisible(for: event.id),
+            onTonightStarPick: isHost
+                ? { memberId, category, custom in
+                    Task { await setTonightStarPick(event: event, memberId: memberId, category: category, customText: custom) }
+                }
+                : nil,
+            onSubmitMemberNote: !isHost
+                ? { text in
+                    Task { await submitMemberNote(roomId: room.id, text: text) }
+                }
+                : nil,
+            onSkipMemberNote: !isHost
+                ? { skipMemberNotePrompt(for: event.id) }
+                : nil
+        )
+    }
+
     /// S1.5 — "Settle the night". Optimistic: the cached night reads
     /// as settled at once (the recap renders) and "Night settled."
     /// offers Undo for 5 s. Only after 5 s without Undo does the
@@ -1881,10 +1973,6 @@ private enum V0State: Equatable {
     case claimed(Event)
     case declined(Event)
     case readStandings
-    /// M1.1 — season-close moment: the current season has
-    /// `status == .ended`. Renders the awards card surface with
-    /// per-recipient privacy filtering for the drowning row.
-    case seasonClose(Season, [SeasonAward])
 }
 
 // MARK: - Briefing slot

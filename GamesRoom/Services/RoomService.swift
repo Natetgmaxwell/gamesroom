@@ -109,6 +109,16 @@ final class RoomService: ObservableObject {
     /// Active event cache keyed by roomId. Populated lazily by
     /// `loadActiveEvent(roomId:)`; consumed by `RoomDetailView`.
     @Published private(set) var activeEventByRoom: [UUID: Event] = [:]
+    /// S1.7 — the room's most recently settled night, kept apart from
+    /// the active event so the recap can sit above the next night's
+    /// card for 24h after the settle. Filled when `settleEvent`
+    /// succeeds and whenever `get_active_event` returns a settled night.
+    @Published private(set) var recentlySettledByRoom: [UUID: Event] = [:]
+    /// S1.7 — a night this device just scheduled while the server
+    /// still answers `get_active_event` with the settled night
+    /// (migration 107 ranks a settled night inside 24h above a future
+    /// one). Held so the host lands on the new night's card.
+    private var scheduledNextByRoom: [UUID: Event] = [:]
 
     /// Briefing summary cache keyed by eventId. Populated lazily
     /// by `loadBriefing(eventId:)`; consumed by `RoomDetailView`.
@@ -427,8 +437,22 @@ final class RoomService: ObservableObject {
         let task = Task<Event?, Error> { [weak self] () -> Event? in
             guard let self else { return nil }
             do {
-                let event = try await Perf.span("rpc get_active_event") {
+                var event = try await Perf.span("rpc get_active_event") {
                     try await self.store.fetchActiveEvent(roomId: roomId)
+                }
+                // S1.7 — remember the settled night for the recap.
+                if let fetched = event, fetched.settledAt != nil {
+                    self.recentlySettledByRoom[roomId] = fetched
+                }
+                // S1.7 — a night scheduled here outranks the settled
+                // night the server still returns; drop it once it has
+                // started or the server returns it itself.
+                if let next = self.scheduledNextByRoom[roomId] {
+                    if next.playedAt <= Date() || event?.id == next.id || (event != nil && event?.settledAt == nil) {
+                        self.scheduledNextByRoom[roomId] = nil
+                    } else if event?.settledAt != nil {
+                        event = next
+                    }
                 }
                 self.activeEventByRoom[roomId] = event
                 self.cacheTimestamps[key] = Date()
@@ -459,6 +483,7 @@ final class RoomService: ObservableObject {
         let settledAt = try await store.settleEvent(eventId: eventId)
         if let entry = activeEventByRoom.first(where: { $0.value.id == eventId }) {
             activeEventByRoom[entry.key] = entry.value.withSettledAt(settledAt)
+            recentlySettledByRoom[entry.key] = entry.value.withSettledAt(settledAt)
             cacheTimestamps.removeValue(forKey: "activeEvent:\(entry.key.uuidString)")
         }
         self.lastError = nil
@@ -468,6 +493,11 @@ final class RoomService: ObservableObject {
     /// S1.5 — the optimistic settle and its Undo. Stamps (or clears)
     /// `settledAt` on the cached event only; nothing is sent. The
     /// room page flips to the recap at once and back on Undo.
+    /// S1.7 — the room's most recently settled night, or nil.
+    func cachedRecentlySettledEvent(roomId: UUID) -> Event? {
+        recentlySettledByRoom[roomId]
+    }
+
     func setCachedSettledAt(eventId: UUID, _ settledAt: Date?) {
         guard let entry = activeEventByRoom.first(where: { $0.value.id == eventId }) else { return }
         activeEventByRoom[entry.key] = entry.value.withSettledAt(settledAt)
@@ -944,6 +974,23 @@ final class RoomService: ObservableObject {
         // Eagerly refresh the active-event cache so the parent's
         // post-create flow doesn't need a second round-trip.
         _ = await loadActiveEvent(roomId: roomId)
+        // S1.7 — inside the 24h after a settle the server still
+        // returns the settled night (migration 107). Hold the new
+        // night here so the host lands on its card, with the recap
+        // above it.
+        if let current = activeEventByRoom[roomId], current.id != newId, current.settledAt != nil {
+            let next = Event(
+                id: newId,
+                roomId: roomId,
+                name: name,
+                playedAt: playedAt,
+                createdAt: Date(),
+                packSlugs: packSlugs,
+                packSlug: packSlugs.first ?? "casino"
+            )
+            scheduledNextByRoom[roomId] = next
+            activeEventByRoom[roomId] = next
+        }
         // T1.1 — calendar auto-add. Best-effort: a denied prompt
         // or a failed write never blocks the event flow. Uses the
         // server-canonical event from the cache when available.

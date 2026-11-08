@@ -235,6 +235,7 @@ func runS1Tests(_ runner: TestRunner) {
         runner.assertEqual(plan.secondaries, [])
     }
     runS1NextRoundTests(runner)
+    runS1SectionTests(runner)
 }
 
 // MARK: - S1.6 next round
@@ -293,6 +294,72 @@ func runS1NextRoundTests(_ runner: TestRunner) {
         runner.assertEqual(NextRound.lastLine(winnerNames: ["Sam", "Alex"], round: 2), "Last: Sam and Alex won round 1")
         runner.assertEqual(NextRound.lastLine(winnerNames: ["Sam", "Alex", "Jo"], round: 5), "Last: Sam, Alex and Jo won round 4")
         runner.assertNil(NextRound.lastLine(winnerNames: [], round: 4))
+    }
+}
+
+// MARK: - S1.7 season awards + recap sections
+
+func runS1SectionTests(_ runner: TestRunner) {
+    let roomId = UUID()
+    func season(_ ordinal: Int, endedDaysAgo: Double?) -> Season {
+        Season(
+            id: UUID(), roomId: roomId, ordinal: ordinal, subtitle: "S\(ordinal)",
+            status: endedDaysAgo == nil ? .active : .ended,
+            startedAt: nightBase.addingTimeInterval(-90 * 86_400),
+            endedAt: endedDaysAgo.map { nightBase.addingTimeInterval(-$0 * 86_400) }
+        )
+    }
+    func event(settledHoursAgo: Double?, startsInHours: Double = -3) -> Event {
+        let e = Event(
+            id: UUID(), roomId: roomId, name: "Night",
+            playedAt: nightBase.addingTimeInterval(startsInHours * 3_600),
+            createdAt: nightBase.addingTimeInterval(-30 * 86_400),
+            packSlugs: ["casino"], packSlug: "casino"
+        )
+        return settledHoursAgo.map { e.withSettledAt(nightBase.addingTimeInterval(-$0 * 3_600)) } ?? e
+    }
+
+    runner.run("S1.7: the season that just ended shows to every member") {
+        let latest = season(3, endedDaysAgo: 2)
+        let shown = SeasonAwardsWindow.seasonToShow(
+            [season(2, endedDaysAgo: 40), latest, season(4, endedDaysAgo: nil)],
+            now: nightBase, isDismissed: { _ in false }
+        )
+        runner.assertEqual(shown?.id, latest.id)
+    }
+
+    runner.run("S1.7: the awards stop after 7 days") {
+        let shown = SeasonAwardsWindow.seasonToShow(
+            [season(3, endedDaysAgo: 8)], now: nightBase, isDismissed: { _ in false }
+        )
+        runner.assertNil(shown)
+    }
+
+    runner.run("S1.7: Done hides the awards and never brings back an older season") {
+        let latest = season(3, endedDaysAgo: 1)
+        let older = season(2, endedDaysAgo: 3)
+        let shown = SeasonAwardsWindow.seasonToShow(
+            [older, latest], now: nightBase, isDismissed: { $0 == latest.id }
+        )
+        runner.assertNil(shown)
+        runner.assertEqual(
+            SeasonAwardsWindow.dismissedKey(seasonId: latest.id),
+            "seasonAwardsDismissed-\(latest.id.uuidString)"
+        )
+    }
+
+    runner.run("S1.7: the recap sits above the next night for 24h") {
+        let settled = event(settledHoursAgo: 2)
+        let next = event(settledHoursAgo: nil, startsInHours: 7 * 24)
+        runner.assertEqual(NightPlan.recapAboveNextNight(recent: settled, active: next, now: nightBase)?.id, settled.id)
+        let stale = event(settledHoursAgo: 25)
+        runner.assertNil(NightPlan.recapAboveNextNight(recent: stale, active: next, now: nightBase))
+    }
+
+    runner.run("S1.7: no recap section when the settled night is the page's own slot") {
+        let settled = event(settledHoursAgo: 2)
+        runner.assertNil(NightPlan.recapAboveNextNight(recent: settled, active: settled, now: nightBase))
+        runner.assertNil(NightPlan.recapAboveNextNight(recent: settled, active: nil, now: nightBase))
     }
 }
 
