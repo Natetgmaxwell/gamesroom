@@ -284,4 +284,65 @@ func runS3Tests(_ runner: TestRunner) {
             runner.assertTrue(true)
         }
     }
+
+    // MARK: - S3.5 — leaving a room
+
+    runner.runAsync("InMemoryRoomStore.leaveRoom drops the room from the caller's list (S3.5)") {
+        // A member leaves a room they are in. The membership ends, so
+        // the room leaves their own rooms list; the room itself
+        // survives for everyone else.
+        let store = InMemoryRoomStore()
+        let rooms = try await store.fetchRooms()
+        guard let memberRoom = rooms.first(where: { $0.userRole == .member }) else {
+            runner.assertTrue(false, "the seed has a room the caller is a member of")
+            return
+        }
+        runner.assertTrue(
+            rooms.contains { $0.id == memberRoom.id },
+            "the room starts in the caller's list"
+        )
+
+        try await store.leaveRoom(roomId: memberRoom.id)
+
+        let after = try await store.fetchRooms()
+        runner.assertTrue(
+            !after.contains { $0.id == memberRoom.id },
+            "the room is gone from the caller's list"
+        )
+        runner.assertEqual(after.count, rooms.count - 1)
+    }
+
+    runner.runAsync("InMemoryRoomStore.leaveRoom refuses the last host (S3.5)") {
+        // A room must always keep one host, so the last host cannot
+        // walk away. The live RPC raises `last_host`; the mirror
+        // raises the same typed error and the room stays put.
+        let store = InMemoryRoomStore()
+        let rooms = try await store.fetchRooms()
+        guard let hosted = rooms.first(where: { $0.userRole == .host }) else {
+            runner.assertTrue(false, "the seed has a room the caller hosts")
+            return
+        }
+
+        do {
+            try await store.leaveRoom(roomId: hosted.id)
+            runner.assertTrue(false, "the last host was allowed to leave")
+        } catch {
+            runner.assertEqual(error as? LeaveRoomError, LeaveRoomError.lastHost)
+        }
+        runner.assertTrue(
+            try await store.fetchRooms().contains { $0.id == hosted.id },
+            "the room stays in the caller's list"
+        )
+    }
+
+    runner.runAsync("InMemoryRoomStore.leaveRoom is a no-op for a room the caller is not in (S3.5)") {
+        // The live RPC is idempotent: leaving a room you are not in
+        // returns true and changes nothing.
+        let store = InMemoryRoomStore()
+        let rooms = try await store.fetchRooms()
+
+        try await store.leaveRoom(roomId: UUID())
+
+        runner.assertEqual(try await store.fetchRooms().count, rooms.count)
+    }
 }

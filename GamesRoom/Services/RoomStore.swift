@@ -915,6 +915,20 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
             .value as Void
     }
 
+    /// S3.5 — the live RPC is `leave_room(p_room_id)` (migration 093).
+    /// The caller leaves the room: their membership row goes, the
+    /// room stays for everyone else. Members leave freely; a host
+    /// may only leave when another active host remains (the RPC
+    /// raises `last_host` for the last host).
+    func leaveRoom(roomId: UUID) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("leave_room", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value as Bool
+    }
+
     /// The live RPC is `update_room_settings(p_room_id, p_name,
     /// p_mascot_name, p_mascot_personality, p_mascot_political_ideology,
     /// p_max_seats, p_member_invite_quota, p_join_starting_bonus,

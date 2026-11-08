@@ -1898,6 +1898,38 @@ actor InMemoryRoomStore: RoomStore {
         anchorPushEnabledByRoom.removeValue(forKey: roomId)
     }
 
+    /// S3.5 — in-memory mirror of `leave_room` (migration 093).
+    /// The caller's membership ends, so the room leaves the
+    /// caller's own rooms list (the store's `rooms` array IS that
+    /// list). Members leave freely; a host may only leave when
+    /// another active host remains — the live RPC raises
+    /// `last_host` for the last host, so the mirror raises
+    /// `LeaveRoomError.lastHost`. Leaving a room the caller is not
+    /// in is a no-op, matching the live RPC's idempotent return.
+    ///
+    /// The room itself survives for everyone else, so the night's
+    /// state (events, roster, join codes) is left alone.
+    func leaveRoom(roomId: UUID) async throws {
+        guard let idx = rooms.firstIndex(where: { $0.id == roomId }) else {
+            // Not a member (or already left): the live RPC is
+            // idempotent and returns true.
+            return
+        }
+        let room = rooms[idx]
+        if room.userRole == .host {
+            // Seed the roster so the host count is real.
+            _ = try await fetchRoomMembers(roomId: roomId)
+            let callerId = currentSyntheticMemberId()
+            let otherHosts = (membersByRoom[roomId] ?? [])
+                .filter { $0.role == .host && $0.userId != callerId }
+                .count
+            if otherHosts < 1 {
+                throw LeaveRoomError.lastHost
+            }
+        }
+        rooms.remove(at: idx)
+    }
+
     func updateRoom(
         id: UUID,
         name: String,

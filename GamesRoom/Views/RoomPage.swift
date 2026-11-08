@@ -117,6 +117,14 @@ struct RoomPage: View {
     /// settings sheet is dismissed. Only valid for host role rooms.
     @State private var settingsRoom: Room?
 
+    /// S3.5 — the room the user is about to leave. Set by the row's
+    /// trailing swipe action and by its context menu; both open the
+    /// same confirmation.
+    @State private var roomToLeave: Room?
+
+    /// S3.5 — inline error for a refused leave (the last host).
+    @State private var leaveError: String?
+
     /// Create-room sheet binding. Mirrors the empty-state "Create"
     /// CTA (P0.2 onboarding).
     @State private var showingCreateRoom: Bool = false
@@ -152,7 +160,11 @@ struct RoomPage: View {
             // delete; the service's rooms-list cache update re-renders
             // this page without the room (and the last-viewed hero
             // resolves to nil because the room is gone).
-            RoomSettingsSheet(room: room)
+            // S3.5 — same for leaving: the room leaves the list, so
+            // the page pops back to the rooms list.
+            RoomSettingsSheet(room: room, onRoomLeft: {
+                popToRoomsList()
+            })
                 .environmentObject(roomService)
                 .environmentObject(casinoService)
         }
@@ -207,6 +219,52 @@ struct RoomPage: View {
             await roomService.refresh()
             await roomService.loadRoomsSocialProof()
             Haptics.light()
+        }
+        // S3.5 — leaving a room is destructive (the caller's
+        // membership ends), so it goes through a confirmation. The
+        // dialog lives at the page level: a context-menu button
+        // cannot own one, and a swipe action fires while the row is
+        // mid-gesture.
+        .confirmationDialog(
+            "Leave \(roomToLeave?.name ?? "")?",
+            isPresented: Binding(
+                get: { roomToLeave != nil },
+                set: { if !$0 { roomToLeave = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Leave", role: .destructive) {
+                guard let room = roomToLeave else { return }
+                roomToLeave = nil
+                Task { await leaveRoom(room) }
+            }
+            Button("Cancel", role: .cancel) {
+                roomToLeave = nil
+            }
+        } message: {
+            Text("Your season history stays with the room.")
+        }
+        .alert(
+            "Couldn't leave the room",
+            isPresented: Binding(
+                get: { leaveError != nil },
+                set: { if !$0 { leaveError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(leaveError ?? "")
+        }
+        // S3.5 — a room the caller left (or was removed from) must
+        // not stay on the stack: the detail page would show a room
+        // they are no longer in. Pop back to the rooms list.
+        .onChange(of: roomService.rooms.map(\.id)) { _, ids in
+            if let current = roomsPath.last, !ids.contains(current.id) {
+                roomsPath.removeAll()
+            }
+            if let current = selectedRoom, !ids.contains(current.id) {
+                selectedRoom = nil
+            }
         }
     }
 
@@ -392,6 +450,14 @@ struct RoomPage: View {
                             .accessibilityAddTraits(.isButton)
                             .accessibilityLabel(Text(room.name))
                             .accessibilityHint(Text("Opens \(room.name) in the detail pane"))
+                            // S3.5 — the same leave affordance the
+                            // iPhone list rows carry.
+                            .swipeActions(edge: .trailing) {
+                                leaveRoomButton(for: room)
+                            }
+                            .contextMenu {
+                                leaveRoomButton(for: room)
+                            }
                     }
                 }
                 .listStyle(.sidebar)
@@ -453,78 +519,62 @@ struct RoomPage: View {
 
     // MARK: - Rooms list (with optional last-viewed hero)
 
+    /// S3.5 — the rooms list is a `List`, not a `LazyVStack` in a
+    /// `ScrollView`: a row can only carry a trailing swipe action
+    /// inside a `List`. The rows keep the content they had (name,
+    /// social-proof caption, overlap line, season arc) and the
+    /// hairline between rows is the list's own separator.
     private var roomsList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
-                if let lastViewed = resolvedLastViewedRoom {
-                    lastViewedHero(for: lastViewed)
-                }
-
-                sectionHeader("Your rooms")
-
-                LazyVStack(spacing: 0) {
-                    ForEach(roomService.rooms) { room in
-                        NavigationLink(
-                            value: room
-                        ) {
-                            HStack(spacing: Theme.Layout.gutter) {
-                                // M1.2 — session-active indicator. A
-                                // small accent dot appears next to the
-                                // room name when the room has an
-                                // active event cached in RoomService.
-                                if roomService.activeEventByRoom[room.id] != nil {
-                                    Circle()
-                                        .fill(Theme.Palette.accent)
-                                        .frame(width: 8, height: 8)
-                                        .accessibilityLabel(Text("Active session"))
-                                }
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(room.name)
-                                        .font(Theme.Typography.title)
-                                        .foregroundStyle(Theme.Palette.primaryText)
-                                    Text(socialProofCaption(for: room) ?? "Tap to open")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                                    // V0.55 — overlap badge + season-arc
-                                    // preview. Two lines max, no new chrome.
-                                    if let overlap = overlapLine(for: room) {
-                                        Text(overlap)
-                                            .font(Theme.Typography.caption)
-                                            .foregroundStyle(Theme.Palette.accent)
-                                    }
-                                    if let arc = seasonArcLine(for: room) {
-                                        Text(arc)
-                                            .font(Theme.Typography.monoFootnote)
-                                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                                    }
-                                }
-                                Spacer()
-                            }
-                            .padding(.vertical, Theme.Layout.cardInset)
-                            .padding(.horizontal, Theme.Layout.edgePadding)
-                        }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            recordLastViewed(room)
-                        })
-
-                        if room.id != roomService.rooms.last?.id {
-                            Divider()
-                                .overlay(Theme.Palette.hairline)
-                                .padding(.horizontal, Theme.Layout.edgePadding)
-                        }
-                    }
-                }
-                .background(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+        List {
+            if let lastViewed = resolvedLastViewedRoom {
+                lastViewedHero(for: lastViewed)
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: Theme.Layout.sectionSpacing,
+                            leading: Theme.Layout.edgePadding,
+                            bottom: 0,
+                            trailing: Theme.Layout.edgePadding
+                        )
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-            .contentColumn()
-            .padding(.vertical, Theme.Layout.sectionSpacing)
+
+            sectionHeader("Your rooms")
+                .listRowInsets(
+                    EdgeInsets(
+                        top: Theme.Layout.sectionSpacing,
+                        leading: Theme.Layout.edgePadding,
+                        bottom: Theme.Layout.roomHeaderGap,
+                        trailing: Theme.Layout.edgePadding
+                    )
+                )
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            ForEach(roomService.rooms) { room in
+                roomRow(for: room)
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: Theme.Layout.cardInset,
+                            leading: Theme.Layout.edgePadding * 2,
+                            bottom: Theme.Layout.cardInset,
+                            trailing: Theme.Layout.edgePadding * 2
+                        )
+                    )
+                    .listRowBackground(Theme.Palette.surface)
+                    .listRowSeparatorTint(Theme.Palette.hairline)
+                    .swipeActions(edge: .trailing) {
+                        leaveRoomButton(for: room)
+                    }
+                    .contextMenu {
+                        leaveRoomButton(for: room)
+                    }
+            }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Theme.Palette.background)
         .navigationDestination(for: Room.self) { room in
             RoomDetailView(
                 room: room,
@@ -533,6 +583,82 @@ struct RoomPage: View {
                 onSwitchRoom: { _ in }
             )
         }
+    }
+
+    /// One room row: the name, the live dot, and the two quiet
+    /// caption lines. The row is a `NavigationLink` so the push is
+    /// the platform's own.
+    private func roomRow(for room: Room) -> some View {
+        NavigationLink(
+            value: room
+        ) {
+            HStack(spacing: Theme.Layout.gutter) {
+                // M1.2 — session-active indicator. A
+                // small accent dot appears next to the
+                // room name when the room has an
+                // active event cached in RoomService.
+                if roomService.activeEventByRoom[room.id] != nil {
+                    Circle()
+                        .fill(Theme.Palette.accent)
+                        .frame(width: 8, height: 8)
+                        .accessibilityLabel(Text("Active session"))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(room.name)
+                        .font(Theme.Typography.title)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Text(socialProofCaption(for: room) ?? "Tap to open")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    // V0.55 — overlap badge + season-arc
+                    // preview. Two lines max, no new chrome.
+                    if let overlap = overlapLine(for: room) {
+                        Text(overlap)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.accent)
+                    }
+                    if let arc = seasonArcLine(for: room) {
+                        Text(arc)
+                            .font(Theme.Typography.monoFootnote)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                }
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture().onEnded {
+            recordLastViewed(room)
+        })
+    }
+
+    /// S3.5 — the trailing swipe action and the context-menu entry
+    /// for leaving a room. Both open the same confirmation; the
+    /// button only records which room the user picked.
+    private func leaveRoomButton(for room: Room) -> some View {
+        Button(role: .destructive) {
+            roomToLeave = room
+        } label: {
+            Label("Leave room", systemImage: "rectangle.portrait.and.arrow.right")
+        }
+    }
+
+    /// S3.5 — leaves the room and returns to the rooms list.
+    private func leaveRoom(_ room: Room) async {
+        do {
+            try await roomService.leaveRoom(roomId: room.id)
+            popToRoomsList()
+        } catch {
+            leaveError = error.localizedDescription
+        }
+    }
+
+    /// S3.5 — back to the rooms list. On iPhone the room was pushed
+    /// onto this page's stack, so emptying the path pops it; on iPad
+    /// the room is the sidebar selection.
+    private func popToRoomsList() {
+        roomsPath.removeAll()
+        selectedRoom = nil
     }
 
     private func socialProofCaption(for room: Room) -> String? {

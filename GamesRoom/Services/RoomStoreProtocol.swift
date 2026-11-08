@@ -242,6 +242,16 @@ protocol RoomStore: Sendable {
     /// Server side: `delete_room(p_room_id)` (migration 052).
     func deleteRoom(roomId: UUID) async throws
 
+    /// S3.5 — the caller leaves the room. Members leave freely; a
+    /// host may only leave when another active host remains, so the
+    /// live RPC raises `last_host` for the last host. Leaving ends
+    /// the caller's membership, so the room disappears from the
+    /// caller's own rooms list. The room itself survives for
+    /// everyone else.
+    ///
+    /// Server side: `leave_room(p_room_id)` (migration 093).
+    func leaveRoom(roomId: UUID) async throws
+
     /// Updates the room's mascot + operations + feature-toggle
     /// columns. Returns the freshly-read `Room` so the UI can
     /// mirror the server-canonical state. Throws on
@@ -663,6 +673,22 @@ enum HostKickError: Error, LocalizedError, Equatable {
             return "You can't remove yourself. Demote first, then ask another host to remove you."
         case .activeDeposit(let detail):
             return detail
+        }
+    }
+}
+
+/// S3.5 — the one guard the leave path has: a room must always
+/// have at least one host, so the last host cannot walk away. The
+/// live `leave_room` RPC raises `last_host` (P0001); the service
+/// maps that string into this case so the UI can show the same
+/// sentence it shows before the button.
+enum LeaveRoomError: Error, LocalizedError, Equatable {
+    case lastHost
+
+    var errorDescription: String? {
+        switch self {
+        case .lastHost:
+            return "Make someone else host first."
         }
     }
 }

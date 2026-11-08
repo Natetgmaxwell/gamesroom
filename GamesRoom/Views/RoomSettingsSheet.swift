@@ -50,6 +50,10 @@ struct RoomSettingsSheet: View {
     /// pop/dismiss the surrounding navigation (the room is gone from
     /// the service's rooms cache at this point).
     var onRoomDeleted: (() -> Void)?
+    /// S3.5 — invoked after a successful leave so the presenter can
+    /// pop/dismiss the surrounding navigation (the room is gone from
+    /// the service's rooms cache at this point).
+    var onRoomLeft: (() -> Void)?
     /// v1.1 — invoked after Declare season end succeeds, with the
     /// closed season, so the room page can land on its awards card.
     var onSeasonClosed: ((Season) -> Void)?
@@ -130,6 +134,18 @@ struct RoomSettingsSheet: View {
     @State private var showDeleteConfirm: Bool = false
     @State private var isDeleting: Bool = false
 
+    // S3.5 — "Leave room" state. The confirm is a destructive
+    // action (the caller's membership ends), so it goes through a
+    // `confirmationDialog` like the other destructive actions.
+    @State private var showLeaveConfirm: Bool = false
+    @State private var isLeaving: Bool = false
+    /// S3.5 — inline error for a refused leave (the last host).
+    @State private var leaveError: String?
+    /// S3.5 — true once the room roster has been read. A host may
+    /// only leave when another host remains, so the Leave row
+    /// waits for the roster instead of guessing.
+    @State private var rosterReady: Bool = false
+
     // V0.86 — member-facing calendar surface. The sheet is opened
     // from the hub (member-visible), lives outside any specific
     // room — the toggle is per-user.
@@ -146,10 +162,12 @@ struct RoomSettingsSheet: View {
     init(
         room: Room,
         onRoomDeleted: (() -> Void)? = nil,
+        onRoomLeft: (() -> Void)? = nil,
         onSeasonClosed: ((Season) -> Void)? = nil
     ) {
         self.room = room
         self.onRoomDeleted = onRoomDeleted
+        self.onRoomLeft = onRoomLeft
         self.onSeasonClosed = onSeasonClosed
         _roomName = State(initialValue: room.name)
         _mascotName = State(initialValue: room.mascotName)
@@ -225,6 +243,11 @@ struct RoomSettingsSheet: View {
                 seededShowBroughtBy = on
                 showBroughtBy = on
             }
+            // S3.5 — read the roster so the Leave row knows whether
+            // another host remains. A host may only leave when one
+            // does (the live `leave_room` refuses the last host).
+            _ = await roomService.loadRoomMembers(roomId: room.id)
+            rosterReady = true
         }
         .tint(Theme.Palette.accent)
         // V0.86 — member-facing calendar surface. The toggle is
@@ -317,11 +340,27 @@ struct RoomSettingsSheet: View {
     }
 
 
+    /// S3.5 — the hub branches on role at the top. A host gets the
+    /// full hub (social, operations, questions, casino chips,
+    /// season, delete room). A member gets only the surfaces that
+    /// are theirs: notifications, calendar, the roster (read-only),
+    /// the pack list (read-only) and Leave room. Everyone can leave
+    /// a room, so the Leave row sits at the bottom for both roles.
     @ViewBuilder
     private var hubSections: some View {
         notifAndCalendarSections
-        navLinkSection
-        statusAndSeasonSections
+        if isHost {
+            navLinkSection
+            statusAndSeasonSections
+        } else {
+            memberNavLinkSection
+        }
+        leaveRoomSection
+    }
+
+    /// S3.5 — the caller's role in this room.
+    private var isHost: Bool {
+        room.userRole == .host
     }
 
 
@@ -371,6 +410,9 @@ struct RoomSettingsSheet: View {
 
     }
 
+    /// S3.5 — the host's links: everything that writes to the room
+    /// (social, operations, questions, casino chips) plus the two
+    /// read-only links a member also gets.
     @ViewBuilder
     private var navLinkSection: some View {
                 Section {
@@ -433,29 +475,9 @@ struct RoomSettingsSheet: View {
                         .accessibilityIdentifier("settings-questions-link")
                     }
 
-                    NavigationLink {
-                        RoomSettingsMembersSheet(room: room)
-                    } label: {
-                        settingsRow(
-                            icon: Theme.Icon.person2Fill,
-                            title: "Members",
-                            detail: room.userRole == .host ? "Roster + per-member controls" : "Who's in the room"
-                        )
-                    }
+                    membersLink
 
-                    // W2.2 — F-MVP-07 pack store shell. Lists the
-                    // four packs with installed state; paid packs
-                    // land here in a future release.
-                    NavigationLink {
-                        PackStoreView(roomId: room.id)
-                            .environmentObject(roomService)
-                    } label: {
-                        settingsRow(
-                            icon: Theme.Icon.infoCircle,
-                            title: "Pack store",
-                            detail: "Browse packs, how-to guides, installed state"
-                        )
-                    }
+                    packStoreLink
 
                     // W-06 — host chip-color-map editor (US-26).
                     // Data layer (`upsert_casino_config`, migration
@@ -474,6 +496,49 @@ struct RoomSettingsSheet: View {
                     }
                 }
 
+    }
+
+    /// S3.5 — the member's links. The roster and the pack list are
+    /// read-only for a member (the sheets gate their own controls on
+    /// the host role), so a member sees what the room is without any
+    /// of the controls that would only error for them.
+    @ViewBuilder
+    private var memberNavLinkSection: some View {
+                Section {
+                    membersLink
+                    packStoreLink
+                }
+    }
+
+    /// The roster link. Members see the list; hosts see the list plus
+    /// the per-member controls.
+    private var membersLink: some View {
+        NavigationLink {
+            RoomSettingsMembersSheet(room: room)
+        } label: {
+            settingsRow(
+                icon: Theme.Icon.person2Fill,
+                title: "Members",
+                detail: room.userRole == .host ? "Roster + per-member controls" : "Who's in the room"
+            )
+        }
+    }
+
+    /// W2.2 — F-MVP-07 pack store shell. Lists the four packs with
+    /// installed state; paid packs land here in a future release.
+    /// Read-only for a member: the store lists what is installed and
+    /// opens the how-to body, it never writes.
+    private var packStoreLink: some View {
+        NavigationLink {
+            PackStoreView(roomId: room.id)
+                .environmentObject(roomService)
+        } label: {
+            settingsRow(
+                icon: Theme.Icon.infoCircle,
+                title: "Pack store",
+                detail: "Browse packs, how-to guides, installed state"
+            )
+        }
     }
 
     @ViewBuilder
@@ -600,6 +665,106 @@ struct RoomSettingsSheet: View {
                 }
     }
 
+
+    /// S3.5 — Leave room. Every role can leave: a member walks away
+    /// from a room they are in, a host walks away when another host
+    /// remains. The last host gets a grey caption instead of the
+    /// button, because the server refuses that leave (`last_host`).
+    @ViewBuilder
+    private var leaveRoomSection: some View {
+                Section {
+                    if isHost && !rosterReady {
+                        HStack {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(Theme.Palette.accent)
+                            Text("Checking the roster")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            Spacer()
+                        }
+                    } else if canLeaveRoom {
+                        Button(role: .destructive) {
+                            showLeaveConfirm = true
+                        } label: {
+                            HStack {
+                                Text("Leave room")
+                                    .font(Theme.Typography.body.weight(.semibold))
+                                Spacer()
+                                if isLeaving {
+                                    ProgressView()
+                                        .tint(.red)
+                                }
+                            }
+                        }
+                        .disabled(isLeaving)
+                    } else {
+                        Text("Make someone else host first.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                }
+                .confirmationDialog(
+                    "Leave \(room.name)?",
+                    isPresented: $showLeaveConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Leave", role: .destructive) {
+                        Task { await leaveRoom() }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Your season history stays with the room.")
+                }
+                .alert(
+                    "Couldn't leave the room",
+                    isPresented: Binding(
+                        get: { leaveError != nil },
+                        set: { if !$0 { leaveError = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text(leaveError ?? "")
+                }
+    }
+
+    /// S3.5 — the host count that decides whether the caller may
+    /// leave. A room must always keep one host, so the last host
+    /// stays. The caller's own row is excluded (`room.userRole` is
+    /// the caller's role in this room).
+    private var otherHostCount: Int {
+        let roster = roomService.cachedMembers(roomId: room.id)
+        let hosts = roster.filter { $0.role == .host }.count
+        return isHost ? max(0, hosts - 1) : hosts
+    }
+
+    /// S3.5 — a member may always leave. A host may leave when
+    /// another host remains. An empty roster means the read failed
+    /// or has not landed: the server has the final say, so the
+    /// button stays.
+    private var canLeaveRoom: Bool {
+        guard isHost else { return true }
+        let roster = roomService.cachedMembers(roomId: room.id)
+        guard !roster.isEmpty else { return true }
+        return otherHostCount > 0
+    }
+
+    /// S3.5 — leaves the room. The membership ends server-side, the
+    /// room leaves the caller's rooms list, and the sheet closes so
+    /// the caller lands back on the rooms list without it.
+    private func leaveRoom() async {
+        guard !isLeaving else { return }
+        isLeaving = true
+        defer { isLeaving = false }
+        do {
+            try await roomService.leaveRoom(roomId: room.id)
+            dismiss()
+            onRoomLeft?()
+        } catch {
+            leaveError = error.localizedDescription
+        }
+    }
 
     /// Visual row inside the hub. Shared shape; sub-sheets own
     /// the body of the form.
@@ -1198,15 +1363,10 @@ struct RoomSettingsMembersSheet: View {
                     }
                 }
             }
-            if isHost {
-                Section {
-                    if let selfRow = roster.first(where: { $0.userId == currentUserId }), selfRow.role == .host {
-                        Text("To leave the room, ask another host to demote you.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    }
-                }
-            }
+            // S3.5 — the old host-only copy here ("To leave the room,
+            // ask another host to demote you") is gone: leaving is
+            // now an action every member has, from the settings hub
+            // (and from the rooms list row).
         }
         .scrollContentBackground(.hidden)
         .background(Theme.Palette.background)

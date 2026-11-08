@@ -1127,6 +1127,51 @@ final class RoomService: ObservableObject {
         await refresh()
     }
 
+    /// S3.5 — the caller leaves the room via the `leave_room` RPC
+    /// (migration 093). Their membership ends, so the room leaves
+    /// their own rooms list; the room itself survives for everyone
+    /// else. Members leave freely; the last host cannot (the server
+    /// raises `last_host`, mapped here to `LeaveRoomError.lastHost`
+    /// so the UI can say "Make someone else host first.").
+    ///
+    /// On success: drops the room's caches, cancels the pending
+    /// briefing pushes for its nights (a member who left must not
+    /// keep getting reminders for a room they are not in) and
+    /// refreshes the rooms list.
+    func leaveRoom(roomId: UUID) async throws {
+        do {
+            try await store.leaveRoom(roomId: roomId)
+        } catch {
+            // The live RPC raises `last_host: a room must always
+            // have at least one host` (P0001). Match on the token.
+            let message = error.localizedDescription.lowercased()
+            if message.contains("last_host") {
+                self.lastError = LeaveRoomError.lastHost.errorDescription
+                throw LeaveRoomError.lastHost
+            }
+            // In-memory preview errors are already typed; rethrow.
+            if error is LeaveRoomError { throw error }
+            self.lastError = error.localizedDescription
+            throw error
+        }
+        self.lastError = nil
+        // No more reminders for a room the caller has left. This
+        // reads the cached active events, so it runs before the
+        // caches are dropped below.
+        await cancelRoomCadence(roomId: roomId)
+        // The caller is no longer a member: drop the room's caches
+        // so nothing they can still read comes back from the client.
+        activeEventByRoom[roomId] = nil
+        leaderboardByRoom[roomId] = []
+        currentSeasonByRoom[roomId] = nil
+        seasonHistoryByRoom[roomId] = []
+        membersByRoom[roomId] = []
+        for key in cacheTimestamps.keys where key.contains(roomId.uuidString) {
+            cacheTimestamps.removeValue(forKey: key)
+        }
+        await refresh()
+    }
+
     /// Updates the room's mascot + operations + feature-toggle
     /// columns. Called from `RoomSettingsSheet.writeAll()` (V0.81
     /// autosave). Returns the
