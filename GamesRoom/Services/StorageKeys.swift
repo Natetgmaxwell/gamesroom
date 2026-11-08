@@ -28,6 +28,10 @@ enum StorageKeys {
     /// photo never leaves the device.
     static let keepScanPhotos = "keepScanPhotos"
 
+    /// Lane S2: this device's calendar rows, a dictionary
+    /// eventId -> EventKit identifier (`CalendarRowStore`).
+    static let calendarRowIdentifiers = "calendarRowIdentifiers"
+
     /// V0.86 — the calendar identifier storage moved server-side
     /// (`events.event_calendar_identifier`, migration 087). iOS
     /// event UUIDs are not stable across reinstalls and the
@@ -36,9 +40,9 @@ enum StorageKeys {
     /// time I rebuild the app". The calendar identifier is now
     /// reported back via `report_calendar_identifier(p_event_id,
     /// p_identifier)` after each successful EKEvent.save().
-    /// `CalendarService` reads the identifier from the
-    /// `Event.eventCalendarIdentifier` field (server-canonical)
-    /// instead of UserDefaults.
+    /// Lane S2 (1.2.4) moved it back on device, per member:
+    /// `calendarRowIdentifiers` below. The server column held one
+    /// identifier for the whole table and is no longer read.
 
     /// V0.84 C5 — per-event member-note prompt dismissal. The
     /// prompt is local: "one tap to dismiss, no nagging, never
@@ -61,5 +65,36 @@ enum StorageKeys {
     /// a missing RPC is retried on a later room open.
     static func roomTimeZoneReported(roomId: UUID) -> String {
         "roomTimeZoneReported-\(roomId.uuidString)"
+    }
+}
+
+/// Lane S2: this device's calendar rows, eventId -> EventKit
+/// identifier, in UserDefaults. The identifier is per device, so it
+/// never goes to the server.
+enum CalendarRowStore {
+
+    /// `gamesroom://event/<eventId>`, the URL every row carries.
+    static func eventURL(eventId: UUID) -> URL? {
+        URL(string: "gamesroom://event/\(eventId.uuidString)")
+    }
+
+    static func identifier(eventId: UUID, defaults: UserDefaults = .standard) -> String? {
+        map(defaults)[eventId.uuidString]
+    }
+
+    static func set(_ identifier: String, eventId: UUID, defaults: UserDefaults = .standard) {
+        var rows = map(defaults)
+        rows[eventId.uuidString] = identifier
+        defaults.set(rows, forKey: StorageKeys.calendarRowIdentifiers)
+    }
+
+    static func remove(eventId: UUID, defaults: UserDefaults = .standard) {
+        var rows = map(defaults)
+        guard rows.removeValue(forKey: eventId.uuidString) != nil else { return }
+        defaults.set(rows, forKey: StorageKeys.calendarRowIdentifiers)
+    }
+
+    private static func map(_ defaults: UserDefaults) -> [String: String] {
+        defaults.dictionary(forKey: StorageKeys.calendarRowIdentifiers) as? [String: String] ?? [:]
     }
 }

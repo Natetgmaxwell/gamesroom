@@ -4,37 +4,25 @@
 //
 //  V0.86 — EventKit calendar auto-add (VISION.md §8).
 //
-//  The host's per-room toggle (`calendarAutoAddHost`) was retired:
-//  the EventKit identifier was stored in UserDefaults keyed by
-//  event UUID, and iOS event UUIDs are not stable across
-//  reinstalls. The toggle persisted server-side but the
-//  identifier map died: writes looked like they succeeded but
-//  update / delete couldn't find the EKEvent row.
+//  Lane S2 (1.2.4): calendar rows per member. Every member who
+//  claims a seat, with their calendar auto-add on
+//  (`Room.calendarAutoAdd`, a per-member toggle on the membership
+//  row), gets their own row; declining or releasing the seat, or
+//  leaving the room, removes it.
 //
-//  V0.86 surfaces a per-member toggle (`Room.calendarAutoAdd`).
-//  The EventKit identifier is persisted server-side in
-//  `events.event_calendar_identifier` (migration 087). The
-//  identifier survives reinstalls + device transfers — and the
-//  toggle survives a re-install because it lives on the
-//  membership row, not in the app's UserDefaults.
+//  The EventKit identifier is a per-device fact, so it lives on the
+//  device: `CalendarRowStore` keeps a dictionary eventId ->
+//  identifier in UserDefaults. The old shared column
+//  (`events.event_calendar_identifier`, migration 087) held ONE
+//  identifier for the whole table, so the second member's phone
+//  looked up the first member's row and found nothing; it is no
+//  longer read or written for lookups. A reinstall loses the map,
+//  and the next claim writes a fresh row.
 //
-//  Flow:
-//   - Member turns the toggle on in `MemberCalendarSettingsSheet`.
-//     First turn triggers `requestAccess()`; granted → write
-//     members.calendar_auto_add via `setMember_calendar_auto_add`.
-//   - RoomService.addEvent / updateEventMemberFields sees the
-//     toggle on and calls `CalendarService.addEvent / updateEvent`
-//     with the server-cached `eventCalendarIdentifier`.
-//   - After a successful EKEvent.save(), the service reports the
-//     EventKit row id back to the server via
-//     `report_calendar_identifier`. The host's calendar row is
-//     written when the host is also a member with the toggle on
-//     (no special-case for hosts).
+//  Each row carries `gamesroom://event/<eventId>` as its URL.
 //
-//  Failure is non-fatal by design: calendar writes never block
-//  the event flow. Errors collapse to `lastError` so a transient
-//  banner can surface them; the event itself is already durable
-//  server-side.
+//  Failure is non-fatal by design: calendar writes never block the
+//  seat flow. Errors collapse to `lastError`.
 //
 
 import EventKit
@@ -52,7 +40,7 @@ final class CalendarService: ObservableObject {
     private init() {}
 
     /// Requests full calendar access. Returns true when granted.
-    /// The member-facing consent prompt is triggered by this call —
+    /// The member-facing consent prompt is triggered by this call:
     /// the toggle's onChange fires it the first time the member
     /// enables auto-add.
     func requestAccess() async -> Bool {
@@ -73,91 +61,53 @@ final class CalendarService: ObservableObject {
         EKEventStore.authorizationStatus(for: .event)
     }
 
-    /// Writes the EKEvent for a room event. Triggered by the
-    /// `RoomService.addEvent` post-write path when the member's
-    /// `calendarAutoAdd` toggle is on. After a successful save,
-    /// reports the EventKit row id back to the server so the next
-    /// update / delete can find it (replaces the old UserDefaults
-    /// map keyed by event UUID).
-    func addEvent(
-        room: Room,
-        event: Event,
-        memberToggleOn: Bool,
-        reportIdentifier: ((UUID, String) async -> Void)?
-    ) async {
-        guard memberToggleOn else { return }
+    /// Adds this member's calendar row for a night, or updates it
+    /// when one is already on this device. With `createIfMissing`
+    /// false, a night with no row on this device is left alone (an
+    /// edit to a night the member has not claimed writes nothing).
+    func upsertEvent(_ event: Event, createIfMissing: Bool = true) async {
+        let known = CalendarRowStore.identifier(eventId: event.id)
+        if known == nil, !createIfMissing { return }
         guard await requestAccess() else { return }
 
-        let ekEvent = EKEvent(eventStore: store)
-        ekEvent.title = event.name
-        ekEvent.startDate = event.playedAt
-        ekEvent.endDate = event.playedAt.addingTimeInterval(2 * 3600)
-        ekEvent.calendar = store.defaultCalendarForNewEvents
-        ekEvent.notes = venueNotes(event.venue)
+        let row: EKEvent
+        if let known, let existing = store.event(withIdentifier: known) {
+            row = existing
+        } else {
+            guard createIfMissing else { return }
+            row = EKEvent(eventStore: store)
+            row.calendar = store.defaultCalendarForNewEvents
+        }
+        row.title = event.name
+        row.startDate = event.playedAt
+        row.endDate = event.playedAt.addingTimeInterval(2 * 3600)
+        row.notes = venueNotes(event.venue)
+        row.url = CalendarRowStore.eventURL(eventId: event.id)
 
         do {
-            try store.save(ekEvent, span: .thisEvent, commit: true)
+            try store.save(row, span: .thisEvent, commit: true)
             lastError = nil
-            // V0.86 — server-side identifier persistence. Reports
-            // the EventKit row id so the next update / delete can
-            // find the row without a local map. A failure here is
-            // swallowed (the calendar row is still written; the
-            // next edit will re-report).
-            if let reportIdentifier, let identifier = ekEvent.eventIdentifier {
-                await reportIdentifier(event.id, identifier)
+            if let identifier = row.eventIdentifier {
+                CalendarRowStore.set(identifier, eventId: event.id)
             }
         } catch {
             lastError = "Couldn't add to calendar: \(error.localizedDescription)"
         }
     }
 
-    /// Updates the calendar row for a room event, creating it when
-    /// no row was written before. Keeps title/start/venue in sync
-    /// with event edits. The identifier is read from the event
-    /// model (server-canonical) — no UserDefaults lookup.
-    func updateEvent(
-        room: Room,
-        event: Event,
-        memberToggleOn: Bool,
-        reportIdentifier: ((UUID, String) async -> Void)?
-    ) async {
-        guard memberToggleOn else { return }
-        guard await requestAccess() else { return }
-
-        if let identifier = event.eventCalendarIdentifier,
-           let existing = store.event(withIdentifier: identifier) {
-            existing.title = event.name
-            existing.startDate = event.playedAt
-            existing.endDate = event.playedAt.addingTimeInterval(2 * 3600)
-            existing.notes = venueNotes(event.venue)
-            do {
-                try store.save(existing, span: .thisEvent, commit: true)
-                lastError = nil
-            } catch {
-                lastError = "Couldn't update calendar event: \(error.localizedDescription)"
-            }
-        } else {
-            // No identifier on file (the event was created before
-            // the toggle was on, or a previous report failed). Fall
-            // back to creating a fresh row + reporting back.
-            await addEvent(
-                room: room,
-                event: event,
-                memberToggleOn: memberToggleOn,
-                reportIdentifier: reportIdentifier
-            )
+    /// Removes this member's calendar row for a night, if this
+    /// device wrote one. No-op otherwise.
+    func removeEvent(eventId: UUID) async {
+        guard let identifier = CalendarRowStore.identifier(eventId: eventId) else { return }
+        guard let row = store.event(withIdentifier: identifier) else {
+            // Already gone (deleted by hand, or another device's
+            // sync): forget it.
+            CalendarRowStore.remove(eventId: eventId)
+            return
         }
-    }
-
-    /// Removes the calendar row for a room event. The EventKit
-    /// row identifier is passed in (read from the server-cached
-    /// event) — no local map. No-op when no identifier was
-    /// reported yet (the event was never written to any calendar).
-    func removeEvent(eventId: UUID, identifier: String?) async {
-        guard let identifier,
-              let ekEvent = store.event(withIdentifier: identifier) else { return }
         do {
-            try store.remove(ekEvent, span: .thisEvent, commit: true)
+            try store.remove(row, span: .thisEvent, commit: true)
+            CalendarRowStore.remove(eventId: eventId)
         } catch {
             lastError = "Couldn't remove calendar event: \(error.localizedDescription)"
         }

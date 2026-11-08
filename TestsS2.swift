@@ -406,4 +406,43 @@ func runS2Tests() {
             "a request with no room or event is left alone"
         )
     }
+
+    // MARK: - Step 7: calendar rows are this device's
+
+    runner.run("S2 calendar rows are kept per event on the device") {
+        let suite = "TestsS2.calendarRows.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            runner.assertTrue(false, "could not open a scratch defaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let first = UUID(), second = UUID()
+
+        runner.assertTrue(
+            CalendarRowStore.identifier(eventId: first, defaults: defaults) == nil,
+            "no row before a claim"
+        )
+        CalendarRowStore.set("ek-1", eventId: first, defaults: defaults)
+        CalendarRowStore.set("ek-2", eventId: second, defaults: defaults)
+        runner.assertEqual(CalendarRowStore.identifier(eventId: first, defaults: defaults), "ek-1")
+        runner.assertEqual(CalendarRowStore.identifier(eventId: second, defaults: defaults), "ek-2")
+
+        CalendarRowStore.set("ek-1b", eventId: first, defaults: defaults)
+        runner.assertEqual(CalendarRowStore.identifier(eventId: first, defaults: defaults), "ek-1b")
+
+        CalendarRowStore.remove(eventId: first, defaults: defaults)
+        runner.assertTrue(
+            CalendarRowStore.identifier(eventId: first, defaults: defaults) == nil,
+            "a released seat forgets its row"
+        )
+        runner.assertEqual(CalendarRowStore.identifier(eventId: second, defaults: defaults), "ek-2")
+    }
+
+    runner.run("S2 calendar rows link back to the night") {
+        let event = UUID()
+        runner.assertEqual(
+            CalendarRowStore.eventURL(eventId: event)?.absoluteString,
+            "gamesroom://event/\(event.uuidString)"
+        )
+    }
 }

@@ -266,11 +266,8 @@ final class RoomService: ObservableObject {
             eventIds.insert(eventId)
         }
         await NotificationDispatcher.shared.purgeRoom(roomId: roomId, eventIds: eventIds)
-        for event in events {
-            await CalendarService.shared.removeEvent(
-                eventId: event.id,
-                identifier: event.eventCalendarIdentifier
-            )
+        for eventId in eventIds {
+            await CalendarService.shared.removeEvent(eventId: eventId)
         }
         activeEventByRoom.removeValue(forKey: roomId)
         membersByRoom.removeValue(forKey: roomId)
@@ -871,6 +868,9 @@ final class RoomService: ObservableObject {
         async let rsvps = loadEventRSVPs(eventId: eventId)
         async let briefing = loadBriefing(eventId: eventId)
         _ = await (rsvps, briefing)
+        // Lane S2: claim writes this member's calendar row; decline
+        // and release remove it.
+        await syncCalendarRow(eventId: eventId, claimed: row.state == .claimed)
         // Notification-etiquette fix (2026-11-04) — reschedule via
         // the single reconcile entry point for THIS device's user
         // with the row's canonical state. No roster fan-out: a
@@ -913,29 +913,20 @@ final class RoomService: ObservableObject {
         // calendar row is NOT written unless the host is also a
         // member with the toggle on (host = user, same toggle
         // applies — no special-case for hosts).
+        // Lane S2: the row is this device's, keyed locally by
+        // event id (`CalendarRowStore`), never the shared server
+        // column.
         if let room = rooms.first(where: { $0.id == roomId }), room.calendarAutoAdd {
-            let granted = await CalendarService.shared.requestAccess()
-            if granted {
-                let event = activeEventByRoom[roomId] ?? Event(
-                    id: newId,
-                    roomId: roomId,
-                    name: name,
-                    playedAt: playedAt,
-                    createdAt: Date(),
-                    packSlugs: packSlugs,
-                    packSlug: packSlugs.first ?? "casino"
-                )
-                await CalendarService.shared.addEvent(
-                    room: room,
-                    event: event,
-                    memberToggleOn: true,
-                    reportIdentifier: { eventId, identifier in
-                        try? await self.reportCalendarIdentifier(
-                            eventId: eventId, identifier: identifier
-                        )
-                    }
-                )
-            }
+            let event = activeEventByRoom[roomId] ?? Event(
+                id: newId,
+                roomId: roomId,
+                name: name,
+                playedAt: playedAt,
+                createdAt: Date(),
+                packSlugs: packSlugs,
+                packSlug: packSlugs.first ?? "casino"
+            )
+            await CalendarService.shared.upsertEvent(event)
         }
         // P1.3 — schedule the briefing trio. Notification-etiquette
         // fix (2026-11-04): the HOST's device schedules only the
@@ -970,16 +961,9 @@ final class RoomService: ObservableObject {
             if let room = rooms.first(where: { $0.id == event.roomId }),
                room.calendarAutoAdd,
                let fresh = activeEventByRoom[event.roomId] {
-                await CalendarService.shared.updateEvent(
-                    room: room,
-                    event: fresh,
-                    memberToggleOn: true,
-                    reportIdentifier: { eventId, identifier in
-                        try? await self.reportCalendarIdentifier(
-                            eventId: eventId, identifier: identifier
-                        )
-                    }
-                )
+                // Only a row this device already wrote is updated: a
+                // member who has not claimed gets no row from an edit.
+                await CalendarService.shared.upsertEvent(fresh, createIfMissing: false)
             }
         }
         // "Bring $20" and "new address" are exactly what the few-days
@@ -1000,13 +984,8 @@ final class RoomService: ObservableObject {
     /// non-host calls.
     func deleteRoom(roomId: UUID) async throws {
         for event in activeEventByRoom.values where event.roomId == roomId {
-            // V0.86 — pass the server-cached EventKit identifier
-            // (no UserDefaults lookup) so the calendar row is
-            // removed even after a reinstall.
-            await CalendarService.shared.removeEvent(
-                eventId: event.id,
-                identifier: event.eventCalendarIdentifier
-            )
+            // Lane S2: the row is looked up in this device's map.
+            await CalendarService.shared.removeEvent(eventId: event.id)
         }
         try await store.deleteRoom(roomId: roomId)
         self.lastError = nil
@@ -2033,6 +2012,7 @@ final class RoomService: ObservableObject {
             // as `.unclaimed` are cancelled and re-planned as
             // claimed (logistics only, no claim language).
             rsvpByEvent[eventId] = .claimed
+            await syncCalendarRow(eventId: eventId, claimed: true)
             await reconcileBriefing(eventId: eventId)
             return MemberRSVP(
                 id: UUID(), eventId: eventId, roomId: UUID(), memberId: UUID(),
@@ -2040,6 +2020,23 @@ final class RoomService: ObservableObject {
             )
         }
         return try await upsertEventRSVP(eventId: eventId, state: .claimed)
+    }
+
+    /// Lane S2: mirrors this member's seat into their own calendar.
+    /// A claim adds or updates the row when the member's calendar
+    /// auto-add is on; anything else removes the row this device
+    /// wrote. Best-effort, never throws.
+    private func syncCalendarRow(eventId: UUID, claimed: Bool) async {
+        guard claimed else {
+            await CalendarService.shared.removeEvent(eventId: eventId)
+            return
+        }
+        guard
+            let event = activeEventByRoom.values.first(where: { $0.id == eventId }),
+            let room = rooms.first(where: { $0.id == event.roomId }),
+            room.calendarAutoAdd
+        else { return }
+        await CalendarService.shared.upsertEvent(event)
     }
 
     /// V0.85 — host-only. The broke-member claim: seat claimed
