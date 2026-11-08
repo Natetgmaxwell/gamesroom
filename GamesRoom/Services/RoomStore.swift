@@ -807,6 +807,48 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         return id
     }
 
+    /// S3.4 — host-only. The live RPC is
+    /// `update_event_name(p_event_id, p_name)` (migration 114).
+    /// Renames the night. The server trims the name and refuses an
+    /// empty one.
+    func updateEventName(eventId: UUID, name: String) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("update_event_name", params: [
+                "p_event_id": eventId.uuidString,
+                "p_name": name
+            ])
+            .execute()
+            .value
+    }
+
+    /// S3.4 — host-only. The live RPC is
+    /// `update_event_played_at(p_event_id, p_played_at)` (migration
+    /// 114). Moves the night to a new time; the server refuses a
+    /// date in the past.
+    func updateEventPlayedAt(eventId: UUID, playedAt: Date) async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        _ = try await SupabaseClientProvider.shared
+            .rpc("update_event_played_at", params: [
+                "p_event_id": eventId.uuidString,
+                "p_played_at": formatter.string(from: playedAt)
+            ])
+            .execute()
+            .value
+    }
+
+    /// S3.4 — host-only. The live RPC is `cancel_event(p_event_id)`
+    /// (migration 114). Cancels the night: every seat deposit still
+    /// held for it returns to its owner, then the night is deleted.
+    func cancelEvent(eventId: UUID) async throws {
+        _ = try await SupabaseClientProvider.shared
+            .rpc("cancel_event", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value
+    }
+
     /// The live RPC `update_event_member_fields(p_event_id, p_note,
     /// p_venue)` (migration 050) lets any room member edit the
     /// event's pre-play note + venue. Empty strings clear the field.

@@ -23,6 +23,13 @@
 --    membership row is the truth.
 -- 3. update_event_played_at(p_event_id, p_played_at) — recreated
 --    with the same host guard and `set search_path = public`.
+-- 4. update_event_name(p_event_id, p_name) — NEW. The live database
+--    has no way to rename a night: `update_event_member_fields` only
+--    writes host_note + venue, and the events RLS update policy
+--    authorises on rooms.created_by (the room creator, not the host
+--    role on the membership row), so a host who took the room over
+--    could not rename it from the app at all. The host role lives on
+--    the membership row, so that is what this guard reads.
 --
 -- Apply via:
 --   supabase db query --linked -f Supabase/migrations/114_event_cancel.sql
@@ -31,6 +38,7 @@
 --   select pg_get_function_arguments('public.cancel_event(uuid)'::regprocedure);
 --   select pg_get_functiondef('public.delete_event(uuid)'::regprocedure);
 --   select pg_get_functiondef('public.update_event_played_at(uuid, timestamp with time zone)'::regprocedure);
+--   select pg_get_functiondef('public.update_event_name(uuid, text)'::regprocedure);
 
 begin;
 
@@ -207,6 +215,64 @@ grant execute on function public.update_event_played_at(uuid, timestamp with tim
 
 comment on function public.update_event_played_at(uuid, timestamp with time zone) is
   'S3.2 — host-only (public.is_room_host). Moves a night to a new time. The date must be in the future.';
+
+-- ---------------------------------------------------------------------------
+-- 4. update_event_name(p_event_id, p_name)
+--
+-- Renames a night. The live database has no rename path: the events
+-- update policy authorises on rooms.created_by, which is the room
+-- creator rather than the host role on the membership row, so the
+-- app could not rename a night at all. The role on the membership
+-- row is the truth, so the guard reads it.
+--
+-- The name is trimmed, and an empty name is refused rather than
+-- silently keeping the old one.
+-- ---------------------------------------------------------------------------
+create or replace function public.update_event_name(p_event_id uuid, p_name text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller  uuid := public.current_user_id();
+  v_room_id uuid;
+  v_name    text;
+begin
+  if v_caller is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+
+  select room_id into v_room_id
+  from public.events
+  where id = p_event_id;
+
+  if v_room_id is null then
+    raise exception 'Event not found' using errcode = 'P0002';
+  end if;
+
+  if not public.is_room_host(v_room_id, v_caller) then
+    raise exception 'Only the host can rename events' using errcode = '42501';
+  end if;
+
+  v_name := trim(coalesce(p_name, ''));
+  if v_name = '' then
+    raise exception 'Event name cannot be empty' using errcode = '22023';
+  end if;
+
+  update public.events
+    set name = v_name
+    where id = p_event_id;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.update_event_name(uuid, text) from public, anon;
+grant execute on function public.update_event_name(uuid, text) to authenticated, service_role;
+
+comment on function public.update_event_name(uuid, text) is
+  'S3.4 — host-only (public.is_room_host). Renames a night. The name is trimmed and cannot be empty.';
 
 commit;
 

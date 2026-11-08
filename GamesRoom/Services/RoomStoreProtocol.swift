@@ -181,6 +181,29 @@ protocol RoomStore: Sendable {
     /// briefing push. Empty by default.
     func addEvent(roomId: UUID, name: String, playedAt: Date, packSlugs: [String], hiddenFromUserIds: [UUID]) async throws -> UUID
 
+    // MARK: Event edit
+
+    /// S3.4 — host-only. Renames the night. The name is trimmed
+    /// server-side and cannot be empty.
+    ///
+    /// Server side: `update_event_name(p_event_id, p_name)`
+    /// (migration 114).
+    func updateEventName(eventId: UUID, name: String) async throws
+
+    /// S3.4 — host-only. Moves the night to a new time. The server
+    /// refuses a date in the past.
+    ///
+    /// Server side: `update_event_played_at(p_event_id, p_played_at)`
+    /// (migration 114).
+    func updateEventPlayedAt(eventId: UUID, playedAt: Date) async throws
+
+    /// S3.4 — host-only. Cancels the night: every seat deposit still
+    /// held for it goes back to its owner, then the night is
+    /// deleted. A cancelled night costs nobody their deposit.
+    ///
+    /// Server side: `cancel_event(p_event_id)` (migration 114).
+    func cancelEvent(eventId: UUID) async throws
+
     /// Any room member may edit the event's pre-play note + venue
     /// while the event is still in the future. Empty strings clear
     /// the field. Room scope derives from the event (F-IDENT-01).

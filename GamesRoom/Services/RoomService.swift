@@ -1021,21 +1021,80 @@ final class RoomService: ObservableObject {
             // T1.1 — keep the calendar row in sync with venue/note
             // edits. Reads the post-reload event so the row carries
             // the fresh values.
-            if let room = rooms.first(where: { $0.id == event.roomId }),
-               room.calendarAutoAdd,
-               let fresh = activeEventByRoom[event.roomId] {
-                await CalendarService.shared.updateEvent(
-                    room: room,
-                    event: fresh,
-                    memberToggleOn: true,
-                    reportIdentifier: { eventId, identifier in
-                        try? await self.reportCalendarIdentifier(
-                            eventId: eventId, identifier: identifier
-                        )
-                    }
+            await syncCalendarRow(roomId: event.roomId)
+        }
+    }
+
+    // MARK: - Event edit (S3.4)
+
+    /// S3.4 — host-only. Renames the night. Refreshes the
+    /// active-event cache so the briefing card shows the new name.
+    func updateEventName(eventId: UUID, name: String) async throws {
+        try await store.updateEventName(eventId: eventId, name: name)
+        self.lastError = nil
+        await refreshActiveEvent(forEvent: eventId)
+    }
+
+    /// S3.4 — host-only. Moves the night to a new time. The server
+    /// refuses a date in the past. Refreshes the active-event cache
+    /// and keeps the calendar row in step with the new time.
+    func updateEventPlayedAt(eventId: UUID, playedAt: Date) async throws {
+        try await store.updateEventPlayedAt(eventId: eventId, playedAt: playedAt)
+        self.lastError = nil
+        await refreshActiveEvent(forEvent: eventId)
+        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
+            await syncCalendarRow(roomId: event.roomId)
+        }
+    }
+
+    /// S3.4 — host-only. Cancels the night. Every seat deposit still
+    /// held for it goes back to its owner (migration 114), the
+    /// calendar row goes with it, and the night disappears from the
+    /// room. The briefing trio for the cancelled night is dropped and
+    /// the active event is reloaded, so every member's page stops
+    /// showing the night that is not happening.
+    func cancelEvent(eventId: UUID) async throws {
+        try await store.cancelEvent(eventId: eventId)
+        self.lastError = nil
+        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
+            await CalendarService.shared.removeEvent(
+                eventId: event.id,
+                identifier: event.eventCalendarIdentifier
+            )
+        }
+        rsvpByEvent.removeValue(forKey: eventId)
+        briefingByEvent.removeValue(forKey: eventId)
+        mySeatDepositByEvent.removeValue(forKey: eventId)
+        arrivalCandidatesByEvent.removeValue(forKey: eventId)
+        await eventDidChange(eventId: eventId)
+    }
+
+    /// S3.4 — force-reloads the room's active event so the page
+    /// shows the server's truth after an edit.
+    private func refreshActiveEvent(forEvent eventId: UUID) async {
+        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }) else { return }
+        cacheTimestamps.removeValue(forKey: "activeEvent:\(event.roomId.uuidString)")
+        _ = await loadActiveEvent(roomId: event.roomId, force: true)
+    }
+
+    /// S3.4 — keeps the calendar row in step with an edited night.
+    /// Reads the post-reload event so the row carries the fresh
+    /// values.
+    private func syncCalendarRow(roomId: UUID) async {
+        guard let room = rooms.first(where: { $0.id == roomId }),
+              room.calendarAutoAdd,
+              let fresh = activeEventByRoom[roomId] else { return }
+        await CalendarService.shared.updateEvent(
+            room: room,
+            event: fresh,
+            memberToggleOn: true,
+            reportIdentifier: { eventId, identifier in
+                try? await self.reportCalendarIdentifier(
+                    eventId: eventId,
+                    identifier: identifier
                 )
             }
-        }
+        )
     }
 
     // MARK: - Room settings update

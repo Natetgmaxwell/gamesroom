@@ -1667,6 +1667,102 @@ actor InMemoryRoomStore: RoomStore {
         return new.id
     }
 
+    /// S3.4 — in-memory mirror of `update_event_name(p_event_id,
+    /// p_name)` (migration 114). Renames the night. An empty name is
+    /// refused, the same way the server refuses it.
+    func updateEventName(eventId: UUID, name: String) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event name cannot be empty"]
+            )
+        }
+        events[event.roomId] = replacingEvent(event, name: trimmed)
+    }
+
+    /// S3.4 — in-memory mirror of `update_event_played_at(p_event_id,
+    /// p_played_at)` (migration 114). Moves the night. A date in the
+    /// past is refused, the same way the server refuses it.
+    func updateEventPlayedAt(eventId: UUID, playedAt: Date) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        guard playedAt > Date() else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Events must be in the future"]
+            )
+        }
+        events[event.roomId] = replacingEvent(event, playedAt: playedAt)
+    }
+
+    /// S3.4 — in-memory mirror of `cancel_event(p_event_id)`
+    /// (migration 114). Cancels the night: every seat deposit still
+    /// held for it goes back to its owner, then the night and its
+    /// rows go away. A cancelled night costs nobody their deposit.
+    func cancelEvent(eventId: UUID) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        let held = seatDepositsByEventMember[eventId] ?? [:]
+        for (memberId, deposit) in held where deposit.status == .held {
+            seatDepositsByEventMember[eventId]?[memberId] = SeatDeposit(
+                id: deposit.id, amount: deposit.amount, status: .returned, heldAt: deposit.heldAt
+            )
+        }
+        events.removeValue(forKey: event.roomId)
+        briefings.removeValue(forKey: eventId)
+        rsvps.removeValue(forKey: eventId)
+        arrivalCandidatesByEvent.removeValue(forKey: eventId)
+        seatDepositsByEventMember.removeValue(forKey: eventId)
+        eventMutes.removeValue(forKey: eventId)
+    }
+
+    /// S3.4 — rebuilds an event row with the fields the edit paths
+    /// touch, leaving the rest of the row alone.
+    private func replacingEvent(
+        _ event: Event,
+        name: String? = nil,
+        playedAt: Date? = nil
+    ) -> Event {
+        Event(
+            id: event.id,
+            roomId: event.roomId,
+            name: name ?? event.name,
+            playedAt: playedAt ?? event.playedAt,
+            createdAt: event.createdAt,
+            venue: event.venue,
+            hostNote: event.hostNote,
+            maxSeats: event.maxSeats,
+            startedAt: event.startedAt,
+            settledAt: event.settledAt,
+            sessionId: event.sessionId,
+            packSlugs: event.packSlugs,
+            packSlug: event.packSlug,
+            hostFinalized: event.hostFinalized,
+            eventCalendarIdentifier: event.eventCalendarIdentifier,
+            hiddenFromUserIds: event.hiddenFromUserIds
+        )
+    }
+
     /// In-memory mirror of `update_event_member_fields` (migration
     /// 050). Mutates the seeded event's note + venue so previews
     /// reflect the edit.

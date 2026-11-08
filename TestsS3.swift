@@ -2,17 +2,19 @@
 //  TestsS3.swift
 //  GamesRoom
 //
-//  S3 — "common-sense flows" lane, step 3: release, decline, a full
-//  night.
+//  S3 — "common-sense flows" lane: step 3 (release, decline, a full
+//  night) and step 4 (edit and cancel a night).
 //
 //  The rules under test are the ones the client can hold itself to
 //  without a server: the seat escrow mirror (the in-memory store is
-//  the same contract the live `release_seat` RPC implements) and the
-//  seat-count arithmetic behind "All N seats are taken."
+//  the same contract the live `release_seat` RPC implements), the
+//  seat-count arithmetic behind "All N seats are taken.", and the
+//  edit / cancel mirrors of migration 114.
 //
 //  Every case here is a store-contract case: the live path is the
-//  SQL in `Supabase/migrations/113_seat_flows.sql`, and the
-//  in-memory store is the client-side mirror of it.
+//  SQL in `Supabase/migrations/113_seat_flows.sql` and
+//  `Supabase/migrations/114_event_cancel.sql`, and the in-memory
+//  store is the client-side mirror of it.
 //
 
 import Foundation
@@ -160,5 +162,126 @@ func runS3Tests(_ runner: TestRunner) {
         let after = try await store.fetchBriefing(eventId: event.id)
         runner.assertEqual(after?.seatsClaimed ?? -1, baseClaimed)
         runner.assertEqual(after?.seatsDeclined ?? -1, baseDeclined + 1)
+    }
+
+    // MARK: - S3.4 — editing and cancelling a night
+
+    runner.runAsync("InMemoryRoomStore.updateEventName renames the night (S3.4)") {
+        let store = InMemoryRoomStore()
+        let hosted = try await store.fetchRooms().first!
+        guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+            runner.assertTrue(false, "seeded room has an active event")
+            return
+        }
+
+        try await store.updateEventName(eventId: event.id, name: "  Poker night  ")
+
+        let renamed = try await store.fetchActiveEvent(roomId: hosted.id)
+        runner.assertEqual(renamed?.name, "Poker night")
+        runner.assertEqual(renamed?.id, event.id)
+    }
+
+    runner.runAsync("InMemoryRoomStore.updateEventName refuses an empty name (S3.4)") {
+        let store = InMemoryRoomStore()
+        let hosted = try await store.fetchRooms().first!
+        guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+            runner.assertTrue(false, "seeded room has an active event")
+            return
+        }
+
+        do {
+            try await store.updateEventName(eventId: event.id, name: "   ")
+            runner.assertTrue(false, "an empty name was accepted")
+        } catch {
+            runner.assertTrue(
+                try await store.fetchActiveEvent(roomId: hosted.id)?.name == event.name,
+                "the night keeps its name"
+            )
+        }
+    }
+
+    runner.runAsync("InMemoryRoomStore.updateEventPlayedAt moves the night (S3.4)") {
+        let store = InMemoryRoomStore()
+        let hosted = try await store.fetchRooms().first!
+        guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+            runner.assertTrue(false, "seeded room has an active event")
+            return
+        }
+        let moved = event.playedAt.addingTimeInterval(86_400)
+
+        try await store.updateEventPlayedAt(eventId: event.id, playedAt: moved)
+
+        let stored = try await store.fetchActiveEvent(roomId: hosted.id)?.playedAt
+        runner.assertTrue(
+            abs((stored ?? .distantPast).timeIntervalSince(moved)) < 1,
+            "the night moved to the new time"
+        )
+    }
+
+    runner.runAsync("InMemoryRoomStore.updateEventPlayedAt refuses the past (S3.4)") {
+        let store = InMemoryRoomStore()
+        let hosted = try await store.fetchRooms().first!
+        guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+            runner.assertTrue(false, "seeded room has an active event")
+            return
+        }
+
+        do {
+            try await store.updateEventPlayedAt(eventId: event.id, playedAt: Date().addingTimeInterval(-3_600))
+            runner.assertTrue(false, "a date in the past was accepted")
+        } catch {
+            runner.assertTrue(
+                try await store.fetchActiveEvent(roomId: hosted.id)?.playedAt == event.playedAt,
+                "the night keeps its time"
+            )
+        }
+    }
+
+    runner.runAsync("InMemoryRoomStore.cancelEvent takes the night away (S3.4)") {
+        let store = InMemoryRoomStore()
+        let hosted = try await store.fetchRooms().first!
+        guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+            runner.assertTrue(false, "seeded room has an active event")
+            return
+        }
+
+        try await store.claimSeatWithDeposit(eventId: event.id)
+        runner.assertEqual(
+            try await store.fetchMySeatDeposit(eventId: event.id)?.status,
+            SeatDeposit.Status.held
+        )
+
+        try await store.cancelEvent(eventId: event.id)
+
+        runner.assertNil(
+            try await store.fetchActiveEvent(roomId: hosted.id),
+            "the night is gone"
+        )
+        runner.assertNil(
+            try await store.fetchMySeatDeposit(eventId: event.id),
+            "no deposit is left held for a night that is not happening"
+        )
+        runner.assertTrue(
+            try await store.loadArrivalCandidates(eventId: event.id).isEmpty,
+            "a cancelled night has no arrival list"
+        )
+    }
+
+    runner.runAsync("InMemoryRoomStore.cancelEvent on a night that is gone throws (S3.4)") {
+        let store = InMemoryRoomStore()
+        let hosted = try await store.fetchRooms().first!
+        guard let event = try await store.fetchActiveEvent(roomId: hosted.id) else {
+            runner.assertTrue(false, "seeded room has an active event")
+            return
+        }
+
+        try await store.cancelEvent(eventId: event.id)
+
+        do {
+            try await store.cancelEvent(eventId: event.id)
+            runner.assertTrue(false, "cancelling a night that is gone was accepted")
+        } catch {
+            runner.assertTrue(true)
+        }
     }
 }
