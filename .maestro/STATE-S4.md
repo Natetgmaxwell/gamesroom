@@ -1,65 +1,92 @@
 # STATE S4
 
-STATE: step 4 of 9 done. Next: step 5.
+STATE: step 5 of 9 done. Next: step 6.
 
 BLOCKED: none
 
 Ticks are in .maestro/briefs/BRIEF-S4.md (tick the checkbox there too).
 
-## Step 4 notes (S4.4: one card chrome; ArrivalCard single inset, commit 0eacf31)
+## Step 5 notes (S4.5: list text shares one leading edge, commit 3ece3d8)
 
-One card shape (#1, #2, #20). Styling only: no logic, string, condition or
-view-order changes. Every card on the room page is now a `sectionCard`:
-radius `cardRadius` (12), 0.5pt hairline, surface or hero fill.
+Shared left edges (#5, #14, #23, #29). Styling only: no logic, string,
+condition, view-order or file-structure changes. The rule now applied
+everywhere on the room page and the settings screens: an icon/rank column
+of `Theme.Layout.rowIconWidth` (28) followed by a `Theme.Layout.cardInset`
+(16) gap, so every name in an icon-bearing row starts at x=44 from its
+card's inner edge.
 
+- `Components/LeaderboardRow.swift` (#5) — the standings row's HStack gap
+  was a literal 12 and the rank column a literal 24 wide, putting the
+  name at x=36. Now `HStack(spacing: Theme.Layout.cardInset)` and
+  `.frame(width: Theme.Layout.rowIconWidth, alignment: .leading)` on the
+  rank badge: the name starts at 44, matching Packs and Members.
 - `RoomDetailView.swift`
-  - `BriefingSlot` (:2053) — its own chrome (`.padding(cardInset)` plus a
-    radius-14 / 1pt-stroke `RoundedRectangle` fill) is gone, replaced by
-    `.sectionCard(isHero ? .hero : .standard)`. Same fill logic (hero =
-    accent 10% wash, standard = surface); only the radius (14 -> 12), the
-    stroke (1 -> 0.5) and the clip change, so the most prominent card on
-    the page no longer has the heaviest outline.
-  - `WitnessSlot` (:2631) — the identical change on the live card. Both
-    slots previously drew chrome that did not match `sectionCard`, so the
-    room page had two card shapes on one screen.
-- `ArrivalCard.swift` (#1, the double-inset bug that survived fb2cd19)
-  - The row's `.padding(Theme.Layout.cardInset)` (:133) is deleted. The
-    caller already wraps the card in `.sectionCard(.standard)`, which
-    insets by 16, so the host's arrival text sat 32pt in from the card
-    edge while every other card sits at 16.
-  - The inner bordered box (`surface` fill + 0.5pt rounded stroke +
-    `clipShape`) is dropped: the rows now sit on the card's own surface
-    with a `Divider()` between them, like `StandingsSection` does.
-  - Header is now `SectionTitle(text: "Arrivals")` — the title-size
-    icon+text heading is gone, so the card reads with the same hierarchy
-    as every other section header. The grey explainer ("Held deposits
-    waiting on a check-in. You decide what comes back.") is no longer
-    printed on the card: it is the header's `accessibilityHint`, so
-    VoiceOver hosts still get the line.
-  - Spacing on tokens: card body `cardInset` -> `cardGroupGap`, candidate
-    row `8` -> `cardGroupGap` (text block to its action row), button row
-    `8` -> `cardLineGap` (peer buttons), exactly as finding #1's Fix says.
-  - The Forfeit / Skip: texted / Skip: away buttons are untouched: their
-    copy, order and per-candidate actions are the card's logic, not
-    styling. `Theme.Icon.handRaisedFill` is now unused by the app but is
-    left in Theme.swift (a token, not a literal).
-- `QuestionBoxViews.swift` (#20) — `HostQuestionFallback` is a
-  `.sectionCard(.standard)` now, not a hand-rolled 1pt-stroke box; the
-  two `spacing: 6` become `cardLineGap`. The `host-question-fallback`
-  identifier and the inner identifiers are unchanged, so
-  `GamesRoomUITests/QuestionBoxAcceptanceTests.swift` still finds the
-  button.
+  - `packRow` (:3639) — `HStack(spacing: Theme.Layout.gutter)` (32) plus
+    a 32pt icon put the pack name at x=64, twice the standings name.
+    Now `cardInset` + `rowIconWidth`: x=44.
+  - `memberRow` (:4181) — same change; the monogram avatar was a 32x32
+    circle and is now `rowIconWidth` square (28), so the roster names
+    land on the same 44 as the standings.
+  - `AwardRow` (:3266) (#29) — the award icon had no fixed width, so
+    "Felty" (flame) and "Borat" (cluster) started at different x. The
+    icon now sits in a `rowIconWidth` column and the row's HStack gap is
+    `cardInset`, so both names start at 44.
+  - Awards card divider (:3170) (#29) — the hairline between award rows
+    now starts under the row text
+    (`.padding(.leading, rowIconWidth + cardInset)`), so the rule and
+    the names share a left edge instead of the rule starting at the
+    card's inner edge.
+- `Components/DrowningBadge.swift` (#23, #29) — the drowning row is a
+  sibling of `AwardRow` inside the same awards list, so it had to move
+  with it or the list would have two left edges: the icon gets the
+  `rowIconWidth` column, the HStack gap becomes `cardInset`, and the
+  opt-in toggle and viewer footnote indent from the magic 28 to
+  `rowIconWidth + cardInset` (44) so they still sit under the row text.
+- `RoomSettingsSheet.swift` (#23) — both settings rows (the "My
+  calendar" trigger at :349 and `settingsRow(icon:title:detail:)` at
+  :607) drop `Theme.Layout.gutter` for `Theme.Layout.cardInset`, and
+  their icon frames become `rowIconWidth` instead of a literal 28. The
+  trailing "···" menu (:1372) narrows from a literal 32 to
+  `rowIconWidth`; because the glyph is trailing-aligned inside that
+  frame it does not move, only the invisible leading strip of the frame
+  is 4pt narrower.
+- `PackStoreView.swift` (#23) — the store row had the same 32pt icon and
+  `gutter` gap as the room page's pack shelf; it now uses
+  `rowIconWidth` + `cardInset`, so the store and the shelf agree.
+- `RoomPage.swift` (#14) — the Rooms list row and the iPad sidebar row
+  now always reserve the live-dot column: the `if active { Circle() }`
+  became one circle whose fill is the accent when the room is live and
+  `Color.clear` when it is not, so a room name no longer jumps right
+  when the room goes live. The row gap is `Theme.Layout.cardLineGap * 2`
+  (8) instead of `gutter` (32), so the dot sits 8pt from the name
+  instead of floating. The dot keeps its "Active session" accessibility
+  label when the room is live and is `accessibilityHidden` when it is
+  not, so VoiceOver does not announce a live session for an idle room.
+
+Residual, deliberately left alone (outside this step's list): the room
+page's rows that have no icon column — round history, notes and the
+season comparison rows — still start at their container's left edge
+(x=0 relative to the card), so the page still shows two leading edges
+(0 for those, 44 for icon-bearing rows). The audit's #5 fix only asks
+for the icon gap to change; indenting the icon-less rows would be a
+larger visual move than the brief sanctions. Noted here for the S4
+report.
 
 Gate: `bash .maestro/fastgate.sh` -> FASTGATE: PASS (302 unit cases,
 parse-check 64/64). Also type-checked the whole app source tree against
 the iOS 27 simulator SDK with the cached Supabase module
-(`swiftc -typecheck`): 0 errors, only pre-existing warnings. Verified the
-check is real by planting a deliberate type error in `ArrivalCard.swift`
-(caught: "missing argument label 'text:'", then reverted).
+(`swiftc -typecheck`, deployment target 26.0): 0 errors. Verified the
+check is real by planting a deliberate type error in
+`LeaderboardRow.swift` (caught: "cannot convert value of type 'String' to
+specified type 'Int'", then reverted).
 
-Next iteration is step 5 only: shared left edges (#5, #14, #23, #29) —
-icon/rank columns `frame(width: Theme.Layout.rowIconWidth)` with
-`HStack(spacing: Theme.Layout.cardInset)` in standings, pack shelf,
-members, award rows, settings rows; the Rooms list always reserves the
-live-dot column. `Theme.Layout.rowIconWidth` (28) already exists from
-step 1.
+Next iteration is step 6 only: rhythm (#6, #8-#13, #15-#18) —
+AwardsCard VStack to `cardGroupGap` with inner `cardLineGap`, delete
+the four `.padding(.top, 4)` bumps; the five headers onto `SectionTitle`;
+claimed-card caption+button grouped with `cardLineGap`; member-note
+prompt and declined state onto `cardGroupGap` with the field inset
+`Theme.Layout.fieldInset` and Send as a `PrimaryButtonStyle`;
+SystemBanner rows onto `roomRowInset` with `cardLineGap`/`cardInset`;
+inner 2/3/6 gaps to `cardLineGap`; LeaderboardRow sparkline pad to
+`cardLineGap`; Rooms page onto `roomSectionGap`/`roomHeaderGap`/
+`roomRowInset` with `SectionTitle` instead of `sectionHeader`.
