@@ -1,6 +1,6 @@
 # STATE S1
 
-STATE: step 4 of 8 done. Next: step 5.
+STATE: step 5 of 8 done. Next: step 6.
 
 BLOCKED: none
 
@@ -47,5 +47,12 @@ Notes for step 4 (live card follows NightPlan):
 - Extras beyond the plan, both pack-driven: "Withdraw more" once chips are in hand; "Count your CAH cards" when CAH is picked and the plan's own line is not the CAH count.
 - `Score a round` with 2+ scorable packs opens `confirmationDialog("Score which game?")`; the chosen slug goes to `HostScoreEntrySheet` via `HostScoreTarget`. iPad dashboard only when the chosen pack is the headline pack (the dashboard scores `event.packSlug`). Sheet dismiss forces a refresh so the round count moves the host on to Settle.
 - Settle / Plan next are stubs in this commit; step 5 wires them.
+
+Notes for step 5 (settle with Undo, plan next):
+- Commit `4d8b674`. Fastgate: 321 cases passed, 65 parse-check, `FASTGATE: PASS`. Extra: `swiftc -typecheck` of `GamesRoom/`, zero errors.
+- `Settle the night`: `RoomService.setCachedSettledAt` stamps the cached event (recap renders at once), bottom toast `Night settled.` + `Undo` for 5 s; `Undo` cancels the timer and clears the stamp, nothing sent. After 5 s `settleEvent`; success = `Haptics.success()`, `ScoreLiveActivityDriver.endNight(roomName:)` (new public wrapper over the private `end`), forced reload of active event, leaderboard, season. Failure reverts and the live card shows grey `Couldn't settle. Try again.` (host only).
+- `Plan the next night`: accent button under the CeremonialCard when NightPlan gives the host `planNextNight`; opens AddEventSheet with `initialPlayedAt` = tonight + 7 days (new `init(roomId:initialPlayedAt:onSaved:)`, seeds the date only). `.justSettled` only renders while the cached active event IS the settled night, i.e. no future night is known, so the offer follows the one-upcoming-event rule as far as the client can see.
+- `.settleRound` state, its `hostFinalized` branch and the `Count what's on the table` header removed. `hostFinalized` is still read by the mascot inputs (untouched).
+- OPEN FOR TARS (not blocking): migration 107 ranks a settled-within-24h night ABOVE a future night, so for 24h after a settle `get_active_event` never returns a night that already exists in the future (e.g. one scheduled before the settle). The client cannot see it, so `Plan the next night` can still show and the add would hit the one-upcoming index. Your step-7 recap design (next night primary, recap above it) needs the server to return the future night; step 7 implements it client-side for the host who plans the night on this device (see step 7 notes). The full fix is a 107 tweak (rank future above settled; the client keeps the recap from its own cache), which I did not make because you said not to change 107.
 
 Ticks are in .maestro/briefs/BRIEF-S1.md (tick the checkbox there too).
