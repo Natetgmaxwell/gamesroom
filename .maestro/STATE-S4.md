@@ -1,6 +1,6 @@
 # STATE S4
 
-STATE: step 0 of 9 done. Next: step 1.
+STATE: step 1 of 9 done. Next: step 2.
 
 BLOCKED: none
 
