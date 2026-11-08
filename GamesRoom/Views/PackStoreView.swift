@@ -66,19 +66,19 @@ struct PackStoreView: View {
         Button {
             packDetailType = pack
         } label: {
-            HStack(spacing: Theme.Layout.gutter) {
+            HStack(spacing: Theme.Layout.cardInset) {
                 Image(systemName: pack.iconSystemName)
                     .accessibilityHidden(true)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
-                    .frame(width: 32)
+                    .frame(width: Theme.Layout.rowIconWidth)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(pack.displayName)
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.primaryText)
                     Text(pack.description)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                         .lineLimit(2)
                 }
                 Spacer()
@@ -86,7 +86,7 @@ struct PackStoreView: View {
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(enabledSlugs.contains(pack.slug)
                         ? Theme.Palette.accent
-                        : Theme.Palette.primaryText.opacity(0.45))
+                        : Theme.Palette.tertiaryText)
             }
             .padding(.vertical, 4)
         }

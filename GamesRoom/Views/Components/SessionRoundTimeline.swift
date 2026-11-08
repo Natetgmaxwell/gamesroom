@@ -57,7 +57,7 @@ struct SessionRoundTimeline: View {
                 .foregroundStyle(Theme.Palette.primaryText)
             Text("\(sortedRounds.count)")
                 .font(Theme.Typography.monoCaption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
                 .accessibilityLabel(Text("\(sortedRounds.count) rounds logged"))
         }
         .accessibilityElement(children: .combine)
@@ -87,7 +87,7 @@ struct SessionRoundTimeline: View {
     private var emptyState: some View {
         Text("No rounds logged yet")
             .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            .foregroundStyle(Theme.Palette.secondaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 8)
     }
@@ -137,7 +137,7 @@ private struct SessionRoundTimelineRow: View {
                 HStack(spacing: 6) {
                     Text(displayName(entry.memberId))
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.labelText)
                     Text(deltaLabel(entry.pointsDelta))
                         .font(Theme.Typography.monoCaption)
                         .foregroundStyle(deltaColor(entry.pointsDelta))
@@ -149,11 +149,11 @@ private struct SessionRoundTimelineRow: View {
     private var correctedChip: some View {
         Text("corrected")
             .font(Theme.Typography.footnote)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            .foregroundStyle(Theme.Palette.secondaryText)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .overlay(
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
                     .stroke(Theme.Palette.hairline, lineWidth: 0.5)
             )
             .accessibilityLabel(Text("This round corrects a previous submission"))
@@ -163,7 +163,7 @@ private struct SessionRoundTimelineRow: View {
         Button(action: onDelete) {
             Image(systemName: Theme.Icon.trashFill)
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
                 .frame(width: 32, height: 32)
                 .contentShape(Rectangle())
         }
@@ -179,7 +179,7 @@ private struct SessionRoundTimelineRow: View {
     }
 
     private func deltaColor(_ delta: Int64) -> Color {
-        delta < 0 ? Theme.Palette.primaryText.opacity(0.6) : Theme.Palette.accent
+        delta < 0 ? Theme.Palette.secondaryText : Theme.Palette.accent
     }
 
     private var accessibilityLabel: String {

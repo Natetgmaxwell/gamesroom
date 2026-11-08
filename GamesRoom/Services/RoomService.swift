@@ -942,61 +942,6 @@ final class RoomService: ObservableObject {
         _ = await (rsvps, briefing)
     }
 
-    /// P1.3 — re-schedules the event's briefing trio (T-48h and
-    /// morning-of logistics nudges) with the current per-member
-    /// cadence. The dispatcher's `cancelBriefingTrio` followed by
-    /// `scheduleBriefingTrio` is idempotent at the UN layer (the
-    /// dispatcher uses stable per-(event, cadence, user)
-    /// identifiers).
-    ///
-    /// S3.3 — split out of `upsertEventRSVP` so the escrow paths
-    /// (which write through `claim_seat_with_deposit` /
-    /// `release_seat` and never touch `upsert_event_rsvp`) push the
-    /// same cadence the plain RSVP path pushes.
-    func rescheduleBriefingTrio(
-        eventId: UUID,
-        callerState: MemberRSVPState,
-        callerMemberId: UUID? = nil
-    ) async {
-        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }) else { return }
-        let room = rooms.first(where: { $0.id == event.roomId })
-        let roster = membersByRoom[event.roomId] ?? []
-        var cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
-            acc[member.userId] = rsvpByEvent[event.id] ?? .unclaimed
-        }
-        // The just-written state is canonical — overwrite the
-        // caller's own cadence so the dispatcher fires for them,
-        // not against the stale `.unclaimed` default.
-        if let callerMemberId {
-            cadence[callerMemberId] = callerState
-        }
-        let optedInMemberIds = Set(
-            roster.filter { $0.notificationsEnabled }.map(\.userId)
-        )
-        let mutedMemberIds = Set(
-            cachedEventRSVPs(eventId: event.id)
-                .filter { $0.notificationsMuted }
-                .map(\.memberId)
-        )
-        await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
-        await NotificationDispatcher.shared.scheduleBriefingTrio(
-            eventId: event.id,
-            eventName: event.name,
-            playedAt: event.playedAt,
-            mascotName: room?.mascotName ?? "Your mascot",
-            perMemberCadence: cadence,
-            memberNameById: Dictionary(
-                uniqueKeysWithValues: roster.map { ($0.userId, $0.displayName) }
-            ),
-            optedInMemberIds: optedInMemberIds,
-            mutedMemberIds: mutedMemberIds,
-            hostNote: event.hostNote,
-            mascotPersonality: room?.mascotPersonality ?? .friendly,
-            mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist,
-            mascotState: .idle
-        )
-    }
-
     // MARK: - Event create
 
     /// Creates a new event in a room. Called from `AddEventSheet`.
@@ -1141,10 +1086,7 @@ final class RoomService: ObservableObject {
         try await store.cancelEvent(eventId: eventId)
         self.lastError = nil
         if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
-            await CalendarService.shared.removeEvent(
-                eventId: event.id,
-                identifier: event.eventCalendarIdentifier
-            )
+            await CalendarService.shared.removeEvent(eventId: event.id)
         }
         rsvpByEvent.removeValue(forKey: eventId)
         briefingByEvent.removeValue(forKey: eventId)
@@ -1168,17 +1110,11 @@ final class RoomService: ObservableObject {
         guard let room = rooms.first(where: { $0.id == roomId }),
               room.calendarAutoAdd,
               let fresh = activeEventByRoom[roomId] else { return }
-        await CalendarService.shared.updateEvent(
-            room: room,
-            event: fresh,
-            memberToggleOn: true,
-            reportIdentifier: { eventId, identifier in
-                try? await self.reportCalendarIdentifier(
-                    eventId: eventId,
-                    identifier: identifier
-                )
-            }
-        )
+        // Lane S2 owns the per-device calendar rows: one EventKit
+        // identifier per (event, device) in UserDefaults, written by
+        // `upsertEvent`. An edit only refreshes a row this device
+        // already wrote, so a member who has not claimed gets none.
+        await CalendarService.shared.upsertEvent(fresh, createIfMissing: false)
     }
 
     // MARK: - Room settings update

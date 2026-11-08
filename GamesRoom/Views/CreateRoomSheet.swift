@@ -85,10 +85,10 @@ struct CreateRoomSheet: View {
                             Spacer()
                             Text("\(resolvedMascotName) · \(joinStartingBonus) pts")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                             Image(systemName: Theme.Icon.chevronRight)
                                 .font(Theme.Typography.caption.weight(.semibold))
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                                .foregroundStyle(Theme.Palette.tertiaryText)
                                 .rotationEffect(.degrees(showCustomise ? 90 : 0))
                                 .accessibilityHidden(true)
                         }

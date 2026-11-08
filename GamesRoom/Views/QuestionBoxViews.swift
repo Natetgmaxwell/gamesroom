@@ -80,11 +80,11 @@ struct ClaimedCardAskField: View {
         initial: String,
         submit: @escaping (String) async -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             Text(label)
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            HStack(spacing: 8) {
+                .foregroundStyle(Theme.Palette.secondaryText)
+            HStack(spacing: Theme.Layout.cardLineGap) {
                 TextField(placeholder, text: $text)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -101,9 +101,8 @@ struct ClaimedCardAskField: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline))
+            .padding(Theme.Layout.fieldInset)
+            .overlay(RoundedRectangle(cornerRadius: Theme.Layout.smallRadius).stroke(Theme.Palette.hairline))
         }
         .onAppear { reseed(seed, initial) }
         .onChange(of: seed) { _, newSeed in reseed(newSeed, initial) }
@@ -138,55 +137,64 @@ struct QuestionReaderCard: View {
     @State private var light = SpeakingLightController(torch: AVTorch())
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        // v1.2.4 S4.7 — the reader card is on the system now. Its
+        // margin is the app's full-screen margin (`gutter`), the
+        // question wears the app's display serif (`displayLarge`), and
+        // the card's groups sit `roomSectionGap` apart. The question
+        // block itself is one group: the ritual line, the question and
+        // its two meta lines sit `cardLineGap` apart.
+        VStack(alignment: .leading, spacing: Theme.Layout.roomSectionGap) {
             Text("You're asking.")
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.accent)
                 .accessibilityIdentifier("reader-card-title")
             Spacer(minLength: 0)
-            Text(QuestionTurn.ritualLine)
-                .font(Theme.Typography.body.weight(.semibold))
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-            Text(turn.questionText)
-                .font(.system(size: 34, weight: .semibold, design: .serif))
-                .foregroundStyle(Theme.Palette.primaryText)
-                .minimumScaleFactor(0.5)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("reader-card-question")
-            if let askedBy = turn.askedBy {
-                Text("asked by \(askedBy)")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                Text(QuestionTurn.ritualLine)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.labelText)
+                Text(turn.questionText)
+                    .font(Theme.Typography.displayLarge)
+                    .foregroundStyle(Theme.Palette.primaryText)
+                    .minimumScaleFactor(0.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("reader-card-question")
             }
-            if let line = turn.answerFirstLine {
-                Text(line)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            // TARS review: the question and its meta lines are two groups,
+            // so "Pick who answers first" no longer sits on the question.
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                if let askedBy = turn.askedBy {
+                    Text("asked by \(askedBy)")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                }
+                if let line = turn.answerFirstLine {
+                    Text(line)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.labelText)
+                }
+            }
             }
             Spacer(minLength: 0)
-            HStack(spacing: 12) {
+            // v1.2.4 S4.7 — one primary action per screen: Done is the
+            // app's one primary button, full width, and Pass is the app's
+            // one secondary underneath it. They are no longer two
+            // equal-weight halves of a row.
+            VStack(spacing: Theme.Layout.cardGroupGap) {
                 Button(action: close(onDone, haptic: Haptics.success)) {
                     Text("Done")
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(PrimaryButtonStyle())
                 .accessibilityIdentifier("reader-card-done")
-                Button(action: close(onPass, haptic: Haptics.light)) {
-                    Text("Pass")
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.hairline))
-                }
-                .accessibilityIdentifier("reader-card-pass")
+                // v1.2.4 S4.3 — the pass is the app's one secondary
+                // style: a grey caption, no outline box, so it stops
+                // reading as a peer of the Done primary.
+                SecondaryTextAction(title: "Pass", action: close(onPass, haptic: Haptics.light))
+                    .accessibilityIdentifier("reader-card-pass")
             }
         }
-        .padding(28)
+        .padding(Theme.Layout.gutter)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(Theme.Palette.background.ignoresSafeArea())
         .onAppear { light.cardOpened(settingEnabled: turn.speakingLight) }
@@ -209,8 +217,8 @@ struct HostQuestionFallback: View {
 
     var body: some View {
         Button { withAnimation { revealed.toggle() } } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                HStack(spacing: Theme.Layout.cardLineGap) {
                     Image(systemName: Theme.Icon.bubbleLeftAndBubbleRightFill)
                     Text("\(turn.readerDisplayName)'s asking")
                         .accessibilityIdentifier("host-fallback-reader")
@@ -227,13 +235,11 @@ struct HostQuestionFallback: View {
                         .accessibilityIdentifier("host-fallback-question")
                 }
             }
-            .padding(Theme.Layout.cardInset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Theme.Palette.surface)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.hairline))
-            )
+            // v1.2.4 S4.4 — one card shape: the host fallback's
+            // hand-rolled 1pt-stroke box is now a `sectionCard`, so it
+            // matches the cards around it.
+            .sectionCard(.standard)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("host-question-fallback")
@@ -324,7 +330,7 @@ struct QuestionBoxSettingsView: View {
                 }
             }
             if let error {
-                Section { Text(error).foregroundStyle(.red.opacity(0.85)) }
+                Section { Text(error).foregroundStyle(Theme.Palette.loss) }
             }
         }
         .navigationTitle("Questions")
@@ -403,16 +409,16 @@ struct QuestionBoxEditorView: View {
     }
 
     private func row(_ q: RoomQuestion) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             Text(q.text)
                 .font(Theme.Typography.body)
-            HStack(spacing: 6) {
+            HStack(spacing: Theme.Layout.cardLineGap) {
                 if let tag = q.tag { Text(tag.rawValue) }
                 if q.source == .member, let author = q.authorDisplayName { Text("from \(author)") }
                 if q.source == .host { Text("host") }
             }
             .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.5))
+            .foregroundStyle(Theme.Palette.secondaryText)
         }
         .contentShape(Rectangle())
     }
@@ -439,7 +445,7 @@ private struct QuestionEditSheet: View {
                     Text("None").tag(QuestionTag?.none)
                     ForEach(QuestionTag.allCases, id: \.self) { Text($0.rawValue).tag(QuestionTag?.some($0)) }
                 }
-                if let error { Text(error).foregroundStyle(.red.opacity(0.85)) }
+                if let error { Text(error).foregroundStyle(Theme.Palette.loss) }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

@@ -378,7 +378,7 @@ struct RoomPage: View {
                 } else {
                     Text("Select a room")
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
         }
@@ -417,17 +417,17 @@ struct RoomPage: View {
             Button {
                 showingAppSettings = true
             } label: {
-                HStack(spacing: Theme.Layout.gutter) {
+                HStack(spacing: Theme.Layout.cardInset) {
                     Image(systemName: "gearshape")
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.labelText)
                     Text("App Settings")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
                     Spacer()
                 }
                 .padding(.horizontal, Theme.Layout.edgePadding)
-                .padding(.vertical, 12)
+                .padding(.vertical, Theme.Layout.roomRowInset)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -455,7 +455,7 @@ struct RoomPage: View {
                         .tint(Theme.Palette.accent)
                     Text("Loading rooms…")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if roomService.rooms.isEmpty {
@@ -505,7 +505,7 @@ struct RoomPage: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(socialProofCaption(for: room) ?? "Tap to open")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
     }
@@ -522,7 +522,7 @@ struct RoomPage: View {
                     .tint(Theme.Palette.accent)
                 Text("Loading rooms…")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if roomService.rooms.isEmpty {
@@ -646,11 +646,11 @@ struct RoomPage: View {
                     // time ("Fri 7:30pm").
                     Text(schedule ?? proof ?? "Tap to open")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                     if let proof, schedule != nil {
                         Text(proof)
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     // V0.55 — overlap badge + season-arc
                     // preview. Two lines max, no new chrome.
@@ -662,7 +662,7 @@ struct RoomPage: View {
                     if let arc = seasonArcLine(for: room) {
                         Text(arc)
                             .font(Theme.Typography.monoFootnote)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                 }
                 Spacer()
@@ -806,14 +806,19 @@ struct RoomPage: View {
     // MARK: - Last-viewed hero
 
     private func lastViewedHero(for room: Room) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            Text("Continue")
-                .font(Theme.Typography.footnote)
-                .foregroundStyle(Theme.Palette.accent)
+        // v1.2.4 S4.6 — the hero's own lines (eyebrow, room name,
+        // status) are one block `cardLineGap` apart; the Resume button
+        // starts the next group `cardGroupGap` below. The eyebrow is
+        // now the app's `SectionTitle`, so every section header on
+        // every screen reads the same.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                SectionTitle(text: "Continue")
 
-            Text(room.name)
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
+                Text(room.name)
+                    .font(Theme.Typography.title)
+                    .foregroundStyle(Theme.Palette.primaryText)
+            }
 
             // Live state is derived from the active-event cache, NOT
             // from the stored Room.isLive field. The stored field
@@ -835,21 +840,15 @@ struct RoomPage: View {
                     .frame(width: 8, height: 8)
                 Text(isLive ? "Live now" : "Last opened")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 Spacer(minLength: 8)
                 Text(room.mascotName)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
 
             NavigationLink(value: room) {
                 Text("Resume")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
         }
@@ -858,16 +857,15 @@ struct RoomPage: View {
 
     // MARK: - Section header
 
+    /// v1.2.4 S4.6 — the header is the app's `SectionTitle` (one header
+    /// style for every section); only the room count is this view's own.
     private func sectionHeader(_ title: String) -> some View {
         HStack {
-            Text(title)
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                .accessibilityAddTraits(.isHeader)
+            SectionTitle(text: title)
             Spacer()
             Text("\(roomService.rooms.count)")
                 .font(Theme.Typography.monoFootnote)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.40))
+                .foregroundStyle(Theme.Palette.tertiaryText)
         }
         .padding(.horizontal, Theme.Layout.edgePadding)
     }
@@ -875,7 +873,13 @@ struct RoomPage: View {
     // MARK: - Empty state
 
     private var emptyState: some View {
-        VStack(spacing: Theme.Layout.cardInset) {
+        // v1.2.4 S4.6 — one margin. The empty state used to pad
+        // `edgePadding` on top of `contentColumn`'s own padding, inset
+        // the subhead by a further `gutter` (64 from the edge) and cap
+        // both buttons at 320. Now the column owns the margin, the
+        // buttons are full width of it, and the groups sit
+        // `cardGroupGap` apart.
+        VStack(spacing: Theme.Layout.cardGroupGap) {
             Spacer(minLength: 0)
 
             Text(emptyHeadline)
@@ -897,13 +901,12 @@ struct RoomPage: View {
                     .background(Theme.Palette.accent)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.plain)
-            .padding(.top, 8)
+            .buttonStyle(PrimaryButtonStyle())
 
             Button(action: openCreateRoom) {
                 Text("Starting your own games night? Create a room")
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    .foregroundStyle(Theme.Palette.labelText)
                     .frame(maxWidth: 320)
                     .padding(.vertical, 12)
                     .multilineTextAlignment(.center)
@@ -913,7 +916,6 @@ struct RoomPage: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Theme.Layout.edgePadding)
         .contentColumn()
     }
 

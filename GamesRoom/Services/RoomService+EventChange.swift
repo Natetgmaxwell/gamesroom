@@ -45,9 +45,9 @@ extension RoomService {
         // no longer the room's active event: nothing to re-schedule.
         guard let live = reloaded, live.id == eventId else { return }
 
-        await rescheduleBriefingTrio(
-            eventId: eventId,
-            callerState: rsvpByEvent[eventId] ?? .unclaimed
-        )
+        // Lane S2 owns reminder scheduling: ONE reconcile entry point
+        // for this device's signed-in user, planned from their
+        // canonical seat state. No roster fan-out.
+        await reconcileBriefing(eventId: eventId)
     }
 }

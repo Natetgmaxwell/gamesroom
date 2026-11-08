@@ -24,7 +24,7 @@ struct PackDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
                     header
                     if let howTo {
                         summaryBlock(howTo)
@@ -52,52 +52,54 @@ struct PackDetailView: View {
 
     @ViewBuilder
     private var header: some View {
-        HStack(spacing: 12) {
+        // v1.2.4 S4.7 — the nav title already carries the pack name,
+        // so the header no longer prints it a second time. What is
+        // left is the pack's mark and its scoring type: the icon wears
+        // the app's title face (scaled up) and the label sits
+        // `cardInset` from it.
+        HStack(spacing: Theme.Layout.cardInset) {
             Image(systemName: pack.iconSystemName)
                 .accessibilityHidden(true)
-                .font(.system(size: 36))
+                .font(Theme.Typography.title)
+                .imageScale(.large)
                 .foregroundStyle(Theme.Palette.accent)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(pack.displayName)
-                    .font(Theme.Typography.title.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Text(pack.scoringType.displayLabel)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            }
+            Text(pack.scoringType.displayLabel)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.secondaryText)
             Spacer()
         }
     }
 
     @ViewBuilder
     private func summaryBlock(_ howTo: PackHowTo) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             Text(howTo.headline)
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText)
             Text(howTo.summary)
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                .foregroundStyle(Theme.Palette.bodyMuted)
         }
     }
 
     @ViewBuilder
     private func sectionBlock(_ section: PackHowTo.Section) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        // v1.2.4 S4.7 — the ad-hoc 4pt top bump is gone: the outer
+        // stack's `cardGroupGap` is the only gap between two sections.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             Text(section.title)
                 .font(Theme.Typography.body.weight(.semibold))
                 .foregroundStyle(Theme.Palette.primaryText)
             Text(section.body)
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                .foregroundStyle(Theme.Palette.bodyMuted)
         }
-        .padding(.top, 4)
     }
 
     @ViewBuilder
     private var placeholder: some View {
         Text(pack.description)
             .font(Theme.Typography.body)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            .foregroundStyle(Theme.Palette.labelText)
     }
 }

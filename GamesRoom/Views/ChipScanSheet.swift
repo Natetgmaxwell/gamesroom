@@ -116,7 +116,13 @@ struct ChipScanSheet: View {
     // MARK: - Camera
 
     private var cameraView: some View {
-        VStack(spacing: 16) {
+        // v1.2.4 S4.7 — the scan sheet is on the system now. One
+        // `edgePadding` inset for the whole flow (the camera and the
+        // caption block share it), the camera and the caption block
+        // `cardGroupGap` apart, the caption lines `cardLineGap` apart,
+        // the button the app's one primary, and the sheet's bottom
+        // inset `roomSectionGap`.
+        VStack(spacing: Theme.Layout.cardGroupGap) {
             ZStack {
                 ScanCameraView(controller: camera)
                 switch camera.state {
@@ -126,68 +132,68 @@ struct ChipScanSheet: View {
                     EmptyView()
                 }
                 if isUploading {
-                    VStack(spacing: 12) {
+                    VStack(spacing: Theme.Layout.cardLineGap) {
                         ProgressView()
                             .tint(.white)
                             .scaleEffect(1.4)
                         Text("Counting chips…")
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black.opacity(0.45))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(Theme.Palette.background.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.cardRadius))
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal, Theme.Layout.gutter)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.cardRadius))
             .frame(maxHeight: .infinity)
 
-            VStack(spacing: 8) {
+            VStack(spacing: Theme.Layout.cardLineGap) {
                 Text("Settling your Casino hand, you brought \(withdrawn) pts. Scan what's left on the table.")
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent)
+                    .multilineTextAlignment(.center)
                 Text("Point at your chip stack")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .multilineTextAlignment(.center)
                 Text("Hold steady, then tap the shutter.")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                    .multilineTextAlignment(.center)
 
                 if let errorMessage {
                     Text(errorMessage)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(.red.opacity(0.85))
-                }
-
-                if !isUploading {
-                    Button {
-                        capture()
-                    } label: {
-                        Text("Scan chips")
-                            .font(Theme.Typography.body.weight(.medium))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    .disabled(camera.state != .running)
+                        .foregroundStyle(Theme.Palette.loss)
+                        .multilineTextAlignment(.center)
                 }
             }
-            .padding(.horizontal, Theme.Layout.gutter)
-            .padding(.bottom, 24)
+
+            if !isUploading {
+                Button {
+                    capture()
+                } label: {
+                    Text("Scan chips")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(camera.state != .running)
+            }
         }
+        .padding(.horizontal, Theme.Layout.edgePadding)
+        .padding(.bottom, Theme.Layout.roomSectionGap)
     }
 
     /// V0.71 — permission-refused / no-camera surface.
     @ViewBuilder
     private var cameraFallbackView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Theme.Layout.cardLineGap) {
             if camera.state == .denied {
                 Text("Camera access is off.")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .multilineTextAlignment(.center)
                 Button("Open Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
@@ -198,9 +204,10 @@ struct ChipScanSheet: View {
                 Text("No camera available on this device.")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .multilineTextAlignment(.center)
             }
         }
-        .padding(24)
+        .padding(Theme.Layout.sectionSpacing)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Palette.background)
     }
@@ -209,32 +216,32 @@ struct ChipScanSheet: View {
 
     private func resultView(result: ScanSettleChipsResult) -> some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text("Your chips: \(displayedTotal) pts")
                     .font(Theme.Typography.display)
                     .foregroundStyle(Theme.Palette.primaryText)
                     .contentTransition(.numericText())
                     .animation(reduceMotion ? nil : Theme.Motion.popIn, value: displayedTotal)
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Layout.cardLineGap) {
                     Text("Counted by the table's vision service · counts are final")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 Text("Withdrew: \(withdrawn) pts")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 Text("Net: \(netDelta >= 0 ? "+" : "")\(netDelta) pts")
                     .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(netDelta >= 0 ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
+                    .foregroundStyle(netDelta >= 0 ? Theme.Palette.accent : Theme.Palette.labelText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Theme.Layout.gutter)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
+            .padding(.horizontal, Theme.Layout.edgePadding)
+            .padding(.top, Theme.Layout.roomSectionGap)
+            .padding(.bottom, Theme.Layout.roomRowInset)
 
             Divider()
                 .background(Theme.Palette.hairline)
-                .padding(.horizontal, Theme.Layout.gutter)
+                .padding(.horizontal, Theme.Layout.edgePadding)
 
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -246,50 +253,42 @@ struct ChipScanSheet: View {
 
             Divider()
                 .background(Theme.Palette.hairline)
-                .padding(.horizontal, Theme.Layout.gutter)
+                .padding(.horizontal, Theme.Layout.edgePadding)
 
-            VStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Text("Attempt \(result.attempt) of \(ScanSettleService.maxAttempts)")
-                    if result.attemptsRemaining == 0 {
-                        Text("· last scan")
+            // v1.2.4 S4.7 — the footer's caption lines are one group
+            // (`cardLineGap`), the Done button is the next group
+            // (`cardGroupGap`) and is the app's one primary, and
+            // "Re-scan" is the app's one secondary under it.
+            VStack(spacing: Theme.Layout.cardGroupGap) {
+                VStack(spacing: Theme.Layout.cardLineGap) {
+                    HStack(spacing: Theme.Layout.cardLineGap) {
+                        Text("Attempt \(result.attempt) of \(ScanSettleService.maxAttempts)")
+                        if result.attemptsRemaining == 0 {
+                            Text("· last scan")
+                        }
                     }
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                    Text("Photo \(String(result.photoHash.prefix(8)))…")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                    Text("Your photo is analysed by a cloud vision model and never stored.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                Text("Photo \(String(result.photoHash.prefix(8)))…")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                Text("Your photo is analysed by a cloud vision model and never stored.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 
                 Button(action: { Task { await done() } }) {
                     Text("Done")
-                        .font(Theme.Typography.body.weight(.medium))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+                .buttonStyle(PrimaryButtonStyle())
 
                 if result.attemptsRemaining > 0 {
-                    Button {
-                        resetForRescan()
-                    } label: {
-                        Text("Re-scan")
-                            .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                    }
-                    .buttonStyle(.plain)
+                    SecondaryTextAction(title: "Re-scan", action: resetForRescan)
                 }
             }
-            .padding(.horizontal, Theme.Layout.gutter)
-            .padding(.vertical, 16)
+            .padding(.horizontal, Theme.Layout.edgePadding)
+            .padding(.top, Theme.Layout.roomSectionGap)
+            .padding(.bottom, Theme.Layout.roomSectionGap)
         }
     }
 
@@ -297,7 +296,7 @@ struct ChipScanSheet: View {
         let chipColor = ChipColor(rawValue: stack.color.lowercased())
         let displayName = chipColor?.displayName ?? stack.color.capitalized
         let value = chipColor?.defaultValue ?? 0
-        return HStack(spacing: 12) {
+        return HStack(spacing: Theme.Layout.cardInset) {
             Circle()
                 .fill(swiftUIColor(for: chipColor))
                 .frame(width: 24, height: 24)
@@ -307,19 +306,19 @@ struct ChipScanSheet: View {
                         .foregroundStyle(chipColor == .white ? .black : .white)
                 )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text("\(displayName) stack")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text("\(stack.count) × \(value) pts")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
 
             Spacer()
         }
-        .padding(.horizontal, Theme.Layout.gutter)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Theme.Layout.edgePadding)
+        .padding(.vertical, Theme.Layout.roomRowInset)
     }
 
     private func swiftUIColor(for chipColor: ChipColor?) -> Color {

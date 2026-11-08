@@ -59,17 +59,14 @@ struct ArrivalCard: View {
     @State private var pendingKeep: SeatDepositCandidate?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            HStack(spacing: 8) {
-                Image(systemName: Theme.Icon.handRaisedFill)
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Arrivals")
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.primaryText)
-            }
-            Text("Held deposits waiting on a check-in. You decide what comes back.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            // v1.2.4 S4.4 — one card shape. The title-size icon+text
+            // header is now the app's `SectionTitle`, and the grey
+            // explainer is no longer printed on the card: it rides the
+            // header's accessibility hint instead, so sighted hosts
+            // read the card and VoiceOver hosts get the same line.
+            SectionTitle(text: "Arrivals")
+                .accessibilityHint("Held deposits waiting on a check-in. You decide what comes back.")
             VStack(spacing: 0) {
                 ForEach(candidates) { candidate in
                     candidateRow(candidate)
@@ -79,12 +76,6 @@ struct ArrivalCard: View {
                     }
                 }
             }
-            .background(Theme.Palette.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .confirmationDialog(
@@ -114,7 +105,7 @@ struct ArrivalCard: View {
 
     @ViewBuilder
     private func candidateRow(_ candidate: SeatDepositCandidate) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
             Text(
                 ArrivalPromptVoice.promptLine(
                     mascotName: room.mascotName,
@@ -124,16 +115,13 @@ struct ArrivalCard: View {
             )
             .font(Theme.Typography.body)
             .foregroundStyle(Theme.Palette.primaryText)
-            // S3.7 — two plain text actions, no filled button. The
-            // grey one gives the deposit back; the red one keeps
-            // it and asks first.
-            HStack(spacing: 16) {
+            HStack(spacing: Theme.Layout.cardLineGap) {
                 Button {
                     Task { await onGiveBack(candidate) }
                 } label: {
                     Text("Give it back")
                         .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Give back \(candidate.displayName)'s \(candidate.depositAmount) CC deposit"))
@@ -149,7 +137,10 @@ struct ArrivalCard: View {
                 .accessibilityLabel(Text("Keep \(candidate.displayName)'s \(candidate.depositAmount) CC deposit"))
             }
         }
-        .padding(Theme.Layout.cardInset)
+        // v1.2.4 S4.4 — the row's own 16pt inset is gone: the card
+        // insets its content by 16 already, so the row text used to
+        // sit 32pt in from the card edge while every other card sits
+        // at 16.
     }
 }
 

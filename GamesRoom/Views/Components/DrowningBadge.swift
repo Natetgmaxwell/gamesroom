@@ -46,26 +46,31 @@ struct DrowningBadge: View {
     private var iconName: String { "drop.fill" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
+        // v1.2.4 S4.6 — the drowning row is a sibling of `AwardRow` in
+        // the same awards list, so it takes the same rhythm: the
+        // lines of the row sit `cardLineGap` apart and the row itself
+        // takes the page's `roomRowInset`.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+            HStack(spacing: Theme.Layout.cardInset) {
                 Image(systemName: iconName)
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                    .foregroundStyle(Theme.Palette.secondaryText)
+                    .frame(width: Theme.Layout.rowIconWidth)
+                VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                    HStack(spacing: Theme.Layout.cardLineGap) {
                         Text(award.recipientDisplayName)
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.primaryText)
                         Text("·")
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                            .foregroundStyle(Theme.Palette.tertiaryText)
                         Text("Drowning")
                             .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     if let caption = award.caption, !caption.isEmpty {
                         Text(caption)
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                 }
                 Spacer()
@@ -81,7 +86,7 @@ struct DrowningBadge: View {
                 viewerFootnote
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, Theme.Layout.roomRowInset)
     }
 
     @ViewBuilder
@@ -95,18 +100,18 @@ struct DrowningBadge: View {
                     .font(Theme.Typography.caption.weight(.semibold))
                 Text("Members who opt in can see this row. Off by default.")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
         .tint(Theme.Palette.accent)
-        .padding(.leading, 28)  // align under the row text, past the icon
+        .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)  // align under the row text, past the icon
     }
 
     @ViewBuilder
     private var viewerFootnote: some View {
         Text("Visible because you've opted in to Drowning shares.")
             .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            .padding(.leading, 28)
+            .foregroundStyle(Theme.Palette.secondaryText)
+            .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
     }
 }

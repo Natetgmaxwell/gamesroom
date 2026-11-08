@@ -75,7 +75,7 @@ struct MascotConfigSection: View {
 
                 Text("\(personality.displayName) · \(ideology.displayName)")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.6))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)

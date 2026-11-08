@@ -108,7 +108,7 @@ struct HostScoreEntrySheet: View {
                                 .tint(Theme.Palette.accent)
                             Text("Loading members…")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                         }
                     } else {
                         memberChipTray
@@ -239,11 +239,11 @@ struct HostScoreEntrySheet: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius)
                     .fill(isSelected ? Theme.Palette.accent.opacity(0.14) : Theme.Palette.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius)
                     .stroke(isSelected ? Theme.Palette.accent : Theme.Palette.hairline, lineWidth: isSelected ? 1.5 : 0.5)
             )
         }

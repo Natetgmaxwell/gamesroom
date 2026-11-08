@@ -659,7 +659,7 @@ struct RoomDetailView: View {
                         Button { dismissSeasonAwards(season) } label: {
                             Text("Done")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: .infinity)
                         }
@@ -774,7 +774,7 @@ struct RoomDetailView: View {
                                 )
                             )
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                             .padding(.horizontal, Theme.Layout.cardInset)
                         }
                     }
@@ -1166,15 +1166,16 @@ struct RoomDetailView: View {
                 // the host's "Add an event" action, which stays true
                 // at any night count.
                 if leaderboard.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(isHost ? "No nights on the books yet" : "Standings")
-                            .font(Theme.Typography.title)
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        if !isHost {
-                            Text("The ledger fills in after your first night.")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                        }
+                    // v1.2.4 S4.6 — one header style and one rhythm. The
+                    // heading is now the app's `SectionTitle`, and the
+                    // member's grey line rides the header's accessibility
+                    // hint instead of printing under it as a second
+                    // hierarchy level. The card's groups sit
+                    // `cardGroupGap` apart.
+                    VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+                        SectionTitle(text: isHost ? "No nights on the books yet" : "Standings")
+                            .padding(.bottom, Theme.Layout.roomHeaderGap)
+                            .accessibilityHint(isHost ? "" : "The ledger fills in after your first night.")
                         if isHost {
                             hostHeroActions
                         }
@@ -1205,14 +1206,8 @@ struct RoomDetailView: View {
                 Image(systemName: Theme.Icon.plus)
                 Text("Add an event")
             }
-            .font(Theme.Typography.body.weight(.semibold))
-            .foregroundStyle(Theme.Palette.background)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(Theme.Palette.accent)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PrimaryButtonStyle())
         .padding(.top, 4)
     }
 
@@ -1233,7 +1228,7 @@ struct RoomDetailView: View {
             } label: {
                 Text("Add a night")
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    .foregroundStyle(Theme.Palette.labelText)
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
             }
@@ -1241,7 +1236,7 @@ struct RoomDetailView: View {
             if let heroCodeError {
                 Text(heroCodeError)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
             }
@@ -2378,12 +2373,12 @@ private struct BriefingSlot: View {
                 // v1.2 S2 — seat count lives in the tile grid below.
                 Text("\(event.playedAt, format: .dateTime.weekday().day().month().hour().minute())")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
 
                 if let venue = event.venue, !venue.isEmpty {
                     Text(venue)
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.labelText)
                 }
             }
 
@@ -2391,7 +2386,7 @@ private struct BriefingSlot: View {
             if let hostNote = event.hostNote, !hostNote.isEmpty {
                 Text(hostNote)
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                    .foregroundStyle(Theme.Palette.bodyMuted)
             }
 
             // (3) "Edit details" — W2.4 member-side event edit.
@@ -2443,7 +2438,7 @@ private struct BriefingSlot: View {
                     if isNightFull {
                         Text("All \(event.maxSeats) seats are taken.")
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                     } else {
@@ -2470,7 +2465,7 @@ private struct BriefingSlot: View {
                     Button(action: onDecline) {
                         Text("Can't make it")
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                     }
@@ -2520,20 +2515,20 @@ private struct BriefingSlot: View {
                        room.seatDepositTrigger == .escrow,
                        event.playedAt <= Date(),
                        let onCheckIn {
-                        Text("Tap when you walk in and your deposit comes straight back.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                        Button(action: onCheckIn) {
-                            Text("I'm here. Reclaim \(deposit.amount) CC")
-                                .font(Theme.Typography.body.weight(.semibold))
-                                .foregroundStyle(Theme.Palette.background)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Theme.Palette.accent)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        // v1.2.4 S4.6 — the explainer and the button it
+                        // explains are one group, so they sit
+                        // `cardLineGap` apart instead of a full
+                        // `cardGroupGap` away from each other.
+                        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                            Text("Tap when you walk in and your deposit comes straight back.")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.secondaryText)
+                            Button(action: onCheckIn) {
+                                Text("I'm here. Reclaim \(deposit.amount) CC")
+                            }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .accessibilityLabel(Text("Check in and reclaim the \(deposit.amount) CC seat deposit"))
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Text("Check in and reclaim the \(deposit.amount) CC seat deposit"))
                     }
                     // 2026-08-10 feedback round — a claimed seat is
                     // not terminal: the member can release it and
@@ -2553,12 +2548,12 @@ private struct BriefingSlot: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Layout.cardInset)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(isHero ? Theme.Palette.accent.opacity(0.10) : Theme.Palette.surface)
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
-        )
+        // v1.2.4 S4.4 — one card shape. The slot used to draw its own
+        // chrome (radius 14, 1pt hairline) on top of its content; it
+        // is now a `sectionCard`, so the briefing card, the live card
+        // and every other card on the room page share one radius, one
+        // stroke weight and one fill.
+        .sectionCard(isHero ? .hero : .standard)
         .appearTransition()
         // v1.2.2 S6 T3 — the "Who's coming" list that used to sit
         // here also owned the load of the event's Currently Into
@@ -2589,47 +2584,38 @@ private struct V0StateReEntryPills: View {
     var body: some View {
         // v1.2 S2 — one primary per card state: Re-accept carries
         // the fill; Re-decline is the trailing text secondary.
-        VStack(alignment: .leading, spacing: 8) {
+        // v1.2.4 S4.6 — the declined state's groups sit
+        // `cardGroupGap` apart (the ad-hoc 8 was neither step).
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
             Text("You said you can\'t make it.")
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
             Button(action: onReAccept) {
                 Text("Re-accept")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+            .buttonStyle(PrimaryButtonStyle())
             TrailingTextAction(title: "Re-decline", action: onReDecline)
         }
     }
 }
 
 /// v1.2 S2 — the plain grey text action every card state uses for
-/// its non-primary verb: trailing-aligned, chevron, no box chrome.
-/// Exactly one brass-filled primary per card state; everything
-/// else on the card is this.
+/// its non-primary verb. Exactly one brass-filled primary per card
+/// state; everything else on the card is this.
+///
+/// v1.2.4 S4.3 — the card's secondary is now the app's one
+/// secondary style: a centred grey caption with no chevron and no
+/// chrome, sitting under the primary. The old trailing-aligned
+/// chevron version put this action at the card's right edge while
+/// the unclaimed card centred the same verb, so a one-tap state
+/// change moved the secondary across the card. The component stays
+/// (call sites are unchanged) and now renders `SecondaryTextAction`.
 private struct TrailingTextAction: View {
     let title: String
     let action: () -> Void
 
     var body: some View {
-        HStack {
-            Spacer()
-            Button(action: action) {
-                HStack(spacing: 4) {
-                    Text(title)
-                    Image(systemName: Theme.Icon.chevronRight)
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .accessibilityHidden(true)
-                }
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-            }
-            .buttonStyle(.plain)
-        }
+        SecondaryTextAction(title: title, action: action)
     }
 }
 
@@ -2716,7 +2702,7 @@ private struct UnconsumedMemberNotesSection: View {
                     VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                         Text("\(room.mascotName): \(note.memberDisplayName) left a note for next time.")
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                         Text(note.noteText)
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Palette.primaryText)
@@ -2727,7 +2713,7 @@ private struct UnconsumedMemberNotesSection: View {
                 Button(action: { onDone(capturedIds) }) {
                     Text("Done reading")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 .buttonStyle(.plain)
             }
@@ -2847,14 +2833,17 @@ private struct SeatGridRow: View {
                 Haptics.light()
                 popoverMemberId = rsvp.memberId
             } label: {
-                VStack(spacing: 3) {
+                // v1.2.4 S4.6 — the chair and its initial are two
+                // lines of one cell: `cardLineGap` (4), not the
+                // ad-hoc 3.
+                VStack(spacing: Theme.Layout.cardLineGap) {
                     Image(systemName: Theme.Icon.chairFill)
                         .font(Theme.Typography.body)
-                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
+                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.bodyMuted)
                         .accessibilityHidden(true)
                     Text(initial(for: rsvp.displayName))
                         .font(Theme.Typography.footnote.weight(.semibold))
-                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.labelText)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, minHeight: 52)
@@ -2881,10 +2870,10 @@ private struct SeatGridRow: View {
                     .presentationCompactAdaptation(.popover)
             }
         } else {
-            VStack(spacing: 3) {
+            VStack(spacing: Theme.Layout.cardLineGap) {
                 Image(systemName: Theme.Icon.chair)
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
                     .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, minHeight: 52)
@@ -2905,7 +2894,7 @@ private struct SeatGridRow: View {
             if let line = caption(for: rsvp) {
                 Text(line)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .accessibilityIdentifier("seat-popover-\(rsvp.displayName)")
             }
         }
@@ -3039,6 +3028,10 @@ private struct WitnessSlot: View {
             // the badge back to pending — those chips haven't been
             // counted, and the next scan settles the whole delta.
             if let workingHand, workingHand > 0 {
+                // v1.2.4 S4.7 — the pill is gone. The live card carries
+                // no chips: the state is a plain accent caption, so its
+                // text starts on the card's leading edge like every
+                // other line in the card.
                 if hasScanned, let scannedValue, scannedValue == workingHand {
                     // icon and its own label belong together, so
                     // they sit `cardLineGap` apart (was an ad-hoc 6).
@@ -3046,12 +3039,8 @@ private struct WitnessSlot: View {
                         Image(systemName: Theme.Icon.checkmarkCircleFill)
                         Text("Counted: \(scannedValue) pts, settled")
                     }
-                    .font(Theme.Typography.caption.weight(.semibold))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Theme.Palette.accent.opacity(0.12))
-                    .clipShape(Capsule())
                     .accessibilityLabel(Text("Chips counted: \(scannedValue) points, settled"))
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 } else {
@@ -3059,36 +3048,35 @@ private struct WitnessSlot: View {
                         Image(systemName: Theme.Icon.handPointUpFill)
                         Text("Working hand: \(workingHand) pts")
                     }
-                    .font(Theme.Typography.caption.weight(.semibold))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Theme.Palette.accent.opacity(0.12))
-                    .clipShape(Capsule())
                     .accessibilityLabel(Text("Working hand: \(workingHand) pts"))
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 }
             }
 
             if !attestations.isEmpty {
-                ForEach(attestations) { s in
-                    // v1.2.2 S6 T7 — one reading is one group, so
-                    // the rows keep `cardGroupGap` between them (via
-                    // the outer stack) and the `6` here is the row's
-                    // own vertical inset, not a step between groups.
-                    // The `8` inside the row is inert: it sits
-                    // either side of the `Spacer` that pushes the
-                    // amount to the trailing edge.
-                    HStack(spacing: 8) {
-                        Text(s.contextLabel)
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        Spacer()
-                        Text(s.visionAmountPoints >= 0 ? "+\(s.visionAmountPoints)" : "\(s.visionAmountPoints)")
-                            .font(Theme.Typography.mono)
-                            .foregroundStyle(s.visionAmountPoints >= 0 ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.55))
+                // v1.2.4 S4.7 — the readings are list rows, the same
+                // shape as the system banner: each one takes the
+                // page's `roomRowInset`, a hairline separates two of
+                // them, and the stack's own spacing is 0 so the
+                // hairline touches neither row.
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(attestations) { s in
+                        HStack(spacing: Theme.Layout.cardLineGap) {
+                            Text(s.contextLabel)
+                                .font(Theme.Typography.body)
+                                .foregroundStyle(Theme.Palette.primaryText)
+                            Spacer()
+                            Text(s.visionAmountPoints >= 0 ? "+\(s.visionAmountPoints)" : "\(s.visionAmountPoints)")
+                                .font(Theme.Typography.mono)
+                                .foregroundStyle(s.visionAmountPoints >= 0 ? Theme.Palette.accent : Theme.Palette.secondaryText)
+                        }
+                        .padding(.vertical, Theme.Layout.roomRowInset)
+                        if s.id != attestations.last?.id {
+                            Divider().overlay(Theme.Palette.hairline)
+                        }
                     }
-                    .padding(.vertical, 6)
                 }
             }
 
@@ -3097,7 +3085,7 @@ private struct WitnessSlot: View {
                     if let lead = primary.lead {
                         Text(lead)
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                     }
@@ -3118,7 +3106,7 @@ private struct WitnessSlot: View {
                     case .caption:
                         Text(primary.title)
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                             .accessibilityLabel(Text(primary.title))
@@ -3129,7 +3117,7 @@ private struct WitnessSlot: View {
             if let note {
                 Text(note)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
@@ -3144,7 +3132,7 @@ private struct WitnessSlot: View {
                         Button(action: line.action) {
                             Text(line.title)
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: .infinity)
                         }
@@ -3157,12 +3145,11 @@ private struct WitnessSlot: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Layout.cardInset)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(isHero ? Theme.Palette.accent.opacity(0.10) : Theme.Palette.surface)
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
-        )
+        // v1.2.4 S4.4 — one card shape, same change as the briefing
+        // card above: the live card's own radius-14 / 1pt-stroke
+        // chrome is gone and the card is a `sectionCard` like every
+        // other card on the page.
+        .sectionCard(isHero ? .hero : .standard)
         .appearTransition()
         // V0.70 — drive the working-hand badge pop-in and the
         // secondary CTAs' fade-in from one place. Closures aren't
@@ -3248,23 +3235,18 @@ private struct CeremonialCard: View {
     /// `TonightStarCallSheet`. Rendered inside `TonightStarSection`'s
     /// label row when there is a star, on its own trailing row when
     /// there isn't. No chrome of its own — same type scale, same grey.
+    ///
+    /// v1.2.4 S4.3 — the trailing chevron is gone and the action is
+    /// the app's one secondary style: a centred grey caption, no
+    /// chrome. The `make-a-call` identifier stays for the UI sweep.
     private var makeACallAction: (() -> Void)? {
         guard canMakeACall else { return nil }
         return { showingCallSheet = true }
     }
 
     private var makeACallButton: some View {
-        Button { showingCallSheet = true } label: {
-            HStack(spacing: 4) {
-                Text("Make a call")
-                Image(systemName: Theme.Icon.chevronRight)
-                    .accessibilityHidden(true)
-            }
-            .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("make-a-call")
+        SecondaryTextAction(title: "Make a call") { showingCallSheet = true }
+            .accessibilityIdentifier("make-a-call")
     }
 
     var body: some View {
@@ -3285,7 +3267,7 @@ private struct CeremonialCard: View {
                 if let settledCaption {
                     Text(settledCaption)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -3298,6 +3280,10 @@ private struct CeremonialCard: View {
             // `TonightStarSection` so the quote gets the full card
             // width; with no star to sit beside it, it keeps a row
             // of its own.
+            //
+            // v1.2.4 S4.3 — with no star to sit beside, the action
+            // is the app's one secondary style: a centred grey caption
+            // on its own row, so it no longer hangs off the right edge.
             Group {
                 if let card = tonightStarCard {
                     TonightStarSection(
@@ -3305,10 +3291,7 @@ private struct CeremonialCard: View {
                         onMakeACall: makeACallAction
                     )
                 } else if canMakeACall {
-                    HStack {
-                        Spacer(minLength: 12)
-                        makeACallButton
-                    }
+                    makeACallButton
                 }
             }
             .sheet(isPresented: $showingCallSheet) {
@@ -3363,7 +3346,7 @@ private struct CeremonialCard: View {
                !card.heroFootLine.contains(card.memberDisplayName) {
                 Text(card.heroFootLine)
                     .font(Theme.Typography.caption.italic())
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3392,27 +3375,29 @@ private struct TonightStarSection: View {
     var onMakeACall: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        // v1.2.4 S4.6 — the section's header is now the app's
+        // `SectionTitle` (one header style for every section), and the
+        // card's lines sit `cardLineGap` apart.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Tonight's Star")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                SectionTitle(text: "Tonight's Star")
                 if let onMakeACall {
                     Spacer(minLength: 12)
+                    // v1.2.4 S4.3 — the trailing chevron is gone: the
+                    // action wears the app's one secondary look (grey
+                    // caption, no chrome) whether it rides this label
+                    // row or stands on its own.
                     Button(action: onMakeACall, label: {
-                        HStack(spacing: 4) {
-                            Text("Make a call")
-                            Image(systemName: Theme.Icon.chevronRight)
-                                .accessibilityHidden(true)
-                        }
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        Text("Make a call")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.secondaryText)
+                            .multilineTextAlignment(.center)
                     })
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("make-a-call")
                 }
             }
-            HStack(spacing: 6) {
+            HStack(spacing: Theme.Layout.cardLineGap) {
                 Image(systemName: "star.fill")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent)
@@ -3425,7 +3410,7 @@ private struct TonightStarSection: View {
             if let custom = card.customText, !custom.isEmpty {
                 Text("“\(custom)”")
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                    .foregroundStyle(Theme.Palette.bodyMuted)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -3459,39 +3444,37 @@ private struct MemberNotePromptSection: View {
     let onSkip: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // v1.2.4 S4.6 — the prompt's groups sit `cardGroupGap` apart,
+        // the field takes the app's `fieldInset`, and Send is the
+        // app's one primary button with Skip as the grey caption
+        // under it.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
             Text("Anything you want the room to know next time?")
                 .font(Theme.Typography.body.italic())
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                .foregroundStyle(Theme.Palette.labelText)
             TextField(
                 "",
                 text: $draft,
                 prompt: Text("One line for the host")
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
             )
             .textFieldStyle(.plain)
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Palette.primaryText)
-            .padding(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
-            HStack(spacing: 12) {
+            .padding(Theme.Layout.fieldInset)
+            .overlay(RoundedRectangle(cornerRadius: Theme.Layout.smallRadius).stroke(Theme.Palette.hairline, lineWidth: 0.5))
+            VStack(spacing: 0) {
                 Button(action: onSubmit) {
                     Text("Send")
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.background)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button(action: onSkip) {
-                    Text("Skip")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                }
-                .buttonStyle(.plain)
+                // v1.2.4 S4.3 — the skip wears the app's one secondary
+                // look: a grey caption, no chrome.
+                // v1.2.4 S4.6 — it now sits under the primary button,
+                // which is where the app's one secondary-action shape
+                // lives.
+                SecondaryTextAction(title: "Skip", action: onSkip)
             }
         }
     }
@@ -3638,23 +3621,27 @@ private struct AwardsCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            VStack(alignment: .leading, spacing: 4) {
+        // v1.2.4 S4.6 — the card's rhythm. Groups sit `cardGroupGap`
+        // apart (the card's own inset token, `cardInset`, was being
+        // used as a gap and made them 20 apart), the header's two
+        // lines sit `cardLineGap` apart, and the four ad-hoc 4pt
+        // bumps are gone: the stack's spacing owns the rhythm now.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text("Season \(season.ordinal) is closed")
                     .font(Theme.Typography.title.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
                 if !season.subtitle.isEmpty {
                     Text(season.subtitle)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
 
             if sortedAwards.isEmpty {
                 Text("Awards haven't been declared yet.")
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .padding(.top, 4)
+                    .foregroundStyle(Theme.Palette.secondaryText)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
@@ -3662,10 +3649,14 @@ private struct AwardsCard: View {
                         if idx != sortedAwards.count - 1 {
                             Divider()
                                 .overlay(Theme.Palette.hairline)
+                                // Start the hairline under the row
+                                // text, past the icon column, so the
+                                // award names and the rule share a
+                                // left edge.
+                                .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
                         }
                     }
                 }
-                .padding(.vertical, 4)
             }
 
             // V0.53 — share the member's own stat card. The card is
@@ -3684,14 +3675,12 @@ private struct AwardsCard: View {
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.accent)
                 }
-                .padding(.top, 4)
             }
 
             if let endedAt = season.endedAt {
                 Text("Closed \(endedAt, format: .relative(presentation: .named))")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .padding(.top, 4)
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3761,34 +3750,37 @@ private struct AwardRow: View {
     let award: SeasonAward
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Layout.cardInset) {
             Image(systemName: symbol)
                 .font(Theme.Typography.body)
                 .foregroundStyle(award.awardType.isPrivate
-                    ? Theme.Palette.primaryText.opacity(0.55)
+                    ? Theme.Palette.secondaryText
                     : Theme.Palette.accent)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+                .frame(width: Theme.Layout.rowIconWidth)
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                HStack(spacing: Theme.Layout.cardLineGap) {
                     Text(award.recipientDisplayName)
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.primaryText)
                     Text("·")
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                        .foregroundStyle(Theme.Palette.tertiaryText)
                     Text(award.awardType.displayName)
                         .font(Theme.Typography.caption.weight(.semibold))
                         .foregroundStyle(award.awardType.isPrivate
-                            ? Theme.Palette.primaryText.opacity(0.55)
+                            ? Theme.Palette.secondaryText
                             : Theme.Palette.accent)
                 }
                 if let caption = award.caption, !caption.isEmpty {
                     Text(caption)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
             Spacer()
         }
-        .padding(.vertical, 8)
+        // v1.2.4 S4.6 — the award row takes the page's row inset
+        // (`roomRowInset`), the same as every other list row.
+        .padding(.vertical, Theme.Layout.roomRowInset)
     }
 
     private var symbol: String {
@@ -3812,19 +3804,24 @@ private struct SystemBanner: View {
     let onDismiss: (UUID) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // v1.2.4 S4.6 — the banner's rows are list rows: each one takes
+        // the page's `roomRowInset`, the icon sits `cardInset` from its
+        // text, and the row's two lines sit `cardLineGap` apart. The
+        // stack's own spacing is 0 so the hairline between two rows
+        // touches neither of them.
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(events) { event in
-                HStack(spacing: 10) {
+                HStack(spacing: Theme.Layout.cardInset) {
                     Image(systemName: iconFor(event.kind))
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    VStack(alignment: .leading, spacing: 2) {
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                    VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                         Text(event.kind.displayName)
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.primaryText)
                         Text(payloadDescription(for: event))
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     Spacer()
                     Button {
@@ -3832,10 +3829,11 @@ private struct SystemBanner: View {
                     } label: {
                         Image(systemName: Theme.Icon.xmark)
                             .font(Theme.Typography.footnote)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                            .foregroundStyle(Theme.Palette.tertiaryText)
                     }
                     .accessibilityLabel(Text("Dismiss"))
                 }
+                .padding(.vertical, Theme.Layout.roomRowInset)
                 if event.id != events.last?.id {
                     Divider().overlay(Theme.Palette.hairline)
                 }
@@ -3877,15 +3875,13 @@ private struct HostWithdrawalsSection: View {
     let onDispense: (UUID) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            HStack(spacing: 8) {
-                Image(systemName: Theme.Icon.circleHexagongridFill)
-                    .accessibilityHidden(true)
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Chips to dispense")
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.primaryText)
-            }
+        // v1.2.4 S4.6 — one header style for every section: the title
+        // is the app's `SectionTitle`, and it sits `roomHeaderGap`
+        // above its first row.
+        VStack(alignment: .leading, spacing: 0) {
+            SectionTitle(text: "Chips to dispense")
+                .padding(.bottom, Theme.Layout.roomHeaderGap)
+
             VStack(spacing: 0) {
                 ForEach(withdrawals) { txn in
                     row(txn: txn)
@@ -3899,13 +3895,13 @@ private struct HostWithdrawalsSection: View {
 
     private func row(txn: EventTransaction) -> some View {
         HStack(spacing: Theme.Layout.cardInset) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(txn.memberDisplayName)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text("Withdrew chips")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             Spacer()
             Text("\(abs(txn.amountPoints)) pts")
@@ -3921,7 +3917,7 @@ private struct HostWithdrawalsSection: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
                             .fill(Theme.Palette.accent)
                     )
             }
@@ -3941,7 +3937,7 @@ struct SectionTitle: View {
     var body: some View {
         Text(text)
             .font(Theme.Typography.caption.weight(.semibold))
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            .foregroundStyle(Theme.Palette.labelText)
             .accessibilityAddTraits(.isHeader)
     }
 }
@@ -4005,7 +4001,7 @@ private struct RoundBreakdownSection: View {
             SectionTitle(text: "Round history")
                 .padding(.bottom, Theme.Layout.roomHeaderGap)
             ForEach(rounds) { round in
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                     HStack {
                         Text("Round \(round.roundIndex)")
                             .font(Theme.Typography.body.weight(.semibold))
@@ -4013,19 +4009,19 @@ private struct RoundBreakdownSection: View {
                         Spacer()
                         Text(round.packSlug.replacingOccurrences(of: "_", with: " "))
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     ForEach(round.entries, id: \.id) { entry in
                         HStack {
                             Text(memberNameById[entry.memberId] ?? "Member")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                                .foregroundStyle(Theme.Palette.labelText)
                             Spacer()
                             Text(deltaText(entry.pointsDelta))
                                 .font(Theme.Typography.monoCaptionSemibold)
                                 .foregroundStyle(entry.pointsDelta >= 0
                                     ? Theme.Palette.accent
-                                    : Theme.Palette.primaryText.opacity(0.6))
+                                    : Theme.Palette.secondaryText)
                         }
                     }
                 }
@@ -4138,25 +4134,25 @@ private struct PackShelfReadOnly: View {
         // V0.35B — the row now also surfaces the configured
         // points-per-card for `.countBased` packs (CAH), and the
         // tap handler routes each scoring type to its own editor.
-        HStack(spacing: Theme.Layout.gutter) {
+        HStack(spacing: Theme.Layout.cardInset) {
             Image(systemName: pack.iconSystemName)
                 .accessibilityHidden(true)
                 .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                .frame(width: 32)
-            VStack(alignment: .leading, spacing: 2) {
+                .foregroundStyle(Theme.Palette.secondaryText)
+                .frame(width: Theme.Layout.rowIconWidth)
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(pack.displayName)
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(pack.description)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .lineLimit(2, reservesSpace: true)
                     .fixedSize(horizontal: false, vertical: true)
                 if pack.scoringType == .singleWinner || pack.scoringType == .countBased {
                     Text(payoutCaption(for: pack))
                         .font(Theme.Typography.footnote)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                         .padding(.top, 2)
                 }
             }
@@ -4164,7 +4160,7 @@ private struct PackShelfReadOnly: View {
             if isHost {
                 Image(systemName: Theme.Icon.sliderHorizontal3)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
             }
         }
         .padding(.vertical, Theme.Layout.roomRowInset)
@@ -4416,7 +4412,7 @@ private struct MemberRosterReadOnly: View {
             if members.isEmpty {
                 Text("No members yet. Share your join code to get the table set.")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .padding(.vertical, Theme.Layout.roomRowInset)
             } else {
                 VStack(spacing: 0) {
@@ -4524,7 +4520,7 @@ private struct MemberRosterReadOnly: View {
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: Theme.Icon.person2Fill)
                 .foregroundStyle(Theme.Palette.accent)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text("Your invite paid off")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -4532,7 +4528,7 @@ private struct MemberRosterReadOnly: View {
                      ? "1 friend joined, +\(rewards.totalReward) pts"
                      : "\(rewards.friendsJoined) friends joined, +\(rewards.totalReward) pts")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             Spacer()
         }
@@ -4551,7 +4547,7 @@ private struct MemberRosterReadOnly: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Pending invites")
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 ForEach(tierTwo) { member in
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
@@ -4570,7 +4566,7 @@ private struct MemberRosterReadOnly: View {
                             ) {
                                 Text(via)
                                     .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                    .foregroundStyle(Theme.Palette.secondaryText)
                             }
                         }
                         Spacer()
@@ -4608,7 +4604,7 @@ private struct MemberRosterReadOnly: View {
             VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
                 Text("Send a code to someone in your other rooms")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 Menu {
                     ForEach(candidates) { member in
                         Button(member.displayName) {
@@ -4619,12 +4615,12 @@ private struct MemberRosterReadOnly: View {
                     HStack {
                         Text(inviteeName ?? "Choose a friend")
                             .font(Theme.Typography.body)
-                            .foregroundStyle(inviteeUserId == nil ? Theme.Palette.primaryText.opacity(0.55) : Theme.Palette.primaryText)
+                            .foregroundStyle(inviteeUserId == nil ? Theme.Palette.secondaryText : Theme.Palette.primaryText)
                         Spacer()
                         Image(systemName: Theme.Icon.chevronDown)
                             .accessibilityHidden(true)
                             .font(Theme.Typography.footnote)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                            .foregroundStyle(Theme.Palette.tertiaryText)
                     }
                     .padding(.vertical, 12)
                 }
@@ -4645,7 +4641,7 @@ private struct MemberRosterReadOnly: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius))
                     }
                     .buttonStyle(.plain)
                 }
@@ -4675,25 +4671,25 @@ private struct MemberRosterReadOnly: View {
     }
 
     private func memberRow(_ member: Member) -> some View {
-        HStack(spacing: Theme.Layout.gutter) {
+        HStack(spacing: Theme.Layout.cardInset) {
             // Avatar placeholder — the V0.8 brief deliberately
             // surfaces a monogram (initials) rather than a photo so
             // the roster renders without a media dependency.
             Circle()
                 .fill(Theme.Palette.accent.opacity(0.18))
-                .frame(width: 32, height: 32)
+                .frame(width: Theme.Layout.rowIconWidth, height: Theme.Layout.rowIconWidth)
                 .overlay(
                     Text(initials(for: member.displayName))
                         .font(Theme.Typography.caption.weight(.semibold))
                         .foregroundStyle(Theme.Palette.accent)
                 )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(member.displayName)
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(member.role == .host ? "Host" : "Member")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             Spacer(minLength: 8)
         }
@@ -4768,7 +4764,7 @@ private struct CollapsibleSection<Content: View, Accessory: View>: View {
                 Button(action: toggle) {
                     Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
                         .font(Theme.Typography.footnote)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                        .foregroundStyle(Theme.Palette.tertiaryText)
                         .frame(width: 16)
                 }
                 .buttonStyle(.plain)
@@ -5034,7 +5030,7 @@ private struct MascotFooterCaption: View {
 
             Text(caption)
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
                 // 2026-08-10 feedback round — the caption was cut off at
                 // one line. The mascot comment is the room's voice; let
                 // it wrap so the whole comment is readable.
@@ -5259,7 +5255,7 @@ private struct RoomSwitcherMenu: View {
             // reachable on `accessibilityValue` below.
             Image(systemName: "chevron.up.chevron.down")
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                .foregroundStyle(Theme.Palette.labelText)
         }
         .accessibilityLabel(Text("Switch room"))
         .accessibilityValue(Text(currentRoom.name))
