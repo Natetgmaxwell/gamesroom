@@ -32,7 +32,8 @@ SRC_FILES=(main.swift
            GamesRoom/Services/CalendarService.swift
            GamesRoom/Services/MascotEngine.swift
            GamesRoom/Services/MascotFaceEngine.swift
-           GamesRoom/Services/MascotVoiceService.swift)
+           GamesRoom/Services/MascotVoiceService.swift
+           GamesRoom/Services/NightPlan.swift)
 
 echo "Compiling ${BIN} against $SDK..."
 swiftc \

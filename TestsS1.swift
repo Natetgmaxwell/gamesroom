@@ -80,4 +80,191 @@ func runS1Tests(_ runner: TestRunner) {
         }
         runner.assertTrue(threw, "settleEvent throws for an event the room does not have")
     }
+
+    // MARK: - S1.3 NightPlan
+
+    runner.run("S1.3: a member holding a deposit checks in first") {
+        // The deposit is what they came for: getting it back is the
+        // primary, the casino withdrawal waits underneath it.
+        let plan = NightPlan.plan(for: nightInput(
+            packSlugs: ["casino", "monopoly_deal"],
+            iHaveHeldDeposit: true
+        ))
+        runner.assertEqual(plan.primary, NightAction.checkIn)
+        runner.assertEqual(plan.secondaries, [])
+    }
+
+    runner.run("S1.3: a member who already withdrew skips the check-in") {
+        let plan = NightPlan.plan(for: nightInput(
+            packSlugs: ["casino"],
+            iHaveHeldDeposit: true,
+            iHaveWithdrawn: true
+        ))
+        runner.assertEqual(plan.primary, NightAction.withdrawChips)
+    }
+
+    runner.run("S1.3: a casino night asks the member to withdraw chips") {
+        let plan = NightPlan.plan(for: nightInput(packSlugs: ["casino"]))
+        runner.assertEqual(plan.primary, NightAction.withdrawChips)
+        runner.assertEqual(plan.secondaries, [])
+    }
+
+    runner.run("S1.3: a CAH night asks the member to count their cards") {
+        let plan = NightPlan.plan(for: nightInput(packSlugs: ["cards_against_humanity"]))
+        runner.assertEqual(plan.primary, NightAction.countCAH)
+        runner.assertEqual(plan.secondaries, [])
+    }
+
+    runner.run("S1.3: a Monopoly Deal only night has no member action") {
+        // No casino pack, so no chip withdrawal: the member has
+        // nothing of their own to do at the table.
+        let plan = NightPlan.plan(for: nightInput(packSlugs: ["monopoly_deal"]))
+        runner.assertNil(plan.primary, "no member action on a Monopoly Deal only night")
+        runner.assertEqual(plan.secondaries, [])
+    }
+
+    runner.run("S1.3: the host waits for the table when nobody has arrived") {
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["casino", "monopoly_deal"],
+            claimedCount: 6
+        ))
+        runner.assertEqual(plan.primary, NightAction.waitingForTable(arrived: 0, claimed: 6))
+    }
+
+    runner.run("S1.3: the host scores the first round once people arrive") {
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["monopoly_deal"],
+            arrivedCount: 2,
+            claimedCount: 6
+        ))
+        runner.assertEqual(plan.primary, NightAction.scoreRound(packs: ["monopoly_deal"]))
+    }
+
+    runner.run("S1.3: the host settles a night with nothing to score") {
+        // Casino is a withdraw-and-return pack: there is no round to
+        // score, so the night is ready to be settled.
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["casino"],
+            arrivedCount: 2,
+            claimedCount: 6
+        ))
+        runner.assertEqual(plan.primary, NightAction.settleNight)
+    }
+
+    runner.run("S1.3: the host settles once a round is scored") {
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["monopoly_deal"],
+            arrivedCount: 2,
+            claimedCount: 6,
+            roundsScored: 1
+        ))
+        runner.assertEqual(plan.primary, NightAction.settleNight)
+        runner.assertEqual(plan.secondaries, [NightAction.scoreRound(packs: ["monopoly_deal"])])
+    }
+
+    runner.run("S1.3: casino and Monopoly Deal scores Monopoly Deal, not the chip scanner") {
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["casino", "monopoly_deal"],
+            arrivedCount: 2,
+            claimedCount: 6
+        ))
+        runner.assertEqual(plan.primary, NightAction.scoreRound(packs: ["monopoly_deal"]))
+    }
+
+    runner.run("S1.3: the host gets their member action as a secondary") {
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["casino", "monopoly_deal"],
+            arrivedCount: 2,
+            claimedCount: 6
+        ))
+        runner.assertEqual(plan.primary, NightAction.scoreRound(packs: ["monopoly_deal"]))
+        runner.assertEqual(plan.secondaries, [NightAction.withdrawChips])
+    }
+
+    runner.run("S1.3: CAH is a scorable pack for the host") {
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["cards_against_humanity"],
+            arrivedCount: 3,
+            claimedCount: 6
+        ))
+        runner.assertEqual(plan.primary, NightAction.scoreRound(packs: ["cards_against_humanity"]))
+    }
+
+    runner.run("S1.3: the host plans the next night once the night is settled") {
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["casino"],
+            settledAt: nightBase.addingTimeInterval(-3_600)
+        ))
+        runner.assertEqual(plan.primary, NightAction.planNextNight)
+        runner.assertEqual(plan.secondaries, [])
+    }
+
+    runner.run("S1.3: a settled night gives members nothing to do") {
+        let plan = NightPlan.plan(for: nightInput(
+            packSlugs: ["casino"],
+            settledAt: nightBase.addingTimeInterval(-3_600)
+        ))
+        runner.assertNil(plan.primary, "a member has no action on a settled night")
+        runner.assertEqual(plan.secondaries, [])
+    }
+
+    runner.run("S1.3: a night settled over 24 hours ago is history") {
+        let plan = NightPlan.plan(for: nightInput(
+            isHost: true,
+            packSlugs: ["casino"],
+            settledAt: nightBase.addingTimeInterval(-90_000)
+        ))
+        runner.assertNil(plan.primary, "the recap window has closed")
+        runner.assertEqual(plan.secondaries, [])
+    }
+
+    runner.run("S1.3: a night that has not started has no plan") {
+        let plan = NightPlan.plan(for: nightInput(
+            packSlugs: ["casino"],
+            playedAt: nightBase.addingTimeInterval(3_600)
+        ))
+        runner.assertNil(plan.primary, "the night has not started")
+        runner.assertEqual(plan.secondaries, [])
+    }
+}
+
+// MARK: - NightPlan fixtures
+
+/// The clock every NightPlan fixture is measured against.
+private let nightBase = Date(timeIntervalSince1970: 1_800_000_000)
+
+/// Builds a NightInput for the tests. The default is a live night
+/// that started an hour ago with nobody at the table.
+private func nightInput(
+    isHost: Bool = false,
+    packSlugs: [String] = [],
+    playedAt: Date? = nil,
+    settledAt: Date? = nil,
+    now: Date = nightBase,
+    arrivedCount: Int = 0,
+    claimedCount: Int = 0,
+    roundsScored: Int = 0,
+    iHaveHeldDeposit: Bool = false,
+    iHaveWithdrawn: Bool = false
+) -> NightInput {
+    NightInput(
+        isHost: isHost,
+        packSlugs: packSlugs,
+        playedAt: playedAt ?? nightBase.addingTimeInterval(-3_600),
+        settledAt: settledAt,
+        now: now,
+        arrivedCount: arrivedCount,
+        claimedCount: claimedCount,
+        roundsScored: roundsScored,
+        iHaveHeldDeposit: iHaveHeldDeposit,
+        iHaveWithdrawn: iHaveWithdrawn
+    )
 }
