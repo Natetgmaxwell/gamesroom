@@ -1,6 +1,34 @@
 # STATE S2B
 
-STATE: step 6 of 7 done. Next: step 7 (rollout doc + report), the LAST step: `docs/S2B_SERVER_PUSH.md`, run all gates including `bash .maestro/fastgate.sh --compile`, write `.maestro/S2B_REPORT.md`, commit `S2B.7: rollout doc + report`. Only end the goal when STATE reads ALL STEPS DONE.
+STATE: ALL STEPS DONE. All 7 steps committed; last fastgate (step 6: plain,
+step 7: --compile) read FASTGATE: PASS.
+
+Step 7 (S2B.7: rollout doc + report) committed as 07e52cc.
+- docs/S2B_SERVER_PUSH.md (new, ALLOWED): the five migration files with
+  what each does and how they relate, apply order 108-112 as one psql block,
+  secrets by NAME only (vault briefing_push_secret and anchor_push_secret;
+  edge env BRIEFING_PUSH_ENABLED, BRIEFING_PUSH_SECRET, ANCHOR_PUSH_SECRET,
+  APNs vars reused from question-turn-push), deploy commands with
+  --no-verify-jwt and project ref bnrgkdcluopicqdpmrtu (mascot-voice deploys
+  normally, clients send a user JWT), verification via an unauthenticated
+  probe expecting 401 then a signed probe expecting the disabled no-op, and
+  the dedupe plan: once server push is on the client stops scheduling local
+  t168h/t48h/morning_of, TARS wires that flag at integration.
+- .maestro/S2B_REPORT.md (new, ALLOWED): step table with commits, gate
+  results at close (fastgate --compile 302 passed / parse pass=64, deno
+  check clean on four dirs, deno test 31+22+10+25 all 0 failed), product-rule
+  check, rollout summary, notes for TARS (vault-secret no-op design, insert
+  policy moved to is_room_host with reasoning, mascot-voice next-unplayed
+  night selection, esm.sh import fix).
+- Gates: bash .maestro/fastgate.sh --compile -> FASTGATE: PASS (302 cases,
+  parse-check pass=64). No new deno surfaces this step; the four lanes' dirs
+  were not touched.
+- Migrations still written, never applied. No supabase db push/query/link.
+
+BLOCKED: none
+
+Git gotchas honoured this iteration: pbxproj checked out clean before both
+commits; no `git commit -- <path>` pathspec anywhere.
 
 Step 6 (S2B.6: active-only events RLS; mascot voice reads what the UI renders)
 committed as af3b7f7.
