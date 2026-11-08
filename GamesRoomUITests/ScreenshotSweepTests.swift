@@ -368,16 +368,12 @@ final class ScreenshotSweepTests: XCTestCase {
         )
         scoreCTA.tap()
 
-        // S1.4 - a night with two scorable packs asks which game before
-        // it opens a scoring sheet. Pick Casino for the scan.
-        let casinoChoice = app.buttons["Casino"].firstMatch
-        XCTAssertTrue(
-            casinoChoice.waitForExistence(timeout: 5),
-            "Score-game picker never offered the night's packs."
-        )
-        casinoChoice.tap()
-
-        let sheetBar = app.navigationBars["Scan your chips"].firstMatch
+        // v1.2.4 S1.4 - scoring follows the packs picked, not the
+        // headline pack: on a Casino + Monopoly Deal night the host's
+        // "Score a round" opens the SCORING sheet for the one pack that
+        // is scored per round (Monopoly Deal), never the chip scanner.
+        // The chip scanner belongs to the member's withdraw path.
+        let sheetBar = app.navigationBars["Score a round"].firstMatch
         XCTAssertTrue(
             sheetBar.waitForExistence(timeout: 10),
             "ChipScanSheet never presented."
