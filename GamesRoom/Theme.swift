@@ -26,6 +26,17 @@ enum Theme {
         static let surface = Color(red: 0.075, green: 0.075, blue: 0.082)           // #131315
         /// Off-white primary text — warm parchment, not pure white.
         static let primaryText = Color(red: 0.957, green: 0.937, blue: 0.902)       // #F4EFE6
+        // Grey scale — every wash of primaryText that is not full-strength.
+        // Four steps, no more: caption grey (0.55), quiet grey (0.4),
+        // label grey (0.7) and muted body copy (0.8).
+        /// Secondary text — the caption grey under a primary action.
+        static let secondaryText = primaryText.opacity(0.55)
+        /// Tertiary text — the quietest grey (footnotes, disabled rows).
+        static let tertiaryText = primaryText.opacity(0.4)
+        /// Label text — section titles and secondary labels.
+        static let labelText = primaryText.opacity(0.7)
+        /// Muted body copy — body text that is not the reading voice.
+        static let bodyMuted = primaryText.opacity(0.8)
         /// Mid-gray hairline — divider lines and quiet chrome.
         static let hairline = Color(red: 0.239, green: 0.239, blue: 0.251)         // #3D3D40
         /// Brass-warm single accent. The only chromatic voice in the app.
@@ -91,6 +102,22 @@ enum Theme {
         static let edgePadding: CGFloat = 16
         /// Vertical spacing between consecutive sections in a slot.
         static let sectionSpacing: CGFloat = 24
+
+        // Controls and shapes (v1.2.4). One geometry for the primary
+        // button, one radius per kind of chrome, one icon-column
+        // width, one field inset.
+        /// Vertical padding inside a primary button.
+        static let buttonVertical: CGFloat = 14
+        /// Corner radius of the primary button.
+        static let buttonRadius: CGFloat = 12
+        /// Corner radius of a card (matches `sectionCard` chrome).
+        static let cardRadius: CGFloat = 12
+        /// Corner radius of small chrome — fields, mini buttons, chips.
+        static let smallRadius: CGFloat = 8
+        /// Width of the icon column in a list row (one leading edge).
+        static let rowIconWidth: CGFloat = 28
+        /// Inset inside a text field.
+        static let fieldInset: CGFloat = 12
 
         // Room page vertical rhythm (v1.2.1). Three steps, used
         // everywhere on the room page so sections breathe evenly:
@@ -239,6 +266,45 @@ enum Theme {
     }
 }
 
+// MARK: - Primary button
+//
+// One geometry for the app's single primary action: full width, the
+// body voice at semibold, `Palette.background` on `Palette.accent`,
+// `buttonVertical` of air above and below, `buttonRadius` corners.
+// The label is the caller's; the style owns the chrome.
+struct PrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.Typography.body.weight(.semibold))
+            .foregroundStyle(Theme.Palette.background)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Theme.Layout.buttonVertical)
+            .background(Theme.Palette.accent)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius))
+            .opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
+// MARK: - Secondary text action
+//
+// The plain grey caption under a primary action. Centred, no chrome,
+// no chevron. 44pt tall so it stays a comfortable tap target.
+struct SecondaryTextAction: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.secondaryText)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - sectionCard modifier
 //
 // Applies a `SectionCard` style to any view. Use to wrap the content of a
@@ -257,10 +323,10 @@ extension View {
             .padding(Theme.Layout.cardInset)
             .background(style.background)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: Theme.Layout.cardRadius)
                     .stroke(style.hairline, lineWidth: 0.5)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.cardRadius))
     }
 }
 
