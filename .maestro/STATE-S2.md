@@ -1,6 +1,6 @@
 # STATE S2
 
-STATE: step 3 of 8 done. Next: step 4.
+STATE: step 4 of 8 done. Next: step 5.
 
 STEP 1 DONE (commit a1de6c1 `S2.1: port fix/notif-claimed-state (reconcileBriefing) onto febbae3`).
 The two upstream objects 04081cb and 5649888 were cherry-picked from refs/remotes/icloud/fix/notif-claimed-state and squashed into that single step commit (upstream SHAs and the conflict resolutions are recorded in the commit body).
@@ -32,6 +32,13 @@ STEP 3 DONE (commit 57e5fbe `S2.3: on-create delivers to Notification Center; ta
 - ContentView selects the room. iPhone: the rooms tab's `NavigationStack` now owns a path (`openRoomPath`) and the tapped room is pushed onto it with a `navigationDestination(for: Room.self)` that renders `RoomDetailView` exactly as `RoomPage` renders it for a room row (`RoomPage` owns its own stack and its own destination, so there is no conflict). iPad: `RoomPage`'s split view owns the detail pane and cannot be driven from outside, so the room is presented over the split view in a `fullScreenCover` with its own "Rooms" toolbar button. The request is resolved against `roomService.rooms` (by room id, falling back to the event's cached room for requests scheduled before the payload carried a room id) and waits for the rooms list if it has not loaded yet; a room the user is no longer in is never opened.
 - Tests: TestsS2.swift grew three cases (the interval trigger for the "now" prompts and the fixed clock time for the reminders, the briefing-kind set, and the tap routing for a briefing, the anchor nudge, a room-less briefing, the Question Box turn and a payload with no event id). Gate: 323 cases, 323 passed, 0 failed; parse-check 65/65; FASTGATE: PASS.
 - Note: the SwiftUI/UN glue in this step is parse-checked by the fast gate but not type-checked until the compile gate in step 8 (the brief reserves `--compile` for the last step).
+
+STEP 4 DONE (commit 962fa39 `S2.4: room opt-out, unmute and note edits reconcile; fix escaped strings`).
+- RoomService.cancelRoomCadence iterates activeEventByRoom.values and cancels by event.id (the dictionary is keyed by room id, so the old key sweep cancelled nothing).
+- Unmute (setEventNotificationsMuted muted=false) calls reconcileBriefing(eventId:) (already present from the step 1 port; verified).
+- updateEventMemberFields (note/venue save) now ends with reconcileBriefing(eventId:) so the host note reaches pending reminders.
+- Escaped interpolations fixed: NotificationDispatcher catch-up identifier/title and RoomService roomMembers cache key. The catch-up id now comes from BriefingReconciler.catchUpIdentifier(eventId:) = "<eventId>-catchup". No escaped interpolations remain in NotificationDispatcher/RoomService/BriefingReconciler.
+- Test: "S2 catch-up identifiers are per event and stable". Gate: 324 cases, 324 passed; parse-check 65/65; FASTGATE: PASS.
 
 BLOCKED: none
 
