@@ -9,10 +9,11 @@ import {
   composeAnchorCopy,
   composePayload,
   type Deps,
+  FALLBACK_TIME_ZONE,
   handleRequest,
-  ROOM_TIME_ZONE,
   type TokenRow,
   type NudgeRow,
+  zoneOrFallback,
 } from "./handler.ts";
 
 const SECRET = "test-secret-123";
@@ -21,6 +22,11 @@ const NEWCOMER = "00000000-0000-0000-0000-0000000000b1";
 const OTHER = "00000000-0000-0000-0000-0000000000a1";
 const EVENT = "00000000-0000-0000-0000-000000000012";
 const ROOM = "00000000-0000-0000-0000-000000000013";
+
+// The room's zone. Every room has one now (rooms.time_zone, migration
+// 108), so the copy follows the room and never a constant in this file.
+const BRISBANE = "Australia/Brisbane";
+const NEW_YORK = "America/New_York";
 
 // Thursday 2026-10-22, 19:00 in Australia/Brisbane.
 const NOW = new Date("2026-10-22T09:00:00Z");
@@ -41,7 +47,7 @@ function nudge(over: Partial<NudgeRow> = {}): NudgeRow {
   };
 }
 
-function fakeDeps(over: Partial<Deps> = {}) {
+function fakeDeps(over: Partial<Deps> = {}, roomZone: string | null = BRISBANE) {
   const log = {
     sentTo: [] as string[],
     payloads: [] as Record<string, unknown>[],
@@ -49,6 +55,9 @@ function fakeDeps(over: Partial<Deps> = {}) {
     marked: [] as string[],
     tokenQueries: [] as string[],
     nameQueries: [] as string[],
+    claims: [] as string[],
+    zoneQueries: [] as string[],
+    seatQueries: [] as string[],
   };
   const tokens: TokenRow[] = [
     { id: "t1", user_id: INVITER, device_token: "aa".repeat(32), environment: "sandbox" },
@@ -60,13 +69,25 @@ function fakeDeps(over: Partial<Deps> = {}) {
     enabled: true,
     secret: SECRET,
     now: () => NOW,
-    loadNudge: (eventId, newcomerId) =>
-      Promise.resolve(eventId === EVENT && newcomerId === NEWCOMER ? nudge() : null),
+    loadNudge: (eventId, newcomerUserId) =>
+      Promise.resolve(eventId === EVENT && newcomerUserId === NEWCOMER ? nudge() : null),
+    claimNudge: (eventId, newcomerUserId) => {
+      log.claims.push(`${eventId}/${newcomerUserId}`);
+      return Promise.resolve(true);
+    },
     loadEvent: (eventId) =>
       Promise.resolve({ id: eventId, room_id: ROOM, played_at: PLAYED_FRI }),
     loadDisplayName: (userId) => {
       log.nameQueries.push(userId);
       return Promise.resolve(userId === NEWCOMER ? "Sam" : "Someone else");
+    },
+    loadRoomTimeZone: (roomId) => {
+      log.zoneQueries.push(roomId);
+      return Promise.resolve(roomZone);
+    },
+    loadRsvpState: (eventId, userId) => {
+      log.seatQueries.push(`${eventId}/${userId}`);
+      return Promise.resolve("unclaimed");
     },
     loadTokens: (userId) => {
       log.tokenQueries.push(userId);
@@ -120,7 +141,7 @@ Deno.test("rejects missing or wrong secret (fails closed when unset)", async () 
   assertEquals(log.tokenQueries.length, 0);
 });
 
-Deno.test("disabled flag sends nothing", async () => {
+Deno.test("disabled flag sends nothing and does not take the row", async () => {
   const { deps, log } = fakeDeps({ enabled: false });
   const res = await handleRequest(post(body()), deps);
   assertEquals(res.status, 200);
@@ -128,6 +149,9 @@ Deno.test("disabled flag sends nothing", async () => {
   assertEquals(log.sentTo.length, 0);
   assertEquals(log.tokenQueries.length, 0);
   assertEquals(log.marked.length, 0);
+  // The row stays queued, so the next tick can still deliver it once the
+  // feature is switched on.
+  assertEquals(log.claims.length, 0);
 });
 
 Deno.test("sends the spec copy when the event is within six days", async () => {
@@ -185,6 +209,8 @@ Deno.test("a ledger row already sent is not sent again", async () => {
   const out = await (await handleRequest(post(body()), deps)).json();
   assertEquals(out.status, "already_sent");
   assertEquals(log.sentTo.length, 0);
+  // A row that already had its turn is not even claimed.
+  assertEquals(log.claims.length, 0);
 });
 
 Deno.test("an inviter with no device is recorded, not retried into a fan-out", async () => {
@@ -229,33 +255,96 @@ Deno.test("payload carries room and event, and no other member's id", () => {
   assert(!JSON.stringify(p).includes(OTHER));
 });
 
+Deno.test("the interruption level is active, not time-sensitive", async () => {
+  const { deps, log } = fakeDeps();
+  await handleRequest(post(body()), deps);
+  const aps = log.payloads[0].aps as Record<string, unknown>;
+  // Audit 01-notifications #13: the nudge is for a night days away, so
+  // it must not break through Focus or Sleep.
+  assertEquals(aps["interruption-level"], "active");
+  assert(aps["interruption-level"] !== "time-sensitive");
+  assertEquals(aps["thread-id"], `anchor-${EVENT}`);
+});
+
+Deno.test("the row is claimed before the send, so a double post sends once", async () => {
+  const { deps, log } = fakeDeps({ claimNudge: () => Promise.resolve(false) });
+  const out = await (await handleRequest(post(body()), deps)).json();
+  assertEquals(out.status, "already_claimed");
+  assertEquals(log.sentTo.length, 0);
+  assertEquals(log.tokenQueries.length, 0);
+});
+
+Deno.test("the row is claimed on the way through", async () => {
+  const { deps, log } = fakeDeps();
+  await handleRequest(post(body()), deps);
+  assertEquals(log.claims, [`${EVENT}/${NEWCOMER}`]);
+});
+
+Deno.test("an inviter who claimed a seat after the queue is skipped", async () => {
+  const { deps, log } = fakeDeps({ loadRsvpState: () => Promise.resolve("claimed") });
+  const out = await (await handleRequest(post(body()), deps)).json();
+  assertEquals(out.status, "skipped_seated");
+  assertEquals(log.sentTo.length, 0);
+  assertEquals(log.marked, ["skipped_seated"]);
+});
+
+Deno.test("the seat re-check asks about the inviter, not the newcomer", async () => {
+  const { deps, log } = fakeDeps();
+  await handleRequest(post(body()), deps);
+  assertEquals(log.seatQueries, [`${EVENT}/${INVITER}`]);
+});
+
+Deno.test("the weekday follows the room's zone, not a hardcoded one", async () => {
+  // The same event, two rooms: Brisbane reads it as Friday, New York
+  // (five hours behind) still reads it as Thursday.
+  const { deps, log } = fakeDeps({}, NEW_YORK);
+  await handleRequest(post(body()), deps);
+  assertEquals(alertBody(log.payloads[0]), "Sam's coming Thursday. Are you?");
+  assertEquals(log.zoneQueries, [ROOM]);
+
+  const brisbane = fakeDeps();
+  await handleRequest(post(body()), brisbane.deps);
+  assertEquals(alertBody(brisbane.log.payloads[0]), "Sam's coming Friday. Are you?");
+});
+
+Deno.test("an unreadable room zone falls back to UTC, not to Brisbane", async () => {
+  const { deps, log } = fakeDeps({ loadRoomTimeZone: () => Promise.resolve(null) });
+  await handleRequest(post(body()), deps);
+  assertEquals(alertBody(log.payloads[0]), "Sam's coming Thursday. Are you?", "UTC day for 23:00Z");
+  assertEquals(FALLBACK_TIME_ZONE, "UTC");
+  assertEquals(zoneOrFallback(null), "UTC");
+  assertEquals(zoneOrFallback(""), "UTC");
+  assertEquals(zoneOrFallback("Not/AZone"), "UTC");
+  assertEquals(zoneOrFallback(BRISBANE), BRISBANE);
+});
+
 Deno.test("copy: weekday form inside six days, date form past them", () => {
   assertEquals(
-    composeAnchorCopy("Sam", d(PLAYED_FRI), NOW, ROOM_TIME_ZONE),
+    composeAnchorCopy("Sam", d(PLAYED_FRI), NOW, BRISBANE),
     "Sam's coming Friday. Are you?",
   );
   // Six days out, still the weekday.
   assertEquals(
-    composeAnchorCopy("Sam", d("2026-10-27T23:00:00Z"), NOW, ROOM_TIME_ZONE),
+    composeAnchorCopy("Sam", d("2026-10-27T23:00:00Z"), NOW, BRISBANE),
     "Sam's coming Wednesday. Are you?",
   );
   // Seven days out, the date.
   assertEquals(
-    composeAnchorCopy("Sam", d("2026-10-28T23:00:00Z"), NOW, ROOM_TIME_ZONE),
+    composeAnchorCopy("Sam", d("2026-10-28T23:00:00Z"), NOW, BRISBANE),
     "Sam's coming on 29 Oct. Are you?",
   );
   assertEquals(
-    composeAnchorCopy("Sam", d("2026-11-13T23:00:00Z"), NOW, ROOM_TIME_ZONE),
+    composeAnchorCopy("Sam", d("2026-11-13T23:00:00Z"), NOW, BRISBANE),
     "Sam's coming on 14 Nov. Are you?",
   );
   // Tonight reads as today, not as tomorrow's weekday.
   assertEquals(
-    composeAnchorCopy("Sam", d("2026-10-22T12:00:00Z"), NOW, ROOM_TIME_ZONE),
+    composeAnchorCopy("Sam", d("2026-10-22T12:00:00Z"), NOW, BRISBANE),
     "Sam's coming Thursday. Are you?",
   );
   // A blank name never reads as a stray apostrophe.
   assertEquals(
-    composeAnchorCopy("  ", d(PLAYED_FRI), NOW, ROOM_TIME_ZONE),
+    composeAnchorCopy("  ", d(PLAYED_FRI), NOW, BRISBANE),
     "Someone's coming Friday. Are you?",
   );
 });
@@ -263,23 +352,24 @@ Deno.test("copy: weekday form inside six days, date form past them", () => {
 Deno.test("copy weekdays follow the room's zone, not UTC", () => {
   // 00:30 Saturday in Brisbane, still Friday 14:30 UTC.
   assertEquals(
-    composeAnchorCopy("Sam", d(PLAYED_SAT_BRISBANE), NOW, ROOM_TIME_ZONE),
+    composeAnchorCopy("Sam", d(PLAYED_SAT_BRISBANE), NOW, BRISBANE),
     "Sam's coming Saturday. Are you?",
   );
   assertEquals(
     composeAnchorCopy("Sam", d(PLAYED_SAT_BRISBANE), NOW, "UTC"),
     "Sam's coming Friday. Are you?",
   );
-  assertEquals(calendarDaysBetween(NOW, d(PLAYED_SAT_BRISBANE), ROOM_TIME_ZONE), 2);
+  assertEquals(calendarDaysBetween(NOW, d(PLAYED_SAT_BRISBANE), BRISBANE), 2);
   assertEquals(calendarDaysBetween(NOW, d(PLAYED_SAT_BRISBANE), "UTC"), 1);
 });
 
-Deno.test("the room zone is Brisbane, the only clock available", () => {
-  assertEquals(ROOM_TIME_ZONE, "Australia/Brisbane");
+Deno.test("the room's clock is the room's own zone", () => {
   // Brisbane is UTC+10 year round (no DST since 1991), which is what makes a
-  // hard-coded zone safe for a week of copy.
+  // week of copy safe in one zone.
   assertEquals(
-    calendarDaysBetween(new Date("2026-01-15T00:00:00Z"), new Date("2026-06-15T00:00:00Z"), ROOM_TIME_ZONE),
+    calendarDaysBetween(new Date("2026-01-15T00:00:00Z"), new Date("2026-06-15T00:00:00Z"), BRISBANE),
     151,
   );
+  // The zone is read from the room, never from a constant in this file.
+  assertEquals(FALLBACK_TIME_ZONE, "UTC");
 });
