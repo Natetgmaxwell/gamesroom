@@ -1327,17 +1327,15 @@ struct RoomDetailView: View {
             let event = await roomService.loadActiveEvent(
                 roomId: room.id, force: force
             )
-            // V0.91 — late-opt-in catch-up on room-open. When the
-            // local user is opted in to this room and an active
-            // event exists, schedule the on-create push for it if
-            // the dispatcher has no pending request for the same
-            // (eventId, kind, userId) identifier. Covers the case
-            // where the realtime INSERT was missed (device
-            // suspended, offline at creation moment) AND the case
-            // where the user just opted in and is now opening the
-            // room for the first time since.
+            // Notification-etiquette fix (2026-11-04) — reconcile
+            // this device's briefing requests for the room's
+            // active event against the caller's CURRENT seat
+            // state on every room open: claimed members never see
+            // claim-your-seat language, declined members get
+            // silence, and the on-create prompt fires at most
+            // once per (event, user) per install.
             if event != nil {
-                await roomService.scheduleActiveEventOnCreateIfMissing(
+                await roomService.reconcileBriefing(
                     roomId: room.id
                 )
             }
