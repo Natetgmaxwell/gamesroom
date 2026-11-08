@@ -216,8 +216,9 @@ off-token."
 ## What was deliberately not done
 
 - **Not one word of logic moved.** Every change is a literal swapped for a token on an
-  existing modifier. 24 files, 814 insertions, 759 deletions - the line counts nearly
-  match because the diffs are mostly one-for-one replacements.
+  existing modifier. 24 files under `GamesRoom/` (Theme.swift, 15 in `GamesRoom/Views/`,
+  8 in `GamesRoom/Views/Components/`), 814 insertions, 759 deletions - the line counts
+  nearly match because the diffs are mostly one-for-one replacements.
 - **The share card, the widgets and the watch app were not tokenised.** The widget
   target does not source `Theme.swift` (audit #27), so tokens there would need the
   target's sources changed first. Out of scope for this lane.

@@ -1,97 +1,26 @@
 # STATE S4
 
-STATE: step 8 of 9 done. Next: step 9.
+STATE: ALL STEPS DONE (9 of 9). Lane complete.
 
 BLOCKED: none
 
 Ticks are in .maestro/briefs/BRIEF-S4.md (tick the checkbox there too).
 
-## Step 8 notes (S4.8: greys and radii from tokens, commit bbf6d14)
+## Step 9 notes (S4.9: report, commit 392cb10)
 
-Greys (#25) and radii (#26). Styling only: every change is a
-literal -> token swap on an existing modifier. No logic, state,
-string, condition or view-order change; 174 lines moved, 174
-lines back.
+The report. `bash .maestro/fastgate.sh --compile` -> FASTGATE: PASS
+(302 unit cases, parse-check 64/64, xcodegen + xcodebuild BUILD SUCCEEDED,
+no ` error:` line). `.maestro/S4_REPORT.md` was rewritten from scratch; it
+replaced an unrelated `polish/s4-chrome` report of the same name that was
+carried in the tree.
 
-### Greys (#25)
+### How the before column was produced
 
-Every `Theme.Palette.primaryText.opacity(x)` in `GamesRoom/Views` is
-gone - 153 sites across 21 files. The four token definitions in
-`Theme.swift` (secondaryText 0.55, tertiaryText 0.4, labelText 0.7,
-bodyMuted 0.8) are now the only `primaryText.opacity` calls in the
-whole app tree.
+The audit's own source, not a re-derivation: `git archive febbae3` extracted
+to a scratch directory and counted with the same script as the after column.
+The audit says it read febbae3 the same way (`03-spacing.md` line 3).
 
-| Was | Now | Sites |
-|---|---|---|
-| 0.55 | `secondaryText` | 99 |
-| 0.6 | `secondaryText` | 6 |
-| 0.5 | `secondaryText` | 1 |
-| 0.7 | `labelText` | 16 |
-| 0.4 (+ one written `0.40`) | `tertiaryText` | 14 |
-| 0.3 | `tertiaryText` | 4 |
-| 0.45 | `tertiaryText` | 2 |
-| 0.28 | `tertiaryText` | 1 |
-| 0.8 | `bodyMuted` | 6 |
-| 0.75 / 0.78 / 0.85 | `bodyMuted` | 3 |
-
-The one conditional grey - `SeasonComparisonViews.swift:203`, the
-season row's chevron, `primaryText.opacity(enabled ? 0.4 : 0)` -
-became `enabled ? Theme.Palette.tertiaryText : .clear`, so the
-disabled chevron stays invisible and the enabled one keeps the
-tertiary grey.
-
-Greys that move: 0.5 -> 0.55, 0.6 -> 0.55, 0.75/0.78/0.85 -> 0.8,
-0.28/0.3/0.45 -> 0.4. The other 128 sites keep their exact value -
-0.55, 0.7, 0.4 and 0.8 are the token values. Two of the movers are
-chart geometry rather than type: the season bar's ghost fill (0.28)
-and the season trace's solid line (0.85) now sit on the grey scale
-too, so the charts and the labels read as one system.
-
-### Radii (#26)
-
-21 shapes across 9 files, by context:
-
-- `buttonRadius` (12) - the interactive shapes: the member-select
-  row and the close button in `HostScoringDashboard`, the
-  member-select row in `HostScoreEntrySheet`, "Generate scoped code"
-  in `RoomDetailView`, and "Log round" in `HostScoringDashboard`.
-- `cardRadius` (12) - the card chrome: the room row in `RoomPage`,
-  the seat cell in `SeatGridView` (a tile in a grid, not a button).
-- `smallRadius` (8) - the small elements: the three ArrivalCard
-  mini-buttons ("Forfeit", "Skip: texted", "Skip: away"), the ask
-  field and the member-note field (hairline strokes), the "Dispensed"
-  mini-button, the member-name badge in `HostScoringDashboard`, the
-  "corrected" badge in `SessionRoundTimeline`, and the confetti
-  particle in `ConfettiBurst`.
-
-Six shapes actually change size: the four that were radius 10 (the
-two member-select rows, the close button, the seat cell, "Generate
-scoped code") are now 12, matching every other control. The rest were
-already at their token's value, so 8 -> 8 and 12 -> 12 are invisible.
-The "corrected" badge (4 -> 8) and the confetti particle (2 -> 8,
-clamped by SwiftUI to 3 on a 6x10 rect) move by a hair.
-
-### What is left, and why
-
-`cornerRadius: <n>` now appears in `GamesRoom/Views` only at:
-
-- `SeasonStatCardView.swift:75,107` (16, 24) - the share-card export,
-  exempt by design (audit #28).
-- `SeasonComparisonViews.swift:242` (2) and `:559,562` (2.5) - the
-  season bar and its end caps, the brief's exempt bar radii.
-
-`opacity(<n>)` still appears in Views, but not as a `primaryText`
-grey any more: accent washes (0.12/0.14/0.18), disabled washes
-(0.35), the scan-sheet scrim (0.45), the mascot's ink ladder
-(0.5-0.9), the exempt share card's palette, and 12 error lines still
-on `.red.opacity(0.85)`. Those reds are the finding #24 family and
-step 8's brief scopes them out ("map every `primaryText.opacity(x)`"),
-so they are carried for TARS.
-
-### Literal counts (the audit's method)
-
-Patterns, reproduced from `docs/audit/2026-11-08/03-spacing.md` and
-verified to match its febbae3 table exactly, file by file:
+Patterns, unchanged from `03-spacing.md`:
 
 ```text
 spacing  grep -cE 'spacing: [0-9]'
@@ -102,59 +31,89 @@ opacity  grep -cE 'opacity\([0-9]'
 frame    grep -cE '\.frame\((width|height|maxWidth): [0-9]'
 ```
 
-Febbae3 -> now, for the 23 files step 8 touched (the now column also
-carries steps 1-7's work on the same files):
+Scope: every `.swift` under `GamesRoom/Views`, plus
+`GamesRoomWidgets/GamesRoomWidgets.swift` and
+`GamesRoomWatch/GamesRoomWatchApp.swift`. That is the audit's own file set.
+`Theme.swift` and `GamesRoom/Auth/SignInView.swift` sit outside the audit's
+table and are outside this count, for consistency with it.
 
-| File | spacing | padding | sysFont | radius | opacity | frame |
-|---|---|---|---|---|---|---|
-| RoomDetailView.swift | 41 -> 20 | 34 -> 11 | 0 -> 0 | 16 -> 0 | 60 -> 2 | 6 -> 4 |
-| Components/SeasonComparisonViews.swift | 15 -> 15 | 6 -> 6 | 0 -> 0 | 3 -> 3 | 15 -> 2 | 9 -> 9 |
-| Components/SeatGridView.swift | 5 -> 5 | 0 -> 0 | 0 -> 0 | 2 -> 0 | 8 -> 3 | 0 -> 0 |
-| Components/SessionRoundTimeline.swift | 4 -> 4 | 4 -> 4 | 0 -> 0 | 1 -> 0 | 6 -> 0 | 2 -> 2 |
-| Components/DrowningBadge.swift | 5 -> 1 | 3 -> 0 | 0 -> 0 | 0 -> 0 | 6 -> 0 | 0 -> 0 |
-| Components/LeaderboardRow.swift | 6 -> 2 | 0 -> 0 | 0 -> 0 | 0 -> 0 | 4 -> 0 | 4 -> 3 |
-| Components/MascotConfigSection.swift | 2 -> 2 | 1 -> 1 | 0 -> 0 | 0 -> 0 | 1 -> 0 | 0 -> 0 |
-| Components/MascotBubble.swift | 1 -> 1 | 0 -> 0 | 0 -> 0 | 0 -> 0 | 1 -> 0 | 0 -> 0 |
-| Components/ConfettiBurst.swift | 0 -> 0 | 0 -> 0 | 0 -> 0 | 1 -> 0 | 0 -> 0 | 1 -> 1 |
-| RoomPage.swift | 7 -> 4 | 5 -> 0 | 0 -> 0 | 5 -> 0 | 13 -> 0 | 5 -> 3 |
-| RoomSettingsSheet.swift | 7 -> 7 | 3 -> 3 | 1 -> 1 | 0 -> 0 | 20 -> 3 | 3 -> 0 |
-| HostScoringDashboard.swift | 7 -> 7 | 3 -> 3 | 0 -> 0 | 6 -> 0 | 10 -> 5 | 6 -> 6 |
-| HostScoreEntrySheet.swift | 3 -> 3 | 3 -> 3 | 0 -> 0 | 2 -> 0 | 3 -> 2 | 1 -> 1 |
-| QuestionBoxViews.swift | 10 -> 2 | 5 -> 0 | 1 -> 0 | 5 -> 0 | 8 -> 0 | 0 -> 0 |
-| ChipScanSheet.swift | 12 -> 2 | 9 -> 0 | 1 -> 1 | 5 -> 0 | 10 -> 1 | 1 -> 1 |
-| CAHCardScanSheet.swift | 8 -> 1 | 8 -> 0 | 0 -> 0 | 5 -> 0 | 7 -> 1 | 0 -> 0 |
-| ArrivalCard.swift | 4 -> 1 | 6 -> 6 | 0 -> 0 | 5 -> 0 | 1 -> 0 | 0 -> 0 |
-| PackDetailView.swift | 4 -> 0 | 1 -> 0 | 1 -> 0 | 0 -> 0 | 4 -> 0 | 0 -> 0 |
-| PackStoreView.swift | 1 -> 1 | 1 -> 1 | 0 -> 0 | 0 -> 0 | 2 -> 0 | 1 -> 0 |
-| MemberCalendarSettingsSheet.swift | 2 -> 0 | 1 -> 0 | 0 -> 0 | 0 -> 0 | 6 -> 0 | 0 -> 0 |
-| RoomNotificationPrefs.swift | 7 -> 0 | 1 -> 0 | 0 -> 0 | 0 -> 0 | 6 -> 1 | 0 -> 0 |
-| CreateRoomSheet.swift | 0 -> 0 | 0 -> 0 | 0 -> 0 | 0 -> 0 | 3 -> 1 | 0 -> 0 |
-| WithdrawChipsSheet.swift | 0 -> 0 | 0 -> 0 | 0 -> 0 | 0 -> 0 | 2 -> 1 | 0 -> 0 |
+**The before column reproduces the audit file for file.** Totals come out at
+160 / 102 / 13 / 58 / 213 / 47 against the audit's published
+160 / 102 / 13 / 58 / 212 / 47. The one-line difference is
+`AppSettingsView.swift:20`, a doc comment containing the word `opacity`,
+which the audit's "Clean" row listed as 0. Commented lines are counted, as
+the audit specifies.
 
-### Gate
+### Totals, febbae3 -> now
 
-`bash .maestro/fastgate.sh` -> FASTGATE: PASS (302 unit cases,
-parse-check 64/64). Also type-checked the whole app source tree
-(123 files) against the iOS 27 simulator SDK with the cached Supabase
-module (`swiftc -typecheck`, deployment target 26.0): 0 errors.
+| Pattern | Before | After | Removed | Cut |
+|---|---|---|---|---|
+| `spacing: <n>` | 160 | 87 | 73 | 46% |
+| `.padding(...)` | 102 | 46 | 56 | 55% |
+| `.system(size:)` | 13 | 11 | 2 | 15% |
+| `cornerRadius: <n>` | 58 | 5 | 53 | 91% |
+| `opacity(<n>)` | 213 | 39 | 174 | 82% |
+| `.frame(w/h: <n>)` | 47 | 38 | 9 | 19% |
 
-### Residuals, deliberately left alone
+The 174 removed opacities are 162 type greys (`primaryText.opacity`), 8
+`.red.opacity(0.85)` error lines moved to `Palette.loss`, 2 hero-card fills
+absorbed by `sectionCard`, and 2 live-card pill backgrounds dropped with the
+pills.
 
-- The "Add an event" CTA keeps its `.padding(.top, 4)`
-  (`RoomDetailView.swift:1178`).
-- `SeasonComparisonViews.swift` still has 2/3/6/8/10 gaps of its own
-  (a different card family; no finding lists it).
-- The room page's icon-less rows (round history, notes, seasons) still
-  start at their container's left edge - carried over from step 5.
-- 12 error lines still on `.red.opacity(0.85)` outside the two sheets
-  step 7 took (finding #24's family, outside this step's brief).
-- `MascotFaceView`'s ink opacity ladder is drawing, not type grey.
+The 39 left are 37 real sites (10 error reds, 7 mascot ink, 5 share-card
+cream, 7 accent washes, 3 disabled washes, 2 scrims, 2 surface and hairline
+washes, 1 accent label), plus the `AppSettingsView` comment and the widget's
+`.activityBackgroundTint(.black.opacity(0.8))`.
 
-Next iteration is step 9 only: the report. Run
-`bash .maestro/fastgate.sh --compile`, re-run the literal counts above
-and write `.maestro/S4_REPORT.md` with the before/after per file.
+### What is left, and why
 
-Note for step 9: `.maestro/S4_REPORT.md` already exists in this tree
-from a different lane (the old `polish/s4-chrome` "Chrome stragglers"
-report). The brief says step 9 writes `.maestro/S4_REPORT.md`, so that
-file is replaced, not appended to.
+- `cornerRadius:` at 5 sites only: `SeasonStatCardView.swift:75,107` (16, 24)
+  and `SeasonComparisonViews.swift:242,559,562` (2, 2.5, 2.5). The first pair
+  is the exempt share-image export (audit #28), the second the exempt season
+  bar radii.
+- `.system(size:)` at 11 sites: 9 in the exempt share card, 1 in
+  `ChipScanSheet.swift:305` (a 10pt count inverted on a chip swatch), 1 in
+  `RoomSettingsSheet.swift:1370` (an 18pt SF Symbol in a Menu label).
+- `primaryText.opacity` appears nowhere outside the four token definitions in
+  `Theme.swift`. Zero call sites in the whole app tree.
+- The 10 remaining `.red.opacity(0.85)` error lines belong to finding #24's
+  family, which this lane's brief did not cover.
+- `spacing: 0` is 31 of the 87 remaining spacing literals. It is not an
+  off-token value; the audit counts it and so does the report.
+
+The full per-file table, the method, the residuals and the gate output are in
+`.maestro/S4_REPORT.md`.
+
+### Scripts
+
+In `.maestro/playbooks/Working/`:
+
+- `s4-literal-counts.sh` - the Views-only counter (step 8's).
+- `s4-count-all.sh` - whole-tree counter, any root.
+- `s4-count-compare.sh` - before/after table, any pair of roots.
+- `s4-report-rows.sh` - emits the report's markdown rows.
+
+### Lane summary
+
+| Step | Commit | Subject |
+|---|---|---|
+| 1 | c785d83 | S4.1: button, secondary-action, grey and radius tokens |
+| 2 | 2db641a | S4.2: one primary button |
+| 3 | 90bc279 | S4.3: one secondary-action style |
+| 4 | 0eacf31 | S4.4: one card chrome; ArrivalCard single inset |
+| 5 | 3ece3d8 | S4.5: list text shares one leading edge |
+| 6 | 78e143b | S4.6: spacing on the two rhythms |
+| 7 | 04a5773 | S4.7: reader card, scan sheets, pack detail on the system |
+| 8 | bbf6d14 | S4.8: greys and radii from tokens |
+| 9 | 392cb10 | S4.9: report |
+
+Each work commit is followed by an `S4.N: tick box and record notes` commit
+that ticks the brief and rewrites this file.
+
+24 files under `GamesRoom/` changed across the lane - `Theme.swift`, 15 in
+`GamesRoom/Views/`, 8 in `GamesRoom/Views/Components/` - 814 insertions and
+759 deletions. The 6 audit documents under `docs/audit/2026-11-08/` were added
+by TARS in the lane's setup commit (`1a44da0`), not by this lane. No logic,
+state, condition, string, view order or file structure moved. No file outside
+ALLOWED FILES was touched, no test was deleted or weakened, no migration was
+written, and `main` was never touched.
