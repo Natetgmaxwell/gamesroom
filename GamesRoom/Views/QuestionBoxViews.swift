@@ -170,15 +170,11 @@ struct QuestionReaderCard: View {
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .accessibilityIdentifier("reader-card-done")
-                Button(action: close(onPass, haptic: Haptics.light)) {
-                    Text("Pass")
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.hairline))
-                }
-                .accessibilityIdentifier("reader-card-pass")
+                // v1.2.4 S4.3 — the pass is the app's one secondary
+                // style: a grey caption, no outline box, so it stops
+                // reading as a peer of the Done primary.
+                SecondaryTextAction(title: "Pass", action: close(onPass, haptic: Haptics.light))
+                    .accessibilityIdentifier("reader-card-pass")
             }
         }
         .padding(28)

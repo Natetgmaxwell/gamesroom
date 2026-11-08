@@ -2100,28 +2100,22 @@ private struct V0StateReEntryPills: View {
 }
 
 /// v1.2 S2 — the plain grey text action every card state uses for
-/// its non-primary verb: trailing-aligned, chevron, no box chrome.
-/// Exactly one brass-filled primary per card state; everything
-/// else on the card is this.
+/// its non-primary verb. Exactly one brass-filled primary per card
+/// state; everything else on the card is this.
+///
+/// v1.2.4 S4.3 — the card's secondary is now the app's one
+/// secondary style: a centred grey caption with no chevron and no
+/// chrome, sitting under the primary. The old trailing-aligned
+/// chevron version put this action at the card's right edge while
+/// the unclaimed card centred the same verb, so a one-tap state
+/// change moved the secondary across the card. The component stays
+/// (call sites are unchanged) and now renders `SecondaryTextAction`.
 private struct TrailingTextAction: View {
     let title: String
     let action: () -> Void
 
     var body: some View {
-        HStack {
-            Spacer()
-            Button(action: action) {
-                HStack(spacing: 4) {
-                    Text(title)
-                    Image(systemName: Theme.Icon.chevronRight)
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .accessibilityHidden(true)
-                }
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-            }
-            .buttonStyle(.plain)
-        }
+        SecondaryTextAction(title: title, action: action)
     }
 }
 
@@ -2588,41 +2582,29 @@ private struct WitnessSlot: View {
             // V0.68 — secondary "Withdraw more" CTA. Renders for casino
             // events in `.inPlay` so a member who has already withdrawn
             // into their working hand can still top up. One tap behind
-            // the primary CTA, styled as an outline button. V0.70
-            // animates the secondary CTAs in via the outer VStack's
-            // fade animation when the optionals flip.
+            // the primary CTA. v1.2.4 S4.3 — the accent-outlined box is
+            // gone: it is now the app's one secondary style (centred grey
+            // caption, no chrome), so the stacked extras stop competing
+            // with the primary. V0.70 animates the secondary CTAs in via
+            // the outer VStack's fade animation when the optionals flip.
             if let onWithdrawMore {
-                Button(action: onWithdrawMore) {
-                    Text("Withdraw more")
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                }
-                .buttonStyle(.plain)
-                .pressScale()
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .accessibilityLabel(Text("Withdraw more"))
+                SecondaryTextAction(title: "Withdraw more", action: onWithdrawMore)
+                    .pressScale()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .accessibilityLabel(Text("Withdraw more"))
             }
 
             // V0.66 — secondary "Count your CAH cards" CTA. Renders for
             // every active event when the room has the CAH pack installed,
             // so a casino night can still settle CAH cards. One tap behind
-            // the primary CTA, styled as an outline button.
+            // the primary CTA. v1.2.4 S4.3 — the accent-outlined box is
+            // gone: it is now the app's one secondary style (centred grey
+            // caption, no chrome).
             if let onCAHSettle {
-                Button(action: onCAHSettle) {
-                    Text("Count your CAH cards")
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                }
-                .buttonStyle(.plain)
-                .pressScale()
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .accessibilityLabel(Text("Count your CAH cards"))
+                SecondaryTextAction(title: "Count your CAH cards", action: onCAHSettle)
+                    .pressScale()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .accessibilityLabel(Text("Count your CAH cards"))
             }
 
             // P0.4 — host-only "Score a round" affordance. Renders
@@ -2633,23 +2615,17 @@ private struct WitnessSlot: View {
             //
             // v1.2.2 S6 T7 — its `4` top nudge is gone, so it sits
             // `cardGroupGap` below the primary CTA like every other
-            // group; the `.vertical, 12` stays because it is inside
-            // the button label (the control's own height).
+            // group.
+            //
+            // v1.2.4 S4.3 — the accent-outlined box and its decorative
+            // seal are gone: it is now the app's one secondary style
+            // (centred grey caption, no chrome). The host's "(host)"
+            // accessibility label stays, so the UI sweep still finds
+            // this button.
             if let onScore {
-                Button(action: onScore) {
-                    HStack {
-                        Image(systemName: Theme.Icon.checkmarkSealFill)
-                        Text("Score a round")
-                    }
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                }
-                .buttonStyle(.plain)
-                .pressScale()
-                .accessibilityLabel(Text("Score a round (host)"))
+                SecondaryTextAction(title: "Score a round", action: onScore)
+                    .pressScale()
+                    .accessibilityLabel(Text("Score a round (host)"))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2771,23 +2747,18 @@ private struct CeremonialCard: View {
     /// `TonightStarCallSheet`. Rendered inside `TonightStarSection`'s
     /// label row when there is a star, on its own trailing row when
     /// there isn't. No chrome of its own — same type scale, same grey.
+    ///
+    /// v1.2.4 S4.3 — the trailing chevron is gone and the action is
+    /// the app's one secondary style: a centred grey caption, no
+    /// chrome. The `make-a-call` identifier stays for the UI sweep.
     private var makeACallAction: (() -> Void)? {
         guard canMakeACall else { return nil }
         return { showingCallSheet = true }
     }
 
     private var makeACallButton: some View {
-        Button { showingCallSheet = true } label: {
-            HStack(spacing: 4) {
-                Text("Make a call")
-                Image(systemName: Theme.Icon.chevronRight)
-                    .accessibilityHidden(true)
-            }
-            .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("make-a-call")
+        SecondaryTextAction(title: "Make a call") { showingCallSheet = true }
+            .accessibilityIdentifier("make-a-call")
     }
 
     var body: some View {
@@ -2821,6 +2792,10 @@ private struct CeremonialCard: View {
             // `TonightStarSection` so the quote gets the full card
             // width; with no star to sit beside it, it keeps a row
             // of its own.
+            //
+            // v1.2.4 S4.3 — with no star to sit beside, the action
+            // is the app's one secondary style: a centred grey caption
+            // on its own row, so it no longer hangs off the right edge.
             Group {
                 if let card = tonightStarCard {
                     TonightStarSection(
@@ -2828,10 +2803,7 @@ private struct CeremonialCard: View {
                         onMakeACall: makeACallAction
                     )
                 } else if canMakeACall {
-                    HStack {
-                        Spacer(minLength: 12)
-                        makeACallButton
-                    }
+                    makeACallButton
                 }
             }
             .sheet(isPresented: $showingCallSheet) {
@@ -2922,14 +2894,15 @@ private struct TonightStarSection: View {
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 if let onMakeACall {
                     Spacer(minLength: 12)
+                    // v1.2.4 S4.3 — the trailing chevron is gone: the
+                    // action wears the app's one secondary look (grey
+                    // caption, no chrome) whether it rides this label
+                    // row or stands on its own.
                     Button(action: onMakeACall, label: {
-                        HStack(spacing: 4) {
-                            Text("Make a call")
-                            Image(systemName: Theme.Icon.chevronRight)
-                                .accessibilityHidden(true)
-                        }
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        Text("Make a call")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.secondaryText)
+                            .multilineTextAlignment(.center)
                     })
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("make-a-call")
@@ -3009,10 +2982,16 @@ private struct MemberNotePromptSection: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                // v1.2.4 S4.3 — the skip wears the app's one secondary
+                // look: a grey caption, no chrome. It stays inline
+                // beside the small Send so the field row keeps its
+                // shape (a full-width secondary would sit half a card
+                // away from the button it answers).
                 Button(action: onSkip) {
                     Text("Skip")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                        .multilineTextAlignment(.center)
                 }
                 .buttonStyle(.plain)
             }

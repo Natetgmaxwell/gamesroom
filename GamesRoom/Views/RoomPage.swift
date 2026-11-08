@@ -671,15 +671,12 @@ struct RoomPage: View {
             .frame(maxWidth: 320)
             .padding(.top, 8)
 
-            Button(action: openJoinRoom) {
-                Text("Ask a friend for a join code")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                    .frame(maxWidth: 320)
-                    .padding(.vertical, 12)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
-            }
-            .buttonStyle(.plain)
+            // v1.2.4 S4.3 — the join path is now the app's one
+            // secondary style: a centred grey caption under the
+            // primary, no outlined box. It keeps the empty state's
+            // 320pt cap so both paths share one measure.
+            SecondaryTextAction(title: "Ask a friend for a join code", action: openJoinRoom)
+                .frame(maxWidth: 320)
 
             Spacer(minLength: 0)
         }
