@@ -1,158 +1,113 @@
 # STATE S2B
 
-STATE: step 5 of 7 done. Next: step 6 (112 RLS + mascot-voice).
+STATE: step 6 of 7 done. Next: step 7 (rollout doc + report), the LAST step: `docs/S2B_SERVER_PUSH.md`, run all gates including `bash .maestro/fastgate.sh --compile`, write `.maestro/S2B_REPORT.md`, commit `S2B.7: rollout doc + report`. Only end the goal when STATE reads ALL STEPS DONE.
 
-Step 5 (S2B.5: question box waits for the table and stops when the night does)
-committed as 431d604.
-- Supabase/migrations/111_question_box_timing.sql (new). Not applied to live.
-- SQL only. No edge function directory was touched, so the deno extra gate
-  had nothing new to check (ran anyway: anchor-nudge-push 22 ok,
-  briefing-push 31 ok, question-turn-push 10 ok, deno check clean on the
-  three).
-- The failure it kills (audit 01-notifications #14, #15 and the reader half
-  of #18): the opener card is created the moment played_at arrives, so the
-  host's phone buzzes at 7:30:00 exactly while the host is at the door and
-  the table is empty; the rotation then asks the members who claimed a seat
-  and never came; and if the host forgets to settle, the box keeps pushing
-  time-sensitive reader cards into the small hours.
+Step 6 (S2B.6: active-only events RLS; mascot voice reads what the UI renders)
+committed as af3b7f7.
+- Supabase/migrations/112_events_rls_active.sql (new). Not applied to live.
+- Supabase/functions/mascot-voice/index.ts rewritten to delegate its
+  decisions to a new pure state.ts; state_test.ts covers it (25 tests).
 
-The SQL (111), four functions
-- public.question_box_arrivals(p_event_id) (new). Who is at the table:
-  a withdrawal on the event (transactions.session_id = event and kind =
-  'casino_withdrawal') or a checked-in seat deposit
-  (seat_deposits.returned_at is set, status <> 'forfeited'). Active room
-  members only. A caller guard: trusted callers (cron, service role) see
-  every room, an app user sees only the rooms they are in. Same shape as
-  106's is_room_member / rpc_caller_trusted and 110's anchor_push_due.
-- public.question_box_rotation(p_event_id). The bank branch is untouched:
-  the members who withdrew, in withdrawal order. The no-bank fallback is
-  now the arrived members in arrival order, instead of everyone who
-  claimed a seat.
-- public.question_box_advance(p_event_id, p_now). Started from the LIVE
-  body. Four rules added:
-    1. the opener waits for three arrivals, or played_at + 30 minutes,
-       whichever comes first;
-    2. no turns once p_now > played_at + rooms.auto_close_hours;
-    3. no turns once nothing has been read or passed for 60 minutes;
-    4. a reader with no active device token is skipped, the next one in
-       the rotation is asked.
-  Everything else is the live body: the cadence, the one-live-card rule,
-  the draw order (member questions, then host questions, then the house
-  deck), the trigger-driven push.
-- public.question_box_host(p_room_id). Started from the LIVE body. The
-  live resolution first (the room's host, else the longest-standing active
-  host), then the reachability rule (a host with an active iOS device
-  token is preferred), then the live host again when no host has a token.
+The SQL (112), four policies dropped and recreated, nothing else touched
+- "members can read events" (select): the 090 shape plus
+  `m.membership_status = 'active'`. The hidden-from check is kept
+  exactly as it was. A kicked member reads no events.
+- "host can insert events" (insert), "host can update events"
+  (update), "host can delete events" (delete): all three moved from
+  `rooms.created_by` to
+  `public.is_room_host(events.room_id, public.current_user_id())`.
+- THE BRIEF LEFT OPEN whether INSERT moves too. It moved, and the
+  reasoning is written in the migration header: the insert policy keyed
+  on the same rooms.created_by and had the same defect (a promoted host
+  can create a night through add_event, which already accepts
+  is_room_host, but the table policy would refuse them). Two guards
+  that disagree is what 095/106 exist to stop. All four policies now
+  agree with the RPCs.
+- No table/column/grant/index changes. The kicked member was already
+  blocked by the back door (093's own policies hide their membership
+  row, and the read policy's exists() runs with caller permissions);
+  112 makes the events policy say what it means on its own.
 
-Deliberate choices, all recorded here for TARS:
-  1. "No turn was read or passed in the last 60 min" is read literally: the
-     newest read or pass on ANY turn of the event. So the box stops an
-     hour after the last answer, and it wakes up again if somebody answers
-     the card that is still open (that answer is then the newest read).
-     The other reading - "the open card is an hour old" - would have kept
-     handing the card to a new reader every cadence until an hour after
-     the card was created. The brief's wording is the literal one.
-  2. The opener is never blocked by the token rule. If it were, a host
-     with no push token would kill the Question Box for the night. So the
-     token rule is applied as a preference between hosts (a host with a
-     token beats a host without), and the last resort is the live host,
-     who still sees the card in the app and can answer it for the reader.
-  3. The token test matches the push exactly: is_active AND platform =
-     'ios', because question-turn-push/index.ts loads tokens with both
-     filters. A member with only a stale or non-iOS token is not asked.
-  4. The arrivals use seat_deposits.returned_at, NOT the
-     transactions.kind = 'seat_deposit_return' ledger row. check_in_seat
-     only writes that ledger row when the deposit amount is greater than
-     zero, so a waived (zero) deposit - a broke member the host waived -
-     would have gone missing as an arrival. returned_at is set by all
-     three arrival paths: the "I'm here" tap, the host's waiver for
-     somebody who arrived unscanned, and the automatic return when a play
-     transaction proves they were there.
-  5. A forfeit is not an arrival: status = 'forfeited' is excluded
-     (forfeit sets forfeited_at, not returned_at).
-  6. The reader cursor is written as the position AFTER the chosen reader,
-     not the position of the chosen reader. The live body adds 1, which is
-     the same thing when nobody is skipped. An earlier draft wrote the
-     chosen position and would have asked the same reader forever; the
-     loop was simulated in Python before the SQL was written (check111.py)
-     and the arithmetic is checked there.
-  7. The internal family keeps the lockdown from 104: question_box_advance,
-     question_box_rotation and question_box_host are revoked from public,
-     anon and authenticated, and granted to service_role. The new arrivals
-     helper is grantable to the app because it checks the caller. The
-     definer chain still works: question_box_tick (granted to
-     authenticated) calls advance as postgres, so the revoked EXECUTE
-     does not bite it. That is the same argument 104 makes.
-  8. question_box_host got TIGHTER than live: live had the default PUBLIC
-     execute. It is now service_role only, like the rest of the family. No
-     client calls it (grepped GamesRoom/ and Supabase/functions/).
-  9. search_path: the live bodies use `set search_path to ''`; the house
-     rule for this lane says `set search_path = public`. 111 follows the
-     house rule and fully qualifies every name, so the behaviour is the
-     same and the rule is met.
-  10. One index was added: transactions (session_id, kind). The arrivals
-      read the ledger by session and there was no index for that shape
-      (the live rotation query had the same gap). create index if not
-      exists, inside the migration transaction.
-  11. The cron was not touched. The 'question-box-tick' job from 097 (every
-      minute) drives the advance, so the opener appears within a minute of
-      the third arrival. The cron still scans events up to 24 hours old;
-      the advance returns null for anything past the auto-close mark, so
-      that is wasted work at worst.
+mascot-voice (audit 04 F5 / F8)
+- state.ts is pure: no env, no fetch, no DB. The decisions and their
+  unit tests live there; index.ts only reads rows and calls it.
+- Event: if the client passes `event_id`, that event is used, but if
+  the caller is on its hidden_from_user_ids the voice says nothing
+  about it (treated as no event). Without an event id, the room's NEXT
+  UNPLAYED night is used, earliest first (the live
+  `get_active_event__inner` rule), plus the hidden-from filter the
+  live body lacks. The old footer path picked the latest event by
+  `played_at DESC, any state`; that is gone.
+  Consequence TARS should know: a room whose NEXT night is not yet
+  created gets "Room has no events yet. Welcome the members." even
+  when it has settled history. The between-nights and recap lines
+  still fire when the client passes the settled event's id, which is
+  what the footer does on a settled night. The model can no longer be
+  handed a stale event and told to write claim nudges for it.
+- Season: `seasonCloseContext` fires the eulogy only when the NEWEST
+  season by ordinal is ended (a room between seasons), or the newest
+  ended season closed within the last three days. The old
+  "any ended season in the top two" kept the eulogy forever after the
+  first close (F5b).
+- Roster (F8): three filters, all active-only now -
+  1. the membership gate itself rejects a non-active caller
+     (not_a_member, 403), because a kicked member gets no voice;
+  2. the leaderboard / leader / margin / caller rank query filters
+     `.eq('membership_status', 'active')` and the facts come from
+     state.ts's `leaderFacts`;
+  3. the member headcount counts active rows only.
+- Extra deno gate for this lane: `deno check` clean and `deno test`
+  25 passed / 0 failed on mascot-voice; the other three function
+  directories re-ran clean (briefing-push 31, anchor-nudge-push 22,
+  question-turn-push 10).
 
-Two consequences TARS should know about:
-  - A room with no bank and no seat deposits (seat_deposit_trigger = 'off')
-    has no arrival signal at all: the opener waits the full 30 minutes and
-    the rotation is empty, so the box runs the opener only. That is what
-    the brief asks for (arrivals are the only gate) but it is a behaviour
-    change for those rooms.
-  - A member with no active device token is never asked while somebody
-    else can be reached. If nobody in the rotation has a token, no interval
-    turn is created at all: the box goes quiet rather than pushing into
-    the void.
+Two deliberate choices, for TARS
+  1. The `jsr:@supabase/supabase-js@2` import in mascot-voice/index.ts
+     was rewritten to `https://esm.sh/@supabase/supabase-js@2`, the
+     import the other three function dirs already use. Without it deno
+     check fails on this machine's empty npm cache (recorded last
+     iteration as a pre-existing failure). One-line, no behaviour
+     change, in an ALLOWED file.
+  2. One test in state_test.ts (uncommitted, no previous version
+     weakened) expected "about 2 days" for a night 2 days + 30 minutes
+     ahead; `Math.ceil` gives 3, as production always has. The test
+     fixture was moved to exactly +2 days (2026-11-10T09:00:00Z) and
+     renamed; the production arithmetic was not touched.
 
-Gates:
-  - bash .maestro/fastgate.sh -> FASTGATE: PASS (302 cases passed,
-    parse-check pass=64).
-  - deno check on the three function directories this lane owns: clean.
-    deno test: anchor-nudge-push 22 passed, briefing-push 31 passed,
-    question-turn-push 10 passed, 0 failed.
-  - The SQL was parsed with pglast (20 statements, every function body
-    balances, every statement starts with a keyword). No postgres on this
-    machine: the migration is written, never applied.
+Gates
+- bash .maestro/fastgate.sh -> FASTGATE: PASS (302 cases, parse-check
+  pass=64).
+- deno check on all four function dirs this lane owns: clean. deno
+  test: briefing-push 31, anchor-nudge-push 22, question-turn-push 10,
+  mascot-voice 25, all 0 failed.
+- 112 parsed with pglast (14 statements) and the structural
+  check112.py from the Working folder: ALL CHECKS OK (drop/create set
+  exact, fragments present, no created_by anywhere in the SQL, begin/
+  commit closed). pglast was not installed on this python; it was
+  pip-installed into /Users/nathanmaxwell/Projects/games-room/.maestro/
+  playbooks/Working/pylib (the lane's temp folder), not the system.
+- Migrations written, never applied. No supabase db push/query/link.
 
-Gotchas for the next step (6, 112 RLS + mascot-voice)
-- The events policies live in two places. The read policy is 090:49-60
-  ("members can read events", the exists() on room_memberships plus the
-  hidden_from_user_ids check). The insert/update/delete policies are
-  011:56-72 ("host can insert/update/delete events", all three keyed on
-  rooms.created_by = current_user_id()). 112 has to drop and recreate all
-  four.
-- The brief for step 6 says the UPDATE and DELETE policies move to
-  is_room_host(events.room_id, current_user_id()). It does not mention the
-  INSERT policy, which also keys on rooms.created_by. Decide whether to
-  move it too (is_room_host is the right shape for a promoted host) and
-  write the decision down.
-- The events read policy today does NOT filter membership_status, so a
-  kicked or left member still reads the room's events. That is the whole
-  point of the step: add m.membership_status = 'active'.
-- deno check Supabase/functions/mascot-voice/ FAILS today, before any
-  change: its index.ts imports `jsr:@supabase/supabase-js@2` and this
-  machine's npm registry cache is empty, so deno cannot resolve
-  `npm:@supabase/realtime-js@2.119.0` offline (scan-settle has the same
-  problem). Rewriting that one import to
-  `https://esm.sh/@supabase/supabase-js@2` - what anchor-nudge-push,
-  briefing-push and question-turn-push already use - makes deno check
-  pass. Verified in a scratch copy outside the repo.
-- The git index tracks Supabase/functions/mascot-voice/index.ts under the
-  UPPERCASE path (git add Supabase/... works for it), but
-  supabase/functions/anchor-nudge-push/* and supabase/migrations/103,105
-  are tracked under the LOWERCASE path. Add those with the exact
-  lowercase path or they stay unstaged.
-- Migrations are written, NEVER applied. No supabase db push/query/link,
-  no deploys.
-- git checkout -- GamesRoom.xcodeproj/project.pbxproj before every commit
-  (xcodegen dirties it).
+Gotchas for step 7 (LAST step: rollout doc + report)
+- The doc is docs/S2B_SERVER_PUSH.md (new, ALLOWED). Required
+  contents per the brief: apply order 108-112; secrets BY NAME only
+  (BRIEFING_PUSH_ENABLED, the shared secret, APNs vars reused);
+  deploy commands with --no-verify-jwt; verify via an unauthenticated
+  probe expecting 401; and the dedupe plan (once server push is on,
+  the client stops scheduling local t168h/t48h/morning_of; TARS wires
+  that flag at integration).
+- Commit message exactly: `S2B.7: rollout doc + report`. Use
+  `bash .maestro/fastgate.sh --compile` for the LAST step's gate.
+- Write `.maestro/S2B_REPORT.md` summarising the lane, then tick step
+  7 in the brief, set STATE to ALL STEPS DONE, and commit the notes.
+- For the secrets section: 109 schedules 'briefing-push-tick' via
+  cron.schedule/pg_net with the vault shared secret exactly like 097;
+  110 mirrors 105. The edge functions gate on the shared-secret
+  header and fail closed with 401; briefing-push additionally does
+  nothing unless env BRIEFING_PUSH_ENABLED === "true".
+- Git path gotchas are recorded two iterations down; the ones that
+  mattered (lowercase supabase paths for 103/105) do not affect new
+  files, which add under Supabase/ normally.
 
 BLOCKED: none
 
