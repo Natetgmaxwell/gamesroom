@@ -1465,6 +1465,16 @@ final class RoomService: ObservableObject {
         membersByRoom[roomId] ?? []
     }
 
+    /// S3.6 — whether the roster for `roomId` has been read at least
+    /// once. The empty-room hero needs to tell "nobody has joined
+    /// yet" from "the roster has not arrived yet": a room with a
+    /// full table must not flash the invite CTA while its roster
+    /// loads. The key is present once the roster has been read, even
+    /// when the room is genuinely empty.
+    func hasLoadedMembers(roomId: UUID) -> Bool {
+        membersByRoom[roomId] != nil
+    }
+
     // MARK: - Brought By (V0.107 — who brought the newcomer)
 
     /// Cached `show_brought_by` switch for `roomId`. Defaults to

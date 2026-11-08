@@ -17,10 +17,14 @@
 //  Save fires `RoomService.redeemJoinCode(code:)` which routes
 //  through the store to either Supabase (production) or the
 //  in-memory fake. On success the sheet dismisses and the parent
-//  `RoomPage` re-renders with the joined room at the top of the
-//  list (the service eagerly refreshes). On failure the inline
-//  error replaces the dismiss path so the member can edit + retry
-//  without losing input.
+//  `RoomPage` opens the joined room (S3.6 — the member lands in
+//  the room they just joined, not back on the list). On failure
+//  the inline error replaces the dismiss path so the member can
+//  edit + retry without losing input.
+//
+//  S3.6 — the code field carries a `PasteButton`: most codes arrive
+//  in a text message, so the paste fills the field when what is on
+//  the clipboard is six letters and digits.
 //
 //  Idempotency: re-redeeming for an existing member returns the
 //  room row without mutating points — the sheet treats that as
@@ -35,6 +39,11 @@ struct JoinRoomSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var roomService: RoomService
 
+    /// S3.6 — called with the joined room's id once the code is
+    /// redeemed, so the parent can open the room straight away
+    /// instead of dropping the member back on the rooms list.
+    var onJoined: ((UUID) -> Void)?
+
     @State private var code: String = ""
     @State private var isRedeeming: Bool = false
     @State private var errorMessage: String?
@@ -43,30 +52,40 @@ struct JoinRoomSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(
-                        "Join code",
-                        text: $code,
-                        prompt: Text("ABC23F")
-                    )
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled(true)
-                    .font(Theme.Typography.titleMono)
-                    .onChange(of: code) { _, newValue in
-                        // Hard-clamp to 6 chars + uppercase. Anything
-                        // pasted with whitespace gets trimmed; the
-                        // server is idempotent so the same code can
-                        // be re-entered without an extra state
-                        // transition.
-                        let filtered = newValue
-                            .uppercased()
-                            .filter { $0.isLetter || $0.isNumber }
-                        let clamped = String(filtered.prefix(6))
-                        if clamped != code { code = clamped }
+                    HStack(spacing: Theme.Layout.gutter) {
+                        TextField(
+                            "Join code",
+                            text: $code,
+                            prompt: Text("ABC23F")
+                        )
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled(true)
+                        .font(Theme.Typography.titleMono)
+                        .onChange(of: code) { _, newValue in
+                            // Hard-clamp to 6 chars + uppercase. Anything
+                            // pasted with whitespace gets trimmed; the
+                            // server is idempotent so the same code can
+                            // be re-entered without an extra state
+                            // transition.
+                            let filtered = newValue
+                                .uppercased()
+                                .filter { $0.isLetter || $0.isNumber }
+                            let clamped = String(filtered.prefix(6))
+                            if clamped != code { code = clamped }
+                        }
+                        // S3.6 — the code usually arrives in a text
+                        // message, so the paste button fills the
+                        // field when what is on the clipboard is six
+                        // letters and digits. Anything else is left
+                        // alone: the member still types it.
+                        PasteButton(payloadType: String.self) { strings in
+                            apply(pasted: strings)
+                        }
                     }
                 } header: {
                     Text("Code")
                 } footer: {
-                    Text("Ask the host for the six-character code from their Room Settings. Codes are case-insensitive.")
+                    Text("Ask the host for the six-character code. They can share it from the room page.")
                 }
 
                 if let errorMessage {
@@ -104,6 +123,21 @@ struct JoinRoomSheet: View {
         code.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    // MARK: - Paste
+
+    /// S3.6 — a pasted code fills the field when it is six letters
+    /// and digits. A longer paste (a whole message, a code with the
+    /// wrong length) is ignored: the member still types it.
+    private func apply(pasted: [String]) {
+        guard let raw = pasted.first else { return }
+        let normalised = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .filter { $0.isLetter || $0.isNumber }
+        guard normalised.count == 6 else { return }
+        code = normalised
+    }
+
     // MARK: - Redeem
 
     private func redeem() async {
@@ -117,7 +151,7 @@ struct JoinRoomSheet: View {
         errorMessage = nil
         defer { isRedeeming = false }
         do {
-            _ = try await roomService.redeemJoinCode(code: resolved)
+            let redeemed = try await roomService.redeemJoinCode(code: resolved)
             // V0.54 — quiet-by-default: the join path no longer
             // requests notification permission. The prompt now
             // surfaces at the first moment a member actually
@@ -128,6 +162,11 @@ struct JoinRoomSheet: View {
             // briefing slot is the on-screen fallback.
             Haptics.success()
             dismiss()
+            // S3.6 — the sheet closes first, then the parent opens
+            // the room. Pushing while the sheet is still on screen
+            // gets swallowed by the dismissal.
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            onJoined?(redeemed.roomId)
         } catch {
             // Map the most common server errors to user-facing
             // copy. The V0.8 brief explicitly avoids public-shame

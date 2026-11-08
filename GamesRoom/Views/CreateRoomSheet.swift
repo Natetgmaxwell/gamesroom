@@ -27,9 +27,9 @@
 //  Save fires `RoomService.createRoom(...)`, which the service
 //  layer routes through the store to either Supabase (production)
 //  or the in-memory fake (previews / dev without Supabase).
-//  Success dismisses the sheet and the parent `RoomPage` re-renders
-//  with the new room at the top of the list (eager refresh in
-//  the service).
+//  Success dismisses the sheet and the parent `RoomPage` opens the
+//  new room (S3.6 — the host lands in the room they just made, not
+//  back on the list).
 //
 
 import SwiftUI
@@ -38,6 +38,11 @@ struct CreateRoomSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var roomService: RoomService
+
+    /// S3.6 — called with the new room's id once the room exists,
+    /// so the parent can open it straight away instead of dropping
+    /// the host back on the rooms list.
+    var onCreated: ((UUID) -> Void)?
 
     @State private var name: String = ""
     @State private var mascotName: String = "Tally"
@@ -170,7 +175,7 @@ struct CreateRoomSheet: View {
         errorMessage = nil
         defer { isSaving = false }
         do {
-            _ = try await roomService.createRoom(
+            let roomId = try await roomService.createRoom(
                 name: resolvedName,
                 mascotName: resolvedMascot.isEmpty ? "Tally" : resolvedMascot,
                 mascotPersonality: mascotPersonality,
@@ -179,6 +184,11 @@ struct CreateRoomSheet: View {
             )
             Haptics.success()
             dismiss()
+            // S3.6 — the sheet closes first, then the parent opens
+            // the new room. Pushing while the sheet is still on
+            // screen gets swallowed by the dismissal.
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            onCreated?(roomId)
         } catch {
             errorMessage = (error as NSError).localizedDescription
         }

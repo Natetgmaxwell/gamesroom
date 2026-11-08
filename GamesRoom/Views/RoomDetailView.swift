@@ -160,9 +160,42 @@ struct RoomDetailView: View {
     /// leaderboard rows.
     @State private var hasLoadedInitialData: Bool = false
 
+    /// S3.6 — the join code the empty-room invite shares. There is
+    /// no read RPC for the live code (only `generate_join_code`), so
+    /// it is minted on demand when the host opens a room with
+    /// nobody in it, and kept for as long as the hero is up.
+    @State private var heroJoinCode: String?
+
+    /// S3.6 — true while the invite code is being minted.
+    @State private var isMintingHeroCode: Bool = false
+
+    /// S3.6 — why the invite code could not be minted, shown as a
+    /// quiet line under the invite action.
+    @State private var heroCodeError: String?
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
+    }
+
+    /// S3.6 — true when the room needs friends before it needs a
+    /// night: the host is alone (fewer than two members) and the
+    /// roster has actually loaded.
+    ///
+    /// The roster gate matters. Until the roster lands we do not
+    /// know the room is empty, so the old CTA stays and a room with
+    /// a full table never flashes the invite.
+    private var inviteFirst: Bool {
+        isHost
+            && roomService.hasLoadedMembers(roomId: room.id)
+            && roomService.cachedMembers(roomId: room.id).count < 2
+    }
+
+    /// S3.6 — the task key for the invite-code mint. It changes when
+    /// the room changes and when the hero starts asking for an
+    /// invite, which is when a code is worth minting.
+    private var inviteHeroTaskKey: String {
+        "\(room.id.uuidString)-\(inviteFirst)"
     }
 
     /// Track P0.4 — gate for the iPad host scoring dashboard. Only
@@ -526,6 +559,12 @@ struct RoomDetailView: View {
             // either; the per-loader error handling + the eventual
             // "Pull to refresh" affordance cover the retry path.
             hasLoadedInitialData = true
+        }
+        // S3.6 — the empty-room invite needs a join code. The key
+        // flips once the roster lands and the host turns out to be
+        // alone, which is when minting one is worth a round trip.
+        .task(id: inviteHeroTaskKey) {
+            await mintHeroJoinCode()
         }
         .refreshable {
             await refresh(force: true)
@@ -1180,7 +1219,7 @@ struct RoomDetailView: View {
                                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         }
                         if isHost {
-                            addEventCTA
+                            hostHeroActions
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1218,6 +1257,94 @@ struct RoomDetailView: View {
         }
         .buttonStyle(.plain)
         .padding(.top, 4)
+    }
+
+    /// S3.6 — the host's empty-room hero.
+    ///
+    /// A room with fewer than two members has nobody at the table,
+    /// so the first thing the host needs is friends, not a night:
+    /// "Invite friends" is the primary (the share sheet, with a join
+    /// code minted on demand) and "Add a night" is the grey caption
+    /// under it. Once the room has a table, the old "Add an event"
+    /// CTA comes back.
+    @ViewBuilder
+    private var hostHeroActions: some View {
+        if inviteFirst {
+            inviteFriendsCTA
+            Button {
+                showingAddEvent = true
+            } label: {
+                Text("Add a night")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+            }
+            .buttonStyle(.plain)
+            if let heroCodeError {
+                Text(heroCodeError)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+            }
+        } else {
+            addEventCTA
+        }
+    }
+
+    /// S3.6 — the invite action. A `ShareLink` over the join code,
+    /// so inviting is one tap. While the code is being minted (or
+    /// when minting failed) the same action mints one instead.
+    @ViewBuilder
+    private var inviteFriendsCTA: some View {
+        if let code = heroJoinCode {
+            ShareLink(
+                item: inviteShareText(for: code),
+                preview: SharePreview("Join my Games Room")
+            ) {
+                inviteFriendsLabel
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                Task { await mintHeroJoinCode() }
+            } label: {
+                inviteFriendsLabel
+            }
+            .buttonStyle(.plain)
+            .disabled(isMintingHeroCode)
+        }
+    }
+
+    private var inviteFriendsLabel: some View {
+        Text("Invite friends")
+            .font(Theme.Typography.body.weight(.semibold))
+            .foregroundStyle(Theme.Palette.background)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Theme.Palette.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func inviteShareText(for code: String) -> String {
+        "Join me in Games Room. Use code \(code) to get started."
+    }
+
+    /// S3.6 — mints the join code the invite shares. There is no
+    /// read RPC for the live code, so this is the only way to get
+    /// one; it is minted once per empty room and then shared.
+    @MainActor
+    private func mintHeroJoinCode() async {
+        guard inviteFirst, !isMintingHeroCode, heroJoinCode == nil else { return }
+        isMintingHeroCode = true
+        defer { isMintingHeroCode = false }
+        do {
+            heroJoinCode = try await roomService.generateJoinCode(roomId: room.id)
+            heroCodeError = nil
+        } catch {
+            heroCodeError = "Couldn't make a join code. Try again."
+        }
     }
 
     // MARK: - Data operations
@@ -4210,7 +4337,10 @@ private struct MemberRosterReadOnly: View {
                         UIPasteboard.general.string = code
                         Haptics.light()
                     } label: {
-                        Image(systemName: Theme.Icon.plusCircle)
+                        // S3.6 — this button copies, so it wears the
+                        // copy mark. It used to wear a plus circle,
+                        // which read as "mint another code".
+                        Image(systemName: "doc.on.doc")
                             .foregroundStyle(Theme.Palette.accent)
                     }
                     .accessibilityLabel(Text("Copy invite code"))
