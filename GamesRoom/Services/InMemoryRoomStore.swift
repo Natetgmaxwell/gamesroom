@@ -1101,6 +1101,24 @@ actor InMemoryRoomStore: RoomStore {
         return 1
     }
 
+    /// In-memory mirror of `settle_event(p_event_id)` (migration
+    /// 107). Stamps `settledAt` on the event and returns the stamp.
+    /// The live function is host-only and refuses a night that has
+    /// not started; the preview path only mirrors the stamp, the
+    /// same way the other in-memory mirrors skip the server guards.
+    func settleEvent(eventId: UUID) async throws -> Date {
+        guard let entry = events.first(where: { $0.value.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "event \(eventId) not found"]
+            )
+        }
+        let settledAt = Date()
+        events[entry.key] = entry.value.withSettledAt(settledAt)
+        return settledAt
+    }
+
     /// In-memory mirror of `set_member_team` (migration 049).
     /// No-op for the synthetic roster — the seeded members have no
     /// team state to mutate, and previews don't need persistence.

@@ -1206,8 +1206,8 @@ struct RoomDetailView: View {
         async let packsLoad: [String] = roomService.loadRoomPacks(roomId: room.id, force: force)
         async let roundsLoad: () = loadRoundsIfNeeded(force: force)
         async let chapterLoad: () = loadChapterLineIfNeeded(force: force)
-        async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded()
-        async let workingHandsLoad: () = loadWorkingHandsIfNeeded()
+        async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded(force: force)
+        async let workingHandsLoad: () = loadWorkingHandsIfNeeded(force: force)
         // V0.84 C2 — Tonight's Star card. Loaded every refresh so
         // a host pick made on another device shows up on next open.
         async let tonightStarLoad: () = loadTonightStarCardIfNeeded(force: force)
@@ -1323,24 +1323,32 @@ struct RoomDetailView: View {
     }
 
     private func loadActiveIfNeeded(force: Bool = false) async {
-        if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            let event = await roomService.loadActiveEvent(
-                roomId: room.id, force: force
+        // V1.24 (audit F1) — the active-event cache used to freeze the
+        // night: the loader only read when the cache was empty, so a
+        // night that started after the first paint never appeared and
+        // pull-to-refresh could not correct it either. The read now
+        // always runs; `force` decides whether the service re-reads
+        // the server or serves its own 30s cache.
+        let wasCached = roomService.cachedActiveEvent(roomId: room.id) != nil
+        let event = await roomService.loadActiveEvent(
+            roomId: room.id, force: force
+        )
+        // V0.91 — late-opt-in catch-up on room-open. When the
+        // local user is opted in to this room and an active
+        // event exists, schedule the on-create push for it if
+        // the dispatcher has no pending request for the same
+        // (eventId, kind, userId) identifier. Covers the case
+        // where the realtime INSERT was missed (device
+        // suspended, offline at creation moment) AND the case
+        // where the user just opted in and is now opening the
+        // room for the first time since. Kept to the first load
+        // for the room: the active event can now be the live
+        // night, and an on-create push for a night already under
+        // way would land in the middle of it.
+        if event != nil, !wasCached {
+            await roomService.scheduleActiveEventOnCreateIfMissing(
+                roomId: room.id
             )
-            // V0.91 — late-opt-in catch-up on room-open. When the
-            // local user is opted in to this room and an active
-            // event exists, schedule the on-create push for it if
-            // the dispatcher has no pending request for the same
-            // (eventId, kind, userId) identifier. Covers the case
-            // where the realtime INSERT was missed (device
-            // suspended, offline at creation moment) AND the case
-            // where the user just opted in and is now opening the
-            // room for the first time since.
-            if event != nil {
-                await roomService.scheduleActiveEventOnCreateIfMissing(
-                    roomId: room.id
-                )
-            }
         }
     }
 
@@ -1384,13 +1392,17 @@ struct RoomDetailView: View {
     /// `casino_withdrawal` rows so the host only sees
     /// withdrawals (the RPC also returns `casino_return` and
     /// other kinds).
-    private func loadHostWithdrawalsIfNeeded() async {
+    ///
+    /// V1.24 (audit F1) — the active event is re-read when the
+    /// refresh is forced, so the pack check below reads tonight's
+    /// event and not the one cached at the first paint.
+    private func loadHostWithdrawalsIfNeeded(force: Bool = false) async {
         guard isHost else {
             hostWithdrawals = []
             return
         }
-        if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            await roomService.loadActiveEvent(roomId: room.id, force: false)
+        if force || roomService.cachedActiveEvent(roomId: room.id) == nil {
+            await roomService.loadActiveEvent(roomId: room.id, force: force)
         }
         guard let event = activeEvent, event.packSlug == "casino" else {
             hostWithdrawals = []
@@ -1413,9 +1425,12 @@ struct RoomDetailView: View {
     /// blanks `workingHands`, and pins the casino state machine
     /// at `.tonightEvent` even though the DB shows a non-zero
     /// `working_hand` for the current user.
-    private func loadWorkingHandsIfNeeded() async {
-        if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            await roomService.loadActiveEvent(roomId: room.id, force: false)
+    ///
+    /// V1.24 (audit F1) — a forced refresh re-reads the active
+    /// event here too, so the pack check reads tonight's event.
+    private func loadWorkingHandsIfNeeded(force: Bool = false) async {
+        if force || roomService.cachedActiveEvent(roomId: room.id) == nil {
+            await roomService.loadActiveEvent(roomId: room.id, force: force)
         }
         guard let event = activeEvent, event.packSlug == "casino" else {
             workingHands = []

@@ -444,6 +444,27 @@ final class RoomService: ObservableObject {
         return (try? await task.value) ?? activeEventByRoom[roomId]
     }
 
+    /// Host-only. Settles the live night through the store
+    /// (`settle_event`, migration 107) and mirrors the stamped
+    /// `settled_at` into the active-event cache, so the room page
+    /// can flip to the recap without waiting on another read. The
+    /// cache timestamp is dropped so the next load re-reads the
+    /// server and the recap comes from the server's own row.
+    ///
+    /// Throws when the RPC refuses: `not_live` for a night that has
+    /// not started or is already settled, 42501 for a caller who is
+    /// not a host of the room.
+    @discardableResult
+    func settleEvent(eventId: UUID) async throws -> Date {
+        let settledAt = try await store.settleEvent(eventId: eventId)
+        if let entry = activeEventByRoom.first(where: { $0.value.id == eventId }) {
+            activeEventByRoom[entry.key] = entry.value.withSettledAt(settledAt)
+            cacheTimestamps.removeValue(forKey: "activeEvent:\(entry.key.uuidString)")
+        }
+        self.lastError = nil
+        return settledAt
+    }
+
     /// Loads the briefing summary for one event into the cache.
     /// Returns the cached value. Called from `RoomDetailView.task`
     /// when an active event is present.

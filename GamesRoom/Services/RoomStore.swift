@@ -419,6 +419,51 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
         return rows.first ?? 0
     }
 
+    /// The live RPC is `settle_event(p_event_id)` (migration 107).
+    /// Host-only: the function raises 42501 for a caller who is not
+    /// a host of the event's room, and P0001 `not_live` for a night
+    /// that has not started or is already settled. It returns the
+    /// `settled_at` it stamped. The deposit escrow is untouched by
+    /// the settle (085 returns a held deposit on the member's own
+    /// check-in or first play transaction).
+    func settleEvent(eventId: UUID) async throws -> Date {
+        let raw: String = try await SupabaseClientProvider.shared
+            .rpc("settle_event", params: [
+                "p_event_id": eventId.uuidString
+            ])
+            .execute()
+            .value
+        guard let settledAt = LiveRoomStore.parsePostgresTimestamp(raw) else {
+            throw NSError(
+                domain: "LiveRoomStore",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "settle_event returned an unreadable timestamp: \(raw)"
+                ]
+            )
+        }
+        return settledAt
+    }
+
+    /// Postgres timestamptz arrives as ISO 8601 with fractional
+    /// seconds ("2026-11-08T09:00:00.123456+00:00"). Try the
+    /// fractional form first, then the plain one. Same shape as the
+    /// realtime payload parser in `RealtimeEventService`.
+    private static func parsePostgresTimestamp(_ raw: String) -> Date? {
+        let fractional: ISO8601DateFormatter = {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return f
+        }()
+        if let date = fractional.date(from: raw) {
+            return date
+        }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: raw)
+    }
+
     // MARK: Briefing
 
     /// The live RPC is `get_briefing_summary(p_event_id)` (migration
