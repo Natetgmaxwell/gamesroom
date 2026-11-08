@@ -56,6 +56,10 @@ enum Theme {
         /// Display — Fraunces, ceremonial card chapter title (28pt).
         /// Same face as the website's display serif. Wonky, warm, hand-made.
         static let display = Font.custom("Fraunces", size: 28)
+        /// Display large — Fraunces at reading size (34pt). The question
+        /// reader card's voice: the same face as the ceremonial headline,
+        /// one step up, because the question is read across a table.
+        static let displayLarge = Font.custom("Fraunces", size: 34)
         /// Display italic — Fraunces italic, the "kept." / "compounds." moments.
         static let displayItalic = Font.custom("Fraunces", size: 28).italic()
         /// Mono — Maple Mono, the numeric voice (V0.99): scores, timers,

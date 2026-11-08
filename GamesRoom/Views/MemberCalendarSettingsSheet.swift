@@ -95,7 +95,7 @@ struct MemberCalendarSettingsSheet: View {
                             Task { await toggle(newValue) }
                         }
                     )) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                             Text("Add Games Room events to my calendar")
                                 .font(Theme.Typography.body)
                                 .foregroundStyle(Theme.Palette.primaryText)
@@ -124,7 +124,7 @@ struct MemberCalendarSettingsSheet: View {
                     if let errorMessage {
                         Text(errorMessage)
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(.red.opacity(0.85))
+                            .foregroundStyle(Theme.Palette.loss)
                     }
                 } header: {
                     Text("Permission")
@@ -168,7 +168,7 @@ struct MemberCalendarSettingsSheet: View {
         case .fullAccess, .authorized, .writeOnly:
             return Theme.Palette.accent
         case .denied, .restricted:
-            return Color.red.opacity(0.85)
+            return Theme.Palette.loss
         case .notDetermined:
             return Theme.Palette.primaryText.opacity(0.55)
         @unknown default:
@@ -236,13 +236,16 @@ struct CalendarVoiceLineRow: View {
     @State private var showSettings: Bool = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Layout.gutter / 2) {
+        // v1.2.4 S4.7 — the voice line is on the tokens now: the icon
+        // sits `cardInset` from its text and the line's two parts sit
+        // `cardLineGap` apart.
+        HStack(alignment: .top, spacing: Theme.Layout.cardInset) {
             Image(systemName: "calendar.badge.plus")
                 .accessibilityHidden(true)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.accent)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 6) {
+                .padding(.top, Theme.Layout.cardLineGap / 2)
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text("Games Room can add events to your calendar. Tap to allow.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText)

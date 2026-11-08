@@ -89,7 +89,13 @@ struct CAHCardScanSheet: View {
     // MARK: - Camera
 
     private var cameraView: some View {
-        VStack(spacing: 16) {
+        // v1.2.4 S4.7 — the scan sheet is on the system now. One
+        // `edgePadding` inset for the whole flow (the camera and the
+        // caption block share it), the camera and the caption block
+        // `cardGroupGap` apart, the caption lines `cardLineGap` apart,
+        // the button the app's one primary, and the sheet's bottom
+        // inset `roomSectionGap`.
+        VStack(spacing: Theme.Layout.cardGroupGap) {
             ZStack {
                 ScanCameraView(controller: camera)
                 switch camera.state {
@@ -99,62 +105,68 @@ struct CAHCardScanSheet: View {
                     EmptyView()
                 }
                 if isUploading {
-                    VStack(spacing: 12) {
+                    VStack(spacing: Theme.Layout.cardLineGap) {
                         ProgressView()
                             .tint(.white)
                             .scaleEffect(1.4)
                         Text("Counting cards…")
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black.opacity(0.45))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(Theme.Palette.background.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.cardRadius))
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal, Theme.Layout.gutter)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.cardRadius))
             .frame(maxHeight: .infinity)
 
-            VStack(spacing: 8) {
+            VStack(spacing: Theme.Layout.cardLineGap) {
                 Text("Counting your CAH cards, the cards you won this session. Each black card is a point.")
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent)
+                    .multilineTextAlignment(.center)
                 Text("Point at your stack of black cards")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .multilineTextAlignment(.center)
                 Text("Hold steady, then tap the shutter.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .multilineTextAlignment(.center)
 
                 if let errorMessage {
                     Text(errorMessage)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(.red.opacity(0.85))
-                }
-
-                if !isUploading {
-                    Button {
-                        capture()
-                    } label: {
-                        Text("Scan cards")
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(camera.state != .running)
+                        .foregroundStyle(Theme.Palette.loss)
+                        .multilineTextAlignment(.center)
                 }
             }
-            .padding(.bottom, 24)
+
+            if !isUploading {
+                Button {
+                    capture()
+                } label: {
+                    Text("Scan cards")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(camera.state != .running)
+            }
         }
+        .padding(.horizontal, Theme.Layout.edgePadding)
+        .padding(.bottom, Theme.Layout.roomSectionGap)
     }
 
     /// V0.71 — permission-refused / no-camera surface.
     @ViewBuilder
     private var cameraFallbackView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Theme.Layout.cardLineGap) {
             if camera.state == .denied {
                 Text("Camera access is off.")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .multilineTextAlignment(.center)
                 Button("Open Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
@@ -165,9 +177,10 @@ struct CAHCardScanSheet: View {
                 Text("No camera available on this device.")
                     .font(Theme.Typography.body.weight(.medium))
                     .foregroundStyle(Theme.Palette.primaryText)
+                    .multilineTextAlignment(.center)
             }
         }
-        .padding(24)
+        .padding(Theme.Layout.sectionSpacing)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Palette.background)
     }
@@ -176,7 +189,7 @@ struct CAHCardScanSheet: View {
 
     private func resultView(result: ScanSettleCardsResult) -> some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text("Your cards: \(displayedCount)")
                     .font(Theme.Typography.display)
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -187,58 +200,50 @@ struct CAHCardScanSheet: View {
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Theme.Layout.gutter)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
+            .padding(.horizontal, Theme.Layout.edgePadding)
+            .padding(.top, Theme.Layout.roomSectionGap)
+            .padding(.bottom, Theme.Layout.roomRowInset)
 
             Divider()
                 .background(Theme.Palette.hairline)
-                .padding(.horizontal, Theme.Layout.gutter)
+                .padding(.horizontal, Theme.Layout.edgePadding)
 
             Spacer()
 
-            VStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Text("Attempt \(result.attempt) of \(ScanSettleService.maxAttempts)")
-                    if result.attemptsRemaining == 0 {
-                        Text("· last scan")
+            // v1.2.4 S4.7 — the footer's caption lines are one group
+            // (`cardLineGap`), the Done button is the next group
+            // (`cardGroupGap`) and is the app's one primary, and
+            // "Re-scan" is the app's one secondary under it.
+            VStack(spacing: Theme.Layout.cardGroupGap) {
+                VStack(spacing: Theme.Layout.cardLineGap) {
+                    HStack(spacing: Theme.Layout.cardLineGap) {
+                        Text("Attempt \(result.attempt) of \(ScanSettleService.maxAttempts)")
+                        if result.attemptsRemaining == 0 {
+                            Text("· last scan")
+                        }
                     }
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    Text("Photo \(String(result.photoHash.prefix(8)))…")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    Text("Your photo is analysed by a cloud vision model and never stored.")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 }
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                Text("Photo \(String(result.photoHash.prefix(8)))…")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                Text("Your photo is analysed by a cloud vision model and never stored.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
 
                 Button(action: { Task { await done() } }) {
                     Text("Done")
-                        .font(Theme.Typography.body.weight(.medium))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
+                .buttonStyle(PrimaryButtonStyle())
 
                 if result.attemptsRemaining > 0 {
-                    Button {
-                        resetForRescan()
-                    } label: {
-                        Text("Re-scan")
-                            .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.accent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                    }
-                    .buttonStyle(.plain)
+                    SecondaryTextAction(title: "Re-scan", action: resetForRescan)
                 }
             }
-            .padding(.horizontal, Theme.Layout.gutter)
-            .padding(.vertical, 16)
+            .padding(.horizontal, Theme.Layout.edgePadding)
+            .padding(.top, Theme.Layout.roomSectionGap)
+            .padding(.bottom, Theme.Layout.roomSectionGap)
         }
     }
 

@@ -2509,6 +2509,10 @@ private struct WitnessSlot: View {
             // the badge back to pending — those chips haven't been
             // counted, and the next scan settles the whole delta.
             if let workingHand, workingHand > 0 {
+                // v1.2.4 S4.7 — the pill is gone. The live card carries
+                // no chips: the state is a plain accent caption, so its
+                // text starts on the card's leading edge like every
+                // other line in the card.
                 if hasScanned, let scannedValue, scannedValue == workingHand {
                     // icon and its own label belong together, so
                     // they sit `cardLineGap` apart (was an ad-hoc 6).
@@ -2516,12 +2520,8 @@ private struct WitnessSlot: View {
                         Image(systemName: Theme.Icon.checkmarkCircleFill)
                         Text("Counted: \(scannedValue) pts, settled")
                     }
-                    .font(Theme.Typography.caption.weight(.semibold))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Theme.Palette.accent.opacity(0.12))
-                    .clipShape(Capsule())
                     .accessibilityLabel(Text("Chips counted: \(scannedValue) points, settled"))
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 } else {
@@ -2529,36 +2529,35 @@ private struct WitnessSlot: View {
                         Image(systemName: Theme.Icon.handPointUpFill)
                         Text("Working hand: \(workingHand) pts")
                     }
-                    .font(Theme.Typography.caption.weight(.semibold))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Theme.Palette.accent.opacity(0.12))
-                    .clipShape(Capsule())
                     .accessibilityLabel(Text("Working hand: \(workingHand) pts"))
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 }
             }
 
             if !attestations.isEmpty {
-                ForEach(attestations) { s in
-                    // v1.2.2 S6 T7 — one reading is one group, so
-                    // the rows keep `cardGroupGap` between them (via
-                    // the outer stack) and the `6` here is the row's
-                    // own vertical inset, not a step between groups.
-                    // The `8` inside the row is inert: it sits
-                    // either side of the `Spacer` that pushes the
-                    // amount to the trailing edge.
-                    HStack(spacing: 8) {
-                        Text(s.contextLabel)
-                            .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        Spacer()
-                        Text(s.visionAmountPoints >= 0 ? "+\(s.visionAmountPoints)" : "\(s.visionAmountPoints)")
-                            .font(Theme.Typography.mono)
-                            .foregroundStyle(s.visionAmountPoints >= 0 ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.55))
+                // v1.2.4 S4.7 — the readings are list rows, the same
+                // shape as the system banner: each one takes the
+                // page's `roomRowInset`, a hairline separates two of
+                // them, and the stack's own spacing is 0 so the
+                // hairline touches neither row.
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(attestations) { s in
+                        HStack(spacing: Theme.Layout.cardLineGap) {
+                            Text(s.contextLabel)
+                                .font(Theme.Typography.body)
+                                .foregroundStyle(Theme.Palette.primaryText)
+                            Spacer()
+                            Text(s.visionAmountPoints >= 0 ? "+\(s.visionAmountPoints)" : "\(s.visionAmountPoints)")
+                                .font(Theme.Typography.mono)
+                                .foregroundStyle(s.visionAmountPoints >= 0 ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.55))
+                        }
+                        .padding(.vertical, Theme.Layout.roomRowInset)
+                        if s.id != attestations.last?.id {
+                            Divider().overlay(Theme.Palette.hairline)
+                        }
                     }
-                    .padding(.vertical, 6)
                 }
             }
 

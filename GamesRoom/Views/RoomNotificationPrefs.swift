@@ -31,21 +31,25 @@ struct RoomNotifPromptCard: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Layout.gutter / 2) {
+        // v1.2.4 S4.7 — the prompt card is on the tokens now: the
+        // icon sits `cardInset` from its text, the question and the
+        // button row are two groups (`cardGroupGap`), and the two
+        // buttons sit `cardGroupGap` apart.
+        HStack(alignment: .top, spacing: Theme.Layout.cardInset) {
             Image(systemName: Theme.Icon.bellFill)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.accent)
-                .padding(.top, 2)
+                .padding(.top, Theme.Layout.cardLineGap / 2)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
                 Text("Get a nudge when \(roomName) schedules a night?")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
 
                 // v1.1 — text buttons: the room state's one filled
                 // button lives in the hero card, not here.
-                HStack(spacing: 20) {
+                HStack(spacing: Theme.Layout.cardGroupGap) {
                     Button {
                         onOptIn()
                     } label: {
@@ -105,7 +109,7 @@ struct RoomNotifSettingsSection: View {
                     }
                 }
             )) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                     Text("Remind me about this room's nights")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
@@ -161,14 +165,18 @@ private struct AnchorPushRow: View {
     @State private var saveError: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // v1.2.4 S4.7 — the anchor-push row is on the tokens now: the
+        // toggle's two lines sit `cardLineGap` apart, the row's own
+        // stack is `cardLineGap` too, and the error line is one group
+        // below it with the app's loss colour.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             Toggle(isOn: Binding(
                 get: { roomService.cachedAnchorPushEnabled(roomId: room.id) },
                 set: { newValue in
                     Task { await save(newValue) }
                 }
             )) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                     Text("Remind me when someone I brought is coming")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
@@ -190,14 +198,14 @@ private struct AnchorPushRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let saveError {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Layout.cardLineGap) {
                     Image(systemName: Theme.Icon.exclamationmarkTriangleFill)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(.red.opacity(0.85))
+                        .foregroundStyle(Theme.Palette.loss)
                         .accessibilityHidden(true)
                     Text("Couldn't save that reminder: \(saveError)")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(.red.opacity(0.85))
+                        .foregroundStyle(Theme.Palette.loss)
                 }
                 .accessibilityIdentifier("anchor-push-enabled-error")
             }
@@ -246,7 +254,7 @@ private struct EventMuteRow: View {
                 }
             }
         )) {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Layout.cardLineGap) {
                 Image(systemName: isMuted ? Theme.Icon.bellSlashFill : Theme.Icon.bellFill)
                     .accessibilityHidden(true)
                     .font(Theme.Typography.caption)
