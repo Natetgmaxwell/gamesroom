@@ -1,6 +1,6 @@
 # STATE S2
 
-STATE: step 4 of 8 done. Next: step 5.
+STATE: step 5 of 8 done. Next: step 6.
 
 STEP 1 DONE (commit a1de6c1 `S2.1: port fix/notif-claimed-state (reconcileBriefing) onto febbae3`).
 The two upstream objects 04081cb and 5649888 were cherry-picked from refs/remotes/icloud/fix/notif-claimed-state and squashed into that single step commit (upstream SHAs and the conflict resolutions are recorded in the commit body).
@@ -39,6 +39,13 @@ STEP 4 DONE (commit 962fa39 `S2.4: room opt-out, unmute and note edits reconcile
 - updateEventMemberFields (note/venue save) now ends with reconcileBriefing(eventId:) so the host note reaches pending reminders.
 - Escaped interpolations fixed: NotificationDispatcher catch-up identifier/title and RoomService roomMembers cache key. The catch-up id now comes from BriefingReconciler.catchUpIdentifier(eventId:) = "<eventId>-catchup". No escaped interpolations remain in NotificationDispatcher/RoomService/BriefingReconciler.
 - Test: "S2 catch-up identifiers are per event and stable". Gate: 324 cases, 324 passed; parse-check 65/65; FASTGATE: PASS.
+
+STEP 5 DONE (commit ed0db05 `S2.5: foreground reconcile + purge rooms the user left or was removed from`).
+- New GamesRoom/Services/AppReconciler.swift (@MainActor, shared). appBecameActive(roomService:): requires a live session; (1) snapshots rooms + cached event ids, roomService.refresh(), and for each removed room calls RoomService.purgeRoom(roomId:) then ends the room Live Activity and clears the widget snapshot if it shows that room (both key on room name); a failed refresh leaves rooms unchanged so nothing is purged; (2) for each still-present room with a cached night: loadActiveEvent(force: true), cancels the old event cadence if the night changed, then reconcileBriefing(eventId:); (3) RealtimeEventService stop + start. Concurrent calls coalesce.
+- RoomService.purgeRoom(roomId:): NotificationDispatcher.purgeRoom (pending AND delivered, matched on userInfo room_id or one of the room event ids, plus the event-id prefix sweep), removes calendar rows, drops the room cached night/members/RSVP caches.
+- Wired in ContentView: onChange(of: scenePhase) on .active, skipped while restoring the session or signed out.
+- Pure helpers in BriefingReconciler (removedRoomIds, requestBelongsToRoom) with 2 new tests. Gate: 326 cases, 326 passed; parse-check 66/66; FASTGATE: PASS. Also ran --compile early (BUILD SUCCEEDED, FASTGATE: PASS) so steps 3-5 are type-checked.
+- ScoreLiveActivityDriver/ScoreSnapshotStore are not in ALLOWED FILES, so the Live Activity end and snapshot clear are done from AppReconciler with ActivityKit and the same App Group key.
 
 BLOCKED: none
 
