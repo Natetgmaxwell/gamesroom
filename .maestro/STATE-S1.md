@@ -1,6 +1,6 @@
 # STATE S1
 
-STATE: step 6 of 8 done. Next: step 7.
+STATE: step 7 of 8 done. Next: step 8.
 
 BLOCKED: none
 
@@ -60,5 +60,12 @@ Notes for step 6 (score sheet starts on the next round):
 - `NextRound` (pure, in `NightPlan.swift`): `after(_ rounds:)` = highest `round_index` across every pack + 1 (1 when none), winners of that last round from its latest row (corrections); `lastLine(winnerNames:round:)` gives `Last: {winner} won round {n-1}` (two names joined with "and", more with commas then "and").
 - `HostScoreEntrySheet` drops the round Stepper (it could be wound back onto a scored round) for grey `Round {n}` plus the `Last:` line; seeds on appear from cached rounds, then again after a forced `loadEventRounds`. The pack comes from step 4's `HostScoreTarget`.
 - Tests: 4 new cases in `TestsS1.swift` (`runS1NextRoundTests`, called from `runS1Tests`).
+
+Notes for step 7 (season awards for everyone; recap above the next night):
+- Commit `f575799`. Fastgate: 330 cases passed (325 before, +5), 65 parse-check, `FASTGATE: PASS`. Extra: `swiftc -typecheck`, zero errors.
+- `.seasonClose` is gone from the state machine and `activeSlot`. The awards are their own section at the top of the page, above the briefing/live card, with grey `Done` (UserDefaults `seasonAwardsDismissed-{seasonId}`). `SeasonAwardsWindow.seasonToShow` (pure, `NightPlan.swift`) picks the most recently ended season from `justClosedSeason`, an ended current season and the season history, if it ended within 7 days and is not dismissed; an older season never resurfaces. Awards for that season are loaded in `loadSeasonIfNeeded` (the current season reopens on close).
+- TARS recap: `RoomService.recentlySettledByRoom` caches the settled night on `settleEvent` success and whenever `get_active_event` returns a settled night. `NightPlan.recapAboveNextNight` renders it (shared `recapCard`) as its own section above the active slot while `settled_at` is within 24h and the active event is a different, unsettled night. Chapter line / star card load for it too.
+- Server gap (see step 5 note): 107 returns the settled night ahead of a future one for 24h. Client-side, `RoomService.addEvent` now holds the night it just created (`scheduledNextByRoom`) when the server still answers with the settled night, and `loadActiveEvent` keeps serving it until it starts or the server returns it. So the host who plans the next night lands on its card with the recap above. Other devices still see only the recap for the rest of the 24h; a night scheduled before the settle stays invisible for that window. Fix needs 107 (rank future above settled). Migration 107 untouched per TARS.
+- Tests: 5 new cases (`runS1SectionTests`).
 
 Ticks are in .maestro/briefs/BRIEF-S1.md (tick the checkbox there too).
