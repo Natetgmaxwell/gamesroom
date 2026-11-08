@@ -12,7 +12,7 @@ Based on main @ febbae3. Nothing pushed, merged or applied. Migration 107 is wri
 | 5 | 4d8b674 | `Settle the night` with 5 s Undo toast, failure caption, haptic, Live Activity end, forced reloads; `Plan the next night` (AddEventSheet `initialPlayedAt`); `.settleRound` removed |
 | 6 | 58d884c | Score sheet starts on max round + 1 across packs; `Round {n}` and `Last: {winner} won round {n-1}` |
 | 7 | f575799 | Season awards as their own section for every member (7 days, `Done`); settled-night recap section above the next night (TARS) |
-| 8 | this commit | Sweep seeds `night-arrivals`, `night-one-round`, `night-settled`; this report |
+| 8 | 2aff95a | Sweep seeds `night-arrivals`, `night-one-round`, `night-settled`; this report |
 
 Each step has a follow-up commit ticking the brief and STATE.
 

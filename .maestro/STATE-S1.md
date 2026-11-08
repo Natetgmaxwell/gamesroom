@@ -1,6 +1,6 @@
 # STATE S1
 
-STATE: step 7 of 8 done. Next: step 8.
+STATE: step 8 of 8 done. Next: done. Lane complete; see .maestro/S1_REPORT.md.
 
 BLOCKED: none
 
@@ -67,5 +67,10 @@ Notes for step 7 (season awards for everyone; recap above the next night):
 - TARS recap: `RoomService.recentlySettledByRoom` caches the settled night on `settleEvent` success and whenever `get_active_event` returns a settled night. `NightPlan.recapAboveNextNight` renders it (shared `recapCard`) as its own section above the active slot while `settled_at` is within 24h and the active event is a different, unsettled night. Chapter line / star card load for it too.
 - Server gap (see step 5 note): 107 returns the settled night ahead of a future one for 24h. Client-side, `RoomService.addEvent` now holds the night it just created (`scheduledNextByRoom`) when the server still answers with the settled night, and `loadActiveEvent` keeps serving it until it starts or the server returns it. So the host who plans the next night lands on its card with the recap above. Other devices still see only the recap for the rest of the 24h; a night scheduled before the settle stays invisible for that window. Fix needs 107 (rank future above settled). Migration 107 untouched per TARS.
 - Tests: 5 new cases (`runS1SectionTests`).
+
+Notes for step 8 (seeds + report):
+- Commit `2aff95a`. `bash .maestro/fastgate.sh --compile`: 333 cases passed, 65 parse-check, xcodebuild build succeeded, `FASTGATE: PASS`.
+- New sweep keys (existing seeds untouched): `night-arrivals` (live Monopoly Deal, 5 claimed, Sam/Jordan/Mike hold deposits -> 2 of 5 arrived), `night-one-round` (round 1 scored, host primary Settle), `night-settled` (settled 30 min ago, CeremonialCard + Plan the next night). InMemoryRoomStore gained seed hooks (`seedExtraMember`, `seedHeldDeposit`, `seedEventRound`) and `fetchEventRounds` returns seeded rounds. 3 new runAsync tests.
+- Report: `.maestro/S1_REPORT.md` (open items for TARS listed there).
 
 Ticks are in .maestro/briefs/BRIEF-S1.md (tick the checkbox there too).
