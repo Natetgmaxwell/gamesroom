@@ -269,6 +269,14 @@ struct RoomPage: View {
         // S3.5 — a room the caller left (or was removed from) must
         // not stay on the stack: the detail page would show a room
         // they are no longer in. Pop back to the rooms list.
+        // S3 fix: the last-viewed room is recorded when a room is
+        // actually pushed (row, Resume hero, or open after create or
+        // join), not from a tap gesture racing the `NavigationLink`.
+        .onChange(of: roomsPath) { _, path in
+            if let opened = path.last {
+                recordLastViewed(opened)
+            }
+        }
         .onChange(of: roomService.rooms.map(\.id)) { _, ids in
             if let current = roomsPath.last, !ids.contains(current.id) {
                 roomsPath.removeAll()
@@ -661,9 +669,13 @@ struct RoomPage: View {
             }
         }
         .buttonStyle(.plain)
-        .simultaneousGesture(TapGesture().onEnded {
-            recordLastViewed(room)
-        })
+        // S3 fix: no `simultaneousGesture` here. Inside a `List` the
+        // tap gesture won over the row's `NavigationLink`: it
+        // recorded the room as last viewed (which inserts the Resume
+        // hero above the row) and the push never happened, so a tap
+        // on a room row left the user on the rooms list. The
+        // last-viewed room is recorded from `roomsPath` instead,
+        // once the push has actually landed.
     }
 
     /// S3.6 — the night's caption for a room row. "Live now" only
@@ -840,9 +852,6 @@ struct RoomPage: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
-            .simultaneousGesture(TapGesture().onEnded {
-                recordLastViewed(room)
-            })
         }
         .sectionCard(.hero)
     }
