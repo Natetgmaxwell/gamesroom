@@ -314,7 +314,7 @@ final class RoomService: ObservableObject {
     func approveTierTwoJoin(roomId: UUID, userId: UUID, remove: Bool) async throws {
         try await store.approveTierTwoJoin(roomId: roomId, userId: userId, remove: remove)
         self.lastError = nil
-        cacheTimestamps.removeValue(forKey: "roomMembers:\\(roomId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "roomMembers:\(roomId.uuidString)")
         if remove, var roster = membersByRoom[roomId] {
             roster.removeAll { $0.userId == userId }
             membersByRoom[roomId] = roster
@@ -925,7 +925,9 @@ final class RoomService: ObservableObject {
     /// while the event is still in the future. Routes through the
     /// `update_event_member_fields` RPC (migration 050); room scope
     /// derives from the event server-side (F-IDENT-01). Refreshes
-    /// the active-event cache so the briefing card updates.
+    /// the active-event cache so the briefing card updates, and
+    /// re-plans the event's pending reminders so the saved note and
+    /// venue actually reach them (audit 01 #10).
     func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws {
         try await store.updateEventMemberFields(eventId: eventId, note: note, venue: venue)
         self.lastError = nil
@@ -950,6 +952,12 @@ final class RoomService: ObservableObject {
                 )
             }
         }
+        // "Bring $20" and "new address" are exactly what the few-days
+        // and morning-of reminders exist to carry, and the bodies are
+        // frozen at schedule time, so a saved note/venue edit has to
+        // re-plan the event's pending pushes from the reloaded event
+        // (audit 01 #10).
+        await reconcileBriefing(eventId: eventId)
     }
 
     // MARK: - Room settings update
@@ -1942,8 +1950,11 @@ final class RoomService: ObservableObject {
     /// previously-scheduled T-48h / morning-of pushes. Idempotent;
     /// a no-op for rooms with no active event.
     private func cancelRoomCadence(roomId: UUID) async {
-        for (eventId, event) in activeEventByRoom where event.roomId == roomId {
-            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
+        // The dictionary is keyed by ROOM id, so the event id has to
+        // come from the event itself: sweeping by the dictionary key
+        // cancelled nothing (audit 04 F3b).
+        for event in activeEventByRoom.values where event.roomId == roomId {
+            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
         }
     }
 

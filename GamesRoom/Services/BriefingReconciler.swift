@@ -138,6 +138,18 @@ enum BriefingReconciler {
         "\(eventId.uuidString)-\(kindRaw)-\(userId.uuidString)"
     }
 
+    /// The joined-late catch-up request id. Stable per event (a
+    /// re-join overwrites instead of stacking a duplicate push) and
+    /// DISTINCT per event: two nights must never share one request
+    /// id, or the second catch-up silently replaces the first.
+    ///
+    /// The id starts with the event id so `cancelBriefingTrio`'s
+    /// prefix sweep cancels the catch-up with the rest of the event's
+    /// cadence.
+    static func catchUpIdentifier(eventId: UUID) -> String {
+        "\(eventId.uuidString)-catchup"
+    }
+
     // MARK: - Fire mode
 
     /// How a planned briefing fires.

@@ -234,8 +234,8 @@ final class NotificationDispatcher {
         )
         await schedule(
             center: center,
-            identifier: "\\(eventId.uuidString)-catchup",
-            title: "\\(mascotName): \\(eventName)",
+            identifier: BriefingReconciler.catchUpIdentifier(eventId: eventId),
+            title: "\(mascotName): \(eventName)",
             body: body,
             kindRaw: NotificationKindRaw.catchUp,
             eventId: eventId,

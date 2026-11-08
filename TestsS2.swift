@@ -325,4 +325,37 @@ func runS2Tests() {
             .none
         )
     }
+
+    // MARK: - Step 4: the catch-up request id is per event
+
+    // The catch-up id used to be the literal text
+    // "\(eventId.uuidString)-catchup" (an escaped interpolation), so
+    // every event shared ONE request id: the second night's catch-up
+    // replaced the first, and the event-id prefix sweep that cancels
+    // an event's cadence never matched it.
+    runner.run("S2 catch-up identifiers are per event and stable") {
+        let first = UUID()
+        let second = UUID()
+
+        let firstId = BriefingReconciler.catchUpIdentifier(eventId: first)
+        let secondId = BriefingReconciler.catchUpIdentifier(eventId: second)
+
+        runner.assertTrue(
+            firstId != secondId,
+            "two events must not share a catch-up identifier"
+        )
+        runner.assertEqual(firstId, "\(first.uuidString)-catchup")
+        runner.assertEqual(secondId, "\(second.uuidString)-catchup")
+        runner.assertEqual(
+            BriefingReconciler.catchUpIdentifier(eventId: first),
+            firstId
+        )
+        // The id carries the event id as its prefix, so the cadence
+        // sweep that cancels an event's pending requests takes the
+        // catch-up with it.
+        runner.assertTrue(
+            firstId.hasPrefix(first.uuidString),
+            "the catch-up identifier must start with the event id"
+        )
+    }
 }
