@@ -19,10 +19,7 @@
 //  type X in scope" errors even when the symbols are present.
 //  Compiling everything in one invocation avoids the issue.
 //
-//  Coverage mirrors what an XCTestCase file would look like:
-//  PackRegistry lookup, PackScoringResolver for both families,
-//  Room / Event / BriefingSummary / RedeemedRoom / ScoreEntry /
-//  PackMetaValue / MemberRSVPState JSON round-trips.
+//  Coverage mirrors what an XCTestCase file would look like.
 //
 
 import Foundation
@@ -5281,6 +5278,8 @@ runner.runAsync("InMemoryRoomStore anchor_push_enabled round-trips both ways fro
     try await store.setAnchorPushEnabled(roomId: room.id, on: true)
     runner.assertTrue(try await store.fetchAnchorPushEnabled(roomId: room.id))
 }
+runBriefingReconcileTests()
+runS2Tests()
 
 // MARK: - S1 lane tests (night lifecycle)
 

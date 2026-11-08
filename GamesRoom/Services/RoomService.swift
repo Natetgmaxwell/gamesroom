@@ -263,6 +263,33 @@ final class RoomService: ObservableObject {
         }
     }
 
+    /// Forgets a room the user is no longer in (they left, or the
+    /// host removed them): cancels and clears its notifications,
+    /// removes its calendar rows and drops its cached night. The
+    /// room's Live Activity and widget snapshot are ended by
+    /// `AppReconciler`, which still knows the room's name.
+    func purgeRoom(roomId: UUID) async {
+        var events: [Event] = []
+        if let event = activeEventByRoom[roomId] { events.append(event) }
+        var eventIds = Set(events.map(\.id))
+        for (eventId, summary) in briefingByEvent where summary.roomId == roomId {
+            eventIds.insert(eventId)
+        }
+        await NotificationDispatcher.shared.purgeRoom(roomId: roomId, eventIds: eventIds)
+        for eventId in eventIds {
+            await CalendarService.shared.removeEvent(eventId: eventId)
+        }
+        activeEventByRoom.removeValue(forKey: roomId)
+        membersByRoom.removeValue(forKey: roomId)
+        cacheTimestamps.removeValue(forKey: "activeEvent:\(roomId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "roomMembers:\(roomId.uuidString)")
+        for eventId in eventIds {
+            briefingByEvent.removeValue(forKey: eventId)
+            rsvpByEvent.removeValue(forKey: eventId)
+            eventRSVPsByEvent.removeValue(forKey: eventId)
+        }
+    }
+
     /// Look up a room by id. The list-side cache; the authoritative
     /// read goes through the store when the view needs server-
     /// fresh data.
@@ -324,7 +351,7 @@ final class RoomService: ObservableObject {
     func approveTierTwoJoin(roomId: UUID, userId: UUID, remove: Bool) async throws {
         try await store.approveTierTwoJoin(roomId: roomId, userId: userId, remove: remove)
         self.lastError = nil
-        cacheTimestamps.removeValue(forKey: "roomMembers:\\(roomId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "roomMembers:\(roomId.uuidString)")
         if remove, var roster = membersByRoom[roomId] {
             roster.removeAll { $0.userId == userId }
             membersByRoom[roomId] = roster
@@ -374,6 +401,7 @@ final class RoomService: ObservableObject {
             .joined(separator: " · ")
         await NotificationDispatcher.shared.scheduleCatchUp(
             eventId: event.id,
+            roomId: room.id,
             eventName: event.name,
             playedAt: event.playedAt,
             mascotName: room.mascotName,
@@ -875,14 +903,11 @@ final class RoomService: ObservableObject {
     /// On error: the cache is unchanged and `lastError` is set.
     /// The view can show a neutral toast.
     ///
-    /// P1.3 — after a successful upsert, re-schedules the briefing
-    /// trio with the new cadence so a member who toggles
-    /// `.declined` → `.claimed` immediately starts receiving T-48h
-    /// and morning-of logistics nudges (and vice versa). The
-    /// dispatcher's `cancelBriefingTrio` followed by
-    /// `scheduleBriefingTrio` is idempotent at the UN layer
-    /// (the dispatcher uses stable per-(event, cadence, user)
-    /// identifiers).
+    /// P1.3 — after a successful upsert, `reconcileBriefing`
+    /// re-schedules this device's briefing requests for the new
+    /// state, so a member who toggles `.declined` → `.claimed`
+    /// immediately starts receiving the T-84h / morning-of
+    /// logistics nudges (and vice versa).
     @discardableResult
     func upsertEventRSVP(eventId: UUID, state: MemberRSVPState) async throws -> MemberRSVP {
         let row = try await store.upsertEventRSVP(eventId: eventId, state: state)
@@ -902,49 +927,14 @@ final class RoomService: ObservableObject {
         async let rsvps = loadEventRSVPs(eventId: eventId)
         async let briefing = loadBriefing(eventId: eventId)
         _ = await (rsvps, briefing)
-        // P1.3 — re-schedule with the new cadence. Reads the
-        // matching event from the cache to surface the name +
-        // playedAt; falls back to the row's roomId for the
-        // roster lookup. V0.54 — filters the fan-out by
-        // `optedInMemberIds` (room-level per-member opt-in) and
-        // `mutedMemberIds` (per-event mute) so quiet members are
-        // never reached.
-        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
-            let room = rooms.first(where: { $0.id == event.roomId })
-            let roster = membersByRoom[event.roomId] ?? []
-            var cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
-                acc[member.userId] = rsvpByEvent[event.id] ?? .unclaimed
-            }
-            // The just-upserted row is canonical — overwrite the
-            // caller's own cadence so the dispatcher fires for
-            // them, not against the stale `.unclaimed` default.
-            cadence[row.memberId] = row.state
-            let optedInMemberIds = Set(
-                roster.filter { $0.notificationsEnabled }.map(\.userId)
-            )
-            let mutedMemberIds = Set(
-                cachedEventRSVPs(eventId: event.id)
-                    .filter { $0.notificationsMuted }
-                    .map(\.memberId)
-            )
-            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
-            await NotificationDispatcher.shared.scheduleBriefingTrio(
-                eventId: event.id,
-                eventName: event.name,
-                playedAt: event.playedAt,
-                mascotName: room?.mascotName ?? "Your mascot",
-                perMemberCadence: cadence,
-                memberNameById: Dictionary(
-                    uniqueKeysWithValues: roster.map { ($0.userId, $0.displayName) }
-                ),
-                optedInMemberIds: optedInMemberIds,
-                mutedMemberIds: mutedMemberIds,
-                hostNote: event.hostNote,
-                mascotPersonality: room?.mascotPersonality ?? .friendly,
-                mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist,
-                mascotState: .idle
-            )
-        }
+        // Lane S2: claim writes this member's calendar row; decline
+        // and release remove it.
+        await syncCalendarRow(eventId: eventId, claimed: row.state == .claimed)
+        // Notification-etiquette fix (2026-11-04) — reschedule via
+        // the single reconcile entry point for THIS device's user
+        // with the row's canonical state. No roster fan-out: a
+        // device schedules only its signed-in user's notifications.
+        await reconcileBriefing(eventId: eventId)
         return row
     }
 
@@ -999,58 +989,31 @@ final class RoomService: ObservableObject {
         // calendar row is NOT written unless the host is also a
         // member with the toggle on (host = user, same toggle
         // applies — no special-case for hosts).
+        // Lane S2: the row is this device's, keyed locally by
+        // event id (`CalendarRowStore`), never the shared server
+        // column.
         if let room = rooms.first(where: { $0.id == roomId }), room.calendarAutoAdd {
-            let granted = await CalendarService.shared.requestAccess()
-            if granted {
-                let event = activeEventByRoom[roomId] ?? Event(
-                    id: newId,
-                    roomId: roomId,
-                    name: name,
-                    playedAt: playedAt,
-                    createdAt: Date(),
-                    packSlugs: packSlugs,
-                    packSlug: packSlugs.first ?? "casino"
-                )
-                await CalendarService.shared.addEvent(
-                    room: room,
-                    event: event,
-                    memberToggleOn: true,
-                    reportIdentifier: { eventId, identifier in
-                        try? await self.reportCalendarIdentifier(
-                            eventId: eventId, identifier: identifier
-                        )
-                    }
-                )
-            }
+            let event = activeEventByRoom[roomId] ?? Event(
+                id: newId,
+                roomId: roomId,
+                name: name,
+                playedAt: playedAt,
+                createdAt: Date(),
+                packSlugs: packSlugs,
+                packSlug: packSlugs.first ?? "casino"
+            )
+            await CalendarService.shared.upsertEvent(event)
         }
-        // P1.3 — schedule the briefing trio. The dispatcher is
-        // non-throwing; failures collapse to a logged warning
-        // inside the dispatcher. Per-event fan-out reads the
-        // post-create room membership (host + invited members)
-        // from the room's roster cache. V0.54 — a brand-new event
-        // has no mutes yet, so `mutedMemberIds` is the empty
-        // default; the fan-out gates on the room-level per-member
-        // opt-in via `optedInMemberIds`.
-        let room = rooms.first(where: { $0.id == roomId })
-        let roster = membersByRoom[roomId] ?? []
-        let cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
-            acc[member.userId] = .unclaimed
-        }
-        let optedInMemberIds = Set(
-            roster.filter { $0.notificationsEnabled }.map(\.userId)
-        )
-        await NotificationDispatcher.shared.scheduleBriefingTrio(
+        // P1.3 — schedule the briefing trio. Notification-etiquette
+        // fix (2026-11-04): the HOST's device schedules only the
+        // host's own notifications (a brand-new event reads
+        // `.unclaimed`, so the once-per-install on-create prompt
+        // fires for the host here). Members' devices self-schedule
+        // via the realtime INSERT path or on room open — no roster
+        // fan-out on this device.
+        await reconcileBriefing(
             eventId: newId,
-            eventName: name,
-            playedAt: playedAt,
-            mascotName: room?.mascotName ?? "Your mascot",
-            perMemberCadence: cadence,
-            memberNameById: Dictionary(
-                uniqueKeysWithValues: roster.map { ($0.userId, $0.displayName) }
-            ),
-            optedInMemberIds: optedInMemberIds,
-            mascotPersonality: room?.mascotPersonality ?? .friendly,
-            mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist
+            hint: (roomId, name, playedAt)
         )
         return newId
     }
@@ -1059,7 +1022,9 @@ final class RoomService: ObservableObject {
     /// while the event is still in the future. Routes through the
     /// `update_event_member_fields` RPC (migration 050); room scope
     /// derives from the event server-side (F-IDENT-01). Refreshes
-    /// the active-event cache so the briefing card updates.
+    /// the active-event cache so the briefing card updates, and
+    /// re-plans the event's pending reminders so the saved note and
+    /// venue actually reach them (audit 01 #10).
     func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws {
         try await store.updateEventMemberFields(eventId: eventId, note: note, venue: venue)
         self.lastError = nil
@@ -1072,18 +1037,17 @@ final class RoomService: ObservableObject {
             if let room = rooms.first(where: { $0.id == event.roomId }),
                room.calendarAutoAdd,
                let fresh = activeEventByRoom[event.roomId] {
-                await CalendarService.shared.updateEvent(
-                    room: room,
-                    event: fresh,
-                    memberToggleOn: true,
-                    reportIdentifier: { eventId, identifier in
-                        try? await self.reportCalendarIdentifier(
-                            eventId: eventId, identifier: identifier
-                        )
-                    }
-                )
+                // Only a row this device already wrote is updated: a
+                // member who has not claimed gets no row from an edit.
+                await CalendarService.shared.upsertEvent(fresh, createIfMissing: false)
             }
         }
+        // "Bring $20" and "new address" are exactly what the few-days
+        // and morning-of reminders exist to carry, and the bodies are
+        // frozen at schedule time, so a saved note/venue edit has to
+        // re-plan the event's pending pushes from the reloaded event
+        // (audit 01 #10).
+        await reconcileBriefing(eventId: eventId)
     }
 
     // MARK: - Room settings update
@@ -1096,13 +1060,8 @@ final class RoomService: ObservableObject {
     /// non-host calls.
     func deleteRoom(roomId: UUID) async throws {
         for event in activeEventByRoom.values where event.roomId == roomId {
-            // V0.86 — pass the server-cached EventKit identifier
-            // (no UserDefaults lookup) so the calendar row is
-            // removed even after a reinstall.
-            await CalendarService.shared.removeEvent(
-                eventId: event.id,
-                identifier: event.eventCalendarIdentifier
-            )
+            // Lane S2: the row is looked up in this device's map.
+            await CalendarService.shared.removeEvent(eventId: event.id)
         }
         try await store.deleteRoom(roomId: roomId)
         self.lastError = nil
@@ -1927,70 +1886,115 @@ final class RoomService: ObservableObject {
         // reflect the new opt-in immediately.
         await cancelRoomCadence(roomId: roomId)
         // V0.91 — late-opt-in catch-up. When the member flips
-        // notifications on, schedule the on-create push for the
-        // room's active event so they receive the briefing they
-        // missed while opted out. Skipped on opt-out (nothing to
-        // catch up on) and on rooms with no active event.
-        // Idempotent against the realtime INSERT path: the
-        // dispatcher's stable (eventId, kind, userId) identifier
-        // means a duplicate scheduling call overwrites instead of
-        // stacking.
+        // notifications on, reconcile the room's active event so
+        // they receive the briefing they missed while opted out,
+        // with bodies matching their CURRENT seat state. Skipped
+        // on opt-out (the cancel above already silenced the room).
         if enabled {
-            await scheduleActiveEventOnCreateIfMissing(roomId: roomId)
+            await reconcileBriefing(roomId: roomId)
         }
     }
 
-    /// V0.91 — schedule the on-create briefing push for the
-    /// room's currently-active event when the local user is opted
-    /// in and the dispatcher has no pending request for the same
-    /// (eventId, kind, userId) identifier. Two call sites:
-    /// 1. `setNotificationsEnabled(_, enabled: true)` — the
-    ///    late-opt-in case: member flips notifications on after
-    ///    the realtime INSERT window closed.
-    /// 2. `RoomDetailView.loadActiveIfNeeded` — the room-open
-    ///    case: covers device-suspended / offline-at-creation
-    ///    misses AND the same late-opt-in flow when the user
-    ///    reopens the room rather than hitting the settings
-    ///    toggle.
-    /// Both paths are idempotent: the dispatcher dedupes by
-    /// identifier, so whichever fires first wins, and the loser is
-    /// a no-op overwrite.
-    func scheduleActiveEventOnCreateIfMissing(roomId: UUID) async {
-        guard let room = rooms.first(where: { $0.id == roomId }) else { return }
-        guard room.notificationsEnabled else { return }
-        guard let event = await loadActiveEvent(roomId: roomId) else { return }
-        let callerId = await SupabaseClientProvider.currentSession()?.user.id
-        guard let callerId else { return }
-        // V0.94 — per-event hidden list. The Event decoded from
-        // the server (migration 060 returns the column when
-        // present) carries the list. The server already filters
-        // get_active_event so a hidden member gets nil from the
-        // load above — this guard is belt-and-braces in case the
-        // load is cache-warm with a non-filtered row.
-        if let hidden = event.hiddenFromUserIds, hidden.contains(callerId) {
+    // MARK: - Briefing reconcile (notification-etiquette fix, 2026-11-04)
+
+    /// The ONE entry point for briefing-trio scheduling on this
+    /// device: read the caller's CANONICAL RSVP state fresh from
+    /// the store (never the `.unclaimed` cache default), then let
+    /// `NotificationDispatcher.reconcileBriefing` cancel the
+    /// event's pending requests and re-plan for the CURRENT state
+    /// (claimed = logistics only, unclaimed = reminder +
+    /// once-per-install on-create prompt, declined = silence).
+    /// A device schedules for its signed-in user only.
+    ///
+    /// Callers: `addEvent`, `RealtimeEventService` INSERT, room
+    /// open (`reconcileBriefing(roomId:)`), `upsertEventRSVP`
+    /// (claim / decline / release), `claimSeat` (escrow branch),
+    /// `claimSeatWaived` (when the waived member is this device's
+    /// user), the mute and opt-in toggles. Unknown state fails
+    /// quiet: cancel, schedule nothing — never the naggy
+    /// `.unclaimed` default. `hint` carries (roomId, name,
+    /// playedAt) for paths that know the event but don't have it
+    /// cached yet (addEvent, realtime INSERT).
+    func reconcileBriefing(
+        eventId: UUID,
+        hint: (roomId: UUID, name: String, playedAt: Date)? = nil
+    ) async {
+        let cachedEvent = activeEventByRoom.values.first(where: { $0.id == eventId })
+        let roomId = cachedEvent?.roomId ?? hint?.roomId
+        guard let roomId else { return }
+        let room = rooms.first(where: { $0.id == roomId })
+        guard
+            let callerId = await SupabaseClientProvider.currentSession()?.user.id
+        else { return }
+
+        // V0.94 — per-event hidden members get nothing. The server
+        // already filters get_active_event; this guards a cache-
+        // warm non-filtered row and the realtime payload path.
+        if let hidden = cachedEvent?.hiddenFromUserIds, hidden.contains(callerId) {
+            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
             return
         }
-        if await NotificationDispatcher.shared.hasPendingOnCreate(
-            eventId: event.id, userId: callerId
-        ) {
+
+        // Room-level opt-out — cancel rather than leave stale
+        // requests pending.
+        if let room, !room.notificationsEnabled {
+            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
             return
         }
+
+        // Per-event mute for this device's user.
+        let muted = cachedEventRSVPs(eventId: eventId).contains {
+            $0.memberId == callerId && $0.notificationsMuted
+        }
+        if muted {
+            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
+            return
+        }
+
+        // Canonical state — fresh from the store. A throw means
+        // unknown: fail quiet (cancel, schedule nothing).
+        let state: MemberRSVPState
+        do {
+            state = try await store.fetchCurrentMemberRSVP(eventId: eventId)
+            rsvpByEvent[eventId] = state
+            cacheTimestamps["currentMemberRSVP:\(eventId.uuidString)"] = Date()
+        } catch {
+            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
+            return
+        }
+
+        let eventName = cachedEvent?.name ?? hint?.name
+        let playedAt = cachedEvent?.playedAt ?? hint?.playedAt
+        guard let eventName, let playedAt else { return }
+
         let callerName = membersByRoom[roomId]?
             .first(where: { $0.userId == callerId })?.displayName
-        await NotificationDispatcher.shared.scheduleBriefingTrio(
-            eventId: event.id,
-            eventName: event.name,
-            playedAt: event.playedAt,
-            mascotName: room.mascotName,
-            perMemberCadence: [callerId: .unclaimed],
-            memberNameById: [callerId: callerName ?? "friend"],
-            optedInMemberIds: [callerId],
-            mutedMemberIds: [],
-            hostNote: nil,
-            mascotPersonality: room.mascotPersonality,
-            mascotIdeology: room.mascotPoliticalIdeology,
-                mascotState: .idle
+
+        await NotificationDispatcher.shared.reconcileBriefing(
+            eventId: eventId,
+            roomId: roomId,
+            eventName: eventName,
+            playedAt: playedAt,
+            mascotName: room?.mascotName ?? "Your mascot",
+            userId: callerId,
+            memberName: callerName,
+            state: state,
+            hostNote: cachedEvent?.hostNote,
+            mascotPersonality: room?.mascotPersonality ?? .friendly,
+            mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist,
+            mascotState: .idle
         )
+    }
+
+    /// Room-open / opt-in-toggle / app-foreground entry: reconcile
+    /// the room's active event (if any) for this device's user.
+    /// Covers the missed-realtime-INSERT case, the late-opt-in
+    /// catch-up, and the state-drift case this fix exists for —
+    /// bodies frozen at schedule time always converge back to the
+    /// caller's current seat state on room open.
+    func reconcileBriefing(roomId: UUID) async {
+        guard let event = await loadActiveEvent(roomId: roomId) else { return }
+        await reconcileBriefing(eventId: event.id)
     }
 
     /// V0.54 — flips the calling member's per-event mute flag.
@@ -1999,7 +2003,7 @@ final class RoomService: ObservableObject {
     /// `eventRSVPsByEvent` row for the caller so the BriefingSlot
     /// mute toggle re-renders immediately. The dispatcher's
     /// `mutedMemberIds` set is recomputed on the next
-    /// `scheduleBriefingTrio` call, so we cancel + reschedule the
+    /// reconcile cycle, so we cancel + reschedule the
     /// event's trio so the new mute reflects in any pending
     /// notification. `currentUserId` is passed in by the view
     /// layer (same shape as `applyOptimisticRSVP`'s parameter)
@@ -2018,7 +2022,11 @@ final class RoomService: ObservableObject {
             eventRSVPsByEvent[eventId] = rows
         }
         self.lastError = nil
-        await cancelEventCadence(eventId: eventId)
+        if muted {
+            await cancelEventCadence(eventId: eventId)
+        } else {
+            await reconcileBriefing(eventId: eventId)
+        }
     }
 
     /// V0.54 — cancels every pending briefing-trio push for every
@@ -2027,8 +2035,11 @@ final class RoomService: ObservableObject {
     /// previously-scheduled T-48h / morning-of pushes. Idempotent;
     /// a no-op for rooms with no active event.
     private func cancelRoomCadence(roomId: UUID) async {
-        for (eventId, event) in activeEventByRoom where event.roomId == roomId {
-            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
+        // The dictionary is keyed by ROOM id, so the event id has to
+        // come from the event itself: sweeping by the dictionary key
+        // cancelled nothing (audit 04 F3b).
+        for event in activeEventByRoom.values where event.roomId == roomId {
+            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
         }
     }
 
@@ -2072,12 +2083,36 @@ final class RoomService: ObservableObject {
         if roomTriggeringEscrow(forEvent: eventId) {
             try await store.claimSeatWithDeposit(eventId: eventId)
             await loadMySeatDeposit(eventId: eventId, force: true)
+            // Notification-etiquette fix (2026-11-04) — the escrow
+            // claim must reconcile too: requests scheduled earlier
+            // as `.unclaimed` are cancelled and re-planned as
+            // claimed (logistics only, no claim language).
+            rsvpByEvent[eventId] = .claimed
+            await syncCalendarRow(eventId: eventId, claimed: true)
+            await reconcileBriefing(eventId: eventId)
             return MemberRSVP(
                 id: UUID(), eventId: eventId, roomId: UUID(), memberId: UUID(),
                 state: .claimed, respondedAt: Date()
             )
         }
         return try await upsertEventRSVP(eventId: eventId, state: .claimed)
+    }
+
+    /// Lane S2: mirrors this member's seat into their own calendar.
+    /// A claim adds or updates the row when the member's calendar
+    /// auto-add is on; anything else removes the row this device
+    /// wrote. Best-effort, never throws.
+    private func syncCalendarRow(eventId: UUID, claimed: Bool) async {
+        guard claimed else {
+            await CalendarService.shared.removeEvent(eventId: eventId)
+            return
+        }
+        guard
+            let event = activeEventByRoom.values.first(where: { $0.id == eventId }),
+            let room = rooms.first(where: { $0.id == event.roomId }),
+            room.calendarAutoAdd
+        else { return }
+        await CalendarService.shared.upsertEvent(event)
     }
 
     /// V0.85 — host-only. The broke-member claim: seat claimed
@@ -2087,6 +2122,14 @@ final class RoomService: ObservableObject {
     func claimSeatWaived(eventId: UUID, memberId: UUID) async throws {
         try await store.claimSeatWaived(eventId: eventId, memberId: memberId)
         self.lastError = nil
+        // Notification-etiquette fix (2026-11-04) — when the waived
+        // member is this device's signed-in user, their own
+        // briefing requests reconcile to claimed immediately;
+        // otherwise their device reconciles on its next room open.
+        if let callerId = await SupabaseClientProvider.currentSession()?.user.id,
+           callerId == memberId {
+            await reconcileBriefing(eventId: eventId)
+        }
     }
 
     /// V0.85 — member. The "I'm here" tap: the held deposit

@@ -153,24 +153,14 @@ final class RealtimeEventService {
             return
         }
 
-        // Schedule the briefing trio for THIS device's user only —
-        // one cadence entry (the local user, .unclaimed). The
-        // host's own addEvent path already scheduled the host's.
-        let callerName = roomService.membersByRoom[roomId]?
-            .first(where: { $0.userId == callerId })?.displayName
-        await NotificationDispatcher.shared.scheduleBriefingTrio(
+        // Reconcile THIS device's user only (notification-etiquette
+        // fix, 2026-11-04): the caller's canonical state is read
+        // fresh inside `reconcileBriefing` — `.unclaimed` for a
+        // brand-new event, so the once-per-install on-create
+        // prompt fires; claim/decline later reconciles the bodies.
+        await roomService.reconcileBriefing(
             eventId: id,
-            eventName: name,
-            playedAt: playedAt,
-            mascotName: room.mascotName,
-            perMemberCadence: [callerId: .unclaimed],
-            memberNameById: [callerId: callerName ?? "friend"],
-            optedInMemberIds: [callerId],
-            mutedMemberIds: [],
-            hostNote: nil,
-            mascotPersonality: room.mascotPersonality,
-            mascotIdeology: room.mascotPoliticalIdeology,
-            mascotState: .idle
+            hint: (roomId, name, playedAt)
         )
     }
 

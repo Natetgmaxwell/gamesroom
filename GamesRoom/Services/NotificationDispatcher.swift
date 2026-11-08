@@ -4,34 +4,32 @@
 //
 //  Track D2 — iOS UNUserNotificationCenter wrapper.
 //
-//  Schedules the 3×3 cadence × response-state matrix that drives the
-//  V0.8 pre-play briefing window (per the brief §"Pre-play Briefing
-//  covers the full pre-event window"):
+//  Notification-etiquette fix (2026-11-04): a device schedules
+//  briefing notifications for its signed-in user ONLY, and every
+//  scheduling path goes through `reconcileBriefing`, which
+//  cancels the event's pending requests and re-plans them from
+//  the caller's CURRENT canonical RSVP state:
 //
 //                  claimed       unclaimed      declined
 //   ─────────────────────────────────────────────────────────
-//   on_create      push          push           push          (event.createdAt)
-//   T-48h          logistics     reminder       skip          (playedAt − 48h)
-//   morning-of     logistics     reminder       skip          (09:00 local, playedAt day)
+//   on_create      skip          prompt (once   skip
+//                                per install)
+//   T-168h         logistics     reminder       skip
+//   T-84h          logistics     reminder       skip
+//   morning-of     logistics     reminder       skip
 //   ─────────────────────────────────────────────────────────
 //
-//  The `declined` state is **terminal** — no T-48h, no morning-of,
-//  no further nudges for that member for that event. Only the
-//  on-create push reaches a declined member (so they have the
-//  option to change their mind before the room forgets about them,
-//  but they don't get a secondary nudge).
+//  `declined` is terminal — silence. `claimed` bodies never
+//  contain claim language. The on-create prompt fires at most
+//  once per (event, user) per install via a UserDefaults
+//  fired-ledger (the UN delivered list is not durable — banner
+//  dismissal empties it). The decision logic lives in
+//  `BriefingReconciler` (Foundation-only, testable); this type is
+//  the UNUserNotificationCenter edge.
 //
-//  Body-text conventions (V0.87 — every push is the mascot's voice,
-//  personalised by member name; no bare "reminder" register):
-//   - on-create (all states): "{mascot}: {member_name}, {event} is on the books. Open the room to claim your seat."
-//   - T-48h claimed        : matrix-voiced "{mascot}: {member_name}, {event} is a few days out…"
-//   - T-48h unclaimed      : matrix-voiced body + personality claim clause
-//   - morning-of claimed   : matrix-voiced "{mascot}: {member_name}, {event} is today…"
-//   - morning-of unclaimed : matrix-voiced body + personality claim clause
-//
-//  Identifiers are stable per (eventId, cadence, userId) so a
-//  duplicate call is idempotent at the UN layer and `cancel` can
-//  sweep by event-id prefix without re-deriving the cadence.
+//  Identifiers stay stable per (eventId, cadence, userId) so
+//  `cancelBriefingTrio` can sweep by event-id prefix without
+//  re-deriving the cadence.
 //
 //
 
@@ -95,101 +93,39 @@ final class NotificationDispatcher {
         }
     }
 
-    // MARK: - Schedule trio
+    // MARK: - Reconcile (the one scheduling entry point)
 
-    /// Schedule the pre-play briefing pushes for every member of the
-    /// `perMemberCadence` map, branching on the 3×3 matrix above.
+    /// Reconcile this device's briefing notifications for one
+    /// event against the signed-in user's CURRENT canonical RSVP
+    /// state: cancel every pending request for the event, then
+    /// re-plan (claimed = logistics only, unclaimed = reminder +
+    /// once-per-install on-create prompt, declined = silence).
     ///
-    /// - Parameters:
-    ///   - eventId: Unique event identifier. Drives the notification
-    ///     identifier prefix so the same notification is not
-    ///     scheduled twice across re-calls.
-    ///   - eventName: Display name (e.g. "Friday Night Hold'em").
-    ///     Used as the notification title.
-    ///   - playedAt: When the event starts. Drives T-48h and the
-    ///     morning-of push times.
-    ///   - mascotName: Display name of the room's mascot. Used as a
-    ///     body prefix so the push reads with the room's voice.
-    ///   - perMemberCadence: Map of member id → RSVP state. Declined
-    ///     members are skipped for the T-48h and morning-of pushes;
-    ///     every member receives the on-create push regardless of
-    ///     their current state.
-    func scheduleBriefingTrio(
+    /// Every path that wants briefing notifications on this device
+    /// routes through here — addEvent, realtime INSERT, room open,
+    /// claim (escrow and plain), claim-waived (when the affected
+    /// member is this device's user), decline/release, mute and
+    /// opt-in toggles (via `RoomService.reconcileBriefing`).
+    ///
+    /// When a session exists, the on-create body (and only it) is
+    /// LLM-generated via the `mascot-voice` edge function; every
+    /// other body comes from the deterministic template matrix.
+    func reconcileBriefing(
         eventId: UUID,
+        roomId: UUID,
         eventName: String,
         playedAt: Date,
         mascotName: String,
-        perMemberCadence: [UUID: MemberRSVPState],
-        memberNameById: [UUID: String] = [:],
-        /// V0.54 — members whose per-room `notifications_enabled` is
-        /// true. The fan-out reaches ONLY this set (plus the
-        /// declined-state exception per the audit's item 2 hard
-        /// requirement). Default `nil` lets pre-V0.54 callers opt in
-        /// to the legacy behaviour (every member reaches on-create).
-        optedInMemberIds: Set<UUID>? = nil,
-        /// V0.54 — members who have tapped the per-event mute toggle.
-        /// The fan-out skips every member in this set regardless of
-        /// their room-level opt-in or RSVP state. Default `[]` = no
-        /// mutes (a brand-new event has none).
-        mutedMemberIds: Set<UUID> = [],
+        userId: UUID,
+        memberName: String?,
+        state: MemberRSVPState,
         hostNote: String? = nil,
         mascotPersonality: MascotPersonality = .friendly,
         mascotIdeology: MascotPoliticalIdeology = .centrist,
-        /// V0.95 D — the room-state the mascot's face renders against
-        /// in the notification attachment. `nil` = no face attached.
         mascotState: RoomState? = nil
     ) async {
         guard await requestAuthorizationIfNeeded() else { return }
-        let center = UNUserNotificationCenter.current()
-        let now = Date()
 
-        // Compute the three trigger times. `onCreate` fires
-        // immediately (effectively event.createdAt — the dispatcher
-        // is invoked when the host creates the event). T-48h and
-        // morning-of schedule against playedAt.
-
-        // On-create: schedule for `now + 1s` so iOS doesn't dedupe
-        // a zero-second trigger. This still lands in the same
-        // notification cycle as the actual creation moment.
-        let onCreateFireAt = now.addingTimeInterval(1)
-
-        // V0.95 F — the 2-Hour Cocktail Party reminder cadence
-        // (Nick Gray; gbrain: inbox/obsidian-cards/cocktail-parties):
-        // three touches — the week before, 3-4 days before, and the
-        // morning of. T-48h becomes T-84h (3.5 days) and a T-168h
-        // week-before reminder joins the trio.
-        let t168FireAt = playedAt.addingTimeInterval(-168 * 3600)
-        let t48FireAt = playedAt.addingTimeInterval(-84 * 3600)
-
-        // Morning-of: 09:00 local time on the calendar day of
-        // playedAt. If 09:00 already passed today, fall back to the
-        // earlier of `now + 1s` or `playedAt − 30m` so we still fire
-        // a same-day push instead of silently dropping the slot.
-        let calendar = Calendar.current
-        let morningFireAt: Date = {
-            let dayStart = calendar.startOfDay(for: playedAt)
-            guard
-                let nineAM = calendar.date(
-                    bySettingHour: 9, minute: 0, second: 0, of: dayStart
-                )
-            else {
-                return playedAt.addingTimeInterval(-30 * 60)
-            }
-            if nineAM > now {
-                return nineAM
-            }
-            // Past 09:00 on the event day — push the same-day fallback.
-            let preStart = playedAt.addingTimeInterval(-30 * 60)
-            return preStart > now ? preStart : now.addingTimeInterval(1)
-        }()
-
-        // Schedule per member. We don't bail early on a single
-        // failure — each request is independent and `add` swallows
-        // errors per-request.
-
-        // V0.95 D — render the mascot's face ONCE for the whole
-        // fan-out: every member of this room sees the same character
-        // in the same room state, so one attachment serves all.
         var faceAttachment: UNNotificationAttachment?
         if let mascotState {
             faceAttachment = await MascotNotificationAttachment.attachment(
@@ -199,52 +135,26 @@ final class NotificationDispatcher {
             )
         }
 
-        for (memberId, state) in perMemberCadence {
+        let sink = UNCenterSink(attachment: faceAttachment, roomId: roomId)
+        let ledger = UserDefaultsOnCreateLedger(
+            defaults: .standard
+        )
 
-            // V0.54 — quiet-by-default fan-out gates. A member is
-            // skipped entirely when:
-            //   1. The service passed an explicit `optedInMemberIds`
-            //      set and the member isn't in it (room-level
-            //      per-member opt-in not flipped on).
-            //   2. The member is in `mutedMemberIds` (tapped the
-            //      per-event mute toggle; overrides the room-level
-            //      opt-in for THIS event).
-            //   3. Per the audit's hard item 2 + V0.54 D3: the
-            //      on-create push reaches only opted-in, non-
-            //      declined members. The `.declined` exception the
-            //      pre-V0.54 brief carried is gone — declined
-            //      members who haven't opted in receive nothing.
-            if let optedIn = optedInMemberIds, !optedIn.contains(memberId) {
-                continue
-            }
-            if mutedMemberIds.contains(memberId) {
-                continue
-            }
-            if state == .declined {
-                continue
-            }
-
-            // On-create push — fires for every opted-in,
-            // non-muted, non-declined member. When the caller has a
-            // session, the body is LLM-generated via the
-            // `mascot-voice` edge function; otherwise falls back
-            // to the template.
-            let memberName = memberNameById[memberId]
-            var onCreateBodyText = onCreateBody(
-                mascotName: mascotName,
-                eventName: eventName,
+        // The on-create body is LLM-voiced when a session exists.
+        // The provider runs only when the prompt will actually
+        // fire (unclaimed, not yet fired this install).
+        let authToken = await SupabaseClientProvider.currentSession()?.accessToken
+        var onCreateBodyProvider: (() async -> String)?
+        if let authToken, !authToken.isEmpty {
+            let context = MascotEngine.RoomContext(
+                activeEventTitle: eventName,
+                lastEventDaysAgo: nil,
+                memberCount: 1,
+                memberNames: memberName.map { [$0] } ?? [],
                 memberName: memberName
             )
-            let authToken = await SupabaseClientProvider.currentSession()?.accessToken
-            if let authToken, !authToken.isEmpty {
-                let context = MascotEngine.RoomContext(
-                    activeEventTitle: eventName,
-                    lastEventDaysAgo: nil,
-                    memberCount: perMemberCadence.count,
-                    memberNames: Array(memberNameById.values),
-                    memberName: memberName
-                )
-                onCreateBodyText = await MascotEngine.generateVoiceLLM(
+            onCreateBodyProvider = {
+                await MascotEngine.generateVoiceLLM(
                     mascotName: mascotName,
                     roomName: "",
                     personality: mascotPersonality,
@@ -258,114 +168,23 @@ final class NotificationDispatcher {
                     hostNote: hostNote
                 )
             }
-            await schedule(
-                center: center,
-                identifier: identifier(
-                    eventId: eventId, kind: .onCreate, userId: memberId
-                ),
-                title: "\\(mascotName): \\(eventName)",
-                body: onCreateBodyText,
-                kindRaw: NotificationKindRaw.onCreate,
-                eventId: eventId,
-                fireAt: onCreateFireAt,
-                attachment: faceAttachment
-            )
-
-            // Declined is terminal for T-48h and morning-of.
-            if state == .declined { continue }
-
-            // Week-before reminder (cocktail-party cadence touch #1).
-            if t168FireAt > now {
-                let (title, body) = t48Body(
-                    mascotName: mascotName,
-                    eventName: eventName,
-                    playedAt: playedAt,
-                    state: state,
-                    memberName: memberName,
-                    hostNote: hostNote,
-                    personality: mascotPersonality,
-                    ideology: mascotIdeology,
-                    memberCount: perMemberCadence.count
-                )
-                await schedule(
-                    center: center,
-                    identifier: identifier(
-                        eventId: eventId, kind: .t168h, userId: memberId
-                    ),
-                    title: title,
-                    body: body,
-                    kindRaw: NotificationKindRaw.t168h,
-                    eventId: eventId,
-                    fireAt: t168FireAt,
-                    attachment: faceAttachment
-                )
-            }
-
-            // 3-4-days-before reminder (cadence touch #2; same body
-            // builder as the old T-48h logistics nudge).
-            if t48FireAt > now {
-                let (title, body) = t48Body(
-                    mascotName: mascotName,
-                    eventName: eventName,
-                    playedAt: playedAt,
-                    state: state,
-                    memberName: memberName,
-                    hostNote: hostNote,
-                    personality: mascotPersonality,
-                    ideology: mascotIdeology,
-                    memberCount: perMemberCadence.count
-                )
-                await schedule(
-                    center: center,
-                    identifier: identifier(
-                        eventId: eventId, kind: .t48h, userId: memberId
-                    ),
-                    title: title,
-                    body: body,
-                    kindRaw: NotificationKindRaw.t48h,
-                    eventId: eventId,
-                    fireAt: t48FireAt,
-                    attachment: faceAttachment
-                )
-            }
-
-            // Morning-of push — claim or reminder variant.
-            if morningFireAt > now {
-                let (title, body) = morningBody(
-                    mascotName: mascotName,
-                    eventName: eventName,
-                    playedAt: playedAt,
-                    state: state,
-                    memberName: memberName,
-                    personality: mascotPersonality,
-                    ideology: mascotIdeology,
-                    memberCount: perMemberCadence.count
-                )
-                await schedule(
-                    center: center,
-                    identifier: identifier(
-                        eventId: eventId, kind: .morningOf, userId: memberId
-                    ),
-                    title: title,
-                    body: body,
-                    kindRaw: NotificationKindRaw.morningOf,
-                    eventId: eventId,
-                    fireAt: morningFireAt,
-                    attachment: faceAttachment
-                )
-            }
         }
-    }
 
-    /// True when the user already has a pending on-create push
-    /// scheduled for `eventId`. Used to skip duplicate scheduling
-    /// across the realtime INSERT path and the late-opt-in
-    /// catch-up path. Mirrors `identifier(...)`'s format.
-    func hasPendingOnCreate(eventId: UUID, userId: UUID) async -> Bool {
-        let center = UNUserNotificationCenter.current()
-        let pending = await center.pendingNotificationRequests()
-        let prefix = "\(eventId.uuidString)-on_create-\(userId.uuidString)"
-        return pending.contains { $0.identifier.hasPrefix(prefix) }
+        await BriefingReconciler.reconcile(
+            sink: sink,
+            ledger: ledger,
+            eventId: eventId,
+            eventName: eventName,
+            playedAt: playedAt,
+            mascotName: mascotName,
+            userId: userId,
+            memberName: memberName,
+            state: state,
+            hostNote: hostNote,
+            personality: mascotPersonality,
+            ideology: mascotIdeology,
+            onCreateBodyProvider: onCreateBodyProvider
+        )
     }
 
     /// Cancel every pending notifications requests associated with one
@@ -382,6 +201,39 @@ final class NotificationDispatcher {
         center.removePendingNotificationRequests(withIdentifiers: ids)
     }
 
+    /// Removes every pending AND delivered request that belongs to a
+    /// room the user is no longer in: by the payload's room id, by
+    /// one of the room's event ids, and by the event-id prefix sweep
+    /// for anything older. Used by the foreground purge.
+    func purgeRoom(roomId: UUID, eventIds: Set<UUID>) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let pendingIds = pending
+            .filter {
+                BriefingReconciler.requestBelongsToRoom(
+                    userInfo: $0.content.userInfo, roomId: roomId, eventIds: eventIds
+                )
+            }
+            .map(\.identifier)
+        if !pendingIds.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: pendingIds)
+        }
+        let delivered = await center.deliveredNotifications()
+        let deliveredIds = delivered
+            .filter {
+                BriefingReconciler.requestBelongsToRoom(
+                    userInfo: $0.request.content.userInfo, roomId: roomId, eventIds: eventIds
+                )
+            }
+            .map(\.request.identifier)
+        if !deliveredIds.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: deliveredIds)
+        }
+        for eventId in eventIds {
+            await cancelBriefingTrio(eventId: eventId)
+        }
+    }
+
     // MARK: - Joined-late catch-up (W2.7)
 
     /// Schedules the joined-late catch-up push for one member.
@@ -391,6 +243,7 @@ final class NotificationDispatcher {
     /// duplicate pushes.
     func scheduleCatchUp(
         eventId: UUID,
+        roomId: UUID,
         eventName: String,
         playedAt: Date,
         mascotName: String,
@@ -414,132 +267,17 @@ final class NotificationDispatcher {
         )
         await schedule(
             center: center,
-            identifier: "\\(eventId.uuidString)-catchup",
-            title: "\\(mascotName): \\(eventName)",
+            identifier: BriefingReconciler.catchUpIdentifier(eventId: eventId),
+            title: "\(mascotName): \(eventName)",
             body: body,
             kindRaw: NotificationKindRaw.catchUp,
             eventId: eventId,
+            roomId: roomId,
             fireAt: Date().addingTimeInterval(1)
         )
     }
 
-    // MARK: - Body builders
-
-    private func onCreateBody(
-        mascotName: String, eventName: String, memberName: String?
-    ) -> String {
-        let address = memberName ?? "friend"
-        return "\(mascotName): \(address), \(eventName) is on the books. Open the room to claim your seat."
-    }
-
-    /// Title + body pair for the T-48h push. Logistics prefix for
-    /// claimed members, claim-clause nudge for unclaimed. When the
-    /// host has written a pre-event note (≤280 chars), the claimed
-    /// variant appends it per vision §3.6: "Host's note: [note]".
-    ///
-    /// V0.81 — the body is voiced through the 25-voice matrix
-    /// (personality × ideology × `.briefing48h`).
-    /// V0.87 — `memberName` personalises the `{member_name}`
-    /// placeholder; unclaimed members get a claim-your-seat nudge in
-    /// the same register (no more bare neutral-system reminder text).
-    private func t48Body(
-        mascotName: String,
-        eventName: String,
-        playedAt: Date,
-        state: MemberRSVPState,
-        memberName: String? = nil,
-        hostNote: String? = nil,
-        personality: MascotPersonality = .friendly,
-        ideology: MascotPoliticalIdeology = .centrist,
-        memberCount: Int = 0
-    ) -> (title: String, body: String) {
-        let title = "\(mascotName): \(eventName) in a few days"
-        switch state {
-        case .claimed, .unclaimed:
-            var body = MascotEngine.generateVoice(
-                mascotName: mascotName,
-                roomName: "",
-                personality: personality,
-                ideology: ideology,
-                kind: .briefing48h,
-                context: .init(
-                    activeEventTitle: eventName,
-                    lastEventDaysAgo: nil,
-                    memberCount: memberCount,
-                    memberNames: [],
-                    memberName: memberName
-                ),
-                eventDate: playedAt
-            )
-            if state == .unclaimed {
-                body += " " + MascotEngine.unclaimedClause(personality: personality)
-            }
-            if let note = hostNote, !note.isEmpty {
-                body += " Host's note: \(note)"
-            }
-            return (title, body)
-        default:
-            // .declined is unreachable here — declined members are
-            // skipped at fan-out (V0.54). Exhaustiveness fallback.
-            return (title, "")
-        }
-    }
-
-    /// Title + body pair for the morning-of push. Logistics prefix
-    /// for claimed members, claim-clause nudge for unclaimed.
-    ///
-    /// V0.81 — the body is voiced through the 25-voice matrix
-    /// (personality × ideology × `.briefingMorning`).
-    /// V0.87 — `memberName` personalises the `{member_name}`
-    /// placeholder; unclaimed members get a claim-your-seat nudge in
-    /// the same register (no more bare neutral-system reminder text).
-    private func morningBody(
-        mascotName: String,
-        eventName: String,
-        playedAt: Date,
-        state: MemberRSVPState,
-        memberName: String? = nil,
-        personality: MascotPersonality = .friendly,
-        ideology: MascotPoliticalIdeology = .centrist,
-        memberCount: Int = 0
-    ) -> (title: String, body: String) {
-        let title = "\(mascotName): \(eventName) today"
-        switch state {
-        case .claimed, .unclaimed:
-            var body = MascotEngine.generateVoice(
-                mascotName: mascotName,
-                roomName: "",
-                personality: personality,
-                ideology: ideology,
-                kind: .briefingMorning,
-                context: .init(
-                    activeEventTitle: eventName,
-                    lastEventDaysAgo: nil,
-                    memberCount: memberCount,
-                    memberNames: [],
-                    memberName: memberName
-                ),
-                eventDate: playedAt
-            )
-            if state == .unclaimed {
-                body += " " + MascotEngine.unclaimedClause(personality: personality)
-            }
-            return (title, body)
-        default:
-            // .declined is unreachable here — declined members are
-            // skipped at fan-out (V0.54). Exhaustiveness fallback.
-            return (title, "")
-        }
-    }
-
-    // MARK: - Identifier helpers
-
-    private enum CadenceKind: String {
-        case onCreate = "on_create"
-        case t168h = "t168h"
-        case t48h = "t48h"
-        case morningOf = "morning_of"
-    }
+    // MARK: - Internal schedule primitive
 
     /// The `kind` value stored in `userInfo` for downstream handlers
     /// to branch on (e.g. a tap that deep-links into the briefing).
@@ -551,14 +289,6 @@ final class NotificationDispatcher {
         case catchUp = "catch_up"
     }
 
-    private func identifier(
-        eventId: UUID, kind: CadenceKind, userId: UUID
-    ) -> String {
-        "\(eventId.uuidString)-\(kind.rawValue)-\(userId.uuidString)"
-    }
-
-    // MARK: - Internal schedule primitive
-
     private func schedule(
         center: UNUserNotificationCenter,
         identifier: String,
@@ -566,13 +296,13 @@ final class NotificationDispatcher {
         body: String,
         kindRaw: NotificationKindRaw,
         eventId: UUID,
+        roomId: UUID,
         fireAt: Date,
         attachment: UNNotificationAttachment? = nil
     ) async {
         // 2026-09-02 dedupe guard — two paths can schedule the same
-        // (event, kind, user) notification on one device: the host's
-        // addEvent fan-out AND the realtime INSERT echo (both call
-        // `scheduleBriefingTrio`). Same identifier among PENDING
+        // (event, kind, user) notification on one device. Same
+        // identifier among PENDING
         // requests replaces silently, but if the first copy already
         // DELIVERED (the on-create push fires 1s after scheduling),
         // re-adding the same identifier delivers a second banner.
@@ -592,7 +322,8 @@ final class NotificationDispatcher {
         content.sound = .default
         content.userInfo = [
             "kind": kindRaw.rawValue,
-            "event_id": eventId.uuidString
+            "event_id": eventId.uuidString,
+            "room_id": roomId.uuidString
         ]
         // V0.95 D — the mascot's face rides on the push (lock-screen
         // thumbnail + expanded banner image). Attachment failure is
@@ -601,17 +332,10 @@ final class NotificationDispatcher {
             content.attachments = [attachment]
         }
 
-        let components = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second],
-            from: fireAt
-        )
-        let trigger = UNCalendarNotificationTrigger(
-            dateMatching: components, repeats: false
-        )
         let request = UNNotificationRequest(
             identifier: identifier,
             content: content,
-            trigger: trigger
+            trigger: UNCenterSink.trigger(for: kindRaw.rawValue, fireAt: fireAt)
         )
         do {
             try await center.add(request)
@@ -626,4 +350,101 @@ final class NotificationDispatcher {
     // V0.81 — `humanTime` / `humanWhen` were removed with the
     // plain-logistics push bodies; the voiced bodies carry the
     // date/time via the template placeholders instead.
+}
+
+// MARK: - UN center sink
+
+/// `BriefingNotificationSink` adapter over `UNUserNotificationCenter`.
+/// The only type that touches the real notification center for
+/// briefing scheduling — tests inject a fake sink instead.
+/// `UNUserNotificationCenter` is thread-safe; state here is immutable.
+private final class UNCenterSink: BriefingNotificationSink, @unchecked Sendable {
+
+    private let center = UNUserNotificationCenter.current()
+    private let attachment: UNNotificationAttachment?
+    /// The room every request from this sink belongs to. It rides
+    /// on the payload so a tap can open the room without a lookup.
+    private let roomId: UUID?
+
+    init(attachment: UNNotificationAttachment?, roomId: UUID?) {
+        self.attachment = attachment
+        self.roomId = roomId
+    }
+
+    /// The trigger for one request.
+    ///
+    /// The "now" prompts (the on-create briefing, the joined-late
+    /// catch-up) fire on a one-second INTERVAL, so the push lands
+    /// after its body was built — a calendar trigger computed
+    /// before the mascot-voice round trip never fires (audit 01 #2).
+    /// The timed reminders keep their fixed local date-time.
+    static func trigger(
+        for kindRaw: String, fireAt: Date
+    ) -> UNNotificationTrigger {
+        switch BriefingReconciler.fireMode(kindRaw: kindRaw, fireAt: fireAt) {
+        case .shortly:
+            return UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        case .at(let date):
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: date
+            )
+            return UNCalendarNotificationTrigger(
+                dateMatching: components, repeats: false
+            )
+        }
+    }
+
+    func pendingIdentifiers() async -> [String] {
+        await center.pendingNotificationRequests().map(\.identifier)
+    }
+
+    func deliveredIdentifiers() async -> [String] {
+        await center.deliveredNotifications().map(\.request.identifier)
+    }
+
+    func removePending(identifiers: [String]) {
+        guard !identifiers.isEmpty else { return }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    func add(
+        identifier: String,
+        title: String,
+        body: String,
+        kindRaw: String,
+        eventId: UUID,
+        fireAt: Date
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        var userInfo: [String: String] = [
+            "kind": kindRaw,
+            "event_id": eventId.uuidString
+        ]
+        if let roomId {
+            userInfo["room_id"] = roomId.uuidString
+        }
+        content.userInfo = userInfo
+        if let attachment {
+            content.attachments = [attachment]
+        }
+
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: UNCenterSink.trigger(for: kindRaw, fireAt: fireAt)
+        )
+        Task {
+            do {
+                try await center.add(request)
+            } catch {
+                // Per-request failure is non-fatal — the next
+                // reconcile overwrites via the same stable
+                // identifier.
+            }
+        }
+    }
 }
