@@ -1,6 +1,6 @@
 # STATE S1
 
-STATE: step 3 of 8 done. Next: step 4.
+STATE: step 4 of 8 done. Next: step 5.
 
 BLOCKED: none
 
@@ -39,5 +39,13 @@ Notes for step 3 (NightPlan — the one next action):
 - **Second judgement call**: the host's secondaries are ordered `scoreRound` first, then the host's own member action (the night's progress line, then their own stake). The brief does not fix the order.
 - Not touched this step: `RoomDetailView.swift` (step 4 wires the plan into the live card; the old `eventHasSingleWinnerPack()` gate stays until then), `HostScoreEntrySheet` (step 6), `RoomService` (step 5 needs the settle flow). No SwiftUI, no view code in a Foundation-only file.
 - Tests: 16 new cases in `TestsS1.swift`, one per rule — member check-in beats the withdrawal, a member who already withdrew skips the check-in, casino -> withdraw, CAH -> count, Monopoly Deal only -> no member action, host waiting for the table, host scores the first round, host settles a night with nothing to score, host settles once a round is scored, Casino + Monopoly Deal scores Monopoly Deal, the host's member action as a secondary, CAH is scorable, settled host plans the next night, settled member gets nothing, settled over 24h ago is history, and a night that has not started has no plan.
+
+Notes for step 4 (live card follows NightPlan):
+- Commit `33c6de2`. Fastgate: 321 cases passed, 65 parse-check, `FASTGATE: PASS`. Extra: `swiftc -typecheck` of `GamesRoom/` against cached simulator modules, zero errors.
+- `.tonightEvent`, `.inPlay`, `.settleRound` all render `liveCard(event:headerMode:)`; `WitnessSlot` now takes `primary: Line?` + `secondaries: [Line]` (grey centred captions, "Can't make it" styling). Old CTA enum, `onScan`/`onScore`/`onCAHSettle`/`onWithdrawMore`, `openScan`, `isSingleWinnerPack`, `eventHasSingleWinnerPack` removed. Casino gates (`isCasinoPlayActive`, host withdrawals, working hands) read `packSlugs`.
+- Arrival count: play signals (chips, scan, scored round) plus, on escrow rooms, claimed seats no longer in the arrival candidates; non-escrow rooms have no arrival signal, so claimed seats and the host count as arrived (otherwise a Monopoly Deal night would wait forever).
+- Extras beyond the plan, both pack-driven: "Withdraw more" once chips are in hand; "Count your CAH cards" when CAH is picked and the plan's own line is not the CAH count.
+- `Score a round` with 2+ scorable packs opens `confirmationDialog("Score which game?")`; the chosen slug goes to `HostScoreEntrySheet` via `HostScoreTarget`. iPad dashboard only when the chosen pack is the headline pack (the dashboard scores `event.packSlug`). Sheet dismiss forces a refresh so the round count moves the host on to Settle.
+- Settle / Plan next are stubs in this commit; step 5 wires them.
 
 Ticks are in .maestro/briefs/BRIEF-S1.md (tick the checkbox there too).
