@@ -1,6 +1,6 @@
 # STATE S2
 
-STATE: step 5 of 8 done. Next: step 6.
+STATE: step 6 of 8 done. Next: step 7.
 
 STEP 1 DONE (commit a1de6c1 `S2.1: port fix/notif-claimed-state (reconcileBriefing) onto febbae3`).
 The two upstream objects 04081cb and 5649888 were cherry-picked from refs/remotes/icloud/fix/notif-claimed-state and squashed into that single step commit (upstream SHAs and the conflict resolutions are recorded in the commit body).
@@ -46,6 +46,12 @@ STEP 5 DONE (commit ed0db05 `S2.5: foreground reconcile + purge rooms the user l
 - Wired in ContentView: onChange(of: scenePhase) on .active, skipped while restoring the session or signed out.
 - Pure helpers in BriefingReconciler (removedRoomIds, requestBelongsToRoom) with 2 new tests. Gate: 326 cases, 326 passed; parse-check 66/66; FASTGATE: PASS. Also ran --compile early (BUILD SUCCEEDED, FASTGATE: PASS) so steps 3-5 are type-checked.
 - ScoreLiveActivityDriver/ScoreSnapshotStore are not in ALLOWED FILES, so the Live Activity end and snapshot clear are done from AppReconciler with ActivityKit and the same App Group key.
+
+STEP 6 DONE (commit 79e59c7 `S2.6: ask for reminders right after the first claim`).
+- RoomDetailView (claimed case of the hero switch): a grey centred caption action "Remind me the morning of" (ClaimReminderAskRow in RoomNotificationPrefs.swift) shows under the claimed BriefingSlot while the room notifications are off and the ask has not been tapped (per-room UserDefaults flag, StorageKeys.claimReminderAskAnswered). Tap: marks it (and the old prompt) answered, requests iOS authorization (alert, sound, badge), turns the room notifications on through RoomService.setNotificationsEnabled, then reconcileBriefing(eventId:).
+- RoomNotifPromptCard: the activeEvent == nil gate is removed; the card now steps aside only while the post-claim ask is showing, so the two never stack.
+- Room open (loadActiveIfNeeded): a host calls AppReconciler.reportRoomTimeZoneOnce(roomId:) -> rpc set_room_time_zone(p_room_id, p_tz: TimeZone.current.identifier). Fire and forget, try?, never surfaces an error; the per-room flag (StorageKeys.roomTimeZoneReported) is set only on success so a missing RPC (lane S2b) is retried on a later open.
+- Gate: --compile run, 326 cases, 326 passed; parse-check 66/66; BUILD SUCCEEDED; FASTGATE: PASS. No new unit test (view-only glue).
 
 BLOCKED: none
 
