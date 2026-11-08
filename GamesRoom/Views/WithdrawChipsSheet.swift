@@ -58,7 +58,7 @@ struct WithdrawChipsSheet: View {
                                 .tint(Theme.Palette.accent)
                             Text("Checking your balance…")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                         }
                     }
                 } else {

@@ -1900,12 +1900,12 @@ private struct BriefingSlot: View {
                 // v1.2 S2 — seat count lives in the tile grid below.
                 Text("\(event.playedAt, format: .dateTime.weekday().day().month().hour().minute())")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
 
                 if let venue = event.venue, !venue.isEmpty {
                     Text(venue)
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.labelText)
                 }
             }
 
@@ -1913,7 +1913,7 @@ private struct BriefingSlot: View {
             if let hostNote = event.hostNote, !hostNote.isEmpty {
                 Text(hostNote)
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                    .foregroundStyle(Theme.Palette.bodyMuted)
             }
 
             // (3) "Edit details" — W2.4 member-side event edit.
@@ -1974,7 +1974,7 @@ private struct BriefingSlot: View {
                     Button(action: onDecline) {
                         Text("Can't make it")
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                     }
@@ -2031,7 +2031,7 @@ private struct BriefingSlot: View {
                         VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                             Text("Tap when you walk in and your deposit comes straight back.")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                             Button(action: onCheckIn) {
                                 Text("I'm here. Reclaim \(deposit.amount) CC")
                             }
@@ -2098,7 +2098,7 @@ private struct V0StateReEntryPills: View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
             Text("You said you can\'t make it.")
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
             Button(action: onReAccept) {
                 Text("Re-accept")
             }
@@ -2166,7 +2166,7 @@ private struct UnconsumedMemberNotesSection: View {
                     VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                         Text("\(room.mascotName): \(note.memberDisplayName) left a note for next time.")
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                         Text(note.noteText)
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Palette.primaryText)
@@ -2177,7 +2177,7 @@ private struct UnconsumedMemberNotesSection: View {
                 Button(action: { onDone(capturedIds) }) {
                     Text("Done reading")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 .buttonStyle(.plain)
             }
@@ -2303,11 +2303,11 @@ private struct SeatGridRow: View {
                 VStack(spacing: Theme.Layout.cardLineGap) {
                     Image(systemName: Theme.Icon.chairFill)
                         .font(Theme.Typography.body)
-                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
+                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.bodyMuted)
                         .accessibilityHidden(true)
                     Text(initial(for: rsvp.displayName))
                         .font(Theme.Typography.footnote.weight(.semibold))
-                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.labelText)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, minHeight: 52)
@@ -2337,7 +2337,7 @@ private struct SeatGridRow: View {
             VStack(spacing: Theme.Layout.cardLineGap) {
                 Image(systemName: Theme.Icon.chair)
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
                     .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity, minHeight: 52)
@@ -2358,7 +2358,7 @@ private struct SeatGridRow: View {
             if let line = caption(for: rsvp) {
                 Text(line)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .accessibilityIdentifier("seat-popover-\(rsvp.displayName)")
             }
         }
@@ -2551,7 +2551,7 @@ private struct WitnessSlot: View {
                             Spacer()
                             Text(s.visionAmountPoints >= 0 ? "+\(s.visionAmountPoints)" : "\(s.visionAmountPoints)")
                                 .font(Theme.Typography.mono)
-                                .foregroundStyle(s.visionAmountPoints >= 0 ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(s.visionAmountPoints >= 0 ? Theme.Palette.accent : Theme.Palette.secondaryText)
                         }
                         .padding(.vertical, Theme.Layout.roomRowInset)
                         if s.id != attestations.last?.id {
@@ -2789,7 +2789,7 @@ private struct CeremonialCard: View {
                 if let settledCaption {
                     Text(settledCaption)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -2868,7 +2868,7 @@ private struct CeremonialCard: View {
                !card.heroFootLine.contains(card.memberDisplayName) {
                 Text(card.heroFootLine)
                     .font(Theme.Typography.caption.italic())
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2932,7 +2932,7 @@ private struct TonightStarSection: View {
             if let custom = card.customText, !custom.isEmpty {
                 Text("“\(custom)”")
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                    .foregroundStyle(Theme.Palette.bodyMuted)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -2973,18 +2973,18 @@ private struct MemberNotePromptSection: View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
             Text("Anything you want the room to know next time?")
                 .font(Theme.Typography.body.italic())
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                .foregroundStyle(Theme.Palette.labelText)
             TextField(
                 "",
                 text: $draft,
                 prompt: Text("One line for the host")
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
             )
             .textFieldStyle(.plain)
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Palette.primaryText)
             .padding(Theme.Layout.fieldInset)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Layout.smallRadius).stroke(Theme.Palette.hairline, lineWidth: 0.5))
             VStack(spacing: 0) {
                 Button(action: onSubmit) {
                     Text("Send")
@@ -3156,14 +3156,14 @@ private struct AwardsCard: View {
                 if !season.subtitle.isEmpty {
                     Text(season.subtitle)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
 
             if sortedAwards.isEmpty {
                 Text("Awards haven't been declared yet.")
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
@@ -3202,7 +3202,7 @@ private struct AwardsCard: View {
             if let endedAt = season.endedAt {
                 Text("Closed \(endedAt, format: .relative(presentation: .named))")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3276,7 +3276,7 @@ private struct AwardRow: View {
             Image(systemName: symbol)
                 .font(Theme.Typography.body)
                 .foregroundStyle(award.awardType.isPrivate
-                    ? Theme.Palette.primaryText.opacity(0.55)
+                    ? Theme.Palette.secondaryText
                     : Theme.Palette.accent)
                 .frame(width: Theme.Layout.rowIconWidth)
             VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
@@ -3285,17 +3285,17 @@ private struct AwardRow: View {
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.primaryText)
                     Text("·")
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                        .foregroundStyle(Theme.Palette.tertiaryText)
                     Text(award.awardType.displayName)
                         .font(Theme.Typography.caption.weight(.semibold))
                         .foregroundStyle(award.awardType.isPrivate
-                            ? Theme.Palette.primaryText.opacity(0.55)
+                            ? Theme.Palette.secondaryText
                             : Theme.Palette.accent)
                 }
                 if let caption = award.caption, !caption.isEmpty {
                     Text(caption)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
             Spacer()
@@ -3336,14 +3336,14 @@ private struct SystemBanner: View {
                 HStack(spacing: Theme.Layout.cardInset) {
                     Image(systemName: iconFor(event.kind))
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                     VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                         Text(event.kind.displayName)
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.primaryText)
                         Text(payloadDescription(for: event))
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     Spacer()
                     Button {
@@ -3351,7 +3351,7 @@ private struct SystemBanner: View {
                     } label: {
                         Image(systemName: Theme.Icon.xmark)
                             .font(Theme.Typography.footnote)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                            .foregroundStyle(Theme.Palette.tertiaryText)
                     }
                     .accessibilityLabel(Text("Dismiss"))
                 }
@@ -3423,7 +3423,7 @@ private struct HostWithdrawalsSection: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text("Withdrew chips")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             Spacer()
             Text("\(abs(txn.amountPoints)) pts")
@@ -3439,7 +3439,7 @@ private struct HostWithdrawalsSection: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
                             .fill(Theme.Palette.accent)
                     )
             }
@@ -3459,7 +3459,7 @@ struct SectionTitle: View {
     var body: some View {
         Text(text)
             .font(Theme.Typography.caption.weight(.semibold))
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            .foregroundStyle(Theme.Palette.labelText)
             .accessibilityAddTraits(.isHeader)
     }
 }
@@ -3531,19 +3531,19 @@ private struct RoundBreakdownSection: View {
                         Spacer()
                         Text(round.packSlug.replacingOccurrences(of: "_", with: " "))
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     ForEach(round.entries, id: \.id) { entry in
                         HStack {
                             Text(memberNameById[entry.memberId] ?? "Member")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                                .foregroundStyle(Theme.Palette.labelText)
                             Spacer()
                             Text(deltaText(entry.pointsDelta))
                                 .font(Theme.Typography.monoCaptionSemibold)
                                 .foregroundStyle(entry.pointsDelta >= 0
                                     ? Theme.Palette.accent
-                                    : Theme.Palette.primaryText.opacity(0.6))
+                                    : Theme.Palette.secondaryText)
                         }
                     }
                 }
@@ -3660,7 +3660,7 @@ private struct PackShelfReadOnly: View {
             Image(systemName: pack.iconSystemName)
                 .accessibilityHidden(true)
                 .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
                 .frame(width: Theme.Layout.rowIconWidth)
             VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(pack.displayName)
@@ -3668,13 +3668,13 @@ private struct PackShelfReadOnly: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(pack.description)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .lineLimit(2, reservesSpace: true)
                     .fixedSize(horizontal: false, vertical: true)
                 if pack.scoringType == .singleWinner || pack.scoringType == .countBased {
                     Text(payoutCaption(for: pack))
                         .font(Theme.Typography.footnote)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                         .padding(.top, 2)
                 }
             }
@@ -3682,7 +3682,7 @@ private struct PackShelfReadOnly: View {
             if isHost {
                 Image(systemName: Theme.Icon.sliderHorizontal3)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
             }
         }
         .padding(.vertical, Theme.Layout.roomRowInset)
@@ -3934,7 +3934,7 @@ private struct MemberRosterReadOnly: View {
             if members.isEmpty {
                 Text("No members yet. Share your join code to get the table set.")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .padding(.vertical, Theme.Layout.roomRowInset)
             } else {
                 VStack(spacing: 0) {
@@ -4047,7 +4047,7 @@ private struct MemberRosterReadOnly: View {
                      ? "1 friend joined, +\(rewards.totalReward) pts"
                      : "\(rewards.friendsJoined) friends joined, +\(rewards.totalReward) pts")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             Spacer()
         }
@@ -4066,7 +4066,7 @@ private struct MemberRosterReadOnly: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Pending invites")
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 ForEach(tierTwo) { member in
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
@@ -4085,7 +4085,7 @@ private struct MemberRosterReadOnly: View {
                             ) {
                                 Text(via)
                                     .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                    .foregroundStyle(Theme.Palette.secondaryText)
                             }
                         }
                         Spacer()
@@ -4123,7 +4123,7 @@ private struct MemberRosterReadOnly: View {
             VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
                 Text("Send a code to someone in your other rooms")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 Menu {
                     ForEach(candidates) { member in
                         Button(member.displayName) {
@@ -4134,12 +4134,12 @@ private struct MemberRosterReadOnly: View {
                     HStack {
                         Text(inviteeName ?? "Choose a friend")
                             .font(Theme.Typography.body)
-                            .foregroundStyle(inviteeUserId == nil ? Theme.Palette.primaryText.opacity(0.55) : Theme.Palette.primaryText)
+                            .foregroundStyle(inviteeUserId == nil ? Theme.Palette.secondaryText : Theme.Palette.primaryText)
                         Spacer()
                         Image(systemName: Theme.Icon.chevronDown)
                             .accessibilityHidden(true)
                             .font(Theme.Typography.footnote)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                            .foregroundStyle(Theme.Palette.tertiaryText)
                     }
                     .padding(.vertical, 12)
                 }
@@ -4160,7 +4160,7 @@ private struct MemberRosterReadOnly: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius))
                     }
                     .buttonStyle(.plain)
                 }
@@ -4208,7 +4208,7 @@ private struct MemberRosterReadOnly: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(member.role == .host ? "Host" : "Member")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             Spacer(minLength: 8)
         }
@@ -4283,7 +4283,7 @@ private struct CollapsibleSection<Content: View, Accessory: View>: View {
                 Button(action: toggle) {
                     Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
                         .font(Theme.Typography.footnote)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                        .foregroundStyle(Theme.Palette.tertiaryText)
                         .frame(width: 16)
                 }
                 .buttonStyle(.plain)
@@ -4549,7 +4549,7 @@ private struct MascotFooterCaption: View {
 
             Text(caption)
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
                 // 2026-08-10 feedback round — the caption was cut off at
                 // one line. The mascot comment is the room's voice; let
                 // it wrap so the whole comment is readable.
@@ -4774,7 +4774,7 @@ private struct RoomSwitcherMenu: View {
             // reachable on `accessibilityValue` below.
             Image(systemName: "chevron.up.chevron.down")
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                .foregroundStyle(Theme.Palette.labelText)
         }
         .accessibilityLabel(Text("Switch room"))
         .accessibilityValue(Text(currentRoom.name))

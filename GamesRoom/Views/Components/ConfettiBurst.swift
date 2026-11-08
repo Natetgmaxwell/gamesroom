@@ -38,7 +38,7 @@ struct ConfettiBurst: View {
                 let x = center.x + CGFloat(cos(angle) * distance)
                 let y = center.y + CGFloat(sin(angle) * distance)
                 let rect = CGRect(x: x, y: y, width: 6, height: 10)
-                var path = Path(roundedRect: rect, cornerRadius: 2)
+                var path = Path(roundedRect: rect, cornerRadius: Theme.Layout.smallRadius)
                 context.fill(path, with: .color(colors[i % colors.count]))
             }
         }

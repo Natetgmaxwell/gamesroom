@@ -301,7 +301,7 @@ struct RoomPage: View {
                 } else {
                     Text("Select a room")
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
         }
@@ -343,7 +343,7 @@ struct RoomPage: View {
                 HStack(spacing: Theme.Layout.cardInset) {
                     Image(systemName: "gearshape")
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.labelText)
                     Text("App Settings")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
@@ -378,7 +378,7 @@ struct RoomPage: View {
                         .tint(Theme.Palette.accent)
                     Text("Loading rooms…")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if roomService.rooms.isEmpty {
@@ -419,7 +419,7 @@ struct RoomPage: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(socialProofCaption(for: room) ?? "Tap to open")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
     }
@@ -436,7 +436,7 @@ struct RoomPage: View {
                     .tint(Theme.Palette.accent)
                 Text("Loading rooms…")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if roomService.rooms.isEmpty {
@@ -489,7 +489,7 @@ struct RoomPage: View {
                                             .foregroundStyle(Theme.Palette.primaryText)
                                         Text(socialProofCaption(for: room) ?? "Tap to open")
                                             .font(Theme.Typography.caption)
-                                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                            .foregroundStyle(Theme.Palette.secondaryText)
                                         // V0.55 — overlap badge + season-arc
                                         // preview. Two lines max, no new chrome.
                                         if let overlap = overlapLine(for: room) {
@@ -500,7 +500,7 @@ struct RoomPage: View {
                                         if let arc = seasonArcLine(for: room) {
                                             Text(arc)
                                                 .font(Theme.Typography.monoFootnote)
-                                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                                .foregroundStyle(Theme.Palette.secondaryText)
                                         }
                                     }
                                     Spacer()
@@ -522,10 +522,10 @@ struct RoomPage: View {
                     }
                     .background(Theme.Palette.surface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: Theme.Layout.cardRadius)
                             .stroke(Theme.Palette.hairline, lineWidth: 0.5)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.cardRadius))
                 }
             }
             .contentColumn()
@@ -617,11 +617,11 @@ struct RoomPage: View {
                         .frame(width: 8, height: 8)
                     Text(hasActiveEvent ? "Live now" : "Last opened")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                     Spacer(minLength: 8)
                     Text(room.mascotName)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
 
@@ -646,7 +646,7 @@ struct RoomPage: View {
             Spacer()
             Text("\(roomService.rooms.count)")
                 .font(Theme.Typography.monoFootnote)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.40))
+                .foregroundStyle(Theme.Palette.tertiaryText)
         }
         .padding(.horizontal, Theme.Layout.edgePadding)
     }
@@ -670,7 +670,7 @@ struct RoomPage: View {
 
             Text(emptySubhead)
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
                 .multilineTextAlignment(.center)
 
             // P0.2: both onboarding paths render equal-weight. The

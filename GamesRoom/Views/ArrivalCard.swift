@@ -83,7 +83,7 @@ struct ArrivalCard: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
                                 .fill(Theme.Palette.accent)
                         )
                 }
@@ -98,7 +98,7 @@ struct ArrivalCard: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
                                 .stroke(Theme.Palette.accent, lineWidth: 1)
                         )
                 }
@@ -113,7 +113,7 @@ struct ArrivalCard: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
                                 .stroke(Theme.Palette.accent, lineWidth: 1)
                         )
                 }

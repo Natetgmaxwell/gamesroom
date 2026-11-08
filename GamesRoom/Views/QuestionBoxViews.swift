@@ -83,7 +83,7 @@ struct ClaimedCardAskField: View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             Text(label)
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
             HStack(spacing: Theme.Layout.cardLineGap) {
                 TextField(placeholder, text: $text)
                     .font(Theme.Typography.body)
@@ -102,7 +102,7 @@ struct ClaimedCardAskField: View {
                 }
             }
             .padding(Theme.Layout.fieldInset)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Layout.smallRadius).stroke(Theme.Palette.hairline))
         }
         .onAppear { reseed(seed, initial) }
         .onChange(of: seed) { _, newSeed in reseed(newSeed, initial) }
@@ -152,7 +152,7 @@ struct QuestionReaderCard: View {
             VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(QuestionTurn.ritualLine)
                     .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    .foregroundStyle(Theme.Palette.labelText)
                 Text(turn.questionText)
                     .font(Theme.Typography.displayLarge)
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -162,12 +162,12 @@ struct QuestionReaderCard: View {
                 if let askedBy = turn.askedBy {
                     Text("asked by \(askedBy)")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 if let line = turn.answerFirstLine {
                     Text(line)
                         .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.labelText)
                 }
             }
             Spacer(minLength: 0)
@@ -412,7 +412,7 @@ struct QuestionBoxEditorView: View {
                 if q.source == .host { Text("host") }
             }
             .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.5))
+            .foregroundStyle(Theme.Palette.secondaryText)
         }
         .contentShape(Rectangle())
     }

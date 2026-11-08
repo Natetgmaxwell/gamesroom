@@ -78,7 +78,7 @@ struct PackStoreView: View {
                         .foregroundStyle(Theme.Palette.primaryText)
                     Text(pack.description)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                         .lineLimit(2)
                 }
                 Spacer()
@@ -86,7 +86,7 @@ struct PackStoreView: View {
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(enabledSlugs.contains(pack.slug)
                         ? Theme.Palette.accent
-                        : Theme.Palette.primaryText.opacity(0.45))
+                        : Theme.Palette.tertiaryText)
             }
             .padding(.vertical, 4)
         }

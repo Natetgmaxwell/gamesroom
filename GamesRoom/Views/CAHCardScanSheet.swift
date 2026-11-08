@@ -133,7 +133,7 @@ struct CAHCardScanSheet: View {
                     .multilineTextAlignment(.center)
                 Text("Hold steady, then tap the shutter.")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .multilineTextAlignment(.center)
 
                 if let errorMessage {
@@ -197,7 +197,7 @@ struct CAHCardScanSheet: View {
                     .animation(reduceMotion ? nil : Theme.Motion.popIn, value: displayedCount)
                 Text("Counted by the table's vision service · counts are final")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Theme.Layout.edgePadding)
@@ -223,13 +223,13 @@ struct CAHCardScanSheet: View {
                         }
                     }
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     Text("Photo \(String(result.photoHash.prefix(8)))…")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                     Text("Your photo is analysed by a cloud vision model and never stored.")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
 
                 Button(action: { Task { await done() } }) {

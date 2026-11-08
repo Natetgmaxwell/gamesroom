@@ -150,12 +150,12 @@ struct HostScoringDashboard: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(packDisplayName)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 if let editingRound {
                     HStack(spacing: Theme.Layout.cardInset) {
                         Text("Editing round \(editingRound.roundIndex)")
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                         Button("Cancel") {
                             cancelEdit()
                         }
@@ -175,7 +175,7 @@ struct HostScoringDashboard: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                     .frame(width: 44, height: 44)
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius)
                             .fill(Theme.Palette.surface)
                     )
             }
@@ -235,7 +235,7 @@ struct HostScoringDashboard: View {
                         .tint(Theme.Palette.accent)
                     Text("Loading members…")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 .frame(maxWidth: .infinity, minHeight: 240)
             } else {
@@ -293,11 +293,11 @@ struct HostScoringDashboard: View {
             .padding(.vertical, Theme.Layout.cardInset)
             .padding(.horizontal, 12)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius)
                     .fill(isSelected ? Theme.Palette.accent.opacity(0.14) : Theme.Palette.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius)
                     .stroke(isSelected ? Theme.Palette.accent : Theme.Palette.hairline, lineWidth: isSelected ? 1.5 : 0.5)
             )
         }
@@ -330,7 +330,7 @@ struct HostScoringDashboard: View {
                     .foregroundStyle(Theme.Palette.background)
                     .frame(maxWidth: .infinity, minHeight: 56)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius)
                             .fill(canSubmit ? Theme.Palette.accent : Theme.Palette.accent.opacity(0.35))
                     )
             }
@@ -356,7 +356,7 @@ struct HostScoringDashboard: View {
             if leaderboard.isEmpty {
                 Text("No scores yet")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -381,16 +381,16 @@ struct HostScoringDashboard: View {
                 .lineLimit(1)
             Text("\(entry.seasonScore)")
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
                 .fill(Theme.Palette.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
                 .stroke(Theme.Palette.hairline, lineWidth: 0.5)
         )
     }

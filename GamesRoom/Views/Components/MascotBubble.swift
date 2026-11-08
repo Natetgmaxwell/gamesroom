@@ -42,7 +42,7 @@ struct MascotBubble: View {
         Text(text)
             .font(Theme.Typography.caption)
             .italic()
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.78))
+            .foregroundStyle(Theme.Palette.bodyMuted)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

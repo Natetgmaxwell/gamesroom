@@ -65,7 +65,7 @@ struct PackDetailView: View {
                 .foregroundStyle(Theme.Palette.accent)
             Text(pack.scoringType.displayLabel)
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
             Spacer()
         }
     }
@@ -78,7 +78,7 @@ struct PackDetailView: View {
                 .foregroundStyle(Theme.Palette.primaryText)
             Text(howTo.summary)
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                .foregroundStyle(Theme.Palette.bodyMuted)
         }
     }
 
@@ -92,7 +92,7 @@ struct PackDetailView: View {
                 .foregroundStyle(Theme.Palette.primaryText)
             Text(section.body)
                 .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                .foregroundStyle(Theme.Palette.bodyMuted)
         }
     }
 
@@ -100,6 +100,6 @@ struct PackDetailView: View {
     private var placeholder: some View {
         Text(pack.description)
             .font(Theme.Typography.body)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+            .foregroundStyle(Theme.Palette.labelText)
     }
 }

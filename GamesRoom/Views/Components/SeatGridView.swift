@@ -80,10 +80,10 @@ struct SeatGridView: View {
             .frame(maxWidth: .infinity, minHeight: 64)
             .background(background(for: seat))
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: Theme.Layout.cardRadius)
                     .stroke(border(for: seat), lineWidth: borderWidth(for: seat))
             )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.cardRadius))
             .accessibilityElement()
             .accessibilityLabel(Text(accessibilityLabel(for: seat, at: index)))
             .accessibilityAddTraits(onTapSeat != nil ? .isButton : [])
@@ -109,19 +109,19 @@ struct SeatGridView: View {
                     .foregroundStyle(Theme.Palette.accent)
                 Text("Your seat")
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    .foregroundStyle(Theme.Palette.labelText)
             }
         case .claimed(let name):
             VStack(spacing: 4) {
                 Image(systemName: Theme.Icon.personFill)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 Text(initial(for: name))
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(name)
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.6))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .lineLimit(1)
             }
         case .available:
@@ -129,10 +129,10 @@ struct SeatGridView: View {
                 Image(systemName: Theme.Icon.chair)
                     .accessibilityHidden(true)
                     .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
                 Text("open")
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                    .foregroundStyle(Theme.Palette.tertiaryText)
             }
         }
     }

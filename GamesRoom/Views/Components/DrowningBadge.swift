@@ -54,7 +54,7 @@ struct DrowningBadge: View {
             HStack(spacing: Theme.Layout.cardInset) {
                 Image(systemName: iconName)
                     .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .frame(width: Theme.Layout.rowIconWidth)
                 VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                     HStack(spacing: Theme.Layout.cardLineGap) {
@@ -62,15 +62,15 @@ struct DrowningBadge: View {
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.primaryText)
                         Text("·")
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                            .foregroundStyle(Theme.Palette.tertiaryText)
                         Text("Drowning")
                             .font(Theme.Typography.caption.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     if let caption = award.caption, !caption.isEmpty {
                         Text(caption)
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                 }
                 Spacer()
@@ -100,7 +100,7 @@ struct DrowningBadge: View {
                     .font(Theme.Typography.caption.weight(.semibold))
                 Text("Members who opt in can see this row. Off by default.")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
         .tint(Theme.Palette.accent)
@@ -111,7 +111,7 @@ struct DrowningBadge: View {
     private var viewerFootnote: some View {
         Text("Visible because you've opted in to Drowning shares.")
             .font(Theme.Typography.caption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            .foregroundStyle(Theme.Palette.secondaryText)
             .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
     }
 }

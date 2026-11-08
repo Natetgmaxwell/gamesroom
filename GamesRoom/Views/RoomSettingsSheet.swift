@@ -263,7 +263,7 @@ struct RoomSettingsSheet: View {
                     // cancel; Done dismisses after any pending write
                     // has flushed.
                     Button("Done") { dismiss() }
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.labelText)
                 }
             }
             // V0.81 — autosave bumpers. Every persisted field
@@ -357,13 +357,13 @@ struct RoomSettingsSheet: View {
                                 .foregroundStyle(Theme.Palette.primaryText)
                             Text("Auto-add events to your iOS calendar")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                         }
                         Spacer()
                         Image(systemName: Theme.Icon.chevronRight)
                             .accessibilityHidden(true)
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+                            .foregroundStyle(Theme.Palette.tertiaryText)
                     }
                     .padding(.vertical, 4)
                 }
@@ -487,21 +487,21 @@ struct RoomSettingsSheet: View {
                         case .idle:
                             Text("Edits save automatically")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                         case .saving:
                             ProgressView()
                                 .controlSize(.small)
                                 .tint(Theme.Palette.accent)
                             Text("Saving…")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                         case .saved:
                             Image(systemName: Theme.Icon.checkmarkCircleFill)
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Palette.accent)
                             Text("Saved")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                         case .failed(let message):
                             Image(systemName: Theme.Icon.exclamationmarkTriangleFill)
                                 .font(Theme.Typography.caption)
@@ -616,7 +616,7 @@ struct RoomSettingsSheet: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text(detail)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
             Spacer()
         }
@@ -827,7 +827,7 @@ struct RoomSettingsSocialSheet: View {
                         .font(Theme.Typography.monoFootnote)
                         .foregroundStyle(hostJournal.count >= 260
                                          ? Theme.Palette.accent
-                                         : Theme.Palette.primaryText.opacity(0.45))
+                                         : Theme.Palette.tertiaryText)
                 }
             } footer: {
                 Text("A short note visible only to hosts: venue quirks, recurring house rules, who's hosting next.")
@@ -986,7 +986,7 @@ struct RoomSettingsOperationsSheet: View {
                                 .foregroundStyle(Theme.Palette.primaryText)
                             Text(pack.scoringType.displayLabel)
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                         }
                     }
                     // V0.9 Wave 2 Slice 2.1 - drill into the how-to
@@ -1019,7 +1019,7 @@ struct RoomSettingsOperationsSheet: View {
                             .tint(Theme.Palette.accent)
                         Text("Generating…")
                             .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     } else if let shareCode {
                         Text(shareCode)
                             .font(Theme.Typography.titleMono)
@@ -1028,7 +1028,7 @@ struct RoomSettingsOperationsSheet: View {
                     } else {
                         Text("Tap to mint a fresh code")
                             .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     Spacer()
                     Button {
@@ -1186,12 +1186,12 @@ struct RoomSettingsMembersSheet: View {
                             .tint(Theme.Palette.accent)
                         Text("Loading members…")
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                 } else if roster.isEmpty {
                     Text("No members yet. Share the invite code from the Operations section.")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 } else {
                     ForEach(roster, id: \.id) { member in
                         memberRow(member)
@@ -1203,7 +1203,7 @@ struct RoomSettingsMembersSheet: View {
                     if let selfRow = roster.first(where: { $0.userId == currentUserId }), selfRow.role == .host {
                         Text("To leave the room, ask another host to demote you.")
                             .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                 }
             }
@@ -1273,7 +1273,7 @@ struct RoomSettingsMembersSheet: View {
                         .foregroundStyle(Theme.Palette.primaryText)
                     Text("Member")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 Spacer()
                 rowMenu(for: member, role: .member)
@@ -1322,7 +1322,7 @@ struct RoomSettingsMembersSheet: View {
                     .font(Theme.Typography.caption)
                     .foregroundStyle(member.role == .host
                                      ? Theme.Palette.accent
-                                     : Theme.Palette.primaryText.opacity(0.55))
+                                     : Theme.Palette.secondaryText)
             }
         }
     }
@@ -1368,7 +1368,7 @@ struct RoomSettingsMembersSheet: View {
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.6))
+                .foregroundStyle(Theme.Palette.secondaryText)
                 .frame(width: Theme.Layout.rowIconWidth, height: 32, alignment: .trailing)
                 .contentShape(Rectangle())
         }

@@ -101,7 +101,7 @@ struct MemberCalendarSettingsSheet: View {
                                 .foregroundStyle(Theme.Palette.primaryText)
                             Text("Applies to every room you're in. Events appear on your default iOS calendar.")
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .foregroundStyle(Theme.Palette.secondaryText)
                         }
                     }
                     .tint(Theme.Palette.accent)
@@ -137,7 +137,7 @@ struct MemberCalendarSettingsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                        .foregroundStyle(Theme.Palette.labelText)
                 }
             }
         }
@@ -170,9 +170,9 @@ struct MemberCalendarSettingsSheet: View {
         case .denied, .restricted:
             return Theme.Palette.loss
         case .notDetermined:
-            return Theme.Palette.primaryText.opacity(0.55)
+            return Theme.Palette.secondaryText
         @unknown default:
-            return Theme.Palette.primaryText.opacity(0.55)
+            return Theme.Palette.secondaryText
         }
     }
 

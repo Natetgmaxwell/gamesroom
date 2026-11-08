@@ -160,7 +160,7 @@ struct ChipScanSheet: View {
                     .multilineTextAlignment(.center)
                 Text("Hold steady, then tap the shutter.")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .multilineTextAlignment(.center)
 
                 if let errorMessage {
@@ -225,14 +225,14 @@ struct ChipScanSheet: View {
                 HStack(spacing: Theme.Layout.cardLineGap) {
                     Text("Counted by the table's vision service · counts are final")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 Text("Withdrew: \(withdrawn) pts")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                 Text("Net: \(netDelta >= 0 ? "+" : "")\(netDelta) pts")
                     .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(netDelta >= 0 ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.7))
+                    .foregroundStyle(netDelta >= 0 ? Theme.Palette.accent : Theme.Palette.labelText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Theme.Layout.edgePadding)
@@ -268,13 +268,13 @@ struct ChipScanSheet: View {
                         }
                     }
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     Text("Photo \(String(result.photoHash.prefix(8)))…")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                     Text("Your photo is analysed by a cloud vision model and never stored.")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
 
                 Button(action: { Task { await done() } }) {
@@ -312,7 +312,7 @@ struct ChipScanSheet: View {
                     .foregroundStyle(Theme.Palette.primaryText)
                 Text("\(stack.count) × \(value) pts")
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
             }
 
             Spacer()

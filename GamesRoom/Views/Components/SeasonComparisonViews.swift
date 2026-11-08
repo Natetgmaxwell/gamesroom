@@ -147,7 +147,7 @@ struct SeasonsSection: View {
                     if !row.subtitle.isEmpty {
                         Text(dateRange(row))
                             .font(Theme.Typography.footnote)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                             .lineLimit(1)
                     }
                 }
@@ -160,7 +160,7 @@ struct SeasonsSection: View {
             }
             SeasonBar(
                 fraction: SeasonComparison.barFraction(row.callerTotal, scale: scale),
-                color: Theme.Palette.primaryText.opacity(0.28),
+                color: Theme.Palette.tertiaryText,
                 tick: nil,
                 grown: grown,
                 caption: nightsCaption(nights(row).count)
@@ -179,7 +179,7 @@ struct SeasonsSection: View {
             SeasonTraceDetail(
                 solid: season,
                 ghost: before,
-                solidColor: Theme.Palette.primaryText.opacity(0.85),
+                solidColor: Theme.Palette.bodyMuted,
                 sentence: SeasonComparison.pastTraceSentence(season: season, before: before),
                 onOpenGrid: openGrid(row.seasonId, title: name)
             )
@@ -200,14 +200,14 @@ struct SeasonsSection: View {
     private func chevron(open: Bool, enabled: Bool) -> some View {
         Image(systemName: open ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
             .font(Theme.Typography.footnote)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(enabled ? 0.4 : 0))
+            .foregroundStyle(enabled ? Theme.Palette.tertiaryText : .clear)
             .frame(width: 16)
             .padding(.leading, 2)
             .accessibilityHidden(true)
     }
 
     private func signColor(_ value: Int64) -> Color {
-        value > 0 ? Theme.Palette.gain : (value < 0 ? Theme.Palette.loss : Theme.Palette.primaryText.opacity(0.4))
+        value > 0 ? Theme.Palette.gain : (value < 0 ? Theme.Palette.loss : Theme.Palette.tertiaryText)
     }
 
     private func dateRange(_ row: SeasonHistoryEntry) -> String {
@@ -244,7 +244,7 @@ struct SeasonBar: View {
                         .frame(width: max(geo.size.width * (grown ? fraction : 0), fraction > 0 ? 2 : 0), height: 6)
                     if let tick {
                         Rectangle()
-                            .fill(Theme.Palette.primaryText.opacity(0.6))
+                            .fill(Theme.Palette.secondaryText)
                             .frame(width: 1.5, height: 14)
                             .offset(x: min(geo.size.width * tick, geo.size.width - 1.5))
                     }
@@ -254,7 +254,7 @@ struct SeasonBar: View {
             .frame(height: 14)
             Text(caption)
                 .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .foregroundStyle(Theme.Palette.secondaryText)
                 .lineLimit(1)
                 .frame(width: Self.captionWidth, alignment: .trailing)
         }
@@ -310,7 +310,7 @@ struct SeasonTraceDetail: View {
                     .frame(height: 76)
                 Text(sentence)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                    .foregroundStyle(Theme.Palette.bodyMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .ignore)
@@ -325,7 +325,7 @@ struct SeasonTraceDetail: View {
                             .accessibilityHidden(true)
                     }
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    .foregroundStyle(Theme.Palette.labelText)
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint(Text("Shows every member's nights, won and lost."))
@@ -359,7 +359,7 @@ struct SeasonDualTrace: View {
                         .opacity(Double(drawn))
                 }
                 plot.line(ghost)
-                    .stroke(Theme.Palette.primaryText.opacity(0.3), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    .stroke(Theme.Palette.tertiaryText, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
                 plot.line(solid)
                     .trim(from: 0, to: drawn)
                     .stroke(solidColor, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
@@ -371,7 +371,7 @@ struct SeasonDualTrace: View {
                         .opacity(Double(drawn))
                     Text("\(solid.last ?? 0)")
                         .font(Theme.Typography.monoFootnote)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                         .fixedSize()
                         .position(
                             x: min(max(end.x, 24), size.width - 18),
@@ -470,13 +470,13 @@ struct SeasonGridSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(grid.summarySentence())
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.8))
+                        .foregroundStyle(Theme.Palette.bodyMuted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.bottom, 4)
                         .accessibilityIdentifier("season-grid-summary")
                     Text("Each mark is a night. Green won, red lost, outline sat out.")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.bottom, 4)
                         .accessibilityIdentifier("season-grid-key")
@@ -584,7 +584,7 @@ struct SeasonGridSheet: View {
         switch mark {
         case .won: return Theme.Palette.gain
         case .lost: return Theme.Palette.loss
-        case .even: return Theme.Palette.primaryText.opacity(0.3)
+        case .even: return Theme.Palette.tertiaryText
         case .satOut: return .clear
         }
     }

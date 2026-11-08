@@ -87,7 +87,7 @@ struct LeaderboardRow: View {
                 }
                 Text(sessionsPlayed == 1 ? "1 session" : "\(sessionsPlayed) sessions")
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .foregroundStyle(Theme.Palette.secondaryText)
                     .accessibilityHidden(true)
             }
             Spacer(minLength: 8)
@@ -99,7 +99,7 @@ struct LeaderboardRow: View {
     private var rankBadge: some View {
         Text("\(rank)")
             .font(Theme.Typography.monoCaption)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+            .foregroundStyle(Theme.Palette.secondaryText)
             .frame(width: Theme.Layout.rowIconWidth, alignment: .leading)
             .accessibilityLabel(Text("Rank \(rank)"))
     }
@@ -128,7 +128,7 @@ struct LeaderboardRow: View {
         Image(systemName: isExpanded ? Theme.Icon.chevronUp : Theme.Icon.chevronDown)
             .accessibilityHidden(true)
             .font(Theme.Typography.footnote)
-            .foregroundStyle(Theme.Palette.primaryText.opacity(0.4))
+            .foregroundStyle(Theme.Palette.tertiaryText)
             .frame(width: 16)
             // Nothing to expand before the first night; keep the
             // column so scores still line up across rows.
@@ -146,7 +146,7 @@ struct LeaderboardRow: View {
     private var deltaColor: Color {
         if lastDelta > 0 { return Theme.Palette.gain }
         if lastDelta < 0 { return Theme.Palette.loss }
-        return Theme.Palette.primaryText.opacity(0.4)
+        return Theme.Palette.tertiaryText
     }
 
     private var trajectoryAccessibilityDescription: String {

@@ -64,7 +64,7 @@ struct RoomNotifPromptCard: View {
                     } label: {
                         Text("Not now")
                             .font(Theme.Typography.body)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .foregroundStyle(Theme.Palette.secondaryText)
                     }
                     .buttonStyle(.plain)
                 }
@@ -115,7 +115,7 @@ struct RoomNotifSettingsSection: View {
                         .foregroundStyle(Theme.Palette.primaryText)
                     Text("When a night is set, a week before, a few days before and the morning of.")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
             .tint(Theme.Palette.accent)
@@ -182,7 +182,7 @@ private struct AnchorPushRow: View {
                         .foregroundStyle(Theme.Palette.primaryText)
                     Text("A nudge when they claim a seat and you haven't — while they're new.")
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
             .tint(Theme.Palette.accent)
