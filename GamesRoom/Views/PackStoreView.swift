@@ -66,12 +66,12 @@ struct PackStoreView: View {
         Button {
             packDetailType = pack
         } label: {
-            HStack(spacing: Theme.Layout.gutter) {
+            HStack(spacing: Theme.Layout.cardInset) {
                 Image(systemName: pack.iconSystemName)
                     .accessibilityHidden(true)
                     .font(Theme.Typography.title)
                     .foregroundStyle(Theme.Palette.accent)
-                    .frame(width: 32)
+                    .frame(width: Theme.Layout.rowIconWidth)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(pack.displayName)
                         .font(Theme.Typography.body.weight(.semibold))

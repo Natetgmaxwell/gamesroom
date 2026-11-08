@@ -3163,6 +3163,11 @@ private struct AwardsCard: View {
                         if idx != sortedAwards.count - 1 {
                             Divider()
                                 .overlay(Theme.Palette.hairline)
+                                // Start the hairline under the row
+                                // text, past the icon column, so the
+                                // award names and the rule share a
+                                // left edge.
+                                .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
                         }
                     }
                 }
@@ -3262,12 +3267,13 @@ private struct AwardRow: View {
     let award: SeasonAward
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Layout.cardInset) {
             Image(systemName: symbol)
                 .font(Theme.Typography.body)
                 .foregroundStyle(award.awardType.isPrivate
                     ? Theme.Palette.primaryText.opacity(0.55)
                     : Theme.Palette.accent)
+                .frame(width: Theme.Layout.rowIconWidth)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(award.recipientDisplayName)
@@ -3639,12 +3645,12 @@ private struct PackShelfReadOnly: View {
         // V0.35B — the row now also surfaces the configured
         // points-per-card for `.countBased` packs (CAH), and the
         // tap handler routes each scoring type to its own editor.
-        HStack(spacing: Theme.Layout.gutter) {
+        HStack(spacing: Theme.Layout.cardInset) {
             Image(systemName: pack.iconSystemName)
                 .accessibilityHidden(true)
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                .frame(width: 32)
+                .frame(width: Theme.Layout.rowIconWidth)
             VStack(alignment: .leading, spacing: 2) {
                 Text(pack.displayName)
                     .font(Theme.Typography.body.weight(.semibold))
@@ -4173,13 +4179,13 @@ private struct MemberRosterReadOnly: View {
     }
 
     private func memberRow(_ member: Member) -> some View {
-        HStack(spacing: Theme.Layout.gutter) {
+        HStack(spacing: Theme.Layout.cardInset) {
             // Avatar placeholder — the V0.8 brief deliberately
             // surfaces a monogram (initials) rather than a photo so
             // the roster renders without a media dependency.
             Circle()
                 .fill(Theme.Palette.accent.opacity(0.18))
-                .frame(width: 32, height: 32)
+                .frame(width: Theme.Layout.rowIconWidth, height: Theme.Layout.rowIconWidth)
                 .overlay(
                     Text(initials(for: member.displayName))
                         .font(Theme.Typography.caption.weight(.semibold))

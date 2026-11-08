@@ -58,7 +58,7 @@ struct LeaderboardRow: View {
     // MARK: Header subview
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Layout.cardInset) {
             rankBadge
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -94,7 +94,7 @@ struct LeaderboardRow: View {
         Text("\(rank)")
             .font(Theme.Typography.monoCaption)
             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            .frame(width: 24, alignment: .leading)
+            .frame(width: Theme.Layout.rowIconWidth, alignment: .leading)
             .accessibilityLabel(Text("Rank \(rank)"))
     }
 

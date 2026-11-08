@@ -346,11 +346,11 @@ struct RoomSettingsSheet: View {
                 Button {
                     showCalendarSettings = true
                 } label: {
-                    HStack(spacing: Theme.Layout.gutter) {
+                    HStack(spacing: Theme.Layout.cardInset) {
                         Image(systemName: "calendar")
                             .font(Theme.Typography.body)
                             .foregroundStyle(Theme.Palette.accent)
-                            .frame(width: 28)
+                            .frame(width: Theme.Layout.rowIconWidth)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("My calendar")
                                 .font(Theme.Typography.body.weight(.semibold))
@@ -604,12 +604,12 @@ struct RoomSettingsSheet: View {
     /// Visual row inside the hub. Shared shape; sub-sheets own
     /// the body of the form.
     private func settingsRow(icon: String, title: String, detail: String) -> some View {
-        HStack(spacing: Theme.Layout.gutter) {
+        HStack(spacing: Theme.Layout.cardInset) {
             Image(systemName: icon)
                 .accessibilityHidden(true)
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.accent)
-                .frame(width: 28)
+                .frame(width: Theme.Layout.rowIconWidth)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Theme.Typography.body.weight(.semibold))
@@ -1369,7 +1369,7 @@ struct RoomSettingsMembersSheet: View {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 18, weight: .regular))
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.6))
-                .frame(width: 32, height: 32, alignment: .trailing)
+                .frame(width: Theme.Layout.rowIconWidth, height: 32, alignment: .trailing)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("Manage \(member.displayName)")

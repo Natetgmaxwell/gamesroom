@@ -47,10 +47,11 @@ struct DrowningBadge: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
+            HStack(spacing: Theme.Layout.cardInset) {
                 Image(systemName: iconName)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .frame(width: Theme.Layout.rowIconWidth)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(award.recipientDisplayName)
@@ -99,7 +100,7 @@ struct DrowningBadge: View {
             }
         }
         .tint(Theme.Palette.accent)
-        .padding(.leading, 28)  // align under the row text, past the icon
+        .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)  // align under the row text, past the icon
     }
 
     @ViewBuilder
@@ -107,6 +108,6 @@ struct DrowningBadge: View {
         Text("Visible because you've opted in to Drowning shares.")
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-            .padding(.leading, 28)
+            .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
     }
 }

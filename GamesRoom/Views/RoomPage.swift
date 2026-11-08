@@ -405,13 +405,14 @@ struct RoomPage: View {
     /// binding owns the tap behavior.
     @ViewBuilder
     private func sidebarRow(for room: Room) -> some View {
-        HStack(spacing: Theme.Layout.gutter) {
-            if roomService.activeEventByRoom[room.id] != nil {
-                Circle()
-                    .fill(Theme.Palette.accent)
-                    .frame(width: 8, height: 8)
-                    .accessibilityLabel(Text("Active session"))
-            }
+        HStack(spacing: Theme.Layout.cardLineGap * 2) {
+            // Same reserved dot column as the phone list, so the
+            // sidebar names do not shift either.
+            Circle()
+                .fill(roomService.activeEventByRoom[room.id] != nil ? Theme.Palette.accent : Color.clear)
+                .frame(width: 8, height: 8)
+                .accessibilityLabel(Text("Active session"))
+                .accessibilityHidden(roomService.activeEventByRoom[room.id] == nil)
             VStack(alignment: .leading, spacing: 4) {
                 Text(room.name)
                     .font(Theme.Typography.body.weight(.semibold))
@@ -467,17 +468,16 @@ struct RoomPage: View {
                         NavigationLink(
                             value: room
                         ) {
-                            HStack(spacing: Theme.Layout.gutter) {
-                                // M1.2 — session-active indicator. A
-                                // small accent dot appears next to the
-                                // room name when the room has an
-                                // active event cached in RoomService.
-                                if roomService.activeEventByRoom[room.id] != nil {
-                                    Circle()
-                                        .fill(Theme.Palette.accent)
-                                        .frame(width: 8, height: 8)
-                                        .accessibilityLabel(Text("Active session"))
-                                }
+                            HStack(spacing: Theme.Layout.cardLineGap * 2) {
+                                // M1.2 — session-active indicator. The dot column is
+                                // always reserved, so every room name starts at the
+                                // same left edge whether the room is live or not; the
+                                // dot itself is clear when the room is not live.
+                                Circle()
+                                    .fill(roomService.activeEventByRoom[room.id] != nil ? Theme.Palette.accent : Color.clear)
+                                    .frame(width: 8, height: 8)
+                                    .accessibilityLabel(Text("Active session"))
+                                    .accessibilityHidden(roomService.activeEventByRoom[room.id] == nil)
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(room.name)
                                         .font(Theme.Typography.title)
