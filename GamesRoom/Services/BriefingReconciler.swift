@@ -521,3 +521,37 @@ enum BriefingReconciler {
         }
     }
 }
+
+// MARK: - Foreground purge (lane S2 step 5)
+
+extension BriefingReconciler {
+
+    /// The rooms in `old` that are missing from `new`, in `old`'s
+    /// order: the rooms the user left or was removed from since the
+    /// last read.
+    static func removedRoomIds(old: [UUID], new: [UUID]) -> [UUID] {
+        let current = Set(new)
+        var seen = Set<UUID>()
+        return old.filter { !current.contains($0) && seen.insert($0).inserted }
+    }
+
+    /// True when a notification request belongs to the room: its
+    /// payload names the room, or names one of the room's events
+    /// (requests scheduled before the payload carried a room id).
+    static func requestBelongsToRoom(
+        userInfo: [AnyHashable: Any],
+        roomId: UUID,
+        eventIds: Set<UUID>
+    ) -> Bool {
+        if let raw = userInfo["room_id"] as? String,
+           UUID(uuidString: raw) == roomId {
+            return true
+        }
+        if let raw = userInfo["event_id"] as? String,
+           let eventId = UUID(uuidString: raw),
+           eventIds.contains(eventId) {
+            return true
+        }
+        return false
+    }
+}

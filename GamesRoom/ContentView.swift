@@ -77,6 +77,7 @@ struct ContentView: View {
     /// start passes it to `RealtimeEventService` as the rooms cache.
     @EnvironmentObject private var roomService: RoomService
     @Environment(\.horizontalSizeClass) private var hSize
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .rooms
     @State private var isRestoringSession = true
 
@@ -200,6 +201,15 @@ struct ContentView: View {
         // that is still loading is opened as soon as it arrives.
         .onChange(of: roomService.rooms) { _, _ in
             openPendingRoomIfReady()
+        }
+        // Every return to the foreground converges the phone on the
+        // server: purge rooms the user left or was removed from,
+        // re-plan reminders for the current seat, restart realtime.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, !isRestoringSession, auth.currentUser != nil else { return }
+            Task {
+                await AppReconciler.shared.appBecameActive(roomService: roomService)
+            }
         }
     }
 

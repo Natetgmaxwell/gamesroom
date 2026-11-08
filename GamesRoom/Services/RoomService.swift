@@ -253,6 +253,36 @@ final class RoomService: ObservableObject {
         }
     }
 
+    /// Forgets a room the user is no longer in (they left, or the
+    /// host removed them): cancels and clears its notifications,
+    /// removes its calendar rows and drops its cached night. The
+    /// room's Live Activity and widget snapshot are ended by
+    /// `AppReconciler`, which still knows the room's name.
+    func purgeRoom(roomId: UUID) async {
+        var events: [Event] = []
+        if let event = activeEventByRoom[roomId] { events.append(event) }
+        var eventIds = Set(events.map(\.id))
+        for (eventId, summary) in briefingByEvent where summary.roomId == roomId {
+            eventIds.insert(eventId)
+        }
+        await NotificationDispatcher.shared.purgeRoom(roomId: roomId, eventIds: eventIds)
+        for event in events {
+            await CalendarService.shared.removeEvent(
+                eventId: event.id,
+                identifier: event.eventCalendarIdentifier
+            )
+        }
+        activeEventByRoom.removeValue(forKey: roomId)
+        membersByRoom.removeValue(forKey: roomId)
+        cacheTimestamps.removeValue(forKey: "activeEvent:\(roomId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "roomMembers:\(roomId.uuidString)")
+        for eventId in eventIds {
+            briefingByEvent.removeValue(forKey: eventId)
+            rsvpByEvent.removeValue(forKey: eventId)
+            eventRSVPsByEvent.removeValue(forKey: eventId)
+        }
+    }
+
     /// Look up a room by id. The list-side cache; the authoritative
     /// read goes through the store when the view needs server-
     /// fresh data.

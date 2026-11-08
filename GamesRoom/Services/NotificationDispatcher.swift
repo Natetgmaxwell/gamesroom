@@ -201,6 +201,39 @@ final class NotificationDispatcher {
         center.removePendingNotificationRequests(withIdentifiers: ids)
     }
 
+    /// Removes every pending AND delivered request that belongs to a
+    /// room the user is no longer in: by the payload's room id, by
+    /// one of the room's event ids, and by the event-id prefix sweep
+    /// for anything older. Used by the foreground purge.
+    func purgeRoom(roomId: UUID, eventIds: Set<UUID>) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let pendingIds = pending
+            .filter {
+                BriefingReconciler.requestBelongsToRoom(
+                    userInfo: $0.content.userInfo, roomId: roomId, eventIds: eventIds
+                )
+            }
+            .map(\.identifier)
+        if !pendingIds.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: pendingIds)
+        }
+        let delivered = await center.deliveredNotifications()
+        let deliveredIds = delivered
+            .filter {
+                BriefingReconciler.requestBelongsToRoom(
+                    userInfo: $0.request.content.userInfo, roomId: roomId, eventIds: eventIds
+                )
+            }
+            .map(\.request.identifier)
+        if !deliveredIds.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: deliveredIds)
+        }
+        for eventId in eventIds {
+            await cancelBriefingTrio(eventId: eventId)
+        }
+    }
+
     // MARK: - Joined-late catch-up (W2.7)
 
     /// Schedules the joined-late catch-up push for one member.

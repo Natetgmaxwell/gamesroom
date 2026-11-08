@@ -358,4 +358,52 @@ func runS2Tests() {
             "the catch-up identifier must start with the event id"
         )
     }
+
+    // MARK: - Step 5: foreground purge decisions
+
+    runner.run("S2 removed rooms are the ones missing from the fresh list") {
+        let a = UUID(), b = UUID(), c = UUID(), d = UUID()
+        runner.assertEqual(
+            BriefingReconciler.removedRoomIds(old: [a, b, c], new: [c, a, d]),
+            [b]
+        )
+        runner.assertEqual(BriefingReconciler.removedRoomIds(old: [], new: [a]), [])
+        runner.assertEqual(BriefingReconciler.removedRoomIds(old: [a, b], new: [a, b]), [])
+        runner.assertEqual(
+            BriefingReconciler.removedRoomIds(old: [a, b, a], new: []),
+            [a, b]
+        )
+    }
+
+    runner.run("S2 a request belongs to a room by room id or by one of its events") {
+        let room = UUID(), other = UUID(), event = UUID(), otherEvent = UUID()
+        runner.assertTrue(
+            BriefingReconciler.requestBelongsToRoom(
+                userInfo: ["room_id": room.uuidString, "event_id": otherEvent.uuidString],
+                roomId: room, eventIds: []
+            ),
+            "the payload room id matches"
+        )
+        runner.assertTrue(
+            BriefingReconciler.requestBelongsToRoom(
+                userInfo: ["kind": "t48h", "event_id": event.uuidString],
+                roomId: room, eventIds: [event]
+            ),
+            "a request without a room id matches by its event"
+        )
+        runner.assertTrue(
+            !BriefingReconciler.requestBelongsToRoom(
+                userInfo: ["room_id": other.uuidString, "event_id": otherEvent.uuidString],
+                roomId: room, eventIds: [event]
+            ),
+            "another room's request is left alone"
+        )
+        runner.assertTrue(
+            !BriefingReconciler.requestBelongsToRoom(
+                userInfo: ["kind": "question_box_turn"],
+                roomId: room, eventIds: [event]
+            ),
+            "a request with no room or event is left alone"
+        )
+    }
 }
