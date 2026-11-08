@@ -1,27 +1,48 @@
 # STATE S4
 
-STATE: step 2 of 9 done. Next: step 3.
+STATE: step 3 of 9 done. Next: step 4.
 
 BLOCKED: none
 
 Ticks are in .maestro/briefs/BRIEF-S4.md (tick the checkbox there too).
 
-## Step 2 notes (S4.2: one primary button, commit 2db641a)
+## Step 3 notes (S4.3: one secondary-action style, commit 90bc279)
 
-PrimaryButtonStyle now drives every primary site (styling only, no logic or string changes):
-- `RoomDetailView.swift` — Claim seat, "I'm here. Reclaim", Re-accept, live CTA and its `.done`
-  passive state (capsule -> `buttonRadius` rounded rect, `buttonVertical` padding, so the
-  claimed -> live flip no longer jumps corner shape), "Add an event" (now full width via the
-  style's `frame(maxWidth: .infinity)`).
-- `RoomPage.swift` — Rooms "Resume" (NavigationLink keeps its `value:` and tap gesture; the
-  style fixes the old `primaryText`-on-accent label colour) and the empty-state CTA (keeps its
-  320pt cap, now via `.frame(maxWidth: 320)` on the button).
-- `QuestionBoxViews.swift` — reader card "Done" (Pass stays as-is until step 3).
-- `ChipScanSheet.swift` / `CAHCardScanSheet.swift` — "Scan chips" / "Scan cards" now use the
-  shared geometry (semibold body, `Palette.background` on accent, radius 12, vertical 14).
-- `Theme.swift` — `PrimaryButtonStyle` gained an `@Environment(\.isEnabled)` dim (0.4) so the
-  disabled scan buttons still read as disabled now that the automatic button style is gone.
+One secondary style now: a centred grey caption, no chrome, no chevron
+(audit #4). Styling only, no logic, string or order changes.
+
+- `Theme.swift` — unchanged. `SecondaryTextAction` (caption, `Palette.secondaryText`,
+  centred, `frame(maxWidth: .infinity, minHeight: 44)`, `.plain`) was already in
+  place from step 1 and is now the app's only secondary look.
+- `RoomDetailView.swift`
+  - `TrailingTextAction` now renders `SecondaryTextAction` (was: body font, 0.7,
+    trailing-aligned, chevron). Its two call sites ("Release my seat", "Re-decline")
+    are untouched, so the claimed card's secondary no longer sits at the card's
+    right edge while the unclaimed card centres the same verb.
+  - Live card extras "Withdraw more", "Count your CAH cards" and "Score a round"
+    are now `SecondaryTextAction`: the accent-outlined boxes are gone, so the three
+    stacked extras stop competing with the primary. "Score a round" lost its
+    decorative `checkmarkSealFill` seal with the box (the button, its title and
+    the `(host)` accessibility label are unchanged).
+  - "Make a call": the standalone copy (no Tonight's Star to sit beside) is now
+    `SecondaryTextAction` on its own row, so it no longer hangs off the right edge;
+    the copy that rides the Tonight's Star label row keeps its row but loses the
+    chevron and takes the grey caption. The `make-a-call` identifier stays on both.
+  - Member-note "Skip": grey caption via `Palette.secondaryText` (was 0.7), no
+    chrome. It stays inline beside the small Send - a full-width secondary would
+    sit half a card away from the button it answers.
+- `QuestionBoxViews.swift` — reader card "Pass" is now `SecondaryTextAction`: the
+  hairline outlined box beside the Done primary is gone.
+- `RoomPage.swift` — empty Rooms "Ask a friend for a join code" is now
+  `SecondaryTextAction`, keeping the empty state's 320pt cap so both onboarding
+  paths share one measure.
+
+Left alone: "Can't make it" (the unclaimed card's secondary) already is caption /
+0.55 / centred - the rule's reference implementation. Its literal 0.55 becomes
+`Palette.secondaryText` in step 8.
 
 Gate: `bash .maestro/fastgate.sh` -> FASTGATE: PASS (302 unit cases, parse-check 64/64).
-Also type-checked the app sources with the iOS SDK: no errors in the changed files (only the
-pre-existing "no such module 'Supabase'" import error, which needs the built package).
+Also type-checked the whole app source tree against the iOS 26 simulator SDK with
+the cached Supabase module (`swiftc -typecheck`): 0 errors, only pre-existing
+warnings. Verified the check is real by planting a deliberate type error in
+`QuestionBoxViews.swift` (caught, then reverted).
