@@ -21,6 +21,10 @@
 //       slugs. Selecting a pack that hasn't been added to the room
 //       is allowed; the server resolves it.
 //
+//  S3.4 adds two optional fields, **Venue** and **Note**, so one
+//  sheet sets the night up. The packs are a set: the headline is the
+//  first selected pack in display order, not the last one tapped.
+//
 //  After a successful create the sheet dismisses and calls
 //  `onSaved(newEventId)`. The parent (`RoomDetailView`) uses the id
 //  to refresh its event list and surface the new event in the
@@ -54,23 +58,32 @@ struct AddEventSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String = ""
-    @State private var playedAt: Date = AddEventSheet.defaultPlayedAt()
-    /// V0.95 G — multi-select packs. First entry is the primary pack
-    /// (drives the legacy pack_slug column + hero CTA flavour).
+    /// S3.4 — seeded by `initialPlayedAt` when the caller knows the
+    /// night already (the room's next slot), otherwise the default
+    /// three weeks out.
+    @State private var playedAt: Date
+    /// S3.4 — optional venue and note. One sheet sets the night up.
+    @State private var venue: String = ""
+    @State private var note: String = ""
+    /// V0.95 G — multi-select packs. The packs are a set: the first
+    /// selected pack in display order is the headline (it drives the
+    /// legacy pack_slug column + hero CTA flavour).
     @State private var packSlugs: [String] = [AddEventSheet.initialPackSlug]
 
 
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
 
-    /// S1.5 — `initialPlayedAt` seeds the date only ("Plan the next
-    /// night" passes tonight + 7 days). nil keeps the default.
+    /// S1.5 + S3.4 — `initialPlayedAt` seeds the date only: "Plan the
+    /// next night" passes tonight + 7 days, and a caller that has no
+    /// date keeps the sheet's own default. The parameter exists in
+    /// both lanes with the same name and type, so callers can pass it
+    /// positionally or by label.
     init(roomId: UUID, initialPlayedAt: Date? = nil, onSaved: @escaping (UUID) -> Void) {
         self.roomId = roomId
         self.onSaved = onSaved
-        if let initialPlayedAt {
-            _playedAt = State(initialValue: initialPlayedAt)
-        }
+        _playedAt = State(initialValue: initialPlayedAt ?? AddEventSheet.defaultPlayedAt())
+
     }
 
     var body: some View {
@@ -92,17 +105,7 @@ struct AddEventSheet: View {
                 Section {
                     ForEach(availablePacks) { option in
                         Button {
-                            // V0.95 G — multi-select. Last tap wins the
-                            // primary slot (first in the array) so the
-                            // hero CTA flavour follows the host's most
-                            // recent intent. At least one pack must
-                            // stay selected.
-                            if let idx = packSlugs.firstIndex(of: option.slug) {
-                                guard packSlugs.count > 1 else { return }
-                                packSlugs.remove(at: idx)
-                            } else {
-                                packSlugs.insert(option.slug, at: 0)
-                            }
+                            togglePack(option.slug)
                         } label: {
                             HStack {
                                 Text(option.displayName)
@@ -120,7 +123,7 @@ struct AddEventSheet: View {
                 } header: {
                     Text("Pack")
                 } footer: {
-                    Text("Pick every pack the night will run. The last one you tap is the headline pack.")
+                    Text("Pick every pack the night will run.")
                 }
 
                 Section {
@@ -133,6 +136,33 @@ struct AddEventSheet: View {
                     .tint(Theme.Palette.accent)
                 } header: {
                     Text("Date & time")
+                }
+
+                Section {
+                    TextField("Venue", text: $venue)
+                        .textInputAutocapitalization(.words)
+                } header: {
+                    Text("Venue")
+                } footer: {
+                    Text("Optional. Where the night is.")
+                }
+
+                Section {
+                    TextField(
+                        "Note for the table",
+                        text: $note,
+                        axis: .vertical
+                    )
+                    .lineLimit(2...4)
+                    .onChange(of: note) { _, newValue in
+                        if newValue.count > 280 {
+                            note = String(newValue.prefix(280))
+                        }
+                    }
+                } header: {
+                    Text("Note")
+                } footer: {
+                    Text("Optional. A short note for the table. \(note.count)/280")
                 }
 
                 if let errorMessage {
@@ -217,6 +247,28 @@ struct AddEventSheet: View {
         PackRegistry.shared.allPacks.first?.slug ?? "casino"
     }
 
+    /// S3.4 — the packs are a set. The headline is the first selected
+    /// pack in display order, so the order the host taps them in
+    /// never decides what the night leads with. At least one pack
+    /// stays selected.
+    private func togglePack(_ slug: String) {
+        if let idx = packSlugs.firstIndex(of: slug) {
+            guard packSlugs.count > 1 else { return }
+            packSlugs.remove(at: idx)
+        } else {
+            packSlugs.append(slug)
+        }
+        packSlugs.sort { packOrder[$0, default: .max] < packOrder[$1, default: .max] }
+    }
+
+    /// The display order of the pack picker, used to keep the
+    /// selected set in the order it is shown.
+    private var packOrder: [String: Int] {
+        Dictionary(
+            uniqueKeysWithValues: availablePacks.enumerated().map { ($0.element.slug, $0.offset) }
+        )
+    }
+
     // MARK: - Save
 
     private func save() async {
@@ -246,6 +298,19 @@ struct AddEventSheet: View {
                 playedAt: playedAt,
                 packSlugs: packSlugs
             )
+            // S3.4 — the venue and the note go on the night that was
+            // just created. A failure here does not undo the night:
+            // the host can add the note from Edit details.
+            let trimmedVenue = venue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedVenue.isEmpty || !trimmedNote.isEmpty {
+                try? await roomService.updateEventMemberFields(
+                    eventId: newEventId,
+                    note: trimmedNote.isEmpty ? nil : trimmedNote,
+                    venue: trimmedVenue.isEmpty ? nil : trimmedVenue
+                )
+            }
+            await roomService.eventDidChange(eventId: newEventId)
             Haptics.success()
             onSaved(newEventId)
             dismiss()

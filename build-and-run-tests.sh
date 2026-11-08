@@ -21,6 +21,7 @@ TARGET="arm64-apple-macosx14.0"
 BIN="games-room-tests"
 SRC_FILES=(main.swift
            TestsS1.swift
+           TestsS3.swift
            GamesRoom/Models/*.swift
            GamesRoom/Packs/*.swift
            GamesRoom/Services/StorageKeys.swift

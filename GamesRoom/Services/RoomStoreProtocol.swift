@@ -191,6 +191,29 @@ protocol RoomStore: Sendable {
     /// briefing push. Empty by default.
     func addEvent(roomId: UUID, name: String, playedAt: Date, packSlugs: [String], hiddenFromUserIds: [UUID]) async throws -> UUID
 
+    // MARK: Event edit
+
+    /// S3.4 — host-only. Renames the night. The name is trimmed
+    /// server-side and cannot be empty.
+    ///
+    /// Server side: `update_event_name(p_event_id, p_name)`
+    /// (migration 114).
+    func updateEventName(eventId: UUID, name: String) async throws
+
+    /// S3.4 — host-only. Moves the night to a new time. The server
+    /// refuses a date in the past.
+    ///
+    /// Server side: `update_event_played_at(p_event_id, p_played_at)`
+    /// (migration 114).
+    func updateEventPlayedAt(eventId: UUID, playedAt: Date) async throws
+
+    /// S3.4 — host-only. Cancels the night: every seat deposit still
+    /// held for it goes back to its owner, then the night is
+    /// deleted. A cancelled night costs nobody their deposit.
+    ///
+    /// Server side: `cancel_event(p_event_id)` (migration 114).
+    func cancelEvent(eventId: UUID) async throws
+
     /// Any room member may edit the event's pre-play note + venue
     /// while the event is still in the future. Empty strings clear
     /// the field. Room scope derives from the event (F-IDENT-01).
@@ -228,6 +251,16 @@ protocol RoomStore: Sendable {
     ///
     /// Server side: `delete_room(p_room_id)` (migration 052).
     func deleteRoom(roomId: UUID) async throws
+
+    /// S3.5 — the caller leaves the room. Members leave freely; a
+    /// host may only leave when another active host remains, so the
+    /// live RPC raises `last_host` for the last host. Leaving ends
+    /// the caller's membership, so the room disappears from the
+    /// caller's own rooms list. The room itself survives for
+    /// everyone else.
+    ///
+    /// Server side: `leave_room(p_room_id)` (migration 093).
+    func leaveRoom(roomId: UUID) async throws
 
     /// Updates the room's mascot + operations + feature-toggle
     /// columns. Returns the freshly-read `Room` so the UI can
@@ -420,6 +453,15 @@ protocol RoomStore: Sendable {
     /// 085). Fails 42501 when balance < amount. Idempotent per
     /// (event, member).
     func claimSeatWithDeposit(eventId: UUID) async throws
+
+    /// S3.3 — member. Releases or declines the caller's own seat:
+    /// the RSVP moves to `state` ('unclaimed' or 'declined') and,
+    /// when the caller still holds a deposit for that night, the
+    /// deposit returns to the balance in the same transaction.
+    /// Mirrors `release_seat(p_event_id, p_state)` (migration
+    /// 113). Releasing never costs a member their deposit.
+    /// Idempotent.
+    func releaseSeat(eventId: UUID, state: MemberRSVPState) async throws
 
     /// V0.85 — host-only broke-member path. Claims the seat with
     /// a zero-amount held deposit row so the arrival card still
@@ -641,6 +683,22 @@ enum HostKickError: Error, LocalizedError, Equatable {
             return "You can't remove yourself. Demote first, then ask another host to remove you."
         case .activeDeposit(let detail):
             return detail
+        }
+    }
+}
+
+/// S3.5 — the one guard the leave path has: a room must always
+/// have at least one host, so the last host cannot walk away. The
+/// live `leave_room` RPC raises `last_host` (P0001); the service
+/// maps that string into this case so the UI can show the same
+/// sentence it shows before the button.
+enum LeaveRoomError: Error, LocalizedError, Equatable {
+    case lastHost
+
+    var errorDescription: String? {
+        switch self {
+        case .lastHost:
+            return "Make someone else host first."
         }
     }
 }

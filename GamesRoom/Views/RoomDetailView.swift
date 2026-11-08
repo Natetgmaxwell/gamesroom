@@ -150,6 +150,19 @@ struct RoomDetailView: View {
     @State private var seatActionError: String?
     @State private var showSeatActionError: Bool = false
 
+    /// S3.3 — the nights this member found full. The server
+    /// refuses a claim on a full night (`night_full`, migration
+    /// 113) and the cached seat counts can still be stale, so the
+    /// refusal is remembered per event: the Claim seat button is
+    /// replaced with the grey "All N seats are taken." line until
+    /// the seat counts come back with a free chair.
+    @State private var nightFullEventIds: Set<UUID> = []
+
+    /// S3.3 — the release toast. Holds the event whose seat was
+    /// released so "Undo" can put it back. Five seconds, then it
+    /// goes.
+    @State private var seatReleaseToast: SeatReleaseToast?
+
     /// V0.100 — first-refresh gate. Flips to `true` after the
     /// initial `refresh()` in `.task` resolves. The state machine
     /// uses this to distinguish "data fetch in flight" (true
@@ -164,9 +177,42 @@ struct RoomDetailView: View {
     /// leaderboard rows.
     @State private var hasLoadedInitialData: Bool = false
 
+    /// S3.6 — the join code the empty-room invite shares. There is
+    /// no read RPC for the live code (only `generate_join_code`), so
+    /// it is minted on demand when the host opens a room with
+    /// nobody in it, and kept for as long as the hero is up.
+    @State private var heroJoinCode: String?
+
+    /// S3.6 — true while the invite code is being minted.
+    @State private var isMintingHeroCode: Bool = false
+
+    /// S3.6 — why the invite code could not be minted, shown as a
+    /// quiet line under the invite action.
+    @State private var heroCodeError: String?
+
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
         return room.userRole == .host || room.createdBy == uid
+    }
+
+    /// S3.6 — true when the room needs friends before it needs a
+    /// night: the host is alone (fewer than two members) and the
+    /// roster has actually loaded.
+    ///
+    /// The roster gate matters. Until the roster lands we do not
+    /// know the room is empty, so the old CTA stays and a room with
+    /// a full table never flashes the invite.
+    private var inviteFirst: Bool {
+        isHost
+            && roomService.hasLoadedMembers(roomId: room.id)
+            && roomService.cachedMembers(roomId: room.id).count < 2
+    }
+
+    /// S3.6 — the task key for the invite-code mint. It changes when
+    /// the room changes and when the hero starts asking for an
+    /// invite, which is when a code is worth minting.
+    private var inviteHeroTaskKey: String {
+        "\(room.id.uuidString)-\(inviteFirst)"
     }
 
     /// Track P0.4 — gate for the iPad host scoring dashboard. Only
@@ -325,6 +371,29 @@ struct RoomDetailView: View {
             }
         }
         .background(Theme.Palette.background.ignoresSafeArea())
+        // S3.3 — the release toast. One line of quiet text and one
+        // plain-text action, parked at the bottom of the page for
+        // five seconds. The Undo window is the point: releasing a
+        // seat is instant and reversible.
+        .overlay(alignment: .bottom) {
+            if let toast = seatReleaseToast {
+                SeatReleaseToastView {
+                    undoRelease(toast)
+                }
+                .padding(.horizontal, Theme.Layout.edgePadding)
+                // The floating tab bar's glass capsule tops out
+                // ~83pt from the screen bottom; the toast clears it.
+                .padding(.bottom, 96)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .task(id: toast.id) {
+                    try? await Task.sleep(for: .seconds(5))
+                    guard seatReleaseToast?.id == toast.id else { return }
+                    withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                        seatReleaseToast = nil
+                    }
+                }
+            }
+        }
         // v1.2.2 S6 T6 — the one Question Box driver for this page,
         // started above the section it feeds (the section only
         // renders once a turn exists, so it can no longer be the
@@ -506,6 +575,12 @@ struct RoomDetailView: View {
             // "Pull to refresh" affordance cover the retry path.
             hasLoadedInitialData = true
         }
+        // S3.6 — the empty-room invite needs a join code. The key
+        // flips once the roster lands and the host turns out to be
+        // alone, which is when minting one is worth a round trip.
+        .task(id: inviteHeroTaskKey) {
+            await mintHeroJoinCode()
+        }
         .refreshable {
             await refresh(force: true)
             Haptics.light()
@@ -654,29 +729,55 @@ struct RoomDetailView: View {
                 // the active event is live (played, not settled),
                 // the caller is the host, and held deposits are
                 // waiting on a check-in the grace window has
-                // covered. The host decides forfeit vs skip per
-                // candidate; the system never decides alone.
+                // covered. The host decides per candidate; the
+                // system never decides alone.
+                //
+                // S3.7 — the card waits for the grace window. While
+                // the window is open the host gets one grey line
+                // ("Arrivals open at 7:40pm") and no rows: a member
+                // who is two minutes late is parking, not a no-show.
+                // Inside the window each row offers a grey "Give it
+                // back" and a red "Keep" behind a confirmation.
                 if let event = activeEvent,
                    isHost,
                    event.playedAt <= Date(),
                    event.settledAt == nil,
-                   liveRoom.seatDepositTrigger == .escrow,
-                   !roomService.cachedArrivalCandidates(eventId: event.id).isEmpty {
-                    ArrivalCard(
-                        room: liveRoom,
-                        event: event,
-                        candidates: roomService.cachedArrivalCandidates(eventId: event.id),
-                        onForfeit: { candidate in
-                            Task { await resolveArrivalCandidate(candidate, forfeit: true) }
-                        },
-                        onSkipTexted: { candidate in
-                            Task { await resolveArrivalCandidate(candidate, forfeit: false, reason: "texted") }
-                        },
-                        onSkipAway: { candidate in
-                            Task { await resolveArrivalCandidate(candidate, forfeit: false, reason: "away") }
+                   liveRoom.seatDepositTrigger == .escrow {
+                    let candidates = roomService.cachedArrivalCandidates(eventId: event.id)
+                    if !candidates.isEmpty {
+                        if ArrivalGrace.isOpen(
+                            candidates: candidates,
+                            playedAt: event.playedAt,
+                            graceMinutes: liveRoom.seatDepositGraceMinutes
+                        ) {
+                            ArrivalCard(
+                                room: liveRoom,
+                                event: event,
+                                candidates: candidates,
+                                onGiveBack: { candidate in
+                                    Task { await resolveArrivalCandidate(candidate, forfeit: false) }
+                                },
+                                onKeep: { candidate in
+                                    Task { await resolveArrivalCandidate(candidate, forfeit: true) }
+                                }
+                            )
+                            .sectionCard(.standard)
+                        } else {
+                            // The quiet stand-in for the card. It
+                            // sits where the card's own caption line
+                            // would sit, so the slot does not jump
+                            // when the card arrives.
+                            Text(
+                                ArrivalGrace.caption(
+                                    playedAt: event.playedAt,
+                                    graceMinutes: liveRoom.seatDepositGraceMinutes
+                                )
+                            )
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .padding(.horizontal, Theme.Layout.cardInset)
                         }
-                    )
-                    .sectionCard(.standard)
+                    }
                 }
                 if !systemEvents.isEmpty {
                     SystemBanner(
@@ -965,7 +1066,8 @@ struct RoomDetailView: View {
                     onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
-                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
+                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } },
+                    nightFullOverride: nightFullEventIds.contains(event.id)
                 )
             case .claimed(let event):
                 BriefingSlot(
@@ -1074,7 +1176,7 @@ struct RoomDetailView: View {
                                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         }
                         if isHost {
-                            addEventCTA
+                            hostHeroActions
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1112,6 +1214,94 @@ struct RoomDetailView: View {
         }
         .buttonStyle(.plain)
         .padding(.top, 4)
+    }
+
+    /// S3.6 — the host's empty-room hero.
+    ///
+    /// A room with fewer than two members has nobody at the table,
+    /// so the first thing the host needs is friends, not a night:
+    /// "Invite friends" is the primary (the share sheet, with a join
+    /// code minted on demand) and "Add a night" is the grey caption
+    /// under it. Once the room has a table, the old "Add an event"
+    /// CTA comes back.
+    @ViewBuilder
+    private var hostHeroActions: some View {
+        if inviteFirst {
+            inviteFriendsCTA
+            Button {
+                showingAddEvent = true
+            } label: {
+                Text("Add a night")
+                    .font(Theme.Typography.body)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+            }
+            .buttonStyle(.plain)
+            if let heroCodeError {
+                Text(heroCodeError)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+            }
+        } else {
+            addEventCTA
+        }
+    }
+
+    /// S3.6 — the invite action. A `ShareLink` over the join code,
+    /// so inviting is one tap. While the code is being minted (or
+    /// when minting failed) the same action mints one instead.
+    @ViewBuilder
+    private var inviteFriendsCTA: some View {
+        if let code = heroJoinCode {
+            ShareLink(
+                item: inviteShareText(for: code),
+                preview: SharePreview("Join my Games Room")
+            ) {
+                inviteFriendsLabel
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                Task { await mintHeroJoinCode() }
+            } label: {
+                inviteFriendsLabel
+            }
+            .buttonStyle(.plain)
+            .disabled(isMintingHeroCode)
+        }
+    }
+
+    private var inviteFriendsLabel: some View {
+        Text("Invite friends")
+            .font(Theme.Typography.body.weight(.semibold))
+            .foregroundStyle(Theme.Palette.background)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Theme.Palette.accent)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func inviteShareText(for code: String) -> String {
+        "Join me in Games Room. Use code \(code) to get started."
+    }
+
+    /// S3.6 — mints the join code the invite shares. There is no
+    /// read RPC for the live code, so this is the only way to get
+    /// one; it is minted once per empty room and then shared.
+    @MainActor
+    private func mintHeroJoinCode() async {
+        guard inviteFirst, !isMintingHeroCode, heroJoinCode == nil else { return }
+        isMintingHeroCode = true
+        defer { isMintingHeroCode = false }
+        do {
+            heroJoinCode = try await roomService.generateJoinCode(roomId: room.id)
+            heroCodeError = nil
+        } catch {
+            heroCodeError = "Couldn't make a join code. Try again."
+        }
     }
 
     // MARK: - Data operations
@@ -1408,10 +1598,14 @@ struct RoomDetailView: View {
     /// row. Reloads candidates + leaderboard so the public
     /// ledger rows the forfeit path writes show up on the next
     /// refresh.
+    ///
+    /// S3.7 — the two Skip buttons are one "Give it back", and
+    /// both did the same thing on the server, so the reason is
+    /// gone: the waive RPC takes no reason and the mascot copy
+    /// has a default line for it.
     private func resolveArrivalCandidate(
         _ candidate: SeatDepositCandidate,
-        forfeit: Bool,
-        reason: String? = nil
+        forfeit: Bool
     ) async {
         guard let event = activeEvent else { return }
         do {
@@ -1421,7 +1615,7 @@ struct RoomDetailView: View {
                 )
             } else {
                 try await roomService.waiveSeatDeposit(
-                    eventId: event.id, memberId: candidate.userId, reason: reason
+                    eventId: event.id, memberId: candidate.userId, reason: nil
                 )
             }
             seatActionError = nil
@@ -1445,14 +1639,29 @@ struct RoomDetailView: View {
     /// failure the previous state is preserved and the
     /// body-level `.alert` (`showSeatActionError`) presents the
     /// localized message (e.g. the 42501 balance-too-low error).
+    ///
+    /// S3.3 — a full night is not an error dialog: the server
+    /// raises `night_full` (migration 113), the optimistic claim
+    /// rolls back, and the card says "All N seats are taken."
     private func claimSeat(eventId: UUID) async {
         let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .claimed, currentUserId: currentUserId)
         do {
             _ = try await roomService.claimSeat(eventId: eventId)
             seatActionError = nil
+            nightFullEventIds.remove(eventId)
             Haptics.success()
+            await roomService.eventDidChange(eventId: eventId)
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
+            if RoomService.isNightFullError(error) {
+                nightFullEventIds.insert(eventId)
+                // The counts in the cache are the ones that sent us
+                // here: re-read them so the card agrees with the
+                // server about how many chairs are gone.
+                await roomService.loadEventRSVPs(eventId: eventId, force: true)
+                await roomService.loadBriefing(eventId: eventId, force: true)
+                return
+            }
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
         }
@@ -1487,12 +1696,18 @@ struct RoomDetailView: View {
 
     /// Fires `RoomService.upsertEventRSVP(eventId, .declined)`.
     /// Mirror of `claimSeat`.
+    /// S3.3 — "Can't make it". Routed through
+    /// `RoomService.releaseSeat(eventId:state:.declined)`, which
+    /// writes the RSVP through `release_seat` (migration 113): the
+    /// decline gives the held deposit back instead of leaving it in
+    /// escrow for the host to forfeit. Mirror of `claimSeat`.
     private func declineSeat(eventId: UUID) async {
         let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .declined, currentUserId: currentUserId)
         do {
-            _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .declined)
+            _ = try await roomService.releaseSeat(eventId: eventId, state: .declined)
             seatActionError = nil
             Haptics.light()
+            await roomService.eventDidChange(eventId: eventId)
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
@@ -1519,19 +1734,42 @@ struct RoomDetailView: View {
 
     /// 2026-08-10 feedback round — releases a claimed seat by
     /// flipping the RSVP back to `.unclaimed`, returning the seat to
-    /// the open pool. Same RPC as claim/decline; the server treats
-    /// `.unclaimed` as "no response" so the seat counts as open.
+    /// the open pool.
+    ///
+    /// S3.3 — the write goes through `release_seat` (migration 113),
+    /// so the held deposit comes back with the seat. It used to go
+    /// through the plain RSVP upsert, which left the deposit in
+    /// escrow until the host forfeited it: the considerate member
+    /// got fined for changing their mind.
+    ///
+    /// The release is instant and undoable: the bottom toast offers
+    /// "Undo" for five seconds, and Undo re-claims the seat.
     private func releaseSeat(eventId: UUID) async {
         let previous = roomService.applyOptimisticRSVP(eventId: eventId, state: .unclaimed, currentUserId: currentUserId)
         do {
-            _ = try await roomService.upsertEventRSVP(eventId: eventId, state: .unclaimed)
+            _ = try await roomService.releaseSeat(eventId: eventId, state: .unclaimed)
             seatActionError = nil
             Haptics.light()
+            await roomService.eventDidChange(eventId: eventId)
+            withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                seatReleaseToast = SeatReleaseToast(eventId: eventId)
+            }
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
         }
+    }
+
+    /// S3.3 — "Undo" in the release toast puts the seat back. It
+    /// goes through the same claim path as the original claim, so a
+    /// night that filled up in the meantime says so instead of
+    /// quietly doing nothing.
+    private func undoRelease(_ toast: SeatReleaseToast) {
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            seatReleaseToast = nil
+        }
+        Task { await claimSeat(eventId: toast.eventId) }
     }
 
     /// V0.9 Wave 1 Slice 1.1 — fires the `set_drowning_opt_in` RPC
@@ -2051,6 +2289,11 @@ private struct BriefingSlot: View {
     /// instantly; the reclaim IS the check-in. Wired up only
     /// when the parent passes a non-nil callback.
     let onCheckIn: (() -> Void)?
+    /// S3.3 — the server refused a claim on this night
+    /// (`night_full`). The cached seat counts can still be stale,
+    /// so the parent remembers the refusal and the card keeps
+    /// saying the table is full until a chair frees up.
+    let nightFullOverride: Bool
     // V0.79 — notification toggle params removed. Preferences moved
     // to the one-time RoomNotifPromptCard (main room page) and
     // RoomSettingsSheet's "My notifications" section.
@@ -2075,7 +2318,8 @@ private struct BriefingSlot: View {
         onEdit: (() -> Void)? = nil,
         room: Room,
         heldDeposit: SeatDeposit? = nil,
-        onCheckIn: (() -> Void)? = nil
+        onCheckIn: (() -> Void)? = nil,
+        nightFullOverride: Bool = false
     ) {
         self.event = event
         self.briefing = briefing
@@ -2093,6 +2337,26 @@ private struct BriefingSlot: View {
         self.room = room
         self.heldDeposit = heldDeposit
         self.onCheckIn = onCheckIn
+        self.nightFullOverride = nightFullOverride
+    }
+
+    /// S3.3 — a table has a fixed number of chairs. The night is
+    /// full when every chair is taken and this member does not hold
+    /// one: the Claim seat button is replaced with a plain grey
+    /// line saying so, because there is no chair to take.
+    ///
+    /// The count comes from the server's briefing summary; the
+    /// seat-grid rows are the fallback while the summary is still
+    /// loading. `nightFullOverride` is the server's own refusal
+    /// (`night_full`), which wins over both.
+    private var isNightFull: Bool {
+        if nightFullOverride { return true }
+        guard event.maxSeats > 0, myRSVP != .claimed else { return false }
+        let claimed = max(
+            briefing?.seatsClaimed ?? 0,
+            rsvps.filter { $0.state == .claimed }.count
+        )
+        return claimed >= event.maxSeats
     }
 
     var body: some View {
@@ -2171,16 +2435,29 @@ private struct BriefingSlot: View {
             switch myRSVP {
             case .unclaimed:
                 VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
-                    Button(action: onClaim) {
-                        Text("Claim seat")
-                            .font(Theme.Typography.body.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.background)
+                    // S3.3 — a full night says so. The claim
+                    // button is gone (there is no chair to take)
+                    // and a plain grey line takes its place. The
+                    // decline below stays: saying "I can't make it"
+                    // is still the right answer on a full table.
+                    if isNightFull {
+                        Text("All \(event.maxSeats) seats are taken.")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        Button(action: onClaim) {
+                            Text("Claim seat")
+                                .font(Theme.Typography.body.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.background)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Theme.Palette.accent)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .pressScale()
                     }
-                    .pressScale()
                     // v1.2.2 S6 T2 — the decline is a caption-grey
                     // text button centred under the full-width
                     // primary, same action and same accessibility
@@ -2353,6 +2630,51 @@ private struct TrailingTextAction: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+// MARK: - Seat release toast (S3.3)
+
+/// S3.3 — the state behind the "Seat released." toast. The token
+/// makes every release its own toast, so releasing twice in a row
+/// restarts the five-second Undo window instead of keeping the old
+/// one on screen.
+private struct SeatReleaseToast: Identifiable {
+    let eventId: UUID
+    let id: UUID = UUID()
+}
+
+/// S3.3 — the bottom toast after a seat is released. Quiet by
+/// default: one line of text and one plain-text action, no chrome
+/// beyond a hairline. The Undo window (five seconds) belongs to
+/// the caller.
+private struct SeatReleaseToastView: View {
+    let onUndo: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Layout.cardLineGap) {
+            Text("Seat released.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText)
+            Spacer(minLength: Theme.Layout.cardLineGap)
+            Button(action: onUndo) {
+                Text("Undo")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Undo the seat release"))
+        }
+        .padding(.horizontal, Theme.Layout.cardInset)
+        .padding(.vertical, Theme.Layout.cardLineGap)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Theme.Palette.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Theme.Palette.hairline, lineWidth: 1)
+        )
     }
 }
 
@@ -4175,7 +4497,10 @@ private struct MemberRosterReadOnly: View {
                         UIPasteboard.general.string = code
                         Haptics.light()
                     } label: {
-                        Image(systemName: Theme.Icon.plusCircle)
+                        // S3.6 — this button copies, so it wears the
+                        // copy mark. It used to wear a plus circle,
+                        // which read as "mint another code".
+                        Image(systemName: "doc.on.doc")
                             .foregroundStyle(Theme.Palette.accent)
                     }
                     .accessibilityLabel(Text("Copy invite code"))

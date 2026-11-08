@@ -5,18 +5,20 @@
 //  Track E2 — the persistent home of the V0.8 app.
 //
 //  One page, three states:
-//   1. **List** — `LazyVStack` of every room the current user is in,
+//   1. **List** — a `List` of every room the current user is in,
 //      rendered as `RoomRow` tiles. The default surface for a brand-new
 //      install or a freshly signed-in user.
 //   2. **Last-viewed hero** — if the user previously opened a room and
 //      that room is still in their list, a hero card at the top offers
 //      one-tap resume. Per the V0.8 brief L "Last-viewed room opens the
 //      Rooms tab automatically." We keep the list visible underneath —
-//      the hero is an accelerator, not a replacement.
-//   3. **Empty** — when the list is empty, a single CTA branching on
-//      host-vs-member. Members see "Ask a friend for a join code";
-//      hosts (or any signed-in user with no rooms yet) see
-//      "Create one to get started".
+//      the hero is an accelerator, not a replacement. S3.6: it is
+//      dropped when there is only one room, where it duplicated the
+//      row right under it.
+//   3. **Empty** — when the list is empty, one primary action:
+//      "Enter a join code" (most people arrive with a code in a text
+//      message), with the grey caption "Starting your own games
+//      night? Create a room" under it.
 //
 //  Navigation
 //  ----------
@@ -117,6 +119,14 @@ struct RoomPage: View {
     /// settings sheet is dismissed. Only valid for host role rooms.
     @State private var settingsRoom: Room?
 
+    /// S3.5 — the room the user is about to leave. Set by the row's
+    /// trailing swipe action and by its context menu; both open the
+    /// same confirmation.
+    @State private var roomToLeave: Room?
+
+    /// S3.5 — inline error for a refused leave (the last host).
+    @State private var leaveError: String?
+
     /// Create-room sheet binding. Mirrors the empty-state "Create"
     /// CTA (P0.2 onboarding).
     @State private var showingCreateRoom: Bool = false
@@ -152,16 +162,29 @@ struct RoomPage: View {
             // delete; the service's rooms-list cache update re-renders
             // this page without the room (and the last-viewed hero
             // resolves to nil because the room is gone).
-            RoomSettingsSheet(room: room)
+            // S3.5 — same for leaving: the room leaves the list, so
+            // the page pops back to the rooms list.
+            RoomSettingsSheet(room: room, onRoomLeft: {
+                popToRoomsList()
+            })
                 .environmentObject(roomService)
                 .environmentObject(casinoService)
         }
         .sheet(isPresented: $showingCreateRoom) {
-            CreateRoomSheet()
+            // S3.6 — a created room opens straight away. The host
+            // lands in the room they just made, not back on the
+            // list with a new row they have to find.
+            CreateRoomSheet(onCreated: { roomId in
+                openRoom(id: roomId)
+            })
                 .environmentObject(roomService)
         }
         .sheet(isPresented: $showingJoinRoom) {
-            JoinRoomSheet()
+            // S3.6 — same for a joined room: the member lands in
+            // the room they just joined.
+            JoinRoomSheet(onJoined: { roomId in
+                openRoom(id: roomId)
+            })
                 .environmentObject(roomService)
         }
         // V0.100 — iPad-only App Settings entry. The Settings tab
@@ -207,6 +230,60 @@ struct RoomPage: View {
             await roomService.refresh()
             await roomService.loadRoomsSocialProof()
             Haptics.light()
+        }
+        // S3.5 — leaving a room is destructive (the caller's
+        // membership ends), so it goes through a confirmation. The
+        // dialog lives at the page level: a context-menu button
+        // cannot own one, and a swipe action fires while the row is
+        // mid-gesture.
+        .confirmationDialog(
+            "Leave \(roomToLeave?.name ?? "")?",
+            isPresented: Binding(
+                get: { roomToLeave != nil },
+                set: { if !$0 { roomToLeave = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Leave", role: .destructive) {
+                guard let room = roomToLeave else { return }
+                roomToLeave = nil
+                Task { await leaveRoom(room) }
+            }
+            Button("Cancel", role: .cancel) {
+                roomToLeave = nil
+            }
+        } message: {
+            Text("Your season history stays with the room.")
+        }
+        .alert(
+            "Couldn't leave the room",
+            isPresented: Binding(
+                get: { leaveError != nil },
+                set: { if !$0 { leaveError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(leaveError ?? "")
+        }
+        // S3.5 — a room the caller left (or was removed from) must
+        // not stay on the stack: the detail page would show a room
+        // they are no longer in. Pop back to the rooms list.
+        // S3 fix: the last-viewed room is recorded when a room is
+        // actually pushed (row, Resume hero, or open after create or
+        // join), not from a tap gesture racing the `NavigationLink`.
+        .onChange(of: roomsPath) { _, path in
+            if let opened = path.last {
+                recordLastViewed(opened)
+            }
+        }
+        .onChange(of: roomService.rooms.map(\.id)) { _, ids in
+            if let current = roomsPath.last, !ids.contains(current.id) {
+                roomsPath.removeAll()
+            }
+            if let current = selectedRoom, !ids.contains(current.id) {
+                selectedRoom = nil
+            }
         }
     }
 
@@ -392,6 +469,14 @@ struct RoomPage: View {
                             .accessibilityAddTraits(.isButton)
                             .accessibilityLabel(Text(room.name))
                             .accessibilityHint(Text("Opens \(room.name) in the detail pane"))
+                            // S3.5 — the same leave affordance the
+                            // iPhone list rows carry.
+                            .swipeActions(edge: .trailing) {
+                                leaveRoomButton(for: room)
+                            }
+                            .contextMenu {
+                                leaveRoomButton(for: room)
+                            }
                     }
                 }
                 .listStyle(.sidebar)
@@ -406,11 +491,13 @@ struct RoomPage: View {
     @ViewBuilder
     private func sidebarRow(for room: Room) -> some View {
         HStack(spacing: Theme.Layout.gutter) {
-            if roomService.activeEventByRoom[room.id] != nil {
+            // S3.6 — the dot marks a night that is on, not a night
+            // that is merely scheduled.
+            if isLiveNow(for: room) {
                 Circle()
                     .fill(Theme.Palette.accent)
                     .frame(width: 8, height: 8)
-                    .accessibilityLabel(Text("Active session"))
+                    .accessibilityLabel(Text("Live now"))
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(room.name)
@@ -453,78 +540,66 @@ struct RoomPage: View {
 
     // MARK: - Rooms list (with optional last-viewed hero)
 
+    /// S3.5 — the rooms list is a `List`, not a `LazyVStack` in a
+    /// `ScrollView`: a row can only carry a trailing swipe action
+    /// inside a `List`. The rows keep the content they had (name,
+    /// social-proof caption, overlap line, season arc) and the
+    /// hairline between rows is the list's own separator.
     private var roomsList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
-                if let lastViewed = resolvedLastViewedRoom {
-                    lastViewedHero(for: lastViewed)
-                }
-
-                sectionHeader("Your rooms")
-
-                LazyVStack(spacing: 0) {
-                    ForEach(roomService.rooms) { room in
-                        NavigationLink(
-                            value: room
-                        ) {
-                            HStack(spacing: Theme.Layout.gutter) {
-                                // M1.2 — session-active indicator. A
-                                // small accent dot appears next to the
-                                // room name when the room has an
-                                // active event cached in RoomService.
-                                if roomService.activeEventByRoom[room.id] != nil {
-                                    Circle()
-                                        .fill(Theme.Palette.accent)
-                                        .frame(width: 8, height: 8)
-                                        .accessibilityLabel(Text("Active session"))
-                                }
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(room.name)
-                                        .font(Theme.Typography.title)
-                                        .foregroundStyle(Theme.Palette.primaryText)
-                                    Text(socialProofCaption(for: room) ?? "Tap to open")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                                    // V0.55 — overlap badge + season-arc
-                                    // preview. Two lines max, no new chrome.
-                                    if let overlap = overlapLine(for: room) {
-                                        Text(overlap)
-                                            .font(Theme.Typography.caption)
-                                            .foregroundStyle(Theme.Palette.accent)
-                                    }
-                                    if let arc = seasonArcLine(for: room) {
-                                        Text(arc)
-                                            .font(Theme.Typography.monoFootnote)
-                                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                                    }
-                                }
-                                Spacer()
-                            }
-                            .padding(.vertical, Theme.Layout.cardInset)
-                            .padding(.horizontal, Theme.Layout.edgePadding)
-                        }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            recordLastViewed(room)
-                        })
-
-                        if room.id != roomService.rooms.last?.id {
-                            Divider()
-                                .overlay(Theme.Palette.hairline)
-                                .padding(.horizontal, Theme.Layout.edgePadding)
-                        }
-                    }
-                }
-                .background(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+        List {
+            // S3.6 — the Resume hero is an accelerator for a user
+            // with several rooms. With one room it duplicated the
+            // row right under it (two targets for the same room),
+            // so it is dropped.
+            if roomService.rooms.count > 1, let lastViewed = resolvedLastViewedRoom {
+                lastViewedHero(for: lastViewed)
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: Theme.Layout.sectionSpacing,
+                            leading: Theme.Layout.edgePadding,
+                            bottom: 0,
+                            trailing: Theme.Layout.edgePadding
+                        )
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-            .contentColumn()
-            .padding(.vertical, Theme.Layout.sectionSpacing)
+
+            sectionHeader("Your rooms")
+                .listRowInsets(
+                    EdgeInsets(
+                        top: Theme.Layout.sectionSpacing,
+                        leading: Theme.Layout.edgePadding,
+                        bottom: Theme.Layout.roomHeaderGap,
+                        trailing: Theme.Layout.edgePadding
+                    )
+                )
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+            ForEach(roomService.rooms) { room in
+                roomRow(for: room)
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: Theme.Layout.cardInset,
+                            leading: Theme.Layout.edgePadding * 2,
+                            bottom: Theme.Layout.cardInset,
+                            trailing: Theme.Layout.edgePadding * 2
+                        )
+                    )
+                    .listRowBackground(Theme.Palette.surface)
+                    .listRowSeparatorTint(Theme.Palette.hairline)
+                    .swipeActions(edge: .trailing) {
+                        leaveRoomButton(for: room)
+                    }
+                    .contextMenu {
+                        leaveRoomButton(for: room)
+                    }
+            }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Theme.Palette.background)
         .navigationDestination(for: Room.self) { room in
             RoomDetailView(
                 room: room,
@@ -533,6 +608,154 @@ struct RoomPage: View {
                 onSwitchRoom: { _ in }
             )
         }
+    }
+
+    /// One room row: the name, the live dot, and the two quiet
+    /// caption lines. The row is a `NavigationLink` so the push is
+    /// the platform's own.
+    private func roomRow(for room: Room) -> some View {
+        let schedule = scheduleCaption(for: room)
+        let proof = socialProofCaption(for: room)
+        return NavigationLink(
+            value: room
+        ) {
+            HStack(spacing: Theme.Layout.gutter) {
+                // M1.2 — session-active indicator. A
+                // small accent dot appears next to the
+                // room name when the room has an
+                // active event cached in RoomService.
+                //
+                // S3.6 — the dot is honest now: it marks a night
+                // that has actually started, not a night that is
+                // merely scheduled. The old check ("the room has
+                // a cached active event") was true for every room
+                // with a night on the calendar, three weeks out.
+                if isLiveNow(for: room) {
+                    Circle()
+                        .fill(Theme.Palette.accent)
+                        .frame(width: 8, height: 8)
+                        .accessibilityLabel(Text("Live now"))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(room.name)
+                        .font(Theme.Typography.title)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    // S3.6 — the caption says when the night is,
+                    // honestly: "Live now" only while the night is
+                    // on, otherwise the night's short date and
+                    // time ("Fri 7:30pm").
+                    Text(schedule ?? proof ?? "Tap to open")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    if let proof, schedule != nil {
+                        Text(proof)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                    // V0.55 — overlap badge + season-arc
+                    // preview. Two lines max, no new chrome.
+                    if let overlap = overlapLine(for: room) {
+                        Text(overlap)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.accent)
+                    }
+                    if let arc = seasonArcLine(for: room) {
+                        Text(arc)
+                            .font(Theme.Typography.monoFootnote)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    }
+                }
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+        // S3 fix: no `simultaneousGesture` here. Inside a `List` the
+        // tap gesture won over the row's `NavigationLink`: it
+        // recorded the room as last viewed (which inserts the Resume
+        // hero above the row) and the push never happened, so a tap
+        // on a room row left the user on the rooms list. The
+        // last-viewed room is recorded from `roomsPath` instead,
+        // once the push has actually landed.
+    }
+
+    /// S3.6 — the night's caption for a room row. "Live now" only
+    /// when the night has started and has not settled; otherwise
+    /// the night's short date and time ("Fri 7:30pm").
+    ///
+    /// The cached active event is the room's next night (the live
+    /// `get_active_event` returns the upcoming one), so a room
+    /// three weeks out says "Fri 7:30pm", never "Live now".
+    private func scheduleCaption(for room: Room) -> String? {
+        guard let event = roomService.cachedActiveEvent(roomId: room.id) else { return nil }
+        if event.playedAt <= Date(), event.settledAt == nil {
+            return "Live now"
+        }
+        return shortNightCaption(for: event.playedAt)
+    }
+
+    /// S3.6 — true when the room's night is on right now: it has
+    /// started and has not been settled.
+    private func isLiveNow(for room: Room) -> Bool {
+        guard let event = roomService.cachedActiveEvent(roomId: room.id) else { return false }
+        return event.playedAt <= Date() && event.settledAt == nil
+    }
+
+    /// S3.6 — "Fri 7:30pm". Short weekday, 12-hour clock, lower-case
+    /// meridiem, no space before it.
+    private func shortNightCaption(for date: Date) -> String {
+        let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: date)
+        let minute = calendar.component(.minute, from: date)
+        let weekdayIndex = calendar.component(.weekday, from: date) - 1
+        let weekdays = calendar.shortWeekdaySymbols
+        let weekday = weekdays.indices.contains(weekdayIndex) ? weekdays[weekdayIndex] : ""
+        let hour12 = hour % 12 == 0 ? 12 : hour % 12
+        let meridiem = hour < 12 ? "am" : "pm"
+        let minuteText = minute < 10 ? "0\(minute)" : "\(minute)"
+        return "\(weekday) \(hour12):\(minuteText)\(meridiem)"
+    }
+
+    /// S3.5 — the trailing swipe action and the context-menu entry
+    /// for leaving a room. Both open the same confirmation; the
+    /// button only records which room the user picked.
+    private func leaveRoomButton(for room: Room) -> some View {
+        Button(role: .destructive) {
+            roomToLeave = room
+        } label: {
+            Label("Leave room", systemImage: "rectangle.portrait.and.arrow.right")
+        }
+    }
+
+    /// S3.5 — leaves the room and returns to the rooms list.
+    private func leaveRoom(_ room: Room) async {
+        do {
+            try await roomService.leaveRoom(roomId: room.id)
+            popToRoomsList()
+        } catch {
+            leaveError = error.localizedDescription
+        }
+    }
+
+    /// S3.5 — back to the rooms list. On iPhone the room was pushed
+    /// onto this page's stack, so emptying the path pops it; on iPad
+    /// the room is the sidebar selection.
+    private func popToRoomsList() {
+        roomsPath.removeAll()
+        selectedRoom = nil
+    }
+
+    /// S3.6 — opens a room the caller just created or joined.
+    ///
+    /// The service refreshes the rooms list eagerly on both paths,
+    /// so the room is already here by the time the sheet hands the
+    /// id back. On iPhone the room is pushed onto the stack; on iPad
+    /// it becomes the sidebar selection. Both bindings are set so
+    /// the page lands in the room whichever layout is on screen.
+    private func openRoom(id: UUID) {
+        guard let room = roomService.rooms.first(where: { $0.id == id }) else { return }
+        recordLastViewed(room)
+        roomsPath = [room]
+        selectedRoom = room
     }
 
     private func socialProofCaption(for room: Room) -> String? {
@@ -554,9 +777,9 @@ struct RoomPage: View {
     private func overlapLine(for room: Room) -> String? {
         guard room.overlapCount > 0 else { return nil }
         if room.overlapCount == 1, let name = room.overlapNames.first {
-            return "Shared with \\(name) in another room"
+            return "Shared with \(name) in another room"
         }
-        return "\\(room.overlapCount) shared with your other rooms"
+        return "\(room.overlapCount) shared with your other rooms"
     }
 
     /// V0.55 — the season-arc preview line for a room row. Reuses the
@@ -596,16 +819,21 @@ struct RoomPage: View {
             // from the stored Room.isLive field. The stored field
             // mirrors the room-creation seed and never updates; the
             // amber-dot row indicator above (RoomPage.swift:363-368)
-            // and this pill both drive off
-            // `roomService.activeEventByRoom[room.id] != nil` so they
-            // flip together when a host kicks off / settles an event.
-            let hasActiveEvent = roomService.activeEventByRoom[room.id] != nil
+            // and this pill both drive off the same honest check, so
+            // they flip together when a host kicks off / settles an
+            // event.
+            //
+            // S3.6 — the check is now "the night has started and has
+            // not settled". The old one ("the room has a cached
+            // active event") was true for any scheduled night, so
+            // the hero claimed "Live now" three weeks out.
+            let isLive = isLiveNow(for: room)
 
             HStack(spacing: 8) {
                 Circle()
-                    .fill(hasActiveEvent ? Theme.Palette.accent : Theme.Palette.hairline)
+                    .fill(isLive ? Theme.Palette.accent : Theme.Palette.hairline)
                     .frame(width: 8, height: 8)
-                Text(hasActiveEvent ? "Live now" : "Last opened")
+                Text(isLive ? "Live now" : "Last opened")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 Spacer(minLength: 8)
@@ -624,9 +852,6 @@ struct RoomPage: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
-            .simultaneousGesture(TapGesture().onEnded {
-                recordLastViewed(room)
-            })
         }
         .sectionCard(.hero)
     }
@@ -658,20 +883,13 @@ struct RoomPage: View {
                 .foregroundStyle(Theme.Palette.primaryText)
                 .multilineTextAlignment(.center)
 
-            Text(emptySubhead)
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Layout.gutter)
-
-            // P0.2: both onboarding paths render equal-weight. The
-            // host-create path is the primary (brass-accented fill);
-            // the member join path is a quieter outlined button.
-            // Members (who don't see the "hosted" badge) get the
-            // same pair — a brand-new user with no rooms can become
-            // a host of their own room by tapping Create.
-            Button(action: openCreateRoom) {
-                Text(emptyCTATitle)
+            // S3.6 — the primary is the join path. Most people
+            // arrive with a code in a text message, so "Enter a
+            // join code" is the one action the empty state pushes.
+            // Creating a room is the grey caption under it: one
+            // primary per screen, the secondary is plain grey text.
+            Button(action: openJoinRoom) {
+                Text("Enter a join code")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.background)
                     .frame(maxWidth: 320)
@@ -682,13 +900,13 @@ struct RoomPage: View {
             .buttonStyle(.plain)
             .padding(.top, 8)
 
-            Button(action: openJoinRoom) {
-                Text("Ask a friend for a join code")
+            Button(action: openCreateRoom) {
+                Text("Starting your own games night? Create a room")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
                     .frame(maxWidth: 320)
                     .padding(.vertical, 12)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.Palette.hairline))
+                    .multilineTextAlignment(.center)
             }
             .buttonStyle(.plain)
 
@@ -701,20 +919,6 @@ struct RoomPage: View {
 
     private var emptyHeadline: String {
         "No rooms yet"
-    }
-
-    private var emptySubhead: String {
-        // Members get the join-code path; hosts get the create path.
-        // Both choices render regardless — V0.8 keeps both visible
-        // so a member can become a host of their own room by
-        // tapping Create.
-        isKnownHost
-            ? "Spin up a room to start running a games night with your group."
-            : "Ask a friend for a join code, or create your own room to host."
-    }
-
-    private var emptyCTATitle: String {
-        isKnownHost ? "Create one to get started" : "Create your own room"
     }
 
     // MARK: - Empty-state actions (P0.2 wired)
@@ -797,20 +1001,6 @@ struct RoomPage: View {
     /// computed setter) so the call site reads as an event.
     private func recordLastViewed(_ room: Room) {
         lastViewedRoomIdString = room.id.uuidString
-    }
-
-    /// True when the current user has hosted at least one of the rooms
-    /// in the list. Used to branch the empty-state CTA. We don't have
-    /// a "has ever hosted" signal outside the rooms list, so this is
-    /// the closest v0.8 approximation. Defaults to `true` when no
-    /// rooms exist — every signed-in user *can* host, and the create
-    /// path is the first-class action.
-    private var isKnownHost: Bool {
-        // In the empty-state branch, we have no rooms. Default true.
-        // In the populated branch, true if the user holds host role
-        // in at least one room.
-        if roomService.rooms.isEmpty { return true }
-        return roomService.rooms.contains { $0.userRole.isHost }
     }
 }
 

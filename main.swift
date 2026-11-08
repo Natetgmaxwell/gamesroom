@@ -5285,6 +5285,10 @@ runS2Tests()
 
 runS1Tests(runner)
 
+// MARK: - S3 — common-sense flows (lane S3)
+
+runS3Tests(runner)
+
 // MARK: - Summary
 
 print("")

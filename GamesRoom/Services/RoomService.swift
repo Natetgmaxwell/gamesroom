@@ -913,20 +913,7 @@ final class RoomService: ObservableObject {
         let row = try await store.upsertEventRSVP(eventId: eventId, state: state)
         self.rsvpByEvent[eventId] = row.state
         self.lastError = nil
-        cacheTimestamps.removeValue(forKey: "eventRSVPs:\(eventId.uuidString)")
-        cacheTimestamps.removeValue(forKey: "briefing:\(eventId.uuidString)")
-        cacheTimestamps.removeValue(forKey: "currentMemberRSVP:\(eventId.uuidString)")
-        // Refresh the seat-grid rows + briefing summary so the
-        // BriefingSlot's seat grid and the briefing seat count
-        // re-render without a manual pull-to-refresh.
-        // `InMemoryRoomStore` mirrors the briefing on upsert but
-        // `LiveRoomStore` does not — without these reloads the
-        // live path would stay stale after every claim/decline/
-        // release. Both caches are `@Published`, so the view
-        // re-renders automatically.
-        async let rsvps = loadEventRSVPs(eventId: eventId)
-        async let briefing = loadBriefing(eventId: eventId)
-        _ = await (rsvps, briefing)
+        await refreshSeatCaches(eventId: eventId)
         // Lane S2: claim writes this member's calendar row; decline
         // and release remove it.
         await syncCalendarRow(eventId: eventId, claimed: row.state == .claimed)
@@ -936,6 +923,78 @@ final class RoomService: ObservableObject {
         // device schedules only its signed-in user's notifications.
         await reconcileBriefing(eventId: eventId)
         return row
+    }
+
+    /// S3.3 — the seat-grid / briefing refresh that follows every
+    /// seat write. The caches are `@Published`, so the view
+    /// re-renders automatically; the timestamps are dropped so the
+    /// next read is a real fetch rather than a 30s-stale copy.
+    ///
+    /// `InMemoryRoomStore` mirrors the briefing on upsert but
+    /// `LiveRoomStore` does not — without these reloads the live
+    /// path would stay stale after every claim/decline/release.
+    func refreshSeatCaches(eventId: UUID) async {
+        cacheTimestamps.removeValue(forKey: "eventRSVPs:\(eventId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "briefing:\(eventId.uuidString)")
+        cacheTimestamps.removeValue(forKey: "currentMemberRSVP:\(eventId.uuidString)")
+        async let rsvps = loadEventRSVPs(eventId: eventId)
+        async let briefing = loadBriefing(eventId: eventId)
+        _ = await (rsvps, briefing)
+    }
+
+    /// P1.3 — re-schedules the event's briefing trio (T-48h and
+    /// morning-of logistics nudges) with the current per-member
+    /// cadence. The dispatcher's `cancelBriefingTrio` followed by
+    /// `scheduleBriefingTrio` is idempotent at the UN layer (the
+    /// dispatcher uses stable per-(event, cadence, user)
+    /// identifiers).
+    ///
+    /// S3.3 — split out of `upsertEventRSVP` so the escrow paths
+    /// (which write through `claim_seat_with_deposit` /
+    /// `release_seat` and never touch `upsert_event_rsvp`) push the
+    /// same cadence the plain RSVP path pushes.
+    func rescheduleBriefingTrio(
+        eventId: UUID,
+        callerState: MemberRSVPState,
+        callerMemberId: UUID? = nil
+    ) async {
+        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }) else { return }
+        let room = rooms.first(where: { $0.id == event.roomId })
+        let roster = membersByRoom[event.roomId] ?? []
+        var cadence = roster.reduce(into: [UUID: MemberRSVPState]()) { acc, member in
+            acc[member.userId] = rsvpByEvent[event.id] ?? .unclaimed
+        }
+        // The just-written state is canonical — overwrite the
+        // caller's own cadence so the dispatcher fires for them,
+        // not against the stale `.unclaimed` default.
+        if let callerMemberId {
+            cadence[callerMemberId] = callerState
+        }
+        let optedInMemberIds = Set(
+            roster.filter { $0.notificationsEnabled }.map(\.userId)
+        )
+        let mutedMemberIds = Set(
+            cachedEventRSVPs(eventId: event.id)
+                .filter { $0.notificationsMuted }
+                .map(\.memberId)
+        )
+        await NotificationDispatcher.shared.cancelBriefingTrio(eventId: event.id)
+        await NotificationDispatcher.shared.scheduleBriefingTrio(
+            eventId: event.id,
+            eventName: event.name,
+            playedAt: event.playedAt,
+            mascotName: room?.mascotName ?? "Your mascot",
+            perMemberCadence: cadence,
+            memberNameById: Dictionary(
+                uniqueKeysWithValues: roster.map { ($0.userId, $0.displayName) }
+            ),
+            optedInMemberIds: optedInMemberIds,
+            mutedMemberIds: mutedMemberIds,
+            hostNote: event.hostNote,
+            mascotPersonality: room?.mascotPersonality ?? .friendly,
+            mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist,
+            mascotState: .idle
+        )
     }
 
     // MARK: - Event create
@@ -1050,6 +1109,78 @@ final class RoomService: ObservableObject {
         await reconcileBriefing(eventId: eventId)
     }
 
+    // MARK: - Event edit (S3.4)
+
+    /// S3.4 — host-only. Renames the night. Refreshes the
+    /// active-event cache so the briefing card shows the new name.
+    func updateEventName(eventId: UUID, name: String) async throws {
+        try await store.updateEventName(eventId: eventId, name: name)
+        self.lastError = nil
+        await refreshActiveEvent(forEvent: eventId)
+    }
+
+    /// S3.4 — host-only. Moves the night to a new time. The server
+    /// refuses a date in the past. Refreshes the active-event cache
+    /// and keeps the calendar row in step with the new time.
+    func updateEventPlayedAt(eventId: UUID, playedAt: Date) async throws {
+        try await store.updateEventPlayedAt(eventId: eventId, playedAt: playedAt)
+        self.lastError = nil
+        await refreshActiveEvent(forEvent: eventId)
+        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
+            await syncCalendarRow(roomId: event.roomId)
+        }
+    }
+
+    /// S3.4 — host-only. Cancels the night. Every seat deposit still
+    /// held for it goes back to its owner (migration 114), the
+    /// calendar row goes with it, and the night disappears from the
+    /// room. The briefing trio for the cancelled night is dropped and
+    /// the active event is reloaded, so every member's page stops
+    /// showing the night that is not happening.
+    func cancelEvent(eventId: UUID) async throws {
+        try await store.cancelEvent(eventId: eventId)
+        self.lastError = nil
+        if let event = activeEventByRoom.values.first(where: { $0.id == eventId }) {
+            await CalendarService.shared.removeEvent(
+                eventId: event.id,
+                identifier: event.eventCalendarIdentifier
+            )
+        }
+        rsvpByEvent.removeValue(forKey: eventId)
+        briefingByEvent.removeValue(forKey: eventId)
+        mySeatDepositByEvent.removeValue(forKey: eventId)
+        arrivalCandidatesByEvent.removeValue(forKey: eventId)
+        await eventDidChange(eventId: eventId)
+    }
+
+    /// S3.4 — force-reloads the room's active event so the page
+    /// shows the server's truth after an edit.
+    private func refreshActiveEvent(forEvent eventId: UUID) async {
+        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }) else { return }
+        cacheTimestamps.removeValue(forKey: "activeEvent:\(event.roomId.uuidString)")
+        _ = await loadActiveEvent(roomId: event.roomId, force: true)
+    }
+
+    /// S3.4 — keeps the calendar row in step with an edited night.
+    /// Reads the post-reload event so the row carries the fresh
+    /// values.
+    private func syncCalendarRow(roomId: UUID) async {
+        guard let room = rooms.first(where: { $0.id == roomId }),
+              room.calendarAutoAdd,
+              let fresh = activeEventByRoom[roomId] else { return }
+        await CalendarService.shared.updateEvent(
+            room: room,
+            event: fresh,
+            memberToggleOn: true,
+            reportIdentifier: { eventId, identifier in
+                try? await self.reportCalendarIdentifier(
+                    eventId: eventId,
+                    identifier: identifier
+                )
+            }
+        )
+    }
+
     // MARK: - Room settings update
 
     /// Host-only. Deletes the room via the `delete_room` RPC
@@ -1069,6 +1200,51 @@ final class RoomService: ObservableObject {
         leaderboardByRoom[roomId] = []
         currentSeasonByRoom[roomId] = nil
         seasonHistoryByRoom[roomId] = []
+        for key in cacheTimestamps.keys where key.contains(roomId.uuidString) {
+            cacheTimestamps.removeValue(forKey: key)
+        }
+        await refresh()
+    }
+
+    /// S3.5 — the caller leaves the room via the `leave_room` RPC
+    /// (migration 093). Their membership ends, so the room leaves
+    /// their own rooms list; the room itself survives for everyone
+    /// else. Members leave freely; the last host cannot (the server
+    /// raises `last_host`, mapped here to `LeaveRoomError.lastHost`
+    /// so the UI can say "Make someone else host first.").
+    ///
+    /// On success: drops the room's caches, cancels the pending
+    /// briefing pushes for its nights (a member who left must not
+    /// keep getting reminders for a room they are not in) and
+    /// refreshes the rooms list.
+    func leaveRoom(roomId: UUID) async throws {
+        do {
+            try await store.leaveRoom(roomId: roomId)
+        } catch {
+            // The live RPC raises `last_host: a room must always
+            // have at least one host` (P0001). Match on the token.
+            let message = error.localizedDescription.lowercased()
+            if message.contains("last_host") {
+                self.lastError = LeaveRoomError.lastHost.errorDescription
+                throw LeaveRoomError.lastHost
+            }
+            // In-memory preview errors are already typed; rethrow.
+            if error is LeaveRoomError { throw error }
+            self.lastError = error.localizedDescription
+            throw error
+        }
+        self.lastError = nil
+        // No more reminders for a room the caller has left. This
+        // reads the cached active events, so it runs before the
+        // caches are dropped below.
+        await cancelRoomCadence(roomId: roomId)
+        // The caller is no longer a member: drop the room's caches
+        // so nothing they can still read comes back from the client.
+        activeEventByRoom[roomId] = nil
+        leaderboardByRoom[roomId] = []
+        currentSeasonByRoom[roomId] = nil
+        seasonHistoryByRoom[roomId] = []
+        membersByRoom[roomId] = []
         for key in cacheTimestamps.keys where key.contains(roomId.uuidString) {
             cacheTimestamps.removeValue(forKey: key)
         }
@@ -1366,6 +1542,16 @@ final class RoomService: ObservableObject {
     /// the roster surface.
     func cachedMembers(roomId: UUID) -> [Member] {
         membersByRoom[roomId] ?? []
+    }
+
+    /// S3.6 — whether the roster for `roomId` has been read at least
+    /// once. The empty-room hero needs to tell "nobody has joined
+    /// yet" from "the roster has not arrived yet": a room with a
+    /// full table must not flash the invite CTA while its roster
+    /// loads. The key is present once the roster has been read, even
+    /// when the room is genuinely empty.
+    func hasLoadedMembers(roomId: UUID) -> Bool {
+        membersByRoom[roomId] != nil
     }
 
     // MARK: - Brought By (V0.107 — who brought the newcomer)
@@ -2079,6 +2265,11 @@ final class RoomService: ObservableObject {
     /// Falls back to the plain RSVP upsert when the room runs
     /// deposits off. On success refreshes the caller's deposit
     /// cache so the chair card renders the held state.
+    ///
+    /// S3.3 — the escrow branch also patches the cached RSVP and
+    /// reloads the seat grid + briefing. It used to skip both, so
+    /// the server said "claimed" while the room page still showed
+    /// an open chair until the next pull-to-refresh.
     func claimSeat(eventId: UUID) async throws -> MemberRSVP {
         if roomTriggeringEscrow(forEvent: eventId) {
             try await store.claimSeatWithDeposit(eventId: eventId)
@@ -2088,6 +2279,7 @@ final class RoomService: ObservableObject {
             // as `.unclaimed` are cancelled and re-planned as
             // claimed (logistics only, no claim language).
             rsvpByEvent[eventId] = .claimed
+            await refreshSeatCaches(eventId: eventId)
             await syncCalendarRow(eventId: eventId, claimed: true)
             await reconcileBriefing(eventId: eventId)
             return MemberRSVP(
@@ -2113,6 +2305,65 @@ final class RoomService: ObservableObject {
             room.calendarAutoAdd
         else { return }
         await CalendarService.shared.upsertEvent(event)
+    }
+
+    /// S3.3 — member. Releases or declines the caller's own seat.
+    ///
+    /// In an escrow room this is routed through `release_seat`
+    /// (migration 113), which moves the RSVP and returns a still-held
+    /// seat deposit to the balance in one transaction. Releasing a
+    /// seat used to write the RSVP only, so the deposit sat in
+    /// escrow until the host forfeited it: the considerate member
+    /// got fined for changing their mind.
+    ///
+    /// A room that runs deposits off has no deposit to return, so it
+    /// keeps the plain RSVP upsert. A room the cache cannot resolve
+    /// is treated as an escrow room: a stranded deposit is worse
+    /// than one extra RPC.
+    ///
+    /// The plain `upsert_event_rsvp` path is also kept for a
+    /// `.claimed` state (the host answering for somebody else),
+    /// which the release RPC does not cover.
+    @discardableResult
+    func releaseSeat(eventId: UUID, state: MemberRSVPState) async throws -> MemberRSVP {
+        guard state == .unclaimed || state == .declined else {
+            return try await upsertEventRSVP(eventId: eventId, state: state)
+        }
+        guard roomRunsEscrow(forEvent: eventId) != false else {
+            return try await upsertEventRSVP(eventId: eventId, state: state)
+        }
+        try await store.releaseSeat(eventId: eventId, state: state)
+        self.lastError = nil
+        self.rsvpByEvent[eventId] = state
+        // The deposit came back with the seat, so the chair card
+        // must stop offering the reclaim.
+        await loadMySeatDeposit(eventId: eventId, force: true)
+        await refreshSeatCaches(eventId: eventId)
+        return MemberRSVP(
+            id: UUID(), eventId: eventId, roomId: UUID(), memberId: UUID(),
+            state: state, respondedAt: Date()
+        )
+    }
+
+    /// S3.3 — does the event's room run the seat-deposit escrow?
+    /// `nil` means the room could not be resolved from the cache, so
+    /// the caller must assume the worst rather than strand a held
+    /// deposit.
+    private func roomRunsEscrow(forEvent eventId: UUID) -> Bool? {
+        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }),
+              let room = rooms.first(where: { $0.id == event.roomId }) else { return nil }
+        return room.seatDepositTrigger == .escrow && room.seatDepositAmount > 0
+    }
+
+    /// S3.3 — true when the server refused a claim because every
+    /// chair is taken. Migration 113 raises `P0001` with the message
+    /// `night_full` from `claim_seat_with_deposit` and
+    /// `upsert_event_rsvp`, so the client shows "All N seats are
+    /// taken." instead of a raw error.
+    nonisolated static func isNightFullError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        let text = "\(nsError.localizedDescription) \(String(describing: error))"
+        return text.lowercased().contains("night_full")
     }
 
     /// V0.85 — host-only. The broke-member claim: seat claimed

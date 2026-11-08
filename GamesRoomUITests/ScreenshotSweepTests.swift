@@ -140,7 +140,7 @@ final class ScreenshotSweepTests: XCTestCase {
     func test_02_join_with_code() throws {
         let app = launchSweep(arguments: ["-screenshots-state=empty"])
 
-        let joinCTA = app.buttons["Ask a friend for a join code"].firstMatch
+        let joinCTA = app.buttons["Enter a join code"].firstMatch
         XCTAssertTrue(
             joinCTA.waitForExistence(timeout: 10),
             "Empty-state join CTA missing."

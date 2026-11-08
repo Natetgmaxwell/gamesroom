@@ -1720,6 +1720,102 @@ actor InMemoryRoomStore: RoomStore {
         return new.id
     }
 
+    /// S3.4 — in-memory mirror of `update_event_name(p_event_id,
+    /// p_name)` (migration 114). Renames the night. An empty name is
+    /// refused, the same way the server refuses it.
+    func updateEventName(eventId: UUID, name: String) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event name cannot be empty"]
+            )
+        }
+        events[event.roomId] = replacingEvent(event, name: trimmed)
+    }
+
+    /// S3.4 — in-memory mirror of `update_event_played_at(p_event_id,
+    /// p_played_at)` (migration 114). Moves the night. A date in the
+    /// past is refused, the same way the server refuses it.
+    func updateEventPlayedAt(eventId: UUID, playedAt: Date) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        guard playedAt > Date() else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Events must be in the future"]
+            )
+        }
+        events[event.roomId] = replacingEvent(event, playedAt: playedAt)
+    }
+
+    /// S3.4 — in-memory mirror of `cancel_event(p_event_id)`
+    /// (migration 114). Cancels the night: every seat deposit still
+    /// held for it goes back to its owner, then the night and its
+    /// rows go away. A cancelled night costs nobody their deposit.
+    func cancelEvent(eventId: UUID) async throws {
+        guard let event = events.values.first(where: { $0.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Event not found"]
+            )
+        }
+        let held = seatDepositsByEventMember[eventId] ?? [:]
+        for (memberId, deposit) in held where deposit.status == .held {
+            seatDepositsByEventMember[eventId]?[memberId] = SeatDeposit(
+                id: deposit.id, amount: deposit.amount, status: .returned, heldAt: deposit.heldAt
+            )
+        }
+        events.removeValue(forKey: event.roomId)
+        briefings.removeValue(forKey: eventId)
+        rsvps.removeValue(forKey: eventId)
+        arrivalCandidatesByEvent.removeValue(forKey: eventId)
+        seatDepositsByEventMember.removeValue(forKey: eventId)
+        eventMutes.removeValue(forKey: eventId)
+    }
+
+    /// S3.4 — rebuilds an event row with the fields the edit paths
+    /// touch, leaving the rest of the row alone.
+    private func replacingEvent(
+        _ event: Event,
+        name: String? = nil,
+        playedAt: Date? = nil
+    ) -> Event {
+        Event(
+            id: event.id,
+            roomId: event.roomId,
+            name: name ?? event.name,
+            playedAt: playedAt ?? event.playedAt,
+            createdAt: event.createdAt,
+            venue: event.venue,
+            hostNote: event.hostNote,
+            maxSeats: event.maxSeats,
+            startedAt: event.startedAt,
+            settledAt: event.settledAt,
+            sessionId: event.sessionId,
+            packSlugs: event.packSlugs,
+            packSlug: event.packSlug,
+            hostFinalized: event.hostFinalized,
+            eventCalendarIdentifier: event.eventCalendarIdentifier,
+            hiddenFromUserIds: event.hiddenFromUserIds
+        )
+    }
+
     /// In-memory mirror of `update_event_member_fields` (migration
     /// 050). Mutates the seeded event's note + venue so previews
     /// reflect the edit.
@@ -1853,6 +1949,38 @@ actor InMemoryRoomStore: RoomStore {
         casinoConfigs.removeValue(forKey: roomId)
         showBroughtByByRoom.removeValue(forKey: roomId)
         anchorPushEnabledByRoom.removeValue(forKey: roomId)
+    }
+
+    /// S3.5 — in-memory mirror of `leave_room` (migration 093).
+    /// The caller's membership ends, so the room leaves the
+    /// caller's own rooms list (the store's `rooms` array IS that
+    /// list). Members leave freely; a host may only leave when
+    /// another active host remains — the live RPC raises
+    /// `last_host` for the last host, so the mirror raises
+    /// `LeaveRoomError.lastHost`. Leaving a room the caller is not
+    /// in is a no-op, matching the live RPC's idempotent return.
+    ///
+    /// The room itself survives for everyone else, so the night's
+    /// state (events, roster, join codes) is left alone.
+    func leaveRoom(roomId: UUID) async throws {
+        guard let idx = rooms.firstIndex(where: { $0.id == roomId }) else {
+            // Not a member (or already left): the live RPC is
+            // idempotent and returns true.
+            return
+        }
+        let room = rooms[idx]
+        if room.userRole == .host {
+            // Seed the roster so the host count is real.
+            _ = try await fetchRoomMembers(roomId: roomId)
+            let callerId = currentSyntheticMemberId()
+            let otherHosts = (membersByRoom[roomId] ?? [])
+                .filter { $0.role == .host && $0.userId != callerId }
+                .count
+            if otherHosts < 1 {
+                throw LeaveRoomError.lastHost
+            }
+        }
+        rooms.remove(at: idx)
     }
 
     func updateRoom(
@@ -2020,24 +2148,81 @@ actor InMemoryRoomStore: RoomStore {
     // MARK: Seat deposit escrow (V0.85 — migration 085)
 
     /// In-memory mirror of `claim_seat_with_deposit(p_event_id)`
-    /// (migration 085). Claims the RSVP and inserts a held
-    /// deposit row of the room's amount. Idempotent per
-    /// (event, member): an existing row of any status
-    /// short-circuits. No balance math in the preview path — the
-    /// live server owns points_balance.
+    /// (migration 085, reworked by 113). Claims the RSVP and
+    /// inserts a held deposit row of the room's amount. Idempotent
+    /// per (event, member) while the deposit is still 'held': no
+    /// balance math in the preview path — the live server owns
+    /// points_balance.
+    ///
+    /// S3.3 — a released seat re-takes the deposit. The old mirror
+    /// short-circuited on ANY existing row, so a member who
+    /// released their seat (deposit returned) and changed their mind
+    /// got a claimed seat with no deposit behind it. Migration 113
+    /// only skips the insert while a deposit is still held.
     func claimSeatWithDeposit(eventId: UUID) async throws {
         guard let event = events.values.first(where: { $0.id == eventId }),
               let room = rooms.first(where: { $0.id == event.roomId }) else { return }
         rsvps[eventId, default: [:]][room.createdBy] = .claimed
-        guard seatDepositsByEventMember[eventId]?[room.createdBy] == nil else { return }
+        let existing = seatDepositsByEventMember[eventId]?[room.createdBy]
+        if let existing, existing.status == .held { return }
         guard room.seatDepositTrigger == .escrow, room.seatDepositAmount > 0 else { return }
         seatDepositsByEventMember[eventId, default: [:]][room.createdBy] = SeatDeposit(
-            id: UUID(), amount: room.seatDepositAmount, status: .held, heldAt: Date()
+            id: existing?.id ?? UUID(),
+            amount: room.seatDepositAmount,
+            status: .held,
+            heldAt: Date()
+        )
+    }
+
+    /// In-memory mirror of `release_seat(p_event_id, p_state)`
+    /// (migration 113). Moves the caller's own RSVP to `state`
+    /// ('unclaimed' or 'declined') and returns any held deposit to
+    /// the balance — a member who changes their mind is never
+    /// fined. Idempotent.
+    func releaseSeat(eventId: UUID, state: MemberRSVPState) async throws {
+        let memberId = currentSyntheticMemberId()
+        let previous = rsvps[eventId]?[memberId] ?? .unclaimed
+        rsvps[eventId, default: [:]][memberId] = state
+        adjustBriefingSeats(eventId: eventId, previous: previous, state: state)
+        resolveDeposit(eventId: eventId, memberId: memberId, status: .returned)
+    }
+
+    /// S3.3 — seat-count mirror for a release / decline. The
+    /// briefing summary drives the "N of M claimed" caption, so a
+    /// released chair comes off the claimed count and a declined
+    /// chair moves to the declined count. The unclaimed pool grows
+    /// only when a member who had answered goes back to silence.
+    private func adjustBriefingSeats(eventId: UUID, previous: MemberRSVPState, state: MemberRSVPState) {
+        guard let briefing = briefings[eventId] else { return }
+        var claimed = briefing.seatsClaimed
+        var declined = briefing.seatsDeclined
+        var unclaimed = briefing.seatsUnclaimed
+
+        switch previous {
+        case .claimed: claimed = max(0, claimed - 1)
+        case .declined: declined = max(0, declined - 1)
+        case .unclaimed: break
+        }
+        switch state {
+        case .claimed: claimed += 1
+        case .declined: declined += 1
+        case .unclaimed: break
+        }
+        if previous != .unclaimed && state == .unclaimed { unclaimed += 1 }
+        if previous == .unclaimed && state != .unclaimed { unclaimed = max(0, unclaimed - 1) }
+
+        briefings[eventId] = BriefingSummary(
+            eventId: briefing.eventId,
+            roomId: briefing.roomId,
+            seatsTotal: briefing.seatsTotal,
+            seatsClaimed: claimed,
+            seatsDeclined: declined,
+            seatsUnclaimed: unclaimed
         )
     }
 
     /// In-memory mirror of `claim_seat_waived(p_event_id,
-    /// p_member_id)` (migration 085). Claims the RSVP with a
+    /// p_member_id)` (migration 085). Claims the seat with a
     /// zero-amount held row — chip-neutral at every resolution.
     func claimSeatWaived(eventId: UUID, memberId: UUID) async throws {
         guard let event = events.values.first(where: { $0.id == eventId }) else { return }
