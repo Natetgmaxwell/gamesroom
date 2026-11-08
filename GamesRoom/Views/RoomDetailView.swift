@@ -636,29 +636,55 @@ struct RoomDetailView: View {
                 // the active event is live (played, not settled),
                 // the caller is the host, and held deposits are
                 // waiting on a check-in the grace window has
-                // covered. The host decides forfeit vs skip per
-                // candidate; the system never decides alone.
+                // covered. The host decides per candidate; the
+                // system never decides alone.
+                //
+                // S3.7 — the card waits for the grace window. While
+                // the window is open the host gets one grey line
+                // ("Arrivals open at 7:40pm") and no rows: a member
+                // who is two minutes late is parking, not a no-show.
+                // Inside the window each row offers a grey "Give it
+                // back" and a red "Keep" behind a confirmation.
                 if let event = activeEvent,
                    isHost,
                    event.playedAt <= Date(),
                    event.settledAt == nil,
-                   liveRoom.seatDepositTrigger == .escrow,
-                   !roomService.cachedArrivalCandidates(eventId: event.id).isEmpty {
-                    ArrivalCard(
-                        room: liveRoom,
-                        event: event,
-                        candidates: roomService.cachedArrivalCandidates(eventId: event.id),
-                        onForfeit: { candidate in
-                            Task { await resolveArrivalCandidate(candidate, forfeit: true) }
-                        },
-                        onSkipTexted: { candidate in
-                            Task { await resolveArrivalCandidate(candidate, forfeit: false, reason: "texted") }
-                        },
-                        onSkipAway: { candidate in
-                            Task { await resolveArrivalCandidate(candidate, forfeit: false, reason: "away") }
+                   liveRoom.seatDepositTrigger == .escrow {
+                    let candidates = roomService.cachedArrivalCandidates(eventId: event.id)
+                    if !candidates.isEmpty {
+                        if ArrivalGrace.isOpen(
+                            candidates: candidates,
+                            playedAt: event.playedAt,
+                            graceMinutes: liveRoom.seatDepositGraceMinutes
+                        ) {
+                            ArrivalCard(
+                                room: liveRoom,
+                                event: event,
+                                candidates: candidates,
+                                onGiveBack: { candidate in
+                                    Task { await resolveArrivalCandidate(candidate, forfeit: false) }
+                                },
+                                onKeep: { candidate in
+                                    Task { await resolveArrivalCandidate(candidate, forfeit: true) }
+                                }
+                            )
+                            .sectionCard(.standard)
+                        } else {
+                            // The quiet stand-in for the card. It
+                            // sits where the card's own caption line
+                            // would sit, so the slot does not jump
+                            // when the card arrives.
+                            Text(
+                                ArrivalGrace.caption(
+                                    playedAt: event.playedAt,
+                                    graceMinutes: liveRoom.seatDepositGraceMinutes
+                                )
+                            )
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .padding(.horizontal, Theme.Layout.cardInset)
                         }
-                    )
-                    .sectionCard(.standard)
+                    }
                 }
                 if !systemEvents.isEmpty {
                     SystemBanner(
@@ -1613,10 +1639,14 @@ struct RoomDetailView: View {
     /// row. Reloads candidates + leaderboard so the public
     /// ledger rows the forfeit path writes show up on the next
     /// refresh.
+    ///
+    /// S3.7 — the two Skip buttons are one "Give it back", and
+    /// both did the same thing on the server, so the reason is
+    /// gone: the waive RPC takes no reason and the mascot copy
+    /// has a default line for it.
     private func resolveArrivalCandidate(
         _ candidate: SeatDepositCandidate,
-        forfeit: Bool,
-        reason: String? = nil
+        forfeit: Bool
     ) async {
         guard let event = activeEvent else { return }
         do {
@@ -1626,7 +1656,7 @@ struct RoomDetailView: View {
                 )
             } else {
                 try await roomService.waiveSeatDeposit(
-                    eventId: event.id, memberId: candidate.userId, reason: reason
+                    eventId: event.id, memberId: candidate.userId, reason: nil
                 )
             }
             seatActionError = nil
