@@ -46,14 +46,18 @@ struct DrowningBadge: View {
     private var iconName: String { "drop.fill" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // v1.2.4 S4.6 — the drowning row is a sibling of `AwardRow` in
+        // the same awards list, so it takes the same rhythm: the
+        // lines of the row sit `cardLineGap` apart and the row itself
+        // takes the page's `roomRowInset`.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             HStack(spacing: Theme.Layout.cardInset) {
                 Image(systemName: iconName)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                     .frame(width: Theme.Layout.rowIconWidth)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                    HStack(spacing: Theme.Layout.cardLineGap) {
                         Text(award.recipientDisplayName)
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.primaryText)
@@ -82,7 +86,7 @@ struct DrowningBadge: View {
                 viewerFootnote
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, Theme.Layout.roomRowInset)
     }
 
     @ViewBuilder

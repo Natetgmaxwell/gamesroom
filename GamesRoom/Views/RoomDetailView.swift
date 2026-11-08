@@ -1133,15 +1133,16 @@ struct RoomDetailView: View {
                 // the host's "Add an event" action, which stays true
                 // at any night count.
                 if leaderboard.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(isHost ? "No nights on the books yet" : "Standings")
-                            .font(Theme.Typography.title)
-                            .foregroundStyle(Theme.Palette.primaryText)
-                        if !isHost {
-                            Text("The ledger fills in after your first night.")
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                        }
+                    // v1.2.4 S4.6 — one header style and one rhythm. The
+                    // heading is now the app's `SectionTitle`, and the
+                    // member's grey line rides the header's accessibility
+                    // hint instead of printing under it as a second
+                    // hierarchy level. The card's groups sit
+                    // `cardGroupGap` apart.
+                    VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+                        SectionTitle(text: isHost ? "No nights on the books yet" : "Standings")
+                            .padding(.bottom, Theme.Layout.roomHeaderGap)
+                            .accessibilityHint(isHost ? "" : "The ledger fills in after your first night.")
                         if isHost {
                             addEventCTA
                         }
@@ -2023,14 +2024,20 @@ private struct BriefingSlot: View {
                        room.seatDepositTrigger == .escrow,
                        event.playedAt <= Date(),
                        let onCheckIn {
-                        Text("Tap when you walk in and your deposit comes straight back.")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                        Button(action: onCheckIn) {
-                            Text("I'm here. Reclaim \(deposit.amount) CC")
+                        // v1.2.4 S4.6 — the explainer and the button it
+                        // explains are one group, so they sit
+                        // `cardLineGap` apart instead of a full
+                        // `cardGroupGap` away from each other.
+                        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                            Text("Tap when you walk in and your deposit comes straight back.")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            Button(action: onCheckIn) {
+                                Text("I'm here. Reclaim \(deposit.amount) CC")
+                            }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .accessibilityLabel(Text("Check in and reclaim the \(deposit.amount) CC seat deposit"))
                         }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .accessibilityLabel(Text("Check in and reclaim the \(deposit.amount) CC seat deposit"))
                     }
                     // 2026-08-10 feedback round — a claimed seat is
                     // not terminal: the member can release it and
@@ -2086,7 +2093,9 @@ private struct V0StateReEntryPills: View {
     var body: some View {
         // v1.2 S2 — one primary per card state: Re-accept carries
         // the fill; Re-decline is the trailing text secondary.
-        VStack(alignment: .leading, spacing: 8) {
+        // v1.2.4 S4.6 — the declined state's groups sit
+        // `cardGroupGap` apart (the ad-hoc 8 was neither step).
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
             Text("You said you can\'t make it.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
@@ -2288,7 +2297,10 @@ private struct SeatGridRow: View {
                 Haptics.light()
                 popoverMemberId = rsvp.memberId
             } label: {
-                VStack(spacing: 3) {
+                // v1.2.4 S4.6 — the chair and its initial are two
+                // lines of one cell: `cardLineGap` (4), not the
+                // ad-hoc 3.
+                VStack(spacing: Theme.Layout.cardLineGap) {
                     Image(systemName: Theme.Icon.chairFill)
                         .font(Theme.Typography.body)
                         .foregroundStyle(isYours ? Theme.Palette.accent : Theme.Palette.primaryText.opacity(0.75))
@@ -2322,7 +2334,7 @@ private struct SeatGridRow: View {
                     .presentationCompactAdaptation(.popover)
             }
         } else {
-            VStack(spacing: 3) {
+            VStack(spacing: Theme.Layout.cardLineGap) {
                 Image(systemName: Theme.Icon.chair)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.3))
@@ -2886,11 +2898,12 @@ private struct TonightStarSection: View {
     var onMakeACall: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        // v1.2.4 S4.6 — the section's header is now the app's
+        // `SectionTitle` (one header style for every section), and the
+        // card's lines sit `cardLineGap` apart.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Tonight's Star")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                SectionTitle(text: "Tonight's Star")
                 if let onMakeACall {
                     Spacer(minLength: 12)
                     // v1.2.4 S4.3 — the trailing chevron is gone: the
@@ -2907,7 +2920,7 @@ private struct TonightStarSection: View {
                     .accessibilityIdentifier("make-a-call")
                 }
             }
-            HStack(spacing: 6) {
+            HStack(spacing: Theme.Layout.cardLineGap) {
                 Image(systemName: "star.fill")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.accent)
@@ -2954,7 +2967,11 @@ private struct MemberNotePromptSection: View {
     let onSkip: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // v1.2.4 S4.6 — the prompt's groups sit `cardGroupGap` apart,
+        // the field takes the app's `fieldInset`, and Send is the
+        // app's one primary button with Skip as the grey caption
+        // under it.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
             Text("Anything you want the room to know next time?")
                 .font(Theme.Typography.body.italic())
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
@@ -2967,32 +2984,20 @@ private struct MemberNotePromptSection: View {
             .textFieldStyle(.plain)
             .font(Theme.Typography.caption)
             .foregroundStyle(Theme.Palette.primaryText)
-            .padding(8)
+            .padding(Theme.Layout.fieldInset)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline, lineWidth: 0.5))
-            HStack(spacing: 12) {
+            VStack(spacing: 0) {
                 Button(action: onSubmit) {
                     Text("Send")
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.background)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 // v1.2.4 S4.3 — the skip wears the app's one secondary
-                // look: a grey caption, no chrome. It stays inline
-                // beside the small Send so the field row keeps its
-                // shape (a full-width secondary would sit half a card
-                // away from the button it answers).
-                Button(action: onSkip) {
-                    Text("Skip")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.secondaryText)
-                        .multilineTextAlignment(.center)
-                }
-                .buttonStyle(.plain)
+                // look: a grey caption, no chrome.
+                // v1.2.4 S4.6 — it now sits under the primary button,
+                // which is where the app's one secondary-action shape
+                // lives.
+                SecondaryTextAction(title: "Skip", action: onSkip)
             }
         }
     }
@@ -3139,8 +3144,13 @@ private struct AwardsCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            VStack(alignment: .leading, spacing: 4) {
+        // v1.2.4 S4.6 — the card's rhythm. Groups sit `cardGroupGap`
+        // apart (the card's own inset token, `cardInset`, was being
+        // used as a gap and made them 20 apart), the header's two
+        // lines sit `cardLineGap` apart, and the four ad-hoc 4pt
+        // bumps are gone: the stack's spacing owns the rhythm now.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text("Season \(season.ordinal) is closed")
                     .font(Theme.Typography.title.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -3155,7 +3165,6 @@ private struct AwardsCard: View {
                 Text("Awards haven't been declared yet.")
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .padding(.top, 4)
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
@@ -3171,7 +3180,6 @@ private struct AwardsCard: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
             }
 
             // V0.53 — share the member's own stat card. The card is
@@ -3190,14 +3198,12 @@ private struct AwardsCard: View {
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.accent)
                 }
-                .padding(.top, 4)
             }
 
             if let endedAt = season.endedAt {
                 Text("Closed \(endedAt, format: .relative(presentation: .named))")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3274,8 +3280,8 @@ private struct AwardRow: View {
                     ? Theme.Palette.primaryText.opacity(0.55)
                     : Theme.Palette.accent)
                 .frame(width: Theme.Layout.rowIconWidth)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                HStack(spacing: Theme.Layout.cardLineGap) {
                     Text(award.recipientDisplayName)
                         .font(Theme.Typography.body.weight(.semibold))
                         .foregroundStyle(Theme.Palette.primaryText)
@@ -3295,7 +3301,9 @@ private struct AwardRow: View {
             }
             Spacer()
         }
-        .padding(.vertical, 8)
+        // v1.2.4 S4.6 — the award row takes the page's row inset
+        // (`roomRowInset`), the same as every other list row.
+        .padding(.vertical, Theme.Layout.roomRowInset)
     }
 
     private var symbol: String {
@@ -3319,13 +3327,18 @@ private struct SystemBanner: View {
     let onDismiss: (UUID) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // v1.2.4 S4.6 — the banner's rows are list rows: each one takes
+        // the page's `roomRowInset`, the icon sits `cardInset` from its
+        // text, and the row's two lines sit `cardLineGap` apart. The
+        // stack's own spacing is 0 so the hairline between two rows
+        // touches neither of them.
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(events) { event in
-                HStack(spacing: 10) {
+                HStack(spacing: Theme.Layout.cardInset) {
                     Image(systemName: iconFor(event.kind))
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                         Text(event.kind.displayName)
                             .font(Theme.Typography.body.weight(.semibold))
                             .foregroundStyle(Theme.Palette.primaryText)
@@ -3343,6 +3356,7 @@ private struct SystemBanner: View {
                     }
                     .accessibilityLabel(Text("Dismiss"))
                 }
+                .padding(.vertical, Theme.Layout.roomRowInset)
                 if event.id != events.last?.id {
                     Divider().overlay(Theme.Palette.hairline)
                 }
@@ -3384,15 +3398,13 @@ private struct HostWithdrawalsSection: View {
     let onDispense: (UUID) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            HStack(spacing: 8) {
-                Image(systemName: Theme.Icon.circleHexagongridFill)
-                    .accessibilityHidden(true)
-                    .foregroundStyle(Theme.Palette.accent)
-                Text("Chips to dispense")
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.Palette.primaryText)
-            }
+        // v1.2.4 S4.6 — one header style for every section: the title
+        // is the app's `SectionTitle`, and it sits `roomHeaderGap`
+        // above its first row.
+        VStack(alignment: .leading, spacing: 0) {
+            SectionTitle(text: "Chips to dispense")
+                .padding(.bottom, Theme.Layout.roomHeaderGap)
+
             VStack(spacing: 0) {
                 ForEach(withdrawals) { txn in
                     row(txn: txn)
@@ -3406,7 +3418,7 @@ private struct HostWithdrawalsSection: View {
 
     private func row(txn: EventTransaction) -> some View {
         HStack(spacing: Theme.Layout.cardInset) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(txn.memberDisplayName)
                     .font(Theme.Typography.body)
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -3512,7 +3524,7 @@ private struct RoundBreakdownSection: View {
             SectionTitle(text: "Round history")
                 .padding(.bottom, Theme.Layout.roomHeaderGap)
             ForEach(rounds) { round in
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                     HStack {
                         Text("Round \(round.roundIndex)")
                             .font(Theme.Typography.body.weight(.semibold))
@@ -3651,7 +3663,7 @@ private struct PackShelfReadOnly: View {
                 .font(Theme.Typography.title)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 .frame(width: Theme.Layout.rowIconWidth)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(pack.displayName)
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -4028,7 +4040,7 @@ private struct MemberRosterReadOnly: View {
         HStack(spacing: Theme.Layout.gutter) {
             Image(systemName: Theme.Icon.person2Fill)
                 .foregroundStyle(Theme.Palette.accent)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text("Your invite paid off")
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -4191,7 +4203,7 @@ private struct MemberRosterReadOnly: View {
                         .font(Theme.Typography.caption.weight(.semibold))
                         .foregroundStyle(Theme.Palette.accent)
                 )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(member.displayName)
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)

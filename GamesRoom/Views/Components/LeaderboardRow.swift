@@ -45,9 +45,13 @@ struct LeaderboardRow: View {
                     : Text(isExpanded ? "Tap to collapse trajectory." : "Tap to expand trajectory."))
 
             if isExpanded {
+                // v1.2.4 S4.6 — the trace takes one `cardLineGap` of
+                // air above it. The row already carries the page's
+                // `roomRowInset`, so the old `cardInset` on both sides
+                // put 32pt of padding around a 32pt trace.
                 TrajectorySparkline(values: trajectory)
                     .frame(height: 32)
-                    .padding(.vertical, Theme.Layout.cardInset)
+                    .padding(.top, Theme.Layout.cardLineGap)
                     .accessibilityLabel(Text("Trajectory sparkline for \(name)"))
                     .accessibilityValue(Text(trajectoryAccessibilityDescription))
             }
@@ -60,8 +64,10 @@ struct LeaderboardRow: View {
     private var header: some View {
         HStack(spacing: Theme.Layout.cardInset) {
             rankBadge
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+            // v1.2.4 S4.6 — the row's two lines sit `cardLineGap`
+            // apart, and the name's own row with it.
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Layout.cardLineGap) {
                     Text(name)
                         .font(Theme.Typography.body.weight(isYou ? .semibold : .regular))
                         .foregroundStyle(Theme.Palette.primaryText)
@@ -99,7 +105,7 @@ struct LeaderboardRow: View {
     }
 
     private var scoreColumn: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Layout.cardLineGap) {
             // No night played yet means no last delta: a lone score
             // reads cleaner than a "0 0" pair.
             if sessionsPlayed > 0 {

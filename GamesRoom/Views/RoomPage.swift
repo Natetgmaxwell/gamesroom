@@ -340,7 +340,7 @@ struct RoomPage: View {
             Button {
                 showingAppSettings = true
             } label: {
-                HStack(spacing: Theme.Layout.gutter) {
+                HStack(spacing: Theme.Layout.cardInset) {
                     Image(systemName: "gearshape")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
@@ -350,7 +350,7 @@ struct RoomPage: View {
                     Spacer()
                 }
                 .padding(.horizontal, Theme.Layout.edgePadding)
-                .padding(.vertical, 12)
+                .padding(.vertical, Theme.Layout.roomRowInset)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -413,7 +413,7 @@ struct RoomPage: View {
                 .frame(width: 8, height: 8)
                 .accessibilityLabel(Text("Active session"))
                 .accessibilityHidden(roomService.activeEventByRoom[room.id] == nil)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
                 Text(room.name)
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.primaryText)
@@ -456,71 +456,77 @@ struct RoomPage: View {
 
     private var roomsList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Layout.sectionSpacing) {
+            // v1.2.4 S4.6 — the first screen reads on the room page's
+            // grid now: sections sit `roomSectionGap` apart, the header
+            // sits `roomHeaderGap` above its list, and the rows take
+            // `roomRowInset`. It used to read on the pre-S6 24pt rhythm.
+            VStack(alignment: .leading, spacing: Theme.Layout.roomSectionGap) {
                 if let lastViewed = resolvedLastViewedRoom {
                     lastViewedHero(for: lastViewed)
                 }
 
-                sectionHeader("Your rooms")
+                VStack(alignment: .leading, spacing: Theme.Layout.roomHeaderGap) {
+                    sectionHeader("Your rooms")
 
-                LazyVStack(spacing: 0) {
-                    ForEach(roomService.rooms) { room in
-                        NavigationLink(
-                            value: room
-                        ) {
-                            HStack(spacing: Theme.Layout.cardLineGap * 2) {
-                                // M1.2 — session-active indicator. The dot column is
-                                // always reserved, so every room name starts at the
-                                // same left edge whether the room is live or not; the
-                                // dot itself is clear when the room is not live.
-                                Circle()
-                                    .fill(roomService.activeEventByRoom[room.id] != nil ? Theme.Palette.accent : Color.clear)
-                                    .frame(width: 8, height: 8)
-                                    .accessibilityLabel(Text("Active session"))
-                                    .accessibilityHidden(roomService.activeEventByRoom[room.id] == nil)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(room.name)
-                                        .font(Theme.Typography.title)
-                                        .foregroundStyle(Theme.Palette.primaryText)
-                                    Text(socialProofCaption(for: room) ?? "Tap to open")
-                                        .font(Theme.Typography.caption)
-                                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                                    // V0.55 — overlap badge + season-arc
-                                    // preview. Two lines max, no new chrome.
-                                    if let overlap = overlapLine(for: room) {
-                                        Text(overlap)
+                    LazyVStack(spacing: 0) {
+                        ForEach(roomService.rooms) { room in
+                            NavigationLink(
+                                value: room
+                            ) {
+                                HStack(spacing: Theme.Layout.cardLineGap * 2) {
+                                    // M1.2 — session-active indicator. The dot column is
+                                    // always reserved, so every room name starts at the
+                                    // same left edge whether the room is live or not; the
+                                    // dot itself is clear when the room is not live.
+                                    Circle()
+                                        .fill(roomService.activeEventByRoom[room.id] != nil ? Theme.Palette.accent : Color.clear)
+                                        .frame(width: 8, height: 8)
+                                        .accessibilityLabel(Text("Active session"))
+                                        .accessibilityHidden(roomService.activeEventByRoom[room.id] == nil)
+                                    VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                                        Text(room.name)
+                                            .font(Theme.Typography.title)
+                                            .foregroundStyle(Theme.Palette.primaryText)
+                                        Text(socialProofCaption(for: room) ?? "Tap to open")
                                             .font(Theme.Typography.caption)
-                                            .foregroundStyle(Theme.Palette.accent)
-                                    }
-                                    if let arc = seasonArcLine(for: room) {
-                                        Text(arc)
-                                            .font(Theme.Typography.monoFootnote)
                                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                        // V0.55 — overlap badge + season-arc
+                                        // preview. Two lines max, no new chrome.
+                                        if let overlap = overlapLine(for: room) {
+                                            Text(overlap)
+                                                .font(Theme.Typography.caption)
+                                                .foregroundStyle(Theme.Palette.accent)
+                                        }
+                                        if let arc = seasonArcLine(for: room) {
+                                            Text(arc)
+                                                .font(Theme.Typography.monoFootnote)
+                                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                        }
                                     }
+                                    Spacer()
                                 }
-                                Spacer()
-                            }
-                            .padding(.vertical, Theme.Layout.cardInset)
-                            .padding(.horizontal, Theme.Layout.edgePadding)
-                        }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            recordLastViewed(room)
-                        })
-
-                        if room.id != roomService.rooms.last?.id {
-                            Divider()
-                                .overlay(Theme.Palette.hairline)
+                                .padding(.vertical, Theme.Layout.roomRowInset)
                                 .padding(.horizontal, Theme.Layout.edgePadding)
+                            }
+                            .buttonStyle(.plain)
+                            .simultaneousGesture(TapGesture().onEnded {
+                                recordLastViewed(room)
+                            })
+
+                            if room.id != roomService.rooms.last?.id {
+                                Divider()
+                                    .overlay(Theme.Palette.hairline)
+                                    .padding(.horizontal, Theme.Layout.edgePadding)
+                            }
                         }
                     }
+                    .background(Theme.Palette.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Theme.Palette.hairline, lineWidth: 0.5)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .background(Theme.Palette.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Theme.Palette.hairline, lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .contentColumn()
             .padding(.vertical, Theme.Layout.sectionSpacing)
@@ -583,35 +589,40 @@ struct RoomPage: View {
     // MARK: - Last-viewed hero
 
     private func lastViewedHero(for room: Room) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Layout.cardInset) {
-            Text("Continue")
-                .font(Theme.Typography.footnote)
-                .foregroundStyle(Theme.Palette.accent)
+        // v1.2.4 S4.6 — the hero's own lines (eyebrow, room name,
+        // status) are one block `cardLineGap` apart; the Resume button
+        // starts the next group `cardGroupGap` below. The eyebrow is
+        // now the app's `SectionTitle`, so every section header on
+        // every screen reads the same.
+        VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                SectionTitle(text: "Continue")
 
-            Text(room.name)
-                .font(Theme.Typography.title)
-                .foregroundStyle(Theme.Palette.primaryText)
+                Text(room.name)
+                    .font(Theme.Typography.title)
+                    .foregroundStyle(Theme.Palette.primaryText)
 
-            // Live state is derived from the active-event cache, NOT
-            // from the stored Room.isLive field. The stored field
-            // mirrors the room-creation seed and never updates; the
-            // amber-dot row indicator above (RoomPage.swift:363-368)
-            // and this pill both drive off
-            // `roomService.activeEventByRoom[room.id] != nil` so they
-            // flip together when a host kicks off / settles an event.
-            let hasActiveEvent = roomService.activeEventByRoom[room.id] != nil
+                // Live state is derived from the active-event cache, NOT
+                // from the stored Room.isLive field. The stored field
+                // mirrors the room-creation seed and never updates; the
+                // amber-dot row indicator above (RoomPage.swift:363-368)
+                // and this pill both drive off
+                // `roomService.activeEventByRoom[room.id] != nil` so they
+                // flip together when a host kicks off / settles an event.
+                let hasActiveEvent = roomService.activeEventByRoom[room.id] != nil
 
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(hasActiveEvent ? Theme.Palette.accent : Theme.Palette.hairline)
-                    .frame(width: 8, height: 8)
-                Text(hasActiveEvent ? "Live now" : "Last opened")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
-                Spacer(minLength: 8)
-                Text(room.mascotName)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                HStack(spacing: Theme.Layout.cardLineGap * 2) {
+                    Circle()
+                        .fill(hasActiveEvent ? Theme.Palette.accent : Theme.Palette.hairline)
+                        .frame(width: 8, height: 8)
+                    Text(hasActiveEvent ? "Live now" : "Last opened")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    Spacer(minLength: 8)
+                    Text(room.mascotName)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                }
             }
 
             NavigationLink(value: room) {
@@ -627,12 +638,11 @@ struct RoomPage: View {
 
     // MARK: - Section header
 
+    /// v1.2.4 S4.6 — the header is the app's `SectionTitle` (one header
+    /// style for every section); only the room count is this view's own.
     private func sectionHeader(_ title: String) -> some View {
         HStack {
-            Text(title)
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Palette.primaryText.opacity(0.7))
-                .accessibilityAddTraits(.isHeader)
+            SectionTitle(text: title)
             Spacer()
             Text("\(roomService.rooms.count)")
                 .font(Theme.Typography.monoFootnote)
@@ -644,7 +654,13 @@ struct RoomPage: View {
     // MARK: - Empty state
 
     private var emptyState: some View {
-        VStack(spacing: Theme.Layout.cardInset) {
+        // v1.2.4 S4.6 — one margin. The empty state used to pad
+        // `edgePadding` on top of `contentColumn`'s own padding, inset
+        // the subhead by a further `gutter` (64 from the edge) and cap
+        // both buttons at 320. Now the column owns the margin, the
+        // buttons are full width of it, and the groups sit
+        // `cardGroupGap` apart.
+        VStack(spacing: Theme.Layout.cardGroupGap) {
             Spacer(minLength: 0)
 
             Text(emptyHeadline)
@@ -656,7 +672,6 @@ struct RoomPage: View {
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Layout.gutter)
 
             // P0.2: both onboarding paths render equal-weight. The
             // host-create path is the primary (brass-accented fill);
@@ -668,20 +683,16 @@ struct RoomPage: View {
                 Text(emptyCTATitle)
             }
             .buttonStyle(PrimaryButtonStyle())
-            .frame(maxWidth: 320)
-            .padding(.top, 8)
 
             // v1.2.4 S4.3 — the join path is now the app's one
             // secondary style: a centred grey caption under the
-            // primary, no outlined box. It keeps the empty state's
-            // 320pt cap so both paths share one measure.
+            // primary, no outlined box. Both paths now share the
+            // column's full width.
             SecondaryTextAction(title: "Ask a friend for a join code", action: openJoinRoom)
-                .frame(maxWidth: 320)
 
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, Theme.Layout.edgePadding)
         .contentColumn()
     }
 

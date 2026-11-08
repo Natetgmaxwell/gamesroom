@@ -101,8 +101,7 @@ struct ClaimedCardAskField: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(Theme.Layout.fieldInset)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.Palette.hairline))
         }
         .onAppear { reseed(seed, initial) }
