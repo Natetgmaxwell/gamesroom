@@ -65,6 +65,8 @@ struct RoomDetailView: View {
     /// V0.79 — flips when the one-time notif prompt is answered so
     /// SwiftUI re-renders the card away (UserDefaults isn't observed).
     @State private var notifPromptDismissed: Bool = false
+    /// Lane S2: the post-claim reminder ask was tapped this session.
+    @State private var claimReminderAskTapped: Bool = false
     @State private var packsExpanded = false
     // V0.84 C5 — flips when the one-line drop is dismissed locally
     // so SwiftUI re-renders the prompt away (UserDefaults isn't
@@ -603,9 +605,10 @@ struct RoomDetailView: View {
                 // V0.79 — one-time notification opt-in prompt. Shows
                 // once per room (per device) while opt-in is off;
                 // after any answer it lives in Room settings only.
-                // v1.1 — only while nothing is scheduled and the
-                // season is open: "schedules a night" is the moment.
-                if activeEvent == nil,
+                // Lane S2: no longer limited to rooms with nothing
+                // scheduled (a member who arrives mid-week was never
+                // asked); it steps aside while the post-claim ask shows.
+                if !showsClaimReminderAsk,
                    currentSeason?.status != .ended,
                    !liveRoom.notificationsEnabled,
                    !notifPromptDismissed,
@@ -901,6 +904,11 @@ struct RoomDetailView: View {
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
                     onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
                 )
+                if showsClaimReminderAsk {
+                    ClaimReminderAskRow {
+                        remindMeTheMorningOf(eventId: event.id)
+                    }
+                }
             case .declined(let event):
                 // V0.9 Wave 1 Slice 1.2 — wire the re-entry pills so a
                 // member who previously declined can change their mind.
@@ -1323,6 +1331,12 @@ struct RoomDetailView: View {
     }
 
     private func loadActiveIfNeeded(force: Bool = false) async {
+        // Lane S2: a host's phone tells the server the room's time
+        // zone once per install, so server-sent reminders land at
+        // local times. Fire and forget; never surfaces an error.
+        if isHost {
+            AppReconciler.reportRoomTimeZoneOnce(roomId: room.id)
+        }
         if roomService.cachedActiveEvent(roomId: room.id) == nil {
             let event = await roomService.loadActiveEvent(
                 roomId: room.id, force: force
@@ -1494,6 +1508,33 @@ struct RoomDetailView: View {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             seatActionError = (error as NSError).localizedDescription
             showSeatActionError = true
+        }
+    }
+
+    /// Lane S2: the reminder ask shows under the claimed state while
+    /// the room's notifications are off, until it is tapped.
+    private var showsClaimReminderAsk: Bool {
+        guard case .claimed = state else { return false }
+        return !liveRoom.notificationsEnabled
+            && !claimReminderAskTapped
+            && !ClaimReminderAsk.isAnswered(roomId: room.id)
+    }
+
+    /// Lane S2: "Remind me the morning of". Asks iOS, turns the
+    /// room's notifications on through the existing setter and
+    /// re-plans this member's reminders for the claimed seat.
+    private func remindMeTheMorningOf(eventId: UUID) {
+        ClaimReminderAsk.markAnswered(roomId: room.id)
+        RoomNotifPrompt.markAnswered(roomId: room.id)
+        claimReminderAskTapped = true
+        notifPromptDismissed = true
+        Task {
+            await ClaimReminderAsk.requestAuthorization()
+            try? await roomService.setNotificationsEnabled(
+                roomId: room.id, enabled: true
+            )
+            await roomService.reconcileBriefing(eventId: eventId)
+            Haptics.light()
         }
     }
 

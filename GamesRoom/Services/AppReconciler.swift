@@ -86,6 +86,29 @@ final class AppReconciler {
         await RealtimeEventService.shared.start(roomService: roomService)
     }
 
+    /// Reports the device time zone for a room this user hosts, once
+    /// per room per install. The RPC (`set_room_time_zone`) ships in
+    /// another lane and may not exist yet: the call is fire and
+    /// forget, every failure is swallowed, and the flag is set only
+    /// on success so a later room open tries again.
+    static func reportRoomTimeZoneOnce(roomId: UUID) {
+        let key = StorageKeys.roomTimeZoneReported(roomId: roomId)
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let params = SetRoomTimeZoneParams(
+            p_room_id: roomId.uuidString,
+            p_tz: TimeZone.current.identifier
+        )
+        Task {
+            let sent: Void? = try? await SupabaseClientProvider.shared
+                .rpc("set_room_time_zone", params: params)
+                .execute()
+                .value
+            if sent != nil {
+                UserDefaults.standard.set(true, forKey: key)
+            }
+        }
+    }
+
     /// Ends the room's Live Activity and clears the widget snapshot
     /// when it is showing that room. Both surfaces key on the room's
     /// name (the widget target has no room id). Best-effort.
@@ -103,4 +126,10 @@ final class AppReconciler {
             WidgetCenter.shared.reloadAllTimelines()
         }
     }
+}
+
+/// Params for `set_room_time_zone(p_room_id, p_tz)`.
+struct SetRoomTimeZoneParams: Encodable, Sendable {
+    let p_room_id: String
+    let p_tz: String
 }

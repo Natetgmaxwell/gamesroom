@@ -48,4 +48,18 @@ enum StorageKeys {
     static func memberNotePromptDismissed(eventId: UUID) -> String {
         "memberNotePromptDismissed-\(eventId.uuidString)"
     }
+
+    /// Lane S2: the post-claim "Remind me the morning of" ask was
+    /// tapped in this room. Per device; the room's notification
+    /// setting is the durable surface.
+    static func claimReminderAskAnswered(roomId: UUID) -> String {
+        "claimReminderAskAnswered-\(roomId.uuidString)"
+    }
+
+    /// Lane S2: this install has reported the device time zone for a
+    /// room it hosts (`set_room_time_zone`). Set only on success, so
+    /// a missing RPC is retried on a later room open.
+    static func roomTimeZoneReported(roomId: UUID) -> String {
+        "roomTimeZoneReported-\(roomId.uuidString)"
+    }
 }

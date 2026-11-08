@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 // MARK: - RoomNotificationPrefs (V0.79)
 //
@@ -19,6 +20,44 @@ enum RoomNotifPrompt {
 
     static func markAnswered(roomId: UUID) {
         UserDefaults.standard.set(true, forKey: "notifPromptAnswered.\(roomId.uuidString)")
+    }
+}
+
+/// Lane S2: the reminder ask that follows a member's claim. Asked
+/// at the moment of commitment instead of before a night exists.
+enum ClaimReminderAsk {
+    static func isAnswered(roomId: UUID) -> Bool {
+        UserDefaults.standard.bool(forKey: StorageKeys.claimReminderAskAnswered(roomId: roomId))
+    }
+
+    static func markAnswered(roomId: UUID) {
+        UserDefaults.standard.set(true, forKey: StorageKeys.claimReminderAskAnswered(roomId: roomId))
+    }
+
+    /// Asks iOS for alert, sound and badge. A refusal is not an
+    /// error: the room's setting is still turned on, and iOS simply
+    /// stays quiet.
+    static func requestAuthorization() async {
+        _ = try? await UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .sound, .badge])
+    }
+}
+
+/// The grey caption action under the claimed state. One tap, then
+/// it is gone.
+struct ClaimReminderAskRow: View {
+    let onTap: () -> Void
+
+    var body: some View {
+        Button {
+            onTap()
+        } label: {
+            Text("Remind me the morning of")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .buttonStyle(.plain)
     }
 }
 
