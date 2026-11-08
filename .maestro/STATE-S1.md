@@ -1,6 +1,6 @@
 # STATE S1
 
-STATE: step 5 of 8 done. Next: step 6.
+STATE: step 6 of 8 done. Next: step 7.
 
 BLOCKED: none
 
@@ -54,5 +54,11 @@ Notes for step 5 (settle with Undo, plan next):
 - `Plan the next night`: accent button under the CeremonialCard when NightPlan gives the host `planNextNight`; opens AddEventSheet with `initialPlayedAt` = tonight + 7 days (new `init(roomId:initialPlayedAt:onSaved:)`, seeds the date only). `.justSettled` only renders while the cached active event IS the settled night, i.e. no future night is known, so the offer follows the one-upcoming-event rule as far as the client can see.
 - `.settleRound` state, its `hostFinalized` branch and the `Count what's on the table` header removed. `hostFinalized` is still read by the mascot inputs (untouched).
 - OPEN FOR TARS (not blocking): migration 107 ranks a settled-within-24h night ABOVE a future night, so for 24h after a settle `get_active_event` never returns a night that already exists in the future (e.g. one scheduled before the settle). The client cannot see it, so `Plan the next night` can still show and the add would hit the one-upcoming index. Your step-7 recap design (next night primary, recap above it) needs the server to return the future night; step 7 implements it client-side for the host who plans the night on this device (see step 7 notes). The full fix is a 107 tweak (rank future above settled; the client keeps the recap from its own cache), which I did not make because you said not to change 107.
+
+Notes for step 6 (score sheet starts on the next round):
+- Commit `58d884c`. Fastgate: 325 cases passed (321 before, +4), 65 parse-check, `FASTGATE: PASS`. Extra: `swiftc -typecheck`, zero errors.
+- `NextRound` (pure, in `NightPlan.swift`): `after(_ rounds:)` = highest `round_index` across every pack + 1 (1 when none), winners of that last round from its latest row (corrections); `lastLine(winnerNames:round:)` gives `Last: {winner} won round {n-1}` (two names joined with "and", more with commas then "and").
+- `HostScoreEntrySheet` drops the round Stepper (it could be wound back onto a scored round) for grey `Round {n}` plus the `Last:` line; seeds on appear from cached rounds, then again after a forced `loadEventRounds`. The pack comes from step 4's `HostScoreTarget`.
+- Tests: 4 new cases in `TestsS1.swift` (`runS1NextRoundTests`, called from `runS1Tests`).
 
 Ticks are in .maestro/briefs/BRIEF-S1.md (tick the checkbox there too).
