@@ -63,6 +63,7 @@
 import Foundation
 import SwiftUI
 import Supabase
+import Combine
 
 struct ContentView: View {
     /// The two tabs in the V0.8 root navigation (iPhone only).
@@ -78,6 +79,24 @@ struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var hSize
     @State private var selectedTab: AppTab = .rooms
     @State private var isRestoringSession = true
+
+    /// The rooms a tapped notification asked the app to open, pushed
+    /// onto the rooms stack (the iPhone path). `RoomPage` selects a
+    /// room the same way — a `Room` value on the stack's path — so a
+    /// tap lands on exactly the surface a tap on the room row does.
+    @State private var openRoomPath: [Room] = []
+
+    /// The room a tapped notification asked the app to open on iPad.
+    /// The iPad detail pane belongs to `RoomPage`'s split view, so
+    /// the room is presented over it instead of pushed beside it.
+    @State private var presentedRoom: Room?
+
+    /// An open-room request waiting for the rooms list to resolve
+    /// it. A tap can land before the rooms have loaded (a cold start
+    /// from a notification tap), and a room the user is no longer in
+    /// is simply never opened.
+    @State private var pendingOpenRoomId: UUID?
+    @State private var pendingOpenEventId: UUID?
 
     /// True when the current width qualifies for the iPad sidebar
     /// layout. `.regular` covers full-screen iPad AND iPad
@@ -166,6 +185,63 @@ struct ContentView: View {
                 await RealtimeEventService.shared.start(roomService: roomService)
             }
         }
+        // A tapped briefing (on-create, the reminders, the catch-up)
+        // or a tapped anchor nudge opens the room it belongs to.
+        .onReceive(NotificationCenter.default.publisher(for: .gamesRoomOpenRoom)) { _ in
+            takeOpenRoomRequest()
+        }
+        // The same request, taken on appear: a tap that lands while
+        // the app is still launching is latched by `OpenRoomRequest`
+        // and would otherwise be posted to nobody.
+        .onAppear {
+            takeOpenRoomRequest()
+        }
+        // The rooms list is what resolves the request, so a room
+        // that is still loading is opened as soon as it arrives.
+        .onChange(of: roomService.rooms) { _, _ in
+            openPendingRoomIfReady()
+        }
+    }
+
+    // MARK: - Open room from a notification tap
+
+    /// Takes the latched open-room request, if there is one.
+    private func takeOpenRoomRequest() {
+        guard let request = OpenRoomRequest.shared.take() else { return }
+        pendingOpenRoomId = request.roomId
+        pendingOpenEventId = request.eventId
+        openPendingRoomIfReady()
+    }
+
+    /// Opens the pending room once the rooms list can resolve it.
+    /// The room id is the payload's; a request scheduled before the
+    /// payload carried one falls back to the event's cached room.
+    private func openPendingRoomIfReady() {
+        guard let eventId = pendingOpenEventId else { return }
+        let rooms = roomService.rooms
+        var match: Room?
+        if let roomId = pendingOpenRoomId {
+            match = rooms.first { $0.id == roomId }
+        }
+        if match == nil {
+            match = rooms.first { roomService.activeEventByRoom[$0.id]?.id == eventId }
+        }
+        guard let room = match else { return }
+        pendingOpenRoomId = nil
+        pendingOpenEventId = nil
+        open(room)
+    }
+
+    /// Opens one room. iPhone pushes it onto the rooms stack, the
+    /// same way a tap on the room row does; iPad presents it over
+    /// the split view, whose detail pane `RoomPage` owns.
+    private func open(_ room: Room) {
+        if usesIPadSidebar {
+            presentedRoom = room
+        } else {
+            selectedTab = .rooms
+            openRoomPath.append(room)
+        }
     }
 
     /// True when the iPad sidebar layout should render instead of
@@ -189,8 +265,20 @@ struct ContentView: View {
         let initialTab = AppTab.rooms
         #endif
         return TabView(selection: $selectedTab) {
-            NavigationStack {
+            NavigationStack(path: $openRoomPath) {
                 RoomPage()
+                    // The destination a tapped notification pushes
+                    // to. `RoomPage` keeps its own stack and its own
+                    // destination for the room rows; this one serves
+                    // the rooms the app is asked to open.
+                    .navigationDestination(for: Room.self) { room in
+                        RoomDetailView(
+                            room: room,
+                            allRooms: roomService.rooms,
+                            onDismiss: {},
+                            onSwitchRoom: { _ in }
+                        )
+                    }
             }
             .tabItem {
                 Label("Rooms", systemImage: "house.fill")
@@ -228,6 +316,24 @@ struct ContentView: View {
             .tint(Theme.Palette.accent)
             .sheet(isPresented: signInBinding) {
                 SignInView(authService: auth)
+            }
+            // A tapped notification opens the room over the split
+            // view. The room detail owns no dismiss control of its
+            // own, so the stack carries one.
+            .fullScreenCover(item: $presentedRoom) { room in
+                NavigationStack {
+                    RoomDetailView(
+                        room: room,
+                        allRooms: roomService.rooms,
+                        onDismiss: { presentedRoom = nil },
+                        onSwitchRoom: { _ in }
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Rooms") { presentedRoom = nil }
+                        }
+                    }
+                }
             }
     }
 

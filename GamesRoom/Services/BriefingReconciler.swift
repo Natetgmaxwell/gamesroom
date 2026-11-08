@@ -115,11 +115,93 @@ enum BriefingReconciler {
     static let t168hKindRaw = "t168h"
     static let t84hKindRaw = "t48h"
     static let morningOfKindRaw = "morning_of"
+    /// The joined-late catch-up kind. The dispatcher keeps the same
+    /// raw value in its private `NotificationKindRaw`.
+    static let catchUpKindRaw = "catch_up"
+    /// The kind the server's anchor nudge push carries (`type`).
+    static let anchorKindRaw = "anchor_nudge"
+
+    /// Every kind this device schedules locally. A briefing of one
+    /// of these kinds is listed in Notification Center even when the
+    /// app is in the foreground, and a tap on one opens its room.
+    static let briefingKindRaws: [String] = [
+        onCreateKindRaw,
+        t168hKindRaw,
+        t84hKindRaw,
+        morningOfKindRaw,
+        catchUpKindRaw
+    ]
 
     static func identifier(
         eventId: UUID, kindRaw: String, userId: UUID
     ) -> String {
         "\(eventId.uuidString)-\(kindRaw)-\(userId.uuidString)"
+    }
+
+    // MARK: - Fire mode
+
+    /// How a planned briefing fires.
+    ///
+    /// The on-create prompt and the joined-late catch-up are "now"
+    /// prompts: they must land one second AFTER their body is ready.
+    /// A calendar trigger computed before the body was built never
+    /// fires, because the mascot-voice LLM round trip can push the
+    /// planned second into the past (audit 01 #2). The timed
+    /// reminders keep their fixed local date-time.
+    enum BriefingFireMode: Equatable {
+        /// Fire one second after the body is ready.
+        case shortly
+        /// Fire at a fixed local date-time.
+        case at(Date)
+    }
+
+    static func fireMode(kindRaw: String, fireAt: Date) -> BriefingFireMode {
+        switch kindRaw {
+        case onCreateKindRaw, catchUpKindRaw:
+            return .shortly
+        default:
+            return .at(fireAt)
+        }
+    }
+
+    // MARK: - Tap routing
+
+    /// The kind carried by a notification payload. Local briefings
+    /// use `kind`; remote pushes (the anchor nudge, the Question Box
+    /// turn) use `type`.
+    static func kindRaw(_ userInfo: [AnyHashable: Any]) -> String? {
+        (userInfo["kind"] as? String) ?? (userInfo["type"] as? String)
+    }
+
+    /// True when the payload carries one of the local briefing kinds.
+    static func isBriefingKind(_ userInfo: [AnyHashable: Any]) -> Bool {
+        guard let kind = kindRaw(userInfo) else { return false }
+        return briefingKindRaws.contains(kind)
+    }
+
+    /// What a tapped notification asks the app to do.
+    enum BriefingTapRoute: Equatable {
+        /// Open the room this notification belongs to. The room id
+        /// can be missing on a request scheduled before the payload
+        /// carried it; the event id still identifies the night.
+        case openRoom(roomId: UUID?, eventId: UUID)
+        case none
+    }
+
+    /// Routes a tapped notification payload. Briefing kinds and the
+    /// anchor nudge open their room; everything else (the Question
+    /// Box turn) is not this file's to route.
+    static func tapRoute(_ userInfo: [AnyHashable: Any]) -> BriefingTapRoute {
+        guard let kind = kindRaw(userInfo) else { return .none }
+        guard briefingKindRaws.contains(kind) || kind == anchorKindRaw else {
+            return .none
+        }
+        guard
+            let rawEventId = userInfo["event_id"] as? String,
+            let eventId = UUID(uuidString: rawEventId)
+        else { return .none }
+        let roomId = (userInfo["room_id"] as? String).flatMap { UUID(uuidString: $0) }
+        return .openRoom(roomId: roomId, eventId: eventId)
     }
 
     /// True when the on-create prompt may still fire for this

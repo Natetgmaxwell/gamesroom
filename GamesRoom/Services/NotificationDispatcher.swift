@@ -112,6 +112,7 @@ final class NotificationDispatcher {
     /// other body comes from the deterministic template matrix.
     func reconcileBriefing(
         eventId: UUID,
+        roomId: UUID,
         eventName: String,
         playedAt: Date,
         mascotName: String,
@@ -134,7 +135,7 @@ final class NotificationDispatcher {
             )
         }
 
-        let sink = UNCenterSink(attachment: faceAttachment)
+        let sink = UNCenterSink(attachment: faceAttachment, roomId: roomId)
         let ledger = UserDefaultsOnCreateLedger(
             defaults: .standard
         )
@@ -209,6 +210,7 @@ final class NotificationDispatcher {
     /// duplicate pushes.
     func scheduleCatchUp(
         eventId: UUID,
+        roomId: UUID,
         eventName: String,
         playedAt: Date,
         mascotName: String,
@@ -237,6 +239,7 @@ final class NotificationDispatcher {
             body: body,
             kindRaw: NotificationKindRaw.catchUp,
             eventId: eventId,
+            roomId: roomId,
             fireAt: Date().addingTimeInterval(1)
         )
     }
@@ -260,6 +263,7 @@ final class NotificationDispatcher {
         body: String,
         kindRaw: NotificationKindRaw,
         eventId: UUID,
+        roomId: UUID,
         fireAt: Date,
         attachment: UNNotificationAttachment? = nil
     ) async {
@@ -285,7 +289,8 @@ final class NotificationDispatcher {
         content.sound = .default
         content.userInfo = [
             "kind": kindRaw.rawValue,
-            "event_id": eventId.uuidString
+            "event_id": eventId.uuidString,
+            "room_id": roomId.uuidString
         ]
         // V0.95 D — the mascot's face rides on the push (lock-screen
         // thumbnail + expanded banner image). Attachment failure is
@@ -294,17 +299,10 @@ final class NotificationDispatcher {
             content.attachments = [attachment]
         }
 
-        let components = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second],
-            from: fireAt
-        )
-        let trigger = UNCalendarNotificationTrigger(
-            dateMatching: components, repeats: false
-        )
         let request = UNNotificationRequest(
             identifier: identifier,
             content: content,
-            trigger: trigger
+            trigger: UNCenterSink.trigger(for: kindRaw.rawValue, fireAt: fireAt)
         )
         do {
             try await center.add(request)
@@ -331,9 +329,37 @@ private final class UNCenterSink: BriefingNotificationSink, @unchecked Sendable 
 
     private let center = UNUserNotificationCenter.current()
     private let attachment: UNNotificationAttachment?
+    /// The room every request from this sink belongs to. It rides
+    /// on the payload so a tap can open the room without a lookup.
+    private let roomId: UUID?
 
-    init(attachment: UNNotificationAttachment?) {
+    init(attachment: UNNotificationAttachment?, roomId: UUID?) {
         self.attachment = attachment
+        self.roomId = roomId
+    }
+
+    /// The trigger for one request.
+    ///
+    /// The "now" prompts (the on-create briefing, the joined-late
+    /// catch-up) fire on a one-second INTERVAL, so the push lands
+    /// after its body was built — a calendar trigger computed
+    /// before the mascot-voice round trip never fires (audit 01 #2).
+    /// The timed reminders keep their fixed local date-time.
+    static func trigger(
+        for kindRaw: String, fireAt: Date
+    ) -> UNNotificationTrigger {
+        switch BriefingReconciler.fireMode(kindRaw: kindRaw, fireAt: fireAt) {
+        case .shortly:
+            return UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        case .at(let date):
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: date
+            )
+            return UNCalendarNotificationTrigger(
+                dateMatching: components, repeats: false
+            )
+        }
     }
 
     func pendingIdentifiers() async -> [String] {
@@ -361,25 +387,22 @@ private final class UNCenterSink: BriefingNotificationSink, @unchecked Sendable 
         content.title = title
         content.body = body
         content.sound = .default
-        content.userInfo = [
+        var userInfo: [String: String] = [
             "kind": kindRaw,
             "event_id": eventId.uuidString
         ]
+        if let roomId {
+            userInfo["room_id"] = roomId.uuidString
+        }
+        content.userInfo = userInfo
         if let attachment {
             content.attachments = [attachment]
         }
 
-        let components = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second],
-            from: fireAt
-        )
-        let trigger = UNCalendarNotificationTrigger(
-            dateMatching: components, repeats: false
-        )
         let request = UNNotificationRequest(
             identifier: identifier,
             content: content,
-            trigger: trigger
+            trigger: UNCenterSink.trigger(for: kindRaw, fireAt: fireAt)
         )
         Task {
             do {

@@ -3,7 +3,8 @@
 //  GamesRoom
 //
 //  Lane S2 tests: calendar-anchored reminder times (step 2 of the
-//  lane brief, audit 01 #4, #5, #6).
+//  lane brief, audit 01 #4, #5, #6) and the on-create delivery
+//  contract (step 3, audit 01 #2, #20).
 //
 //  Every date here is a local date-time built with the device's
 //  calendar, and every assertion is an exact local stamp, so the
@@ -213,6 +214,115 @@ func runS2Tests() {
         )
         runner.assertEqual(
             planned.map(\.identifier).filter { $0.contains("-morning_of-") }.count, 1
+        )
+    }
+
+    // MARK: - Step 3: the on-create prompt actually lands
+
+    // The "now" prompts fire on a one-second interval, so the push
+    // lands after its body was built. A calendar trigger computed
+    // before the mascot-voice round trip never fires (audit 01 #2).
+    runner.run("S2 on-create fires on an interval, the reminders keep their clock time") {
+        let fireAt = at(2026, 6, 20, 14, 0)
+
+        runner.assertEqual(
+            BriefingReconciler.fireMode(
+                kindRaw: BriefingReconciler.onCreateKindRaw, fireAt: fireAt
+            ),
+            .shortly
+        )
+        runner.assertEqual(
+            BriefingReconciler.fireMode(
+                kindRaw: BriefingReconciler.catchUpKindRaw, fireAt: fireAt
+            ),
+            .shortly
+        )
+        for kind in [
+            BriefingReconciler.t168hKindRaw,
+            BriefingReconciler.t84hKindRaw,
+            BriefingReconciler.morningOfKindRaw
+        ] {
+            runner.assertEqual(
+                BriefingReconciler.fireMode(kindRaw: kind, fireAt: fireAt),
+                .at(fireAt)
+            )
+        }
+    }
+
+    // Every local briefing kind is listed in Notification Center
+    // while the app is open; the Question Box turn is not.
+    runner.run("S2 briefing kinds are the ones the app lists in Notification Center") {
+        for kind in BriefingReconciler.briefingKindRaws {
+            runner.assertTrue(
+                BriefingReconciler.isBriefingKind(["kind": kind]),
+                "\(kind) should be a briefing kind"
+            )
+        }
+        runner.assertFalse(
+            BriefingReconciler.isBriefingKind(["type": "question_turn"]),
+            "the Question Box turn is not a briefing kind"
+        )
+        runner.assertFalse(
+            BriefingReconciler.isBriefingKind(["type": "anchor_nudge"]),
+            "the anchor nudge is not a local briefing kind"
+        )
+        runner.assertFalse(
+            BriefingReconciler.isBriefingKind([:]),
+            "an empty payload is not a briefing kind"
+        )
+    }
+
+    // A tap on a briefing or on the anchor nudge opens the room.
+    runner.run("S2 a tapped briefing or anchor nudge routes to its room") {
+        let roomId = UUID()
+        let eventId = UUID()
+
+        let briefing = BriefingReconciler.tapRoute([
+            "kind": BriefingReconciler.onCreateKindRaw,
+            "event_id": eventId.uuidString,
+            "room_id": roomId.uuidString
+        ])
+        runner.assertEqual(
+            briefing,
+            .openRoom(roomId: roomId, eventId: eventId)
+        )
+
+        let anchor = BriefingReconciler.tapRoute([
+            "type": BriefingReconciler.anchorKindRaw,
+            "event_id": eventId.uuidString,
+            "room_id": roomId.uuidString
+        ])
+        runner.assertEqual(
+            anchor,
+            .openRoom(roomId: roomId, eventId: eventId)
+        )
+
+        // A request scheduled before the payload carried a room id
+        // still identifies its night.
+        let roomless = BriefingReconciler.tapRoute([
+            "kind": BriefingReconciler.morningOfKindRaw,
+            "event_id": eventId.uuidString
+        ])
+        runner.assertEqual(
+            roomless,
+            .openRoom(roomId: nil, eventId: eventId)
+        )
+
+        // The Question Box turn is not ours to route.
+        runner.assertEqual(
+            BriefingReconciler.tapRoute([
+                "type": "question_turn",
+                "event_id": eventId.uuidString
+            ]),
+            .none
+        )
+        // A payload with no event id cannot name a room.
+        runner.assertEqual(
+            BriefingReconciler.tapRoute([
+                "kind": BriefingReconciler.onCreateKindRaw,
+                "room_id": roomId.uuidString
+            ]),
+            .none
         )
     }
 }

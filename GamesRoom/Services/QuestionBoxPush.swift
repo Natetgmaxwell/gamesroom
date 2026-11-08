@@ -50,23 +50,44 @@ final class GamesRoomAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
 
     /// Foreground: a question turn is shown by the in-app card (realtime
     /// / poll), so its banner is suppressed. Everything else keeps the
-    /// pre-V0.106 behaviour (no foreground banners).
+    /// pre-V0.106 behaviour (no foreground banners), except the local
+    /// briefing kinds: those are listed in Notification Center even
+    /// while the app is open, because the on-create prompt is the ONE
+    /// prompt the etiquette rules allow and a foreground app used to
+    /// swallow it (audit 01 #2).
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        if let eventId = Self.questionTurnEventId(notification.request.content.userInfo) {
+        let userInfo = notification.request.content.userInfo
+        if let eventId = Self.questionTurnEventId(userInfo) {
             await MainActor.run { Task { await Self.questionBox?.refreshTurn(eventId: eventId) } }
+            return []
+        }
+        if BriefingReconciler.isBriefingKind(userInfo) {
+            return [.list]
         }
         return []
     }
 
+    /// A tap on a briefing (on-create, the reminders, the catch-up)
+    /// or on the anchor nudge opens the room it belongs to. The
+    /// Question Box turn keeps its own handling: refresh the turn.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard let eventId = Self.questionTurnEventId(response.notification.request.content.userInfo) else { return }
-        await Self.questionBox?.refreshTurn(eventId: eventId)
+        let userInfo = response.notification.request.content.userInfo
+        if let eventId = Self.questionTurnEventId(userInfo) {
+            await Self.questionBox?.refreshTurn(eventId: eventId)
+            return
+        }
+        guard case .openRoom(let roomId, let eventId) =
+            BriefingReconciler.tapRoute(userInfo)
+        else { return }
+        await MainActor.run {
+            OpenRoomRequest.shared.post(roomId: roomId, eventId: eventId)
+        }
     }
 
     static func questionTurnEventId(_ userInfo: [AnyHashable: Any]) -> UUID? {
@@ -87,6 +108,57 @@ enum QuestionBoxPushRegistration {
         if CommandLine.arguments.contains("-screenshots-bypass-auth") { return }
         #endif
         UIApplication.shared.registerForRemoteNotifications()
+    }
+}
+
+// MARK: - Open-room routing
+
+extension Notification.Name {
+    /// Posted when a tapped notification asks the app to open a room.
+    /// The userInfo carries `room_id` and `event_id`.
+    static let gamesRoomOpenRoom = Notification.Name("GamesRoomOpenRoom")
+}
+
+/// Latches the open-room request.
+///
+/// A tap can arrive before the view hierarchy exists — a cold start
+/// from a notification tap posts the request while the app is still
+/// launching — and a posted notification nobody is listening for is
+/// lost. The latch keeps the request until the UI takes it.
+final class OpenRoomRequest: @unchecked Sendable {
+    static let shared = OpenRoomRequest()
+
+    private let lock = NSLock()
+    private var pending: (roomId: UUID?, eventId: UUID)?
+
+    private init() {}
+
+    /// Announces an open-room request: latches it, then posts the
+    /// notification the root view listens for.
+    func post(roomId: UUID?, eventId: UUID) {
+        lock.lock()
+        pending = (roomId, eventId)
+        lock.unlock()
+
+        var userInfo: [String: String] = ["event_id": eventId.uuidString]
+        if let roomId {
+            userInfo["room_id"] = roomId.uuidString
+        }
+        NotificationCenter.default.post(
+            name: .gamesRoomOpenRoom,
+            object: nil,
+            userInfo: userInfo
+        )
+    }
+
+    /// Takes the latched request, if any, and clears it. A request
+    /// can only be taken once, so it is never handled twice.
+    func take() -> (roomId: UUID?, eventId: UUID)? {
+        lock.lock()
+        defer { lock.unlock() }
+        let request = pending
+        pending = nil
+        return request
     }
 }
 

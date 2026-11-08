@@ -364,6 +364,7 @@ final class RoomService: ObservableObject {
             .joined(separator: " · ")
         await NotificationDispatcher.shared.scheduleCatchUp(
             eventId: event.id,
+            roomId: room.id,
             eventName: event.name,
             playedAt: event.playedAt,
             mascotName: room.mascotName,
@@ -1878,6 +1879,7 @@ final class RoomService: ObservableObject {
 
         await NotificationDispatcher.shared.reconcileBriefing(
             eventId: eventId,
+            roomId: roomId,
             eventName: eventName,
             playedAt: playedAt,
             mascotName: room?.mascotName ?? "Your mascot",
