@@ -13,7 +13,16 @@
 // Auth: Supabase member JWT. POST { room_id, event_id? }.
 // Response: { caption: string } | { error, reason? }.
 
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  activeMemberships,
+  isHiddenFrom,
+  leaderFacts,
+  messageTypeForEvent,
+  pickVisibleEvent,
+  seasonCloseContext,
+  standingsNoteFor,
+} from "./state.ts";
 
 const MINIMAX_URL = "https://api.minimax.io/v1/chat/completions";
 const CORS_HEADERS = {
@@ -197,34 +206,51 @@ Deno.serve(async (req: Request) => {
     { auth: { persistSession: false } },
   );
 
-  // Resolve the room + event. The push path passes only `event_id`
-  // (the dispatcher has no room id); the footer path passes
-  // `room_id` and lets the function pick the latest event. When
-  // both are present, `event_id` wins.
+  // Resolve the room + event (audit 04 F5a: the voice reads the room's
+  // state the way the face does, from get_active_event's rule).
+  // The push path passes only `event_id` (the dispatcher has no room
+  // id); the footer path passes `room_id` and the function picks the
+  // room's next unplayed night. When both are present, `event_id` wins.
   const eventId = (body.event_id ?? "").trim();
   const bodyRoomId = (body.room_id ?? "").trim();
+  type EvRow = {
+    id: string;
+    room_id: string | null;
+    name: string | null;
+    played_at: string;
+    settled_at: string | null;
+    hidden_from_user_ids: string[] | null;
+  };
   let roomId = bodyRoomId;
-  let event: { id: string; name: string; played_at: string; settled_at: string | null } | null = null;
+  let event: EvRow | null = null;
+  const now = new Date();
 
   if (eventId && /^[0-9a-f-]{36}$/i.test(eventId)) {
     const { data: ev } = await serviceClient
       .from("events")
-      .select("id, room_id, name, played_at, settled_at")
+      .select("id, room_id, name, played_at, settled_at, hidden_from_user_ids")
       .eq("id", eventId)
       .maybeSingle();
     if (ev) {
-      event = ev;
-      roomId = ev.room_id as string;
+      // An event the caller is hidden from is never voiced.
+      const named = ev as EvRow;
+      if (!isHiddenFrom(named, memberId)) {
+        event = named;
+        roomId = named.room_id as string;
+      }
     }
   } else if (roomId && /^[0-9a-f-]{36}$/i.test(roomId)) {
-    const { data: ev } = await serviceClient
+    // get_active_event__inner semantics: the next night still to be
+    // played, earliest first, with the hidden-from filter the live
+    // function does not have (the brief supplies it).
+    const { data: candidates } = await serviceClient
       .from("events")
-      .select("id, name, played_at, settled_at")
+      .select("id, room_id, name, played_at, settled_at, hidden_from_user_ids")
       .eq("room_id", roomId)
-      .order("played_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    event = ev;
+      .gt("played_at", now.toISOString())
+      .order("played_at", { ascending: true })
+      .limit(20);
+    event = (pickVisibleEvent((candidates ?? []) as EvRow[], memberId, now) as EvRow | null);
   } else {
     return json({ error: "invalid_room_id" }, 400);
   }
@@ -232,12 +258,14 @@ Deno.serve(async (req: Request) => {
     return json({ error: "invalid_room_id" }, 400);
   }
 
-  // Membership gate — the caller must be a member of the room.
+  // Membership gate — the caller must be an ACTIVE member of the room
+  // (audit 04 F5: a kicked member gets no voice either).
   const { data: membership } = await serviceClient
     .from("room_memberships")
     .select("user_id")
     .eq("room_id", roomId)
     .eq("user_id", memberId)
+    .eq("membership_status", "active")
     .maybeSingle();
   if (!membership) return json({ error: "not_a_member" }, 403);
 
@@ -249,20 +277,22 @@ Deno.serve(async (req: Request) => {
     .single();
   if (!room) return json({ error: "room_not_found" }, 404);
 
-  // V0.84 — season-close branch: read the room's latest two seasons so
-  // the LLM path can praise the season's standouts instead of event-
-  // flavour copy when the footer state is .seasonClose. Mirrors
-  // get_current_season's "prefer ended" ordering: after a close the
-  // highest ordinal is the NEW active season, so the top-2 by ordinal
-  // always contain the most recent ended season (only one active
-  // season exists at a time).
+  // Season-close branch (audit 04 F5b: the eulogy used to fire forever,
+  // because "any ended season in the top two" stayed true after the
+  // first close). The rule now lives in state.ts's seasonCloseContext:
+  // the newest season by ordinal being ended, or a season that ended
+  // within the last three days.
   const { data: latestSeasons } = await serviceClient
     .from("seasons")
     .select("id, ordinal, status, ended_at")
     .eq("room_id", roomId)
     .order("ordinal", { ascending: false })
     .limit(2);
-  const latestSeason = (latestSeasons ?? []).find((s) => s.status === "ended");
+  const seasonClose = seasonCloseContext((latestSeasons ?? []) as {
+    ordinal: number;
+    status: string;
+    ended_at: string | null;
+  }[], now);
 
   // Live room state for the prompt.
   const ctx: Record<string, unknown> = {};
@@ -275,86 +305,67 @@ Deno.serve(async (req: Request) => {
     if (event.settled_at) ctx.event_settled_at = event.settled_at;
   }
 
-  let eventMessageType: string | null = null;
-  if (event) {
-    const now = Date.now();
-    const playedAt = new Date(event.played_at).getTime();
-    const settledAt = event.settled_at ? new Date(event.settled_at).getTime() : null;
-    // 2026-09-02 fix — the previous else-branch classified EVERY event
-    // that wasn't live or fresh-settled as "New event just created. Prompt
-    // members to claim their seat." A week-old settled event (latest by
-    // played_at DESC, as this footer path picks) landed there and the LLM
-    // wrote stale claim nudges for a night long gone (Felt Faction bug).
-    if (settledAt && now - settledAt < 86_400_000) {
-      eventMessageType = "Post-play recap. The event has concluded.";
-    } else if (settledAt) {
-      // Settled more than 24h ago: the room is between nights. No claim
-      // nudge — the event is over.
-      eventMessageType = "The room is between nights. Speak to the standings and the leaderboard. Do not prompt anyone to claim a seat.";
-    } else if (playedAt <= now) {
-      eventMessageType = "The night has started. The event is live.";
-    } else if (playedAt - now < 7 * 86_400_000) {
-      // Genuinely upcoming (within a week): a claim prompt is honest.
-      const days = Math.max(0, Math.ceil((playedAt - now) / 86_400_000));
-      eventMessageType = `New upcoming event in about ${days} day${days === 1 ? "" : "s"}. Prompt members to claim their seat.`;
-    } else {
-      eventMessageType = "The next scheduled event is more than a week away. Speak to the standings. Do not pressure immediate claims.";
-    }
-  } else {
-    eventMessageType = "Room has no events yet. Welcome the members.";
-  }
+  // The message_type decision lives in state.ts (messageTypeForEvent),
+  // unit-tested there; it is the inline block that used to live here.
+  const eventMessageType = event
+    ? messageTypeForEvent(event, now)
+    : "Room has no events yet. Welcome the members.";
 
-  // V0.84 — season-closed wins over the event-derived message_type:
-  // when the latest season has been ended, the footer is showing the
-  // season-close card and the LLM should praise the season's standouts.
-  if (latestSeason?.status === "ended") {
+  // Season-closed wins over the event-derived message_type: when the
+  // footer is showing the season-close card, the LLM should praise the
+  // season's standouts.
+  if (seasonClose) {
     ctx.message_type = "The season has closed. Praise the season's standouts.";
-    ctx.season_ordinal = latestSeason.ordinal;
-  } else if (eventMessageType !== null) {
+    ctx.season_ordinal = seasonClose.ordinal;
+  } else {
     ctx.message_type = eventMessageType;
   }
 
+  // Standings (audit 04 F8: the leaderboard, the caller rank and the
+  // member count used to include kicked members). ACTIVE members only,
+  // ranked by season score like the room page; the facts (leader,
+  // margin, caller rank) come from state.ts.
   const { data: leaderboard } = await serviceClient
     .from("room_memberships")
-    .select("user_id, role, points_balance, season_score")
+    .select("user_id, role, points_balance, season_score, membership_status")
     .eq("room_id", roomId)
     .order("season_score", { ascending: false })
     .limit(10);
-  if (leaderboard && leaderboard.length > 0) {
+  const standings = activeMemberships((leaderboard ?? []) as {
+    user_id: string;
+    role?: string | null;
+    points_balance?: number | null;
+    season_score?: number | null;
+    membership_status?: string | null;
+  }[]);
+  if (standings.length > 0) {
     // 2026-09-02 fix — leader is the top of the ACTUAL standings
     // (season_score DESC, host included: the room page ranks the host
     // too, so a host-led table previously crowned the #2 member as
     // "leader"). Also pass the top score so the model can't call a
     // 0-point member "sits comfortably at the front".
-    const top = leaderboard[0];
+    const facts = leaderFacts(standings, memberId);
+    const top = standings[0];
     const { data: leaderUser } = await serviceClient
       .from("users")
       .select("display_name")
       .eq("id", top.user_id)
       .maybeSingle();
-    if (leaderUser?.display_name) {
+    if (leaderUser?.display_name && facts) {
       ctx.leader = leaderUser.display_name;
-      ctx.leader_score = top.season_score ?? 0;
-      if ((top.season_score ?? 0) <= 0) {
-        ctx.standings_note = "Every member is still on zero for the season or the leader has no points yet — describe the table as level/unplayed, not as anyone leading comfortably.";
-      } else {
-        const second = leaderboard[1];
-        const margin = second ? (top.season_score ?? 0) - (second.season_score ?? 0) : top.season_score ?? 0;
-        ctx.standings_note = margin >= 30
-          ? "The leader is far ahead — a blowout margin is fair to describe."
-          : "The table is close — do not overstate the leader's dominance.";
-      }
+      ctx.leader_score = facts.leaderScore;
+      ctx.standings_note = standingsNoteFor(facts.leaderScore, facts.margin);
     }
-    // Caller rank mirrors the full standings order (host included),
+    // Caller rank mirrors the standings order (host included),
     // matching what the room page shows.
-    const idx = leaderboard.findIndex((r) => r.user_id === memberId);
-    if (idx !== -1) ctx.caller_rank = idx + 1;
+    if (facts?.callerRank) ctx.caller_rank = facts.callerRank;
   }
 
   const { count: memberCount } = await serviceClient
     .from("room_memberships")
     .select("id", { count: "exact", head: true })
-    .eq("room_id", roomId);
+    .eq("room_id", roomId)
+    .eq("membership_status", "active");
   ctx.member_count = memberCount ?? 0;
 
   if (event) {
