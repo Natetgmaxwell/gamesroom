@@ -2050,12 +2050,12 @@ private struct BriefingSlot: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Layout.cardInset)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(isHero ? Theme.Palette.accent.opacity(0.10) : Theme.Palette.surface)
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
-        )
+        // v1.2.4 S4.4 — one card shape. The slot used to draw its own
+        // chrome (radius 14, 1pt hairline) on top of its content; it
+        // is now a `sectionCard`, so the briefing card, the live card
+        // and every other card on the room page share one radius, one
+        // stroke weight and one fill.
+        .sectionCard(isHero ? .hero : .standard)
         .appearTransition()
         // v1.2.2 S6 T3 — the "Who's coming" list that used to sit
         // here also owned the load of the event's Currently Into
@@ -2629,12 +2629,11 @@ private struct WitnessSlot: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Layout.cardInset)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(isHero ? Theme.Palette.accent.opacity(0.10) : Theme.Palette.surface)
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.Palette.hairline, lineWidth: 1))
-        )
+        // v1.2.4 S4.4 — one card shape, same change as the briefing
+        // card above: the live card's own radius-14 / 1pt-stroke
+        // chrome is gone and the card is a `sectionCard` like every
+        // other card on the page.
+        .sectionCard(isHero ? .hero : .standard)
         .appearTransition()
         // V0.70 — drive the working-hand badge pop-in and the
         // secondary CTAs' fade-in from one place. Closures aren't

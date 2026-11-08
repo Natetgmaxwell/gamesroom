@@ -200,8 +200,8 @@ struct HostQuestionFallback: View {
 
     var body: some View {
         Button { withAnimation { revealed.toggle() } } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                HStack(spacing: Theme.Layout.cardLineGap) {
                     Image(systemName: Theme.Icon.bubbleLeftAndBubbleRightFill)
                     Text("\(turn.readerDisplayName)'s asking")
                         .accessibilityIdentifier("host-fallback-reader")
@@ -218,13 +218,11 @@ struct HostQuestionFallback: View {
                         .accessibilityIdentifier("host-fallback-question")
                 }
             }
-            .padding(Theme.Layout.cardInset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Theme.Palette.surface)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.hairline))
-            )
+            // v1.2.4 S4.4 — one card shape: the host fallback's
+            // hand-rolled 1pt-stroke box is now a `sectionCard`, so it
+            // matches the cards around it.
+            .sectionCard(.standard)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("host-question-fallback")
