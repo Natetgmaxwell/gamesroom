@@ -236,6 +236,7 @@ func runS1Tests(_ runner: TestRunner) {
     }
     runS1NextRoundTests(runner)
     runS1SectionTests(runner)
+    runS1SeedTests(runner)
 }
 
 // MARK: - S1.6 next round
@@ -360,6 +361,56 @@ func runS1SectionTests(_ runner: TestRunner) {
         let settled = event(settledHoursAgo: 2)
         runner.assertNil(NightPlan.recapAboveNextNight(recent: settled, active: settled, now: nightBase))
         runner.assertNil(NightPlan.recapAboveNextNight(recent: settled, active: nil, now: nightBase))
+    }
+}
+
+// MARK: - S1.8 sweep seeds
+
+func runS1SeedTests(_ runner: TestRunner) {
+    func seeded(_ key: String) async throws -> (InMemoryRoomStore, Room, Event?) {
+        let store = InMemoryRoomStore()
+        let room = try await store.fetchRooms().first!
+        let base = try await store.fetchActiveEvent(roomId: room.id) ?? Event(
+            id: UUID(), roomId: room.id, name: "Night",
+            playedAt: Date().addingTimeInterval(86_400), createdAt: Date(),
+            packSlugs: ["casino"], packSlug: "casino"
+        )
+        await store.applyAuditSweepSeeds(key: key, carwoola: room, carwoolaEvent: base)
+        return (store, room, try await store.fetchActiveEvent(roomId: room.id))
+    }
+
+    runner.runAsync("S1.8: night-arrivals seeds a live night with 2 of 5 arrived") {
+        let (store, _, event) = try await seeded("night-arrivals")
+        guard let event else { runner.assertNotNil(event, "seeded night"); return }
+        runner.assertTrue(event.playedAt <= Date() && event.settledAt == nil, "the night is live")
+        runner.assertEqual(event.packSlugs, ["monopoly_deal"])
+        let claimed = try await store.fetchEventRSVPs(eventId: event.id).filter { $0.state == .claimed }
+        let waiting = try await store.loadArrivalCandidates(eventId: event.id)
+        runner.assertEqual(claimed.count, 5)
+        runner.assertEqual(claimed.count - waiting.count, 2)
+    }
+
+    runner.runAsync("S1.8: night-one-round seeds one scored round, so the host settles") {
+        let (store, _, event) = try await seeded("night-one-round")
+        guard let event else { runner.assertNotNil(event, "seeded night"); return }
+        let rounds = try await store.fetchEventRounds(eventId: event.id)
+        runner.assertEqual(rounds.count, 1)
+        runner.assertEqual(NextRound.after(rounds).index, 2)
+        let plan = NightPlan.plan(for: NightInput(
+            isHost: true, packSlugs: event.packSlugs, playedAt: event.playedAt,
+            settledAt: nil, now: Date(), arrivedCount: 3, claimedCount: 3,
+            roundsScored: rounds.count, iHaveHeldDeposit: false, iHaveWithdrawn: false
+        ))
+        runner.assertEqual(plan.primary, .settleNight)
+        runner.assertEqual(plan.secondaries, [.scoreRound(packs: ["monopoly_deal"])])
+    }
+
+    runner.runAsync("S1.8: night-settled seeds a night settled inside the recap window") {
+        let (_, _, event) = try await seeded("night-settled")
+        guard let event, let settledAt = event.settledAt else {
+            runner.assertNotNil(event?.settledAt, "seeded settled night"); return
+        }
+        runner.assertTrue(settledAt > Date().addingTimeInterval(-NightPlan.recapWindow), "inside 24h")
     }
 }
 
