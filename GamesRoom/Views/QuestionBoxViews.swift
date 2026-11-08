@@ -167,13 +167,8 @@ struct QuestionReaderCard: View {
             HStack(spacing: 12) {
                 Button(action: close(onDone, haptic: Haptics.success)) {
                     Text("Done")
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.background)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Theme.Palette.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(PrimaryButtonStyle())
                 .accessibilityIdentifier("reader-card-done")
                 Button(action: close(onPass, haptic: Haptics.light)) {
                     Text("Pass")

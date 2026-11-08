@@ -138,13 +138,8 @@ struct CAHCardScanSheet: View {
                         capture()
                     } label: {
                         Text("Scan cards")
-                            .font(Theme.Typography.body.weight(.medium))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
+                    .buttonStyle(PrimaryButtonStyle())
                     .disabled(camera.state != .running)
                 }
             }

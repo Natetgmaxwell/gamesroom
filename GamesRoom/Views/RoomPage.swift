@@ -616,14 +616,8 @@ struct RoomPage: View {
 
             NavigationLink(value: room) {
                 Text("Resume")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.primaryText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PrimaryButtonStyle())
             .simultaneousGesture(TapGesture().onEnded {
                 recordLastViewed(room)
             })
@@ -672,14 +666,9 @@ struct RoomPage: View {
             // a host of their own room by tapping Create.
             Button(action: openCreateRoom) {
                 Text(emptyCTATitle)
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .frame(maxWidth: 320)
-                    .padding(.vertical, 14)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PrimaryButtonStyle())
+            .frame(maxWidth: 320)
             .padding(.top, 8)
 
             Button(action: openJoinRoom) {

@@ -1172,14 +1172,8 @@ struct RoomDetailView: View {
                 Image(systemName: Theme.Icon.plus)
                 Text("Add an event")
             }
-            .font(Theme.Typography.body.weight(.semibold))
-            .foregroundStyle(Theme.Palette.background)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(Theme.Palette.accent)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PrimaryButtonStyle())
         .padding(.top, 4)
     }
 
@@ -1964,13 +1958,8 @@ private struct BriefingSlot: View {
                 VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
                     Button(action: onClaim) {
                         Text("Claim seat")
-                            .font(Theme.Typography.body.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.background)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
+                    .buttonStyle(PrimaryButtonStyle())
                     .pressScale()
                     // v1.2.2 S6 T2 — the decline is a caption-grey
                     // text button centred under the full-width
@@ -2039,14 +2028,8 @@ private struct BriefingSlot: View {
                             .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
                         Button(action: onCheckIn) {
                             Text("I'm here. Reclaim \(deposit.amount) CC")
-                                .font(Theme.Typography.body.weight(.semibold))
-                                .foregroundStyle(Theme.Palette.background)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Theme.Palette.accent)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PrimaryButtonStyle())
                         .accessibilityLabel(Text("Check in and reclaim the \(deposit.amount) CC seat deposit"))
                     }
                     // 2026-08-10 feedback round — a claimed seat is
@@ -2109,13 +2092,8 @@ private struct V0StateReEntryPills: View {
                 .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
             Button(action: onReAccept) {
                 Text("Re-accept")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+            .buttonStyle(PrimaryButtonStyle())
             TrailingTextAction(title: "Re-decline", action: onReDecline)
         }
     }
@@ -2586,30 +2564,25 @@ private struct WitnessSlot: View {
             // Equatable without declaration.
             // V0.73 — `.done` isn't a button. A member who has
             // already scanned (or holds no chips) gets a passive
-            // capsule, not an action that lies about their state.
+            // label, not an action that lies about their state.
             if case .done = cta {
                 Text(ctaTitle)
                     .font(Theme.Typography.body.weight(.semibold))
                     .foregroundStyle(Theme.Palette.accent)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, Theme.Layout.buttonVertical)
                     .background(Theme.Palette.accent.opacity(0.12))
-                    .clipShape(Capsule())
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius))
                     .contentTransition(.opacity)
                     .animation(Theme.Motion.fade, value: cta)
                     .accessibilityLabel(Text(ctaTitle))
             } else {
             Button(action: ctaAction) {
                 Text(ctaTitle)
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .contentTransition(.opacity)
                     .animation(Theme.Motion.fade, value: cta)
             }
+            .buttonStyle(PrimaryButtonStyle())
             }
 
             // V0.68 — secondary "Withdraw more" CTA. Renders for casino

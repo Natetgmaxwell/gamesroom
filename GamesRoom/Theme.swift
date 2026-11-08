@@ -273,6 +273,8 @@ enum Theme {
 // `buttonVertical` of air above and below, `buttonRadius` corners.
 // The label is the caller's; the style owns the chrome.
 struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(Theme.Typography.body.weight(.semibold))
@@ -282,6 +284,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .background(Theme.Palette.accent)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Layout.buttonRadius))
             .opacity(configuration.isPressed ? 0.85 : 1)
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
 
