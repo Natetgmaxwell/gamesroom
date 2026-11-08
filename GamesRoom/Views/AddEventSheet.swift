@@ -63,9 +63,14 @@ struct AddEventSheet: View {
     @State private var isSaving: Bool = false
     @State private var errorMessage: String?
 
-    init(roomId: UUID, onSaved: @escaping (UUID) -> Void) {
+    /// S1.5 — `initialPlayedAt` seeds the date only ("Plan the next
+    /// night" passes tonight + 7 days). nil keeps the default.
+    init(roomId: UUID, initialPlayedAt: Date? = nil, onSaved: @escaping (UUID) -> Void) {
         self.roomId = roomId
         self.onSaved = onSaved
+        if let initialPlayedAt {
+            _playedAt = State(initialValue: initialPlayedAt)
+        }
     }
 
     var body: some View {

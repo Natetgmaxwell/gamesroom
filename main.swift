@@ -2139,26 +2139,6 @@ private func makeEvent(
     .withSettledAt(settledAt)
 }
 
-private extension Event {
-    func withSettledAt(_ value: Date?) -> Event {
-        Event(
-            id: self.id,
-            roomId: self.roomId,
-            name: self.name,
-            playedAt: self.playedAt,
-            createdAt: self.createdAt,
-            venue: self.venue,
-            hostNote: self.hostNote,
-            maxSeats: self.maxSeats,
-            startedAt: self.startedAt,
-            settledAt: value,
-            sessionId: self.sessionId,
-            packSlug: self.packSlug,
-            hostFinalized: self.hostFinalized
-        )
-    }
-}
-
 private func makeWinnerRound(
     eventId: UUID,
     roundIndex: Int,
@@ -5301,6 +5281,10 @@ runner.runAsync("InMemoryRoomStore anchor_push_enabled round-trips both ways fro
     try await store.setAnchorPushEnabled(roomId: room.id, on: true)
     runner.assertTrue(try await store.fetchAnchorPushEnabled(roomId: room.id))
 }
+
+// MARK: - S1 lane tests (night lifecycle)
+
+runS1Tests(runner)
 
 // MARK: - Summary
 

@@ -10,7 +10,6 @@
 //    1. .loading            — first open with no data yet
 //    2. .justSettled        — settledAt within 24h, no new event
 //    3. .inPlay             — activeEvent.isLive && withdrawals exist
-//    4. .settleRound        — host finalized, not all members scanned
 //    5. .upcoming           — playedAt > now, RSVP == .unclaimed
 //    6. .claimed            — playedAt > now, RSVP == .claimed
 //    7. .declined           — playedAt > now, RSVP == .declined
@@ -96,7 +95,23 @@ struct RoomDetailView: View {
     // P0.4 — host-only single-winner scoring sheet binding. Hosts
     // tap "Score a round" on the at-play Witness Slot; the sheet
     // opens for any pack (Casino hosts scan via `ChipScanSheet`).
-    @State private var hostScoreEvent: Event?
+    /// S1.4 — the pack the host chose to score. Carries the pack
+    /// slug so a Casino + Monopoly Deal night scores Monopoly Deal,
+    /// never the headline pack.
+    @State private var hostScoreTarget: HostScoreTarget?
+    /// S1.4 — "Score which game?" when the night has more than one
+    /// scorable pack.
+    @State private var scoreChoice: ScoreChoice?
+    /// S1.5 — the settle waiting out its 5 s Undo window. The cached
+    /// event already reads as settled; nothing has been sent yet.
+    @State private var pendingSettle: PendingSettle?
+    /// S1.5 — the last settle RPC failed; the live card says so.
+    @State private var settleFailed: Bool = false
+    /// S1.5 — "Plan the next night" seeds AddEventSheet's date.
+    @State private var addEventInitialPlayedAt: Date?
+    /// S1.7 — flips when the awards are dismissed so SwiftUI
+    /// re-renders (UserDefaults isn't observed).
+    @State private var seasonAwardsDismissedFlip: Bool = false
 
     // B1.3 — host-only "+ Add an event" CTA in the in-room
     // toolbar. The `AddEventSheet` has shipped since P0.3 (comment
@@ -218,15 +233,6 @@ struct RoomDetailView: View {
         return event.packSlugs.contains(slug)
     }
 
-    /// V0.95 G — any single-winner card pack selected on the event
-    /// (Monopoly Deal et al). Gates the host score CTA.
-    private func eventHasSingleWinnerPack() -> Bool {
-        guard let event = activeEvent else { return false }
-        return event.packSlugs.contains {
-            PackRegistry.shared.definition(for: $0)?.scoringType == .singleWinner
-        }
-    }
-
     /// V0.95 E — casino-pack mirror of `roomHasCAHPack`. Drives the
     /// secondary "Withdraw casino chips" CTA on CAH events so both
     /// withdraw paths exist during any active night.
@@ -272,13 +278,13 @@ struct RoomDetailView: View {
         hostWithdrawals.filter { !$0.isDispensed }
     }
 
-    /// V0.51 — active casino play (`.inPlay` or `.settleRound`): the
+    /// V0.51 — active casino play (`.tonightEvent` or `.inPlay`): the
     /// event has started, is not settled, and the room is running
     /// the casino pack. Drives the render gate for the "Chips on
     /// the table" section.
     private var isCasinoPlayActive: Bool {
         guard let event = activeEvent else { return false }
-        return event.packSlug == "casino"
+        return event.packSlugs.contains(CasinoPack.slug)
             && event.playedAt <= Date()
             && event.settledAt == nil
     }
@@ -405,9 +411,12 @@ struct RoomDetailView: View {
             EditEventSheet(event: event)
                 .environmentObject(roomService)
         }
-        .sheet(isPresented: $showingAddEvent) {
+        .sheet(isPresented: $showingAddEvent, onDismiss: {
+            addEventInitialPlayedAt = nil
+        }) {
             AddEventSheet(
                 roomId: room.id,
+                initialPlayedAt: addEventInitialPlayedAt,
                 onSaved: { _ in
                     showingAddEvent = false
                     justClosedSeason = nil
@@ -460,14 +469,18 @@ struct RoomDetailView: View {
             .environmentObject(scoringService)
             .environmentObject(authService)
         }
-        .sheet(item: $hostScoreEvent) { event in
-            let pack = PackRegistry.shared.definition(for: event.packSlug)
+        .sheet(item: $hostScoreTarget, onDismiss: {
+            // S1.4 — the round count drives the host's next action
+            // (score -> settle), so re-read the rounds after a save.
+            Task { await refresh(force: true) }
+        }) { target in
+            let pack = PackRegistry.shared.definition(for: target.packSlug)
             HostScoreEntrySheet(
-                eventId: event.id,
+                eventId: target.event.id,
                 roomId: room.id,
-                packSlug: event.packSlug,
-                packDisplayName: pack?.displayName ?? event.packSlug,
-                defaultCardCount: roomService.effectiveWinPoints(roomId: room.id, packSlug: event.packSlug)
+                packSlug: target.packSlug,
+                packDisplayName: pack?.displayName ?? target.packSlug,
+                defaultCardCount: roomService.effectiveWinPoints(roomId: room.id, packSlug: target.packSlug)
             )
             .environmentObject(roomService)
             .environmentObject(scoringService)
@@ -495,6 +508,48 @@ struct RoomDetailView: View {
             await refresh(force: true)
             Haptics.light()
         }
+        .confirmationDialog(
+            "Score which game?",
+            isPresented: Binding(
+                get: { scoreChoice != nil },
+                set: { if !$0 { scoreChoice = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: scoreChoice
+        ) { choice in
+            ForEach(choice.packs, id: \.self) { slug in
+                Button(PackRegistry.shared.definition(for: slug)?.displayName ?? slug) {
+                    Task { await openHostScore(event: choice.event, packSlug: slug) }
+                }
+            }
+        }
+        // S1.5 — "Night settled." with Undo, for the 5 s before the
+        // settle is sent.
+        .overlay(alignment: .bottom) {
+            if pendingSettle != nil {
+                HStack(spacing: Theme.Layout.cardLineGap) {
+                    Text("Night settled.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Spacer()
+                    Button("Undo") { undoSettle() }
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                        .accessibilityHint(Text("Puts the night back live"))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Theme.Palette.surface)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.hairline, lineWidth: 1))
+                )
+                .padding(.horizontal, Theme.Layout.edgePadding)
+                .padding(.bottom, 96)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : Theme.Motion.fade, value: pendingSettle != nil)
         .alert("Seat action failed", isPresented: $showSeatActionError) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -507,6 +562,42 @@ struct RoomDetailView: View {
     private var scrollBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Layout.roomSectionGap) {
+                // S1.7 — the season that just closed, for every
+                // member, for 7 days or until they tap Done. Its own
+                // section: the next night's card stays under it.
+                if let season = seasonToCelebrate {
+                    let awards = awardsForPrivacy(seasonId: season.id)
+                    VStack(spacing: Theme.Layout.cardGroupGap) {
+                        AwardsCard(
+                            season: season,
+                            awards: awards,
+                            currentUserId: authService.currentUser?.id,
+                            isHost: room.userRole == .host,
+                            currentUserOptedIn: room.memberDrowningOptIn,
+                            statCard: currentUserStatCard(season: season, awards: awards),
+                            onToggleDrowningOptIn: { newValue in
+                                Task { await setDrowningOptIn(newValue) }
+                            }
+                        )
+                        Button { dismissSeasonAwards(season) } label: {
+                            Text("Done")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Done"))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                // S1.7 (TARS) — the night just settled, while the next
+                // night is already on the books: the recap sits above
+                // the next night's card for 24h after the settle.
+                if let recap = recapAboveNextNight {
+                    recapCard(event: recap)
+                        .frame(maxWidth: .infinity)
+                }
                 activeSlot
                     .frame(maxWidth: .infinity)
                 // v1.2.2 S6 T5 — the host's unread notes, lifted out
@@ -707,7 +798,7 @@ struct RoomDetailView: View {
         // flips after the first `refresh()` resolves; below that,
         // trust the spinner; after that, the room has *loaded*
         // and any empty sub-state must fall through to `.readStandings`,
-        // `.seasonClose`, or the active-event branches — never
+        // or the active-event branches — never
         // spinner-on-forever.
         //
         // The legacy `if activeEvent == nil && briefing == nil &&
@@ -717,17 +808,9 @@ struct RoomDetailView: View {
         if !hasLoadedInitialData {
             return .loading
         }
-        // M1.1 — season-close takes priority over active-event
-        // branches. When the current season has ended, the page
-        // should render the awards card regardless of whether the
-        // room has a recently-settled or in-play event — the
-        // awards card IS the hero for that period.
-        if let closed = justClosedSeason {
-            return .seasonClose(closed, awardsForPrivacy(seasonId: closed.id))
-        }
-        if let season = currentSeason, season.status == .ended {
-            return .seasonClose(season, seasonAwardsForPrivacy)
-        }
+        // S1.7 — the season awards are their own section above
+        // this slot (`seasonToCelebrate`); they never replace the
+        // claim or live card (02-workflows #12, #13).
         if let event = activeEvent {
             let isLive = event.playedAt <= Date()
             let isSettled = event.settledAt != nil
@@ -735,9 +818,6 @@ struct RoomDetailView: View {
                let s = event.settledAt,
                s > Date().addingTimeInterval(-86_400) {
                 return .justSettled(event)
-            }
-            if isLive && event.hostFinalized {
-                return .settleRound(event)
             }
             // M1.1 — `.tonightEvent` is the play-just-started
             // moment: live, member hasn't moved chips yet, the
@@ -923,191 +1003,34 @@ struct RoomDetailView: View {
                 )
 
             case .inPlay(let event):
-                let isCAH = event.packSlug == "cards_against_humanity"
-                WitnessSlot(
-                    event: event,
-                    attestations: openAttestations,
-                    // V0.43 — `.inPlay` means the member has already
-                    // withdrawn, so the CTA flips to scan regardless
-                    // of pack. `isCAH` is still used for `scanTitle`.
-                    // V0.73 — but only while there's something to
-                    // settle. Already scanned → passive "counted"
-                    // capsule; empty hand (shouldn't co-occur with
-                    // `.inPlay`, but the data can) → passive
-                    // "nothing to settle" capsule.
-                    cta: {
-                        if isCAH { return .scan }
-                        // V0.74 — every scan settles the marginal
-                        // delta vs entitlement, so scan stays live
-                        // even after counting (rescan to resettle:
-                        // play on, win/lose, count again). Empty
-                        // hand → nothing to settle.
-                        if myWorkingHand == 0 {
-                            return .done("Nothing to settle. Withdraw to play")
-                        }
-                        return .scan
-                    }(),
-                    onWithdraw: { Task { await openWithdraw(event: event) } },
-                    onScan: { Task { await openScan(event: event) } },
-                    // V0.68 — "Score a round" is gated to single-winner
-                    // packs only. For casino/CAH the primary settle CTA
-                    // already opens the same sheet, so the host-only
-                    // button is redundant there.
-                    onScore: isHost && eventHasSingleWinnerPack()
-                        ? { Task { await openHostScore(event: event) } }
-                        : nil,
-                    isHero: true,
-                    headerMode: .inPlay,
-                    scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
-                    workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
-                    hasScanned: !isCAH && myScanState.hasScanned,
-                    scannedValue: myScanState.scannedValue,
-                    // V0.66 — secondary "Count your CAH cards" CTA
-                    // renders for every active event when the room
-                    // has CAH installed, so a casino night can still
-                    // settle CAH cards.
-                    onCAHSettle: eventHas(CardsAgainstHumanityPack.slug)
-                        ? { cahScanEvent = event }
-                        : nil,
-                    // V0.68 — "Withdraw more" secondary. The member has
-                    // already withdrawn into their working hand but can
-                    // still top up. Casino only (CAH has no chip
-                    // withdrawal concept); member AND host (host-can-play
-                    // lock 2026-07-09).
-                    // V0.95 E — casino withdraw is available on CAH
-                    // nights too (when the room runs the casino pack):
-                    // both withdraw paths exist during any active
-                    // event, per the keep-them-at-the-table rule.
-                    onWithdrawMore: (isCAH && !eventHas("casino"))
-                        ? nil
-                        : { Task { await openWithdraw(event: event) } }
-                )
+                liveCard(event: event, headerMode: .inPlay)
 
-            // M1.1 — `.tonightEvent` renders the witness hero with
-            // the play-just-started copy + the full-width "Withdraw
-            // chips" CTA. Same `WitnessSlot` component as `.inPlay`;
-            // the started-time caption is what differentiates this
-            // state from the post-withdrawal one.
+            // M1.1 — `.tonightEvent` is the play-just-started moment.
+            // Same card as `.inPlay`; only the header differs. The
+            // actions come from the night plan (S1.4).
             case .tonightEvent(let event):
-                let isCAH = event.packSlug == "cards_against_humanity"
-                WitnessSlot(
-                    event: event,
-                    attestations: openAttestations,
-                    cta: isCAH ? .scan : .withdraw,
-                    onWithdraw: { Task { await openWithdraw(event: event) } },
-                    onScan: { Task { await openScan(event: event) } },
-                    // V0.68 — "Score a round" gated to single-winner
-                    // packs only (see `.inPlay`). No "Withdraw more"
-                    // here — withdraw is already the primary CTA.
-                    onScore: isHost && eventHasSingleWinnerPack()
-                        ? { Task { await openHostScore(event: event) } }
-                        : nil,
-                    isHero: true,
-                    headerMode: .tonightEvent,
-                    scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
-                    // V0.66 — secondary "Count your CAH cards" CTA
-                    // renders for every active event when the room
-                    // has CAH installed, so a casino night can still
-                    // settle CAH cards.
-                    onCAHSettle: eventHas(CardsAgainstHumanityPack.slug)
-                        ? { cahScanEvent = event }
-                        : nil,
-                    // V0.95 E — secondary "Withdraw casino chips" on
-                    // CAH nights (room runs the casino pack): both
-                    // withdraw paths live during any active event.
-                    // v1.1 — never on casino nights, where withdraw is
-                    // already the primary CTA; "Withdraw more" waits
-                    // for `.inPlay` (the member has withdrawn).
-                    onWithdrawMore: isCAH && eventHas("casino")
-                        ? { Task { await openWithdraw(event: event) } }
-                        : nil
-                )
-
-            // M1.1 — `.seasonClose` renders the awards card with the
-            // privacy-filtered awards for the current user. The
-            // drowning row stays visible only to the recipient / host /
-            // opted-in members; the AwardsCard renders the drowning row
-            // through DrowningBadge when it appears.
-            case .seasonClose(let season, let awards):
-                AwardsCard(
-                    season: season,
-                    awards: awards,
-                    currentUserId: authService.currentUser?.id,
-                    isHost: room.userRole == .host,
-                    currentUserOptedIn: room.memberDrowningOptIn,
-                    statCard: currentUserStatCard(season: season, awards: awards),
-                    onToggleDrowningOptIn: { newValue in
-                        Task { await setDrowningOptIn(newValue) }
-                    }
-                )
-            case .settleRound(let event):
-                let isCAH = event.packSlug == "cards_against_humanity"
-                WitnessSlot(
-                    event: event,
-                    attestations: openAttestations,
-                    // V0.34 — settleRound always shows the scan CTA
-                    // (no CAH override here per spec — host has
-                    // already finalised, the member is tallying).
-                    // V0.73 — same honest-CTA gating as `.inPlay`:
-                    // scanned or empty-hand members get a passive
-                    // capsule instead of a settle button they can't
-                    // act on truthfully.
-                    cta: {
-                        if isCAH { return .scan }
-                        // V0.74 — same as `.inPlay`: scan always
-                        // settles the marginal delta, so it stays
-                        // live through the final count.
-                        if myWorkingHand == 0 {
-                            return .done("No chips to settle")
-                        }
-                        return .scan
-                    }(),
-                    onWithdraw: { Task { await openWithdraw(event: event) } },
-                    onScan: { Task { await openScan(event: event) } },
-                    // V0.68 — "Score a round" gated to single-winner
-                    // packs only (see `.inPlay`). No "Withdraw more" —
-                    // host has finalised, settlement in progress.
-                    onScore: isHost && eventHasSingleWinnerPack()
-                        ? { Task { await openHostScore(event: event) } }
-                        : nil,
-                    isHero: true,
-                    headerMode: .settleRound,
-                    scanTitle: isCAH ? "Count your CAH cards" : "Settle casino chips",
-                    workingHand: isCAH ? nil : (casinoWithdrawn > 0 ? casinoWithdrawn : nil),
-                    hasScanned: !isCAH && myScanState.hasScanned,
-                    scannedValue: myScanState.scannedValue,
-                    // V0.66 — secondary "Count your CAH cards" CTA
-                    // renders for every active event when the room
-                    // has CAH installed, so a casino night can still
-                    // settle CAH cards.
-                    onCAHSettle: roomHasCAHPack
-                        ? { cahScanEvent = event }
-                        : nil
-                )
+                liveCard(event: event, headerMode: .tonightEvent)
 
             case .justSettled(let event):
-                CeremonialCard(
-                    event: event,
-                    chapterLine: roomService.cachedEventChapterLine(eventId: event.id),
-                    tonightStarCard: roomService.cachedTonightStarCard(eventId: event.id),
-                    hostPickMembers: roomService.cachedMembers(roomId: room.id),
-                    isHost: isHost,
-                    memberNoteWindowOpen: memberNoteWindowOpen(for: event),
-                    memberNotePromptVisible: memberNotePromptVisible(for: event.id),
-                    onTonightStarPick: isHost
-                        ? { memberId, category, custom in
-                            Task { await setTonightStarPick(event: event, memberId: memberId, category: category, customText: custom) }
-                        }
-                        : nil,
-                    onSubmitMemberNote: !isHost
-                        ? { text in
-                            Task { await submitMemberNote(roomId: room.id, text: text) }
-                        }
-                        : nil,
-                    onSkipMemberNote: !isHost
-                        ? { skipMemberNotePrompt(for: event.id) }
-                        : nil
-                )
+                VStack(spacing: Theme.Layout.cardGroupGap) {
+                recapCard(event: event)
+                // S1.5 — the host plans the next night from the
+                // recap. This state only renders while no future
+                // night is known (the room allows one), so the plan
+                // never offers a second upcoming night.
+                if NightPlan.plan(for: nightInput(for: event)).primary == .planNextNight {
+                    Button { planNextNight(after: event) } label: {
+                        Text("Plan the next night")
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.background)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Theme.Palette.accent)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .pressScale()
+                }
+                }
 
             case .readStandings:
                 // V0.100 — branch the empty-state copy on host vs
@@ -1189,7 +1112,7 @@ struct RoomDetailView: View {
     /// the active event, the briefing summary, the leaderboard,
     /// the current member's RSVP, the open attestations, the room
     /// members (for the P1.1 roster surface), and the current
-    /// season + awards (for the M1.1 `.seasonClose` slot).
+    /// season + awards (for the S1.7 season awards section).
     /// Called from `.task` and `.refreshable`.
     private func refresh(force: Bool = false) async {
         Perf.event("refresh start force=\(force)")
@@ -1206,8 +1129,8 @@ struct RoomDetailView: View {
         async let packsLoad: [String] = roomService.loadRoomPacks(roomId: room.id, force: force)
         async let roundsLoad: () = loadRoundsIfNeeded(force: force)
         async let chapterLoad: () = loadChapterLineIfNeeded(force: force)
-        async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded()
-        async let workingHandsLoad: () = loadWorkingHandsIfNeeded()
+        async let hostWithdrawalsLoad: () = loadHostWithdrawalsIfNeeded(force: force)
+        async let workingHandsLoad: () = loadWorkingHandsIfNeeded(force: force)
         // V0.84 C2 — Tonight's Star card. Loaded every refresh so
         // a host pick made on another device shows up on next open.
         async let tonightStarLoad: () = loadTonightStarCardIfNeeded(force: force)
@@ -1251,6 +1174,11 @@ struct RoomDetailView: View {
     /// ceremonial card renders the written title + call-forward.
     /// No-op when there's no active event.
     private func loadChapterLineIfNeeded(force: Bool = false) async {
+        // S1.7 — the recap above the next night reads its own line.
+        if let recap = roomService.cachedRecentlySettledEvent(roomId: room.id),
+           recap.id != activeEvent?.id {
+            await roomService.loadEventChapterLine(eventId: recap.id, force: force)
+        }
         guard let event = activeEvent else { return }
         await roomService.loadEventChapterLine(eventId: event.id, force: force)
     }
@@ -1259,6 +1187,10 @@ struct RoomDetailView: View {
     /// the ceremonial-card star section renders. No-op when there's
     /// no active event.
     private func loadTonightStarCardIfNeeded(force: Bool = false) async {
+        if let recap = roomService.cachedRecentlySettledEvent(roomId: room.id),
+           recap.id != activeEvent?.id {
+            await roomService.loadTonightStarCard(eventId: recap.id, force: force)
+        }
         guard let event = activeEvent else { return }
         await roomService.loadTonightStarCard(eventId: event.id, force: force)
     }
@@ -1313,6 +1245,11 @@ struct RoomDetailView: View {
         if !history.isEmpty {
             await roomService.loadSeasonGrid(roomId: room.id, seasonId: nil, force: force)
         }
+        // S1.7 — awards for the season every member is shown (the
+        // current season is open again once one closes).
+        if let season = seasonToCelebrate, season.id != roomService.cachedCurrentSeason(roomId: room.id)?.id {
+            await roomService.loadSeasonAwards(seasonId: season.id, force: force)
+        }
     }
 
     private func loadMembersIfNeeded(force: Bool = false) async {
@@ -1323,24 +1260,32 @@ struct RoomDetailView: View {
     }
 
     private func loadActiveIfNeeded(force: Bool = false) async {
-        if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            let event = await roomService.loadActiveEvent(
-                roomId: room.id, force: force
+        // V1.24 (audit F1) — the active-event cache used to freeze the
+        // night: the loader only read when the cache was empty, so a
+        // night that started after the first paint never appeared and
+        // pull-to-refresh could not correct it either. The read now
+        // always runs; `force` decides whether the service re-reads
+        // the server or serves its own 30s cache.
+        let wasCached = roomService.cachedActiveEvent(roomId: room.id) != nil
+        let event = await roomService.loadActiveEvent(
+            roomId: room.id, force: force
+        )
+        // V0.91 — late-opt-in catch-up on room-open. When the
+        // local user is opted in to this room and an active
+        // event exists, schedule the on-create push for it if
+        // the dispatcher has no pending request for the same
+        // (eventId, kind, userId) identifier. Covers the case
+        // where the realtime INSERT was missed (device
+        // suspended, offline at creation moment) AND the case
+        // where the user just opted in and is now opening the
+        // room for the first time since. Kept to the first load
+        // for the room: the active event can now be the live
+        // night, and an on-create push for a night already under
+        // way would land in the middle of it.
+        if event != nil, !wasCached {
+            await roomService.scheduleActiveEventOnCreateIfMissing(
+                roomId: room.id
             )
-            // V0.91 — late-opt-in catch-up on room-open. When the
-            // local user is opted in to this room and an active
-            // event exists, schedule the on-create push for it if
-            // the dispatcher has no pending request for the same
-            // (eventId, kind, userId) identifier. Covers the case
-            // where the realtime INSERT was missed (device
-            // suspended, offline at creation moment) AND the case
-            // where the user just opted in and is now opening the
-            // room for the first time since.
-            if event != nil {
-                await roomService.scheduleActiveEventOnCreateIfMissing(
-                    roomId: room.id
-                )
-            }
         }
     }
 
@@ -1384,15 +1329,19 @@ struct RoomDetailView: View {
     /// `casino_withdrawal` rows so the host only sees
     /// withdrawals (the RPC also returns `casino_return` and
     /// other kinds).
-    private func loadHostWithdrawalsIfNeeded() async {
+    ///
+    /// V1.24 (audit F1) — the active event is re-read when the
+    /// refresh is forced, so the pack check below reads tonight's
+    /// event and not the one cached at the first paint.
+    private func loadHostWithdrawalsIfNeeded(force: Bool = false) async {
         guard isHost else {
             hostWithdrawals = []
             return
         }
-        if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            await roomService.loadActiveEvent(roomId: room.id, force: false)
+        if force || roomService.cachedActiveEvent(roomId: room.id) == nil {
+            await roomService.loadActiveEvent(roomId: room.id, force: force)
         }
-        guard let event = activeEvent, event.packSlug == "casino" else {
+        guard let event = activeEvent, event.packSlugs.contains(CasinoPack.slug) else {
             hostWithdrawals = []
             return
         }
@@ -1413,11 +1362,14 @@ struct RoomDetailView: View {
     /// blanks `workingHands`, and pins the casino state machine
     /// at `.tonightEvent` even though the DB shows a non-zero
     /// `working_hand` for the current user.
-    private func loadWorkingHandsIfNeeded() async {
-        if roomService.cachedActiveEvent(roomId: room.id) == nil {
-            await roomService.loadActiveEvent(roomId: room.id, force: false)
+    ///
+    /// V1.24 (audit F1) — a forced refresh re-reads the active
+    /// event here too, so the pack check reads tonight's event.
+    private func loadWorkingHandsIfNeeded(force: Bool = false) async {
+        if force || roomService.cachedActiveEvent(roomId: room.id) == nil {
+            await roomService.loadActiveEvent(roomId: room.id, force: force)
         }
-        guard let event = activeEvent, event.packSlug == "casino" else {
+        guard let event = activeEvent, event.packSlugs.contains(CasinoPack.slug) else {
             workingHands = []
             return
         }
@@ -1711,69 +1663,297 @@ struct RoomDetailView: View {
         withdrawSheetEvent = event
     }
 
-    /// V0.68 — "Score a round" is only meaningful for single-winner
-    /// packs (Monopoly Deal) whose scoring surface is
-    /// `HostScoreEntrySheet`/dashboard. For `.withdrawReturn` (casino)
-    /// and `.countBased` (CAH) the primary settle CTA already opens
-    /// the same sheet, so the host-only button is gated off there.
-    private func isSingleWinnerPack(_ event: Event) -> Bool {
-        PackRegistry.shared.definition(for: event.packSlug)?.scoringType == .singleWinner
+    /// S1.4 — "Score a round". One scorable pack opens it straight
+    /// away; more than one asks "Score which game?" first.
+    private func startScoreRound(event: Event, packs: [String]) {
+        if packs.count > 1 {
+            scoreChoice = ScoreChoice(event: event, packs: packs)
+        } else if let only = packs.first {
+            Task { await openHostScore(event: event, packSlug: only) }
+        }
     }
 
-    /// Chip-scan CTA. Flips `settleSheetEvent` so the
-    /// `ChipScanSheet` (vision) renders. The sheet takes the
-    /// member's net returned chips and routes through
-    /// `ScoringService.recordRoundInput(...)`. The
-    /// `record_member_scan` RPC + camera/Vision pipeline are the
-    /// settle path.
+    /// P0.4 — host scoring for ONE chosen pack. S1.4 routes on the
+    /// pack the host picked, never the event's headline pack:
+    ///   - `.countBased` (CAH) -> `CAHCardScanSheet`.
+    ///   - `.withdrawReturn` (Casino) -> `ChipScanSheet` (never
+    ///     offered by the plan; kept so the switch is total).
+    ///   - `.singleWinner` -> `HostScoreEntrySheet` for that pack.
+    ///     The iPad dashboard scores the event's headline pack, so
+    ///     it is used only when the chosen pack is that pack.
+    private func openHostScore(event: Event, packSlug: String) async {
+        switch PackRegistry.shared.definition(for: packSlug)?.scoringType {
+        case .withdrawReturn?:
+            settleSheetEvent = event
+        case .countBased?:
+            cahScanEvent = event
+        default:
+            if hSize == .regular, packSlug == event.packSlug {
+                scoringDashboardVisible = true
+            } else {
+                hostScoreTarget = HostScoreTarget(event: event, packSlug: packSlug)
+            }
+        }
+    }
+
+    // MARK: Night plan (S1.4)
+
+    /// S1.4 — every fact the night plan needs, read from the caches.
     ///
-    /// V0.34 — count-based scoring (CAH). When the event's pack is
-    /// `cards_against_humanity`, the scan CTA opens the
-    /// `CAHCardScanSheet` instead — the member scans their stack
-    /// of won black cards and the tally is recorded as the
-    /// authoritative count for the night.
-    private func openScan(event: Event) async {
-        if event.packSlug == "cards_against_humanity" {
-            cahScanEvent = event
+    /// Arrived: anyone with a play signal (chips in hand, a scan, a
+    /// scored round). On an escrow room a claimed seat whose deposit
+    /// is no longer waiting (checked in or played) has arrived too.
+    /// Rooms without escrow have no arrival signal at all, so every
+    /// claimed seat and the host count as at the table; waiting for
+    /// a check-in that cannot happen would strand the host.
+    private func nightInput(for event: Event) -> NightInput {
+        let rsvps = roomService.cachedEventRSVPs(eventId: event.id)
+        let claimedIds = Set(rsvps.filter { $0.state == .claimed }.map(\.memberId))
+        let rounds = roomService.cachedEventRounds(eventId: event.id)
+        var arrivedIds = Set(
+            workingHands.filter { $0.workingHand > 0 || $0.hasScanned }.map(\.memberId)
+        )
+        for round in rounds {
+            arrivedIds.formUnion(round.entries.map(\.memberId))
+        }
+        if liveRoom.seatDepositTrigger == .escrow {
+            let waiting = Set(roomService.cachedArrivalCandidates(eventId: event.id).map(\.userId))
+            arrivedIds.formUnion(claimedIds.subtracting(waiting))
         } else {
-            settleSheetEvent = event
+            arrivedIds.formUnion(claimedIds)
+            if isHost, let me = currentUserId { arrivedIds.insert(me) }
+        }
+        let scoredRounds = Set(
+            rounds.filter { $0.correctionOf == nil }.map { "\($0.packSlug):\($0.roundIndex)" }
+        )
+        return NightInput(
+            isHost: isHost,
+            packSlugs: event.packSlugs,
+            playedAt: event.playedAt,
+            settledAt: event.settledAt,
+            now: Date(),
+            arrivedCount: arrivedIds.count,
+            claimedCount: max(claimedIds.count, arrivedIds.count),
+            roundsScored: scoredRounds.count,
+            iHaveHeldDeposit: roomService.cachedMySeatDeposit(eventId: event.id)?.status == .held,
+            iHaveWithdrawn: myWorkingHand > 0 || casinoWithdrawn > 0 || myScanState.hasScanned
+        )
+    }
+
+    /// S1.4 — one night action as a rendered line on the live card.
+    private func nightLine(for action: NightAction, event: Event) -> WitnessSlot.Line? {
+        switch action {
+        case .claimSeat:
+            return nil
+        case .checkIn:
+            return WitnessSlot.Line(
+                title: "I'm here",
+                style: .button,
+                lead: "Tap when you walk in to get your deposit back.",
+                action: { Task { await checkInSeat(eventId: event.id) } }
+            )
+        case .withdrawChips:
+            // Casino: withdraw to play, then settle what is in hand.
+            if myWorkingHand > 0 {
+                return WitnessSlot.Line(title: "Settle casino chips", style: .button, action: { settleSheetEvent = event })
+            }
+            return WitnessSlot.Line(title: "Withdraw to play", style: .button, action: { withdrawSheetEvent = event })
+        case .countCAH:
+            return WitnessSlot.Line(title: "Count your CAH cards", style: .button, action: { cahScanEvent = event })
+        case .waitingForTable(let arrived, let claimed):
+            return WitnessSlot.Line(title: "Waiting for the table · \(arrived) of \(claimed) here", style: .caption)
+        case .scoreRound(let packs):
+            return WitnessSlot.Line(title: "Score a round", style: .button, action: { startScoreRound(event: event, packs: packs) })
+        case .settleNight:
+            return WitnessSlot.Line(title: "Settle the night", style: .button, action: { settleNight(event: event) })
+        case .planNextNight:
+            return WitnessSlot.Line(title: "Plan the next night", style: .button, action: { planNextNight(after: event) })
         }
     }
 
-    /// P0.4 — host-only "Score a round" CTA on the at-play Witness
-    /// Slot. V0.50 branches on scoring type so vision is the
-    /// primary host surface for both packs:
-    ///   - `.withdrawReturn` (Casino) → `ChipScanSheet`
-    ///     (flips `settleSheetEvent`; the vision surface).
-    ///   - `.countBased` (CAH) → `CAHCardScanSheet`
-    ///     (flips `cahScanEvent`; the vision surface).
-    ///     Fixes the CAH-on-iPad dead tap — the dashboard gate
-    ///     only renders `single_winner`, so `count_based` must
-    ///     NOT route to the dashboard.
-    ///   - default (`singleWinner`) → iPad regular →
-    ///     `scoringDashboardVisible`; else `hostScoreEvent`.
-    private func openHostScore(event: Event) async {
-        guard let pack = PackRegistry.shared.definition(for: event.packSlug) else {
-            if hSize == .regular {
-                scoringDashboardVisible = true
-            } else {
-                hostScoreEvent = event
-            }
-            return
+    /// S1.4 — the live card. The plan picks the one primary; every
+    /// other action is grey caption text under it. The plan reads
+    /// `event.packSlugs`, never the headline `event.packSlug`.
+    private func liveCard(event: Event, headerMode: WitnessSlot.HeaderMode) -> some View {
+        let plan = NightPlan.plan(for: nightInput(for: event))
+        let memberActions = [plan.primary].compactMap { $0 } + plan.secondaries
+        var secondaries = plan.secondaries.compactMap { nightLine(for: $0, event: event) }
+        // Casino top-up once chips are in hand.
+        if memberActions.contains(.withdrawChips), myWorkingHand > 0 {
+            secondaries.append(WitnessSlot.Line(title: "Withdraw more", style: .button, action: { withdrawSheetEvent = event }))
         }
-        switch pack.scoringType {
-        case .withdrawReturn:
-            settleSheetEvent = event
-        case .countBased:
-            cahScanEvent = event
-        case .singleWinner:
-            if hSize == .regular {
-                scoringDashboardVisible = true
-            } else {
-                hostScoreEvent = event
-            }
+        // A CAH count on a night where the plan's own action is
+        // something else (Casino + CAH, or the host's score line).
+        if event.packSlugs.contains(CardsAgainstHumanityPack.slug),
+           !memberActions.contains(.countCAH) {
+            secondaries.append(WitnessSlot.Line(title: "Count your CAH cards", style: .button, action: { cahScanEvent = event }))
+        }
+        let inHand = memberActions.contains(.withdrawChips) && casinoWithdrawn > 0 ? casinoWithdrawn : nil
+        return WitnessSlot(
+            event: event,
+            attestations: openAttestations,
+            primary: plan.primary.flatMap { nightLine(for: $0, event: event) },
+            secondaries: secondaries,
+            isHero: true,
+            headerMode: headerMode,
+            workingHand: inHand,
+            hasScanned: myScanState.hasScanned,
+            scannedValue: myScanState.scannedValue,
+            note: settleFailed && isHost ? "Couldn't settle. Try again." : nil
+        )
+    }
+
+    // MARK: Season awards + recap sections (S1.7)
+
+    /// S1.7 — every ended season the page knows about: the one the
+    /// host just closed here, the current season if it has ended,
+    /// and the room's ended seasons from the history read.
+    private var endedSeasons: [Season] {
+        var seasons: [Season] = []
+        if let closed = justClosedSeason {
+            seasons.append(closed.endedAt == nil
+                ? Season(id: closed.id, roomId: closed.roomId, ordinal: closed.ordinal,
+                         subtitle: closed.subtitle, status: .ended,
+                         startedAt: closed.startedAt, endedAt: Date())
+                : closed)
+        }
+        if let current = currentSeason, current.status == .ended {
+            seasons.append(current)
+        }
+        for row in roomService.cachedSeasonHistory(roomId: room.id) {
+            seasons.append(Season(
+                id: row.seasonId, roomId: room.id, ordinal: row.ordinal,
+                subtitle: row.subtitle, status: .ended,
+                startedAt: row.startedAt, endedAt: row.endedAt
+            ))
+        }
+        return seasons
+    }
+
+    /// S1.7 — the season whose awards the page shows: the most
+    /// recently ended one, within 7 days, not dismissed here.
+    private var seasonToCelebrate: Season? {
+        _ = seasonAwardsDismissedFlip
+        return SeasonAwardsWindow.seasonToShow(
+            endedSeasons,
+            now: Date(),
+            isDismissed: { UserDefaults.standard.bool(forKey: SeasonAwardsWindow.dismissedKey(seasonId: $0)) }
+        )
+    }
+
+    /// S1.7 — "Done" on the awards: gone for this member, this device.
+    private func dismissSeasonAwards(_ season: Season) {
+        UserDefaults.standard.set(true, forKey: SeasonAwardsWindow.dismissedKey(seasonId: season.id))
+        if justClosedSeason?.id == season.id { justClosedSeason = nil }
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            seasonAwardsDismissedFlip.toggle()
         }
     }
+
+    /// S1.7 (TARS) — the settled night that renders as its own section
+    /// above the next night's card. nil when the active event is the
+    /// settled night itself (`.justSettled` renders it as the slot).
+    private var recapAboveNextNight: Event? {
+        NightPlan.recapAboveNextNight(
+            recent: roomService.cachedRecentlySettledEvent(roomId: room.id),
+            active: activeEvent,
+            now: Date()
+        )
+    }
+
+    /// The settled night's recap card. Shared by `.justSettled` and
+    /// the recap section above the next night.
+    private func recapCard(event: Event) -> some View {
+        CeremonialCard(
+            event: event,
+            chapterLine: roomService.cachedEventChapterLine(eventId: event.id),
+            tonightStarCard: roomService.cachedTonightStarCard(eventId: event.id),
+            hostPickMembers: roomService.cachedMembers(roomId: room.id),
+            isHost: isHost,
+            memberNoteWindowOpen: memberNoteWindowOpen(for: event),
+            memberNotePromptVisible: memberNotePromptVisible(for: event.id),
+            onTonightStarPick: isHost
+                ? { memberId, category, custom in
+                    Task { await setTonightStarPick(event: event, memberId: memberId, category: category, customText: custom) }
+                }
+                : nil,
+            onSubmitMemberNote: !isHost
+                ? { text in
+                    Task { await submitMemberNote(roomId: room.id, text: text) }
+                }
+                : nil,
+            onSkipMemberNote: !isHost
+                ? { skipMemberNotePrompt(for: event.id) }
+                : nil
+        )
+    }
+
+    /// S1.5 — "Settle the night". Optimistic: the cached night reads
+    /// as settled at once (the recap renders) and "Night settled."
+    /// offers Undo for 5 s. Only after 5 s without Undo does the
+    /// settle go to the server.
+    private func settleNight(event: Event) {
+        settleFailed = false
+        pendingSettle?.task.cancel()
+        roomService.setCachedSettledAt(eventId: event.id, Date())
+        let task = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            await commitSettle(event: event)
+        }
+        pendingSettle = PendingSettle(event: event, task: task)
+    }
+
+    /// S1.5 — Undo: the night goes back live and nothing is sent.
+    private func undoSettle() {
+        guard let pending = pendingSettle else { return }
+        pending.task.cancel()
+        roomService.setCachedSettledAt(eventId: pending.event.id, nil)
+        pendingSettle = nil
+    }
+
+    /// S1.5 — the settle itself, once the Undo window has passed.
+    private func commitSettle(event: Event) async {
+        pendingSettle = nil
+        do {
+            _ = try await roomService.settleEvent(eventId: event.id)
+            Haptics.success()
+            ScoreLiveActivityDriver.endNight(roomName: room.name)
+            async let active: Event? = roomService.loadActiveEvent(roomId: room.id, force: true)
+            async let board: [LeaderboardEntry] = roomService.loadLeaderboard(roomId: room.id, force: true)
+            async let season: () = loadSeasonIfNeeded(force: true)
+            _ = await (active, board, season)
+        } catch {
+            roomService.setCachedSettledAt(eventId: event.id, nil)
+            settleFailed = true
+        }
+    }
+
+    /// S1.5 — "Plan the next night": AddEventSheet seeded 7 days
+    /// after tonight, same time.
+    private func planNextNight(after event: Event) {
+        addEventInitialPlayedAt = Calendar.current.date(byAdding: .day, value: 7, to: event.playedAt)
+        showingAddEvent = true
+    }
+}
+
+/// S1.5 — a settle waiting out its Undo window.
+private struct PendingSettle {
+    let event: Event
+    let task: Task<Void, Never>
+}
+
+/// S1.4 — the host's chosen pack for "Score a round".
+private struct HostScoreTarget: Identifiable {
+    let event: Event
+    let packSlug: String
+    var id: String { "\(event.id.uuidString):\(packSlug)" }
+}
+
+/// S1.4 — the packs on offer in "Score which game?".
+private struct ScoreChoice {
+    let event: Event
+    let packs: [String]
 }
 
 // MARK: - States
@@ -1789,15 +1969,10 @@ private enum V0State: Equatable {
     /// lands.
     case tonightEvent(Event)
     case inPlay(Event)
-    case settleRound(Event)
     case upcoming(Event)
     case claimed(Event)
     case declined(Event)
     case readStandings
-    /// M1.1 — season-close moment: the current season has
-    /// `status == .ended`. Renders the awards card surface with
-    /// per-recipient privacy filtering for the drowning row.
-    case seasonClose(Season, [SeasonAward])
 }
 
 // MARK: - Briefing slot
@@ -2432,63 +2607,46 @@ private struct SeatGridRow: View {
 
 private struct WitnessSlot: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    enum CTA: Equatable {
-        case withdraw
-        case scan
-        /// V0.73 — passive "nothing more to do" state. Renders as a
-        /// non-interactive capsule (not a button) so a member who has
-        /// already scanned, or holds no chips to settle, isn't
-        /// offered an action that lies about their state.
-        case done(String)
-    }
 
     /// M1.1 — header title differentiates `.tonightEvent`
     /// ("The night has started") from `.inPlay`
     /// ("The game is on"). The same `WitnessSlot`
     /// component renders both — only the title changes.
-    /// V0.92 — header caption (the explanatory sentence
-    /// below the title) removed; the CTA does the work.
-    enum HeaderMode { case inPlay, tonightEvent, settleRound }
+    enum HeaderMode { case inPlay, tonightEvent }
+
+    /// S1.4 — one line of the night plan. The primary renders as the
+    /// full-width accent button (or a grey caption when it is a
+    /// state, not an action); secondaries render as grey caption
+    /// text centred under it, the same styling as "Can't make it".
+    struct Line {
+        enum Style: Equatable { case button, caption }
+        let title: String
+        let style: Style
+        /// Grey caption directly above the primary (the check-in
+        /// explainer). Ignored on secondaries.
+        var lead: String? = nil
+        var action: () -> Void = {}
+    }
 
     let event: Event
     let attestations: [OpenAttestationSummary]
-    let cta: CTA
-    let onWithdraw: () -> Void
-    let onScan: () -> Void
-    /// Host-only callback that opens `HostScoreEntrySheet`. `nil`
-    /// for member sessions — the host-only button doesn't render.
-    let onScore: (() -> Void)?
+    /// S1.4 — the one thing to do next. `nil` renders no action.
+    let primary: Line?
+    /// S1.4 — every other action, grey and quiet.
+    let secondaries: [Line]
     let isHero: Bool
-    /// M1.1 — defaults to `.inPlay` for backwards-compat with
-    /// the pre-M1.1 call sites. New call sites for
-    /// `.tonightEvent` / `.settleRound` set this explicitly.
     var headerMode: HeaderMode = .inPlay
-    /// V0.52 — the scan button's label. Defaults to
-    /// "Settle casino chips" so the pack-named convention matches
-    /// if a future call site omits it; CAH call sites pass
-    /// "Count your CAH cards" so the button names the pack.
-    var scanTitle: String = "Settle casino chips"
     /// V0.46 — working hand (withdrawn chips) surfaced in the
     /// hero badge. nil = don't render (CAH / not-yet-withdrawn).
     var workingHand: Int? = nil
     /// V0.72 (072) — the current member has already scanned their
-    /// chips this session. Flips the badge from "Working hand: N"
-    /// to the counted state (the chips are with the host now).
+    /// chips this session.
     var hasScanned: Bool = false
     /// V0.72 (072) — the member's latest scanned value, when known.
     var scannedValue: Int? = nil
-    /// V0.66 — secondary "Count your CAH cards" CTA. Renders for
-    /// EVERY active event when the room has the CAH pack installed,
-    /// so a member/host on a casino night can still settle their CAH
-    /// cards. nil = don't render. Styled as an outline button, one
-    /// tap behind the primary CTA — never a second filled primary.
-    var onCAHSettle: (() -> Void)? = nil
-    /// V0.68 — secondary "Withdraw more" CTA. Renders for casino
-    /// events in `.inPlay` (member AND host) so a member who has
-    /// already withdrawn into their working hand can still top up.
-    /// nil = don't render. Styled as an outline button, one tap
-    /// behind the primary CTA.
-    var onWithdrawMore: (() -> Void)? = nil
+    /// S1.5 — grey caption under the primary ("Couldn't settle.
+    /// Try again.").
+    var note: String? = nil
 
     var body: some View {
         // v1.2.2 S6 T7 — same rule `BriefingSlot` follows (S6 T2):
@@ -2578,105 +2736,68 @@ private struct WitnessSlot: View {
                 }
             }
 
-            // V0.70 — single Button whose identity persists across
-            // the `cta` flip. Two separate Buttons would snap the
-            // label on `.withdraw` ↔ `.scan`; one Button with a
-            // computed title + cross-fading text keeps the surface
-            // stable. `CTA` has no associated values, so it is
-            // Equatable without declaration.
-            // V0.73 — `.done` isn't a button. A member who has
-            // already scanned (or holds no chips) gets a passive
-            // capsule, not an action that lies about their state.
-            if case .done = cta {
-                Text(ctaTitle)
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Theme.Palette.accent.opacity(0.12))
-                    .clipShape(Capsule())
-                    .contentTransition(.opacity)
-                    .animation(Theme.Motion.fade, value: cta)
-                    .accessibilityLabel(Text(ctaTitle))
-            } else {
-            Button(action: ctaAction) {
-                Text(ctaTitle)
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Theme.Palette.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .contentTransition(.opacity)
-                    .animation(Theme.Motion.fade, value: cta)
-            }
-            }
-
-            // V0.68 — secondary "Withdraw more" CTA. Renders for casino
-            // events in `.inPlay` so a member who has already withdrawn
-            // into their working hand can still top up. One tap behind
-            // the primary CTA, styled as an outline button. V0.70
-            // animates the secondary CTAs in via the outer VStack's
-            // fade animation when the optionals flip.
-            if let onWithdrawMore {
-                Button(action: onWithdrawMore) {
-                    Text("Withdraw more")
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                }
-                .buttonStyle(.plain)
-                .pressScale()
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .accessibilityLabel(Text("Withdraw more"))
-            }
-
-            // V0.66 — secondary "Count your CAH cards" CTA. Renders for
-            // every active event when the room has the CAH pack installed,
-            // so a casino night can still settle CAH cards. One tap behind
-            // the primary CTA, styled as an outline button.
-            if let onCAHSettle {
-                Button(action: onCAHSettle) {
-                    Text("Count your CAH cards")
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
-                }
-                .buttonStyle(.plain)
-                .pressScale()
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .accessibilityLabel(Text("Count your CAH cards"))
-            }
-
-            // P0.4 — host-only "Score a round" affordance. Renders
-            // below the member-facing CTA so the host's at-play
-            // surface carries both the chip-withdraw entry point
-            // AND the round-recording control without crowding the
-            // dominant action. Members see nothing here.
-            //
-            // v1.2.2 S6 T7 — its `4` top nudge is gone, so it sits
-            // `cardGroupGap` below the primary CTA like every other
-            // group; the `.vertical, 12` stays because it is inside
-            // the button label (the control's own height).
-            if let onScore {
-                Button(action: onScore) {
-                    HStack {
-                        Image(systemName: Theme.Icon.checkmarkSealFill)
-                        Text("Score a round")
+            if let primary {
+                VStack(spacing: Theme.Layout.cardLineGap) {
+                    if let lead = primary.lead {
+                        Text(lead)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
                     }
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.accent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.accent))
+                    switch primary.style {
+                    case .button:
+                        Button(action: primary.action) {
+                            Text(primary.title)
+                                .font(Theme.Typography.body.weight(.semibold))
+                                .foregroundStyle(Theme.Palette.background)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Theme.Palette.accent)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .contentTransition(.opacity)
+                                .animation(Theme.Motion.fade, value: primary.title)
+                        }
+                        .pressScale()
+                    case .caption:
+                        Text(primary.title)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityLabel(Text(primary.title))
+                    }
                 }
-                .buttonStyle(.plain)
-                .pressScale()
-                .accessibilityLabel(Text("Score a round (host)"))
+            }
+
+            if let note {
+                Text(note)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
+            // S1.4 — secondaries: grey caption text centred under
+            // the primary, never a second tinted button (02-workflows
+            // #19).
+            if !secondaries.isEmpty {
+                VStack(spacing: Theme.Layout.cardLineGap) {
+                    ForEach(secondaries.indices, id: \.self) { i in
+                        let line = secondaries[i]
+                        Button(action: line.action) {
+                            Text(line.title)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Palette.primaryText.opacity(0.55))
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(line.style == .caption)
+                        .accessibilityLabel(Text(line.title))
+                    }
+                }
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2692,44 +2813,17 @@ private struct WitnessSlot: View {
         // Equatable, so the secondary CTAs track the Bool of the
         // optional, not the closure itself.
         .animation(reduceMotion ? Theme.Motion.fade : Theme.Motion.popIn, value: workingHand)
-        .animation(Theme.Motion.fade, value: onWithdrawMore != nil)
-        .animation(Theme.Motion.fade, value: onCAHSettle != nil)
-    }
-
-    /// V0.70 — title for the primary CTA. `.withdraw` reads
-    /// "Withdraw to play"; `.scan` reads from the `scanTitle` the
-    /// caller passed (pack-named: "Settle casino chips" or
-    /// "Count your CAH cards").
-    private var ctaTitle: String {
-        switch cta {
-        case .withdraw:    return "Withdraw to play"
-        case .scan:        return scanTitle
-        case .done(let t): return t
-        }
-    }
-
-    /// V0.70 — action for the primary CTA. Routes to the
-    /// member's withdraw or scan handler depending on the
-    /// current state. `.done` has no action — the surface renders
-    /// as a passive capsule, so this closure is never called.
-    private var ctaAction: () -> Void {
-        switch cta {
-        case .withdraw: return onWithdraw
-        case .scan:     return onScan
-        case .done:     return {}
-        }
+        .animation(Theme.Motion.fade, value: secondaries.map(\.title))
     }
 
     /// M1.1 — copy variant for the witness header. Each variant
     /// carries the V0.8 brief's intent: `.tonightEvent` is
     /// play-just-started (no withdrawals yet), `.inPlay` is the
-    /// canonical mid-game copy, `.settleRound` is the host-finalised
-    /// "phones face-down — count what's on the table" copy.
+    /// canonical mid-game copy.
     private var headerTitle: String {
         switch headerMode {
         case .inPlay:       return "The game is on"
         case .tonightEvent: return "The night has started"
-        case .settleRound:  return "Count what's on the table"
         }
     }
 }

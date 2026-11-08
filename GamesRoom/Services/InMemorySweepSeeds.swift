@@ -50,6 +50,18 @@
 //                       Coming.
 //    claim-card         `.upcoming`, caller unclaimed, 2-of-6 grid —
 //                       the Claim-seat card itself.
+
+//    night-arrivals     S1.8. Live Monopoly Deal night, host view,
+//                       five seats claimed and 2 of 5 arrived: Sam,
+//                       Jordan and Mike still hold their deposits, so
+//                       the host's arrival card lists them and the
+//                       live card offers "Score a round".
+//    night-one-round    S1.8. Live Monopoly Deal night after round 1
+//                       (Alex won): the host's primary is "Settle the
+//                       night" with "Score a round" in grey under it.
+//    night-settled      S1.8. The night settled 30 minutes ago:
+//                       `.justSettled` (CeremonialCard) with the
+//                       host's "Plan the next night" under it.
 //
 
 import Foundation
@@ -359,6 +371,75 @@ extension InMemoryRoomStore {
                 seatsClaimed: 2,
                 seatsDeclined: 0,
                 seatsUnclaimed: 4
+            )
+
+        case "night-arrivals":
+            // S1.8 — 2 of 5 at the table. Escrow arrival: a claimed
+            // seat whose deposit is still held has not arrived.
+            let jordan = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
+            let mike = UUID(uuidString: "00000000-0000-0000-0000-000000000005")!
+            seedExtraMember(roomId: carwoola.id, userId: jordan, displayName: "Jordan")
+            seedExtraMember(roomId: carwoola.id, userId: mike, displayName: "Mike")
+            let night = liveEvent(
+                name: "Monopoly Deal Night",
+                packSlug: "monopoly_deal",
+                packSlugs: ["monopoly_deal"]
+            )
+            events[carwoola.id] = night
+            rsvps[night.id] = [
+                carwoola.createdBy: .claimed,
+                alex: .claimed,
+                sam: .claimed,
+                jordan: .claimed,
+                mike: .claimed
+            ]
+            for waiting in [sam, jordan, mike] {
+                seedHeldDeposit(eventId: night.id, memberId: waiting, amount: 50)
+            }
+            questionBox.settings[carwoola.id] = questionBoxOff
+
+        case "night-one-round":
+            // S1.8 — one round scored: the host settles next.
+            let night = liveEvent(
+                name: "Monopoly Deal Night",
+                packSlug: "monopoly_deal",
+                packSlugs: ["monopoly_deal"]
+            )
+            events[carwoola.id] = night
+            rsvps[night.id] = [
+                carwoola.createdBy: .claimed,
+                alex: .claimed,
+                sam: .claimed
+            ]
+            seedEventRound(EventRound(
+                id: UUID(),
+                eventId: night.id,
+                roomId: carwoola.id,
+                packSlug: "monopoly_deal",
+                roundIndex: 1,
+                entries: [ScoreEntry(memberId: alex, pointsDelta: 3, meta: ["winner": .bool(true)])],
+                createdBy: carwoola.createdBy,
+                createdAt: Date().addingTimeInterval(-600)
+            ))
+            questionBox.settings[carwoola.id] = questionBoxOff
+
+        case "night-settled":
+            // S1.8 — just settled: the recap, and the host plans the
+            // next night (none is scheduled yet).
+            let live = liveEvent(
+                name: "Monopoly Deal Night",
+                packSlug: "monopoly_deal",
+                packSlugs: ["monopoly_deal"]
+            )
+            let settled = live.withSettledAt(Date().addingTimeInterval(-1_800))
+            events[carwoola.id] = settled
+            chapterLines[settled.id] = ChapterLine(
+                id: UUID(),
+                roomId: carwoola.id,
+                sessionId: settled.id,
+                title: "Alex took three on the trot",
+                nextEpisodeTeaser: nil,
+                writtenAt: Date().addingTimeInterval(-1_800)
             )
 
         default:

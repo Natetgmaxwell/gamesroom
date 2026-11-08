@@ -67,6 +67,8 @@ actor InMemoryRoomStore: RoomStore {
     /// `role`. Previews use this so the role-change flow renders
     /// against stateful data without a backend.
     private var membersByRoom: [UUID: [Member]]
+    /// S1.8 — rounds scored by a sweep seed, keyed by event id.
+    private var sweepRoundsByEvent: [UUID: [EventRound]] = [:]
 
     /// V0.98 — sidecar of `roomId → set of kicked userIds`. The
     /// `Member` model carries no status field (invariant 3), so the
@@ -1101,6 +1103,24 @@ actor InMemoryRoomStore: RoomStore {
         return 1
     }
 
+    /// In-memory mirror of `settle_event(p_event_id)` (migration
+    /// 107). Stamps `settledAt` on the event and returns the stamp.
+    /// The live function is host-only and refuses a night that has
+    /// not started; the preview path only mirrors the stamp, the
+    /// same way the other in-memory mirrors skip the server guards.
+    func settleEvent(eventId: UUID) async throws -> Date {
+        guard let entry = events.first(where: { $0.value.id == eventId }) else {
+            throw NSError(
+                domain: "InMemoryRoomStore",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "event \(eventId) not found"]
+            )
+        }
+        let settledAt = Date()
+        events[entry.key] = entry.value.withSettledAt(settledAt)
+        return settledAt
+    }
+
     /// In-memory mirror of `set_member_team` (migration 049).
     /// No-op for the synthetic roster — the seeded members have no
     /// team state to mutate, and previews don't need persistence.
@@ -1254,11 +1274,44 @@ actor InMemoryRoomStore: RoomStore {
     }
 
     /// In-memory mirror of `get_event_rounds` (migration 049).
-    /// Returns an empty breakdown — the seeded rooms have no
-    /// round_submissions rows.
+    /// Empty unless a sweep seed scored a round (S1.8): the default
+    /// seeded rooms have no round_submissions rows.
     func fetchEventRounds(eventId: UUID) async throws -> [EventRound] {
-        _ = eventId
-        return []
+        sweepRoundsByEvent[eventId] ?? []
+    }
+
+    // MARK: S1.8 sweep-seed hooks (InMemorySweepSeeds.swift)
+
+    /// S1.8 — adds members past the synthetic 3-row roster so a seed
+    /// can fill a 5-seat night. No-op for an unknown room or a user
+    /// already on the roster.
+    func seedExtraMember(roomId: UUID, userId: UUID, displayName: String) {
+        guard let room = rooms.first(where: { $0.id == roomId }) else { return }
+        var roster = membersByRoom[roomId] ?? syntheticRoster(for: room)
+        guard !roster.contains(where: { $0.userId == userId }) else { return }
+        roster.append(Member(
+            id: "\(room.id.uuidString):\(userId.uuidString)",
+            roomId: room.id,
+            userId: userId,
+            role: .member,
+            joinedAt: room.createdAt.addingTimeInterval(86_400 * 21),
+            displayName: displayName,
+            notificationsEnabled: false
+        ))
+        membersByRoom[roomId] = roster
+    }
+
+    /// S1.8 — a held seat deposit (not checked in, not played), so
+    /// the member reads as not yet arrived.
+    func seedHeldDeposit(eventId: UUID, memberId: UUID, amount: Int) {
+        seatDepositsByEventMember[eventId, default: [:]][memberId] = SeatDeposit(
+            id: UUID(), amount: amount, status: .held, heldAt: Date()
+        )
+    }
+
+    /// S1.8 — a scored round for the night.
+    func seedEventRound(_ round: EventRound) {
+        sweepRoundsByEvent[round.eventId, default: []].append(round)
     }
 
     // MARK: Briefing

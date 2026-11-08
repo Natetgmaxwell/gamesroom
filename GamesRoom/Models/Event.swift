@@ -216,3 +216,31 @@ struct Event: Identifiable, Codable, Hashable {
         try c.encodeIfPresent(hiddenFromUserIds, forKey: .hiddenFromUserIds)
     }
 }
+
+extension Event {
+    /// A copy of this event with `settledAt` replaced. Every other
+    /// field is carried over untouched, so the pack list, the
+    /// calendar identifier and the hidden-members list survive the
+    /// copy. Used when the night is settled (migration 107's
+    /// `settle_event`) and when the cache mirrors that stamp.
+    func withSettledAt(_ settledAt: Date?) -> Event {
+        Event(
+            id: id,
+            roomId: roomId,
+            name: name,
+            playedAt: playedAt,
+            createdAt: createdAt,
+            venue: venue,
+            hostNote: hostNote,
+            maxSeats: maxSeats,
+            startedAt: startedAt,
+            settledAt: settledAt,
+            sessionId: sessionId,
+            packSlugs: packSlugs,
+            packSlug: packSlug,
+            hostFinalized: hostFinalized,
+            eventCalendarIdentifier: eventCalendarIdentifier,
+            hiddenFromUserIds: hiddenFromUserIds
+        )
+    }
+}

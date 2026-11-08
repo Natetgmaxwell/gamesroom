@@ -149,6 +149,16 @@ protocol RoomStore: Sendable {
     /// (migration 080).
     func autoCloseStaleEvents(roomId: UUID) async throws -> Int
 
+    /// Host-only. Closes the night: stamps `settled_at` on the
+    /// event and returns the settle time the server wrote.
+    ///
+    /// The RPC refuses a night that has not started or is already
+    /// settled (`not_live`) and refuses a caller who is not a host
+    /// of the room. Throws on both.
+    ///
+    /// Server side: `settle_event(p_event_id)` (migration 107).
+    func settleEvent(eventId: UUID) async throws -> Date
+
     /// Briefing summary for one event — the seat counts that drive
     /// the Briefing slot's "{N} seats left" line.
     func fetchBriefing(eventId: UUID) async throws -> BriefingSummary?

@@ -80,6 +80,12 @@ enum ScoreLiveActivityDriver {
         }
     }
 
+    /// S1.5 — the host settled the night: end the room's activity
+    /// now rather than on the next refresh.
+    static func endNight(roomName: String) {
+        end(roomName: roomName)
+    }
+
     private static func end(roomName: String) {
         let running = Activity<ScoreActivityAttributes>.activities
             .first(where: { $0.attributes.roomName == roomName })
