@@ -1,6 +1,6 @@
 # STATE S1
 
-STATE: step 2 of 8 done. Next: step 3.
+STATE: step 3 of 8 done. Next: step 4.
 
 BLOCKED: none
 
@@ -25,5 +25,19 @@ Notes for step 2 (client plumbing — settleEvent + force honoured):
 - The service's single-flight dedupe is unchanged on purpose: a forced read still joins an in-flight `get_active_event` read rather than firing a second RPC (the V0.69 contract, already documented on `loadActiveEvent`). The three forced call sites in one refresh therefore collapse to one RPC.
 - **Tests**: new root file `TestsS1.swift` (added to `SRC_FILES` in `build-and-run-tests.sh`, registered from `main.swift` via `runS1Tests(runner)`). Three cases: `Event.withSettledAt` carries every other field across; the in-memory store stamps the night and returns the stamp; the in-memory store throws for an unknown event. Step 3 adds the NightPlan cases to the same file.
 - **Extra check beyond the gate**: `swiftc -typecheck` over the whole `GamesRoom/` tree against the iOS simulator SDK with the cached Supabase modules — zero errors. The plain fastgate only parse-checks (syntax), so this was the way to prove `RoomService` / `RoomStore` / `RoomDetailView` still type-check. TARS's `--compile` at the last step remains the real build gate.
+
+Notes for step 3 (NightPlan — the one next action):
+- Commit `cb86a21` (`S1.3: NightPlan picks the one next action for a live night`). Fastgate: 321 cases passed (305 before, +16 new in `TestsS1.swift`), 65 files parse-check, `FASTGATE: PASS`. Extra check beyond the gate: `swiftc -typecheck` over the whole `GamesRoom/` tree against the cached Supabase modules in DerivedData (iOS simulator SDK) — zero errors, pre-existing warnings only.
+- One new file: `GamesRoom/Services/NightPlan.swift` (Foundation only, no SwiftUI, no I/O, no clock). `NightAction`, `NightInput` and `NightPlan` are the shapes the brief gives, field for field. Added to `SRC_FILES` in `build-and-run-tests.sh`; the tests live in `TestsS1.swift` and run through the existing `runS1Tests(runner)` registration in `main.swift` (no new registration needed).
+- **The rules, in one place** (the file header carries the same list):
+  - Settled inside the 24h recap window -> host primary `planNextNight`, members nothing. Settled longer ago -> nothing (the night is history).
+  - Live night, member: held deposit and not withdrawn -> `checkIn`; else casino in packs -> `withdrawChips`; else CAH in packs -> `countCAH`; else no action at all.
+  - Live night, host: nobody arrived -> `waitingForTable(arrived:claimed:)`; arrived with no round scored -> `scoreRound(packs:)` when there is a scorable pack, else `settleNight`; a round scored -> primary `settleNight` with `scoreRound(packs:)` as a secondary.
+  - The host also gets their own member action as a secondary (they play too).
+- **Scorable packs** = the single-winner and count-based packs in `event.packSlugs`, read from `PackRegistry.shared` — the same source the room page's `eventHasSingleWinnerPack()` reads, so there is one pack list, not two. Order follows the order the host picked them. Casino is `withdraw_return`, so it is never scorable: on a Casino + Monopoly Deal night the host's score action carries `["monopoly_deal"]` only, never the chip scanner (the audit's #8 case). A CAH night counts as scorable too (count pack), which is what the brief says.
+- **One judgement call, flagged for TARS: `claimSeat` is in the brief's enum but the plan never emits it.** `NightInput` carries no claim state, so the plan cannot tell "has not claimed" from "already claimed", and the RSVP CTA for a night that has not started still belongs to the briefing slot (the room page's own RSVP state). Emitting "Claim seat" to a member who already claimed would be a wrong action, which is worse than no action. The rule is written into the file header so it is not a silent gap. If TARS wants the plan to own the upcoming night, `NightInput` needs an `iHaveClaimed` flag and the rule needs one sentence.
+- **Second judgement call**: the host's secondaries are ordered `scoreRound` first, then the host's own member action (the night's progress line, then their own stake). The brief does not fix the order.
+- Not touched this step: `RoomDetailView.swift` (step 4 wires the plan into the live card; the old `eventHasSingleWinnerPack()` gate stays until then), `HostScoreEntrySheet` (step 6), `RoomService` (step 5 needs the settle flow). No SwiftUI, no view code in a Foundation-only file.
+- Tests: 16 new cases in `TestsS1.swift`, one per rule — member check-in beats the withdrawal, a member who already withdrew skips the check-in, casino -> withdraw, CAH -> count, Monopoly Deal only -> no member action, host waiting for the table, host scores the first round, host settles a night with nothing to score, host settles once a round is scored, Casino + Monopoly Deal scores Monopoly Deal, the host's member action as a secondary, CAH is scorable, settled host plans the next night, settled member gets nothing, settled over 24h ago is history, and a night that has not started has no plan.
 
 Ticks are in .maestro/briefs/BRIEF-S1.md (tick the checkbox there too).
