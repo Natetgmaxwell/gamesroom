@@ -1,0 +1,218 @@
+//
+//  TestsS2.swift
+//  GamesRoom
+//
+//  Lane S2 tests: calendar-anchored reminder times (step 2 of the
+//  lane brief, audit 01 #4, #5, #6).
+//
+//  Every date here is a local date-time built with the device's
+//  calendar, and every assertion is an exact local stamp, so the
+//  tests hold in any time zone.
+//
+
+import Foundation
+
+func runS2Tests() {
+    let cal = Calendar.current
+
+    func at(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {
+        var comps = DateComponents()
+        comps.year = year
+        comps.month = month
+        comps.day = day
+        comps.hour = hour
+        comps.minute = minute
+        comps.second = 0
+        guard let date = cal.date(from: comps) else {
+            fatalError("TestsS2: could not build \(year)-\(month)-\(day) \(hour):\(minute)")
+        }
+        return date
+    }
+
+    /// Local date-time stamp, e.g. "2026-06-20 18:00".
+    func stamp(_ date: Date) -> String {
+        let c = cal.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return String(
+            format: "%04d-%02d-%02d %02d:%02d",
+            c.year ?? 0, c.month ?? 0, c.day ?? 0, c.hour ?? 0, c.minute ?? 0
+        )
+    }
+
+    func planFor(playedAt: Date, now: Date) -> [PlannedBriefingNotification] {
+        BriefingReconciler.plan(
+            eventId: UUID(),
+            eventName: "Friday Night Hold'em",
+            playedAt: playedAt,
+            mascotName: "Ace",
+            userId: UUID(),
+            memberName: "Nathan",
+            state: .claimed,
+            includeOnCreate: false,
+            now: now,
+            calendar: cal
+        )
+    }
+
+    func slot(
+        _ planned: [PlannedBriefingNotification], _ kindRaw: String
+    ) -> Date? {
+        planned.first { $0.kindRaw == kindRaw }?.fireAt
+    }
+
+    func assertSlot(
+        _ planned: [PlannedBriefingNotification],
+        _ kindRaw: String,
+        equals expected: String,
+        _ message: String
+    ) {
+        guard let date = slot(planned, kindRaw) else {
+            runner.assertTrue(false, "\(message): expected a \(kindRaw) slot, found none")
+            return
+        }
+        runner.assertTrue(
+            stamp(date) == expected,
+            "\(message): \(kindRaw) fire time is \(stamp(date)), expected \(expected)"
+        )
+    }
+
+    func assertNoSlot(
+        _ planned: [PlannedBriefingNotification],
+        _ kindRaw: String,
+        _ message: String
+    ) {
+        runner.assertNil(slot(planned, kindRaw), "\(message): no \(kindRaw) slot expected")
+    }
+
+    // Case (a): Saturday 14:00 event, created 14 days earlier at
+    // 10:00. The three slots land on the prior Saturday evening,
+    // the Wednesday evening and the Saturday morning.
+    runner.run("S2 reminder times: week-before, few-days and morning-of anchor to the calendar") {
+        let event = at(2026, 6, 20, 14, 0)      // Saturday 14:00
+        let onCreate = at(2026, 6, 6, 10, 0)    // 14 days earlier, 10:00
+        let planned = planFor(playedAt: event, now: onCreate)
+
+        runner.assertEqual(planned.count, 3)
+        assertSlot(
+            planned, BriefingReconciler.t168hKindRaw,
+            equals: "2026-06-13 18:00", "case a"
+        )
+        assertSlot(
+            planned, BriefingReconciler.t84hKindRaw,
+            equals: "2026-06-17 18:00", "case a"
+        )
+        assertSlot(
+            planned, BriefingReconciler.morningOfKindRaw,
+            equals: "2026-06-20 09:00", "case a"
+        )
+    }
+
+    // Case (b): Friday 08:00 event. The morning-of cannot be three
+    // hours before the start (that is 05:00), so it floors at 07:00.
+    runner.run("S2 reminder times: an 08:00 event floors the morning-of at 07:00") {
+        let event = at(2026, 6, 19, 8, 0)       // Friday 08:00
+        let onCreate = at(2026, 6, 11, 10, 0)   // 8 days earlier, 10:00
+        let planned = planFor(playedAt: event, now: onCreate)
+
+        runner.assertEqual(planned.count, 3)
+        assertSlot(
+            planned, BriefingReconciler.t168hKindRaw,
+            equals: "2026-06-12 18:00", "case b"
+        )
+        assertSlot(
+            planned, BriefingReconciler.t84hKindRaw,
+            equals: "2026-06-16 18:00", "case b"
+        )
+        assertSlot(
+            planned, BriefingReconciler.morningOfKindRaw,
+            equals: "2026-06-19 07:00", "case b"
+        )
+    }
+
+    // Case (c): Friday 19:30 event created Tuesday 09:00 the same
+    // week. The week-before slot is already behind us, the
+    // few-days slot (Tuesday 18:00) lands inside the on-create
+    // prompt's 24-hour window, so only the morning-of survives.
+    runner.run("S2 reminder times: a short-notice event keeps only the morning-of") {
+        let event = at(2026, 6, 19, 19, 30)     // Friday 19:30
+        let onCreate = at(2026, 6, 16, 9, 0)    // Tuesday 09:00, same week
+        let planned = planFor(playedAt: event, now: onCreate)
+
+        runner.assertEqual(planned.count, 1)
+        assertNoSlot(planned, BriefingReconciler.t168hKindRaw, "case c")
+        assertNoSlot(planned, BriefingReconciler.t84hKindRaw, "case c")
+        assertSlot(
+            planned, BriefingReconciler.morningOfKindRaw,
+            equals: "2026-06-19 09:00", "case c"
+        )
+    }
+
+    // Case (d): an event created 85 hours before the start. The
+    // few-days slot (Wednesday 18:00) falls 17 hours after the
+    // on-create prompt, inside its 24-hour window, so it is
+    // dropped rather than fired.
+    runner.run("S2 reminder times: an event created 85h out drops the few-days reminder") {
+        let event = at(2026, 6, 20, 14, 0)      // Saturday 14:00
+        let onCreate = at(2026, 6, 17, 1, 0)    // 85 hours earlier
+        let planned = planFor(playedAt: event, now: onCreate)
+
+        runner.assertEqual(planned.count, 1)
+        assertNoSlot(planned, BriefingReconciler.t168hKindRaw, "case d")
+        assertNoSlot(planned, BriefingReconciler.t84hKindRaw, "case d")
+        assertSlot(
+            planned, BriefingReconciler.morningOfKindRaw,
+            equals: "2026-06-20 09:00", "case d"
+        )
+    }
+
+    // The week-before slot has the same 24-hour guard as the
+    // few-days slot: an event created 169 hours out would fire
+    // the week-before reminder five hours later.
+    runner.run("S2 reminder times: an event created 169h out drops the week-before reminder") {
+        let event = at(2026, 6, 27, 14, 0)      // Saturday 14:00
+        let onCreate = at(2026, 6, 20, 13, 0)   // 169 hours earlier
+        let planned = planFor(playedAt: event, now: onCreate)
+
+        runner.assertEqual(planned.count, 2)
+        assertNoSlot(planned, BriefingReconciler.t168hKindRaw, "case e")
+        assertSlot(
+            planned, BriefingReconciler.t84hKindRaw,
+            equals: "2026-06-24 18:00", "case e"
+        )
+        assertSlot(
+            planned, BriefingReconciler.morningOfKindRaw,
+            equals: "2026-06-27 09:00", "case e"
+        )
+    }
+
+    // The morning-of keeps its own 2-hour guard, so a same-day
+    // event does not double-ping an hour after the on-create
+    // prompt.
+    runner.run("S2 reminder times: a same-day morning-of inside 2h of on-create is dropped") {
+        let event = at(2026, 6, 20, 14, 0)      // Saturday 14:00
+        let onCreate = at(2026, 6, 20, 8, 0)    // Saturday 08:00
+        let planned = planFor(playedAt: event, now: onCreate)
+
+        runner.assertEqual(planned.count, 0)
+        assertNoSlot(planned, BriefingReconciler.morningOfKindRaw, "case f")
+    }
+
+    // The identifier contract is unchanged: the calendar anchor
+    // moved the fire times, not the names.
+    runner.run("S2 reminder times: identifiers keep their kinds") {
+        let event = at(2026, 6, 20, 14, 0)
+        let onCreate = at(2026, 6, 6, 10, 0)
+        let planned = planFor(playedAt: event, now: onCreate)
+
+        let kinds = planned.map(\.kindRaw).sorted()
+        runner.assertEqual(kinds, ["morning_of", "t168h", "t48h"])
+        runner.assertEqual(
+            planned.map(\.identifier).filter { $0.contains("-t168h-") }.count, 1
+        )
+        runner.assertEqual(
+            planned.map(\.identifier).filter { $0.contains("-t48h-") }.count, 1
+        )
+        runner.assertEqual(
+            planned.map(\.identifier).filter { $0.contains("-morning_of-") }.count, 1
+        )
+    }
+}

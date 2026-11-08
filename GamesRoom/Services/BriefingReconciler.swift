@@ -155,7 +155,8 @@ enum BriefingReconciler {
         hostNote: String? = nil,
         personality: MascotPersonality = .friendly,
         ideology: MascotPoliticalIdeology = .centrist,
-        now: Date = Date()
+        now: Date = Date(),
+        calendar: Calendar = .current
     ) -> [PlannedBriefingNotification] {
         // Declined is terminal — silence, not a reschedule.
         if state == .declined { return [] }
@@ -178,16 +179,45 @@ enum BriefingReconciler {
             )
         }
 
-        let t168FireAt = playedAt.addingTimeInterval(-168 * 3600)
-        let t84FireAt = playedAt.addingTimeInterval(-84 * 3600)
-        let morningFireAt = Self.morningFireDate(playedAt: playedAt, now: now)
+        // Calendar-anchored reminder slots (audit 01 #4, #5, #6).
+        //
+        // The on-create prompt is the head of the cadence: it fires
+        // one second after this pass runs, so `now` IS the on-create
+        // time and every other slot is measured from it.
+        let slots = Self.reminderSlots(playedAt: playedAt, calendar: calendar)
+        let onCreateTime = now
+
+        var weekBefore: Date? = slots.weekBefore
+        var fewDays: Date? = slots.fewDays
+        var morningOf: Date? = slots.morningOf
+
+        // A slot whose time has passed never fires.
+        if let w = weekBefore, w <= onCreateTime { weekBefore = nil }
+        if let f = fewDays, f <= onCreateTime { fewDays = nil }
+        if let m = morningOf, m <= onCreateTime { morningOf = nil }
+
+        // Two pings an hour apart read as spam: the long-lead
+        // reminders stay out of the on-create prompt's 24-hour
+        // window and the morning-of stays out of its 2-hour window.
+        if let w = weekBefore,
+            w < onCreateTime.addingTimeInterval(24 * 3600) { weekBefore = nil }
+        if let f = fewDays,
+            f < onCreateTime.addingTimeInterval(24 * 3600) { fewDays = nil }
+        if let m = morningOf,
+            m < onCreateTime.addingTimeInterval(2 * 3600) { morningOf = nil }
+
+        // The two long-lead reminders stay a day apart.
+        if let f = fewDays,
+            abs(f.timeIntervalSince(slots.weekBefore)) < 24 * 3600 {
+            fewDays = nil
+        }
 
         for (kindRaw, fireAt) in [
-            (t168hKindRaw, t168FireAt),
-            (t84hKindRaw, t84FireAt),
-            (morningOfKindRaw, morningFireAt)
+            (t168hKindRaw, weekBefore),
+            (t84hKindRaw, fewDays),
+            (morningOfKindRaw, morningOf)
         ] {
-            guard fireAt > now else { continue }
+            guard let fireAt else { continue }
             let isMorning = kindRaw == morningOfKindRaw
             let body = reminderBody(
                 eventName: eventName,
@@ -217,25 +247,43 @@ enum BriefingReconciler {
         return planned
     }
 
-    /// 09:00 local on the `playedAt` calendar day. Past 09:00 on
-    /// the event day, falls back to the earlier of
-    /// `playedAt − 30m` / `now + 1s` so the same-day slot still
-    /// fires instead of silently dropping.
-    static func morningFireDate(playedAt: Date, now: Date) -> Date {
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: playedAt)
-        guard
-            let nineAM = calendar.date(
-                bySettingHour: 9, minute: 0, second: 0, of: dayStart
-            )
-        else {
-            return playedAt.addingTimeInterval(-30 * 60)
+    /// The three reminder slots for `playedAt`, anchored to the
+    /// calendar in the device's current time zone (audit 01 #4, #5).
+    ///
+    /// - week-before: 18:00 on the calendar day 7 days before the
+    ///   event's own day.
+    /// - few-days (identifier `t48h`): 18:00 on the calendar day
+    ///   3 days before the event's own day.
+    /// - morning-of: the earlier of 09:00 on the event's day and
+    ///   `playedAt - 3h`, never before 07:00 on the event's day.
+    ///
+    /// Hour offsets land a "in a few days" ping at 2am for an
+    /// afternoon event; the calendar anchor puts every long-lead
+    /// reminder in the evening and the morning-of in waking hours.
+    static func reminderSlots(
+        playedAt: Date,
+        calendar: Calendar = .current
+    ) -> (weekBefore: Date, fewDays: Date, morningOf: Date) {
+        let eventDay = calendar.startOfDay(for: playedAt)
+
+        func evening(offsetDays: Int) -> Date {
+            let day = calendar.date(byAdding: .day, value: offsetDays, to: eventDay)
+                ?? eventDay
+            return calendar.date(bySettingHour: 18, minute: 0, second: 0, of: day)
+                ?? day
         }
-        if nineAM > now {
-            return nineAM
-        }
-        let preStart = playedAt.addingTimeInterval(-30 * 60)
-        return preStart > now ? preStart : now.addingTimeInterval(1)
+
+        let nineAM = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: eventDay)
+            ?? eventDay
+        let sevenAM = calendar.date(bySettingHour: 7, minute: 0, second: 0, of: eventDay)
+            ?? eventDay
+        let threeHoursBefore = playedAt.addingTimeInterval(-3 * 3600)
+
+        return (
+            weekBefore: evening(offsetDays: -7),
+            fewDays: evening(offsetDays: -3),
+            morningOf: max(min(nineAM, threeHoursBefore), sevenAM)
+        )
     }
 
     /// Matrix-voiced reminder body. Claimed members get pure
