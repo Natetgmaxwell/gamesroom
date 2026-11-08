@@ -79,6 +79,15 @@ begin
     raise exception 'Only the host can cancel a night' using errcode = '42501';
   end if;
 
+  -- TARS fix: a night that has already started is not cancellable. Its
+  -- rounds, questions and scores cascade-delete with the event while the
+  -- points they created stay on the ledger, so cancelling would leave the
+  -- season holding points for games that no longer exist. The host settles
+  -- a started night instead.
+  if exists (select 1 from public.events e where e.id = p_event_id and e.played_at <= now()) then
+    raise exception 'night_started' using errcode = 'P0001';
+  end if;
+
   -- Every deposit still in escrow goes back, the way check_in_seat
   -- returns one.
   for v_deposit in

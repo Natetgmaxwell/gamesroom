@@ -342,9 +342,12 @@ begin
 
         if v_max_seats is not null and v_max_seats > 0
            and not exists (
+               -- TARS fix: the seat that matters is the TARGET's, so a
+               -- host claiming on a member's behalf is refused on a full
+               -- night exactly like the member would be.
                select 1 from public.event_rsvps r
                where r.event_id = p_event_id
-                 and r.member_id = v_caller
+                 and r.member_id = v_target
                  and r.state = 'claimed'
            )
            and (

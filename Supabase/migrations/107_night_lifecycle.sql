@@ -126,25 +126,6 @@ begin
   -- (ii) The night we just finished. Settled within the last 24h so
   --      the recap shows up tonight and is gone tomorrow. Latest
   --      settle wins.
-  return query
-    select e.id, e.room_id, e.name, e.played_at, e.created_at,
-           e.host_note, e.pack_slug, e.settled_at, r.max_seats,
-           coalesce(
-               (select array_agg(ep.pack_slug order by ep.pack_slug)
-                from public.event_packs ep
-                where ep.event_id = e.id),
-               array[e.pack_slug]
-           ) as pack_slugs,
-           e.hidden_from_user_ids,
-           e.event_calendar_identifier
-    from public.events e
-    join public.rooms r on r.id = e.room_id
-    where e.room_id = p_room_id
-      and e.settled_at is not null
-      and e.settled_at > now() - interval '24 hours'
-      and not (public.current_user_id() = any(coalesce(e.hidden_from_user_ids, '{}'::uuid[])))
-    order by e.settled_at desc
-    limit 1;
   if found then
     return;
   end if;
@@ -167,6 +148,25 @@ begin
       and e.played_at > now()
       and not (public.current_user_id() = any(coalesce(e.hidden_from_user_ids, '{}'::uuid[])))
     order by e.played_at asc
+    limit 1;
+  return query
+    select e.id, e.room_id, e.name, e.played_at, e.created_at,
+           e.host_note, e.pack_slug, e.settled_at, r.max_seats,
+           coalesce(
+               (select array_agg(ep.pack_slug order by ep.pack_slug)
+                from public.event_packs ep
+                where ep.event_id = e.id),
+               array[e.pack_slug]
+           ) as pack_slugs,
+           e.hidden_from_user_ids,
+           e.event_calendar_identifier
+    from public.events e
+    join public.rooms r on r.id = e.room_id
+    where e.room_id = p_room_id
+      and e.settled_at is not null
+      and e.settled_at > now() - interval '24 hours'
+      and not (public.current_user_id() = any(coalesce(e.hidden_from_user_ids, '{}'::uuid[])))
+    order by e.settled_at desc
     limit 1;
 end;
 $$;
@@ -279,5 +279,67 @@ comment on function public.settle_event(uuid) is
 -- =================================================================
 
 notify pgrst, 'reload schema';
+
+-- =====================================================================
+-- 2. get_recent_settled_event(p_room_id) — the recap section.
+--
+-- get_active_event ranks the NEXT night above a night settled in the
+-- last 24h, because a room can only have one upcoming night
+-- (trg_check_one_upcoming_event) and a recap must never hide next
+-- week's claim card. The room page still shows the recap for 24h, so
+-- it asks for it separately. Same member guard as get_active_event and
+-- the same hidden-member filter.
+-- =====================================================================
+create or replace function public.get_recent_settled_event(p_room_id uuid)
+returns table (
+    id uuid,
+    room_id uuid,
+    name text,
+    played_at timestamp with time zone,
+    created_at timestamp with time zone,
+    host_note text,
+    pack_slug text,
+    settled_at timestamp with time zone,
+    max_seats integer,
+    pack_slugs text[],
+    hidden_from_user_ids uuid[],
+    event_calendar_identifier text
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not (public.rpc_caller_trusted() or public.is_room_member(p_room_id, public.current_user_id())) then
+    return;
+  end if;
+  return query
+    select e.id, e.room_id, e.name, e.played_at, e.created_at,
+           e.host_note, e.pack_slug, e.settled_at, r.max_seats,
+           coalesce(
+               (select array_agg(ep.pack_slug order by ep.pack_slug)
+                from public.event_packs ep
+                where ep.event_id = e.id),
+               array[e.pack_slug]
+           ) as pack_slugs,
+           e.hidden_from_user_ids,
+           e.event_calendar_identifier
+    from public.events e
+    join public.rooms r on r.id = e.room_id
+    where e.room_id = p_room_id
+      and e.settled_at is not null
+      and e.settled_at > now() - interval '24 hours'
+      and not (public.current_user_id() = any(coalesce(e.hidden_from_user_ids, '{}'::uuid[])))
+    order by e.settled_at desc
+    limit 1;
+end;
+$$;
+
+revoke all on function public.get_recent_settled_event(uuid) from public, anon;
+grant execute on function public.get_recent_settled_event(uuid) to authenticated, service_role;
+
+comment on function public.get_recent_settled_event(uuid) is
+  'V1.24 — the night settled in the last 24h, for the room page recap section. Kept separate from get_active_event, which ranks the next future night first so one upcoming night can be scheduled straight after a settle.';
 
 commit;

@@ -3138,7 +3138,14 @@ private struct WitnessSlot: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(line.style == .caption)
-                        .accessibilityLabel(Text(line.title))
+                        // The host's at-play score action keeps its
+                        // "(host)" label so VoiceOver and the UI sweep
+                        // can tell it from the member-facing actions.
+                        .accessibilityLabel(Text(
+                            line.title == "Score a round"
+                                ? "Score a round (host)"
+                                : line.title
+                        ))
                     }
                 }
                 .transition(.opacity)
