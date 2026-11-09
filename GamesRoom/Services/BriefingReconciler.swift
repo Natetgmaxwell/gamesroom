@@ -595,6 +595,29 @@ enum BriefingReconciler {
         return body
     }
 
+    /// The pending identifiers a reconcile of this kind OWNS, and may
+    /// therefore cancel. A cadence pass owns the event's whole cadence
+    /// family; a catch-up pass owns only the catch-up request.
+    ///
+    /// Scoping the sweep by kind is what stops a room-open cadence
+    /// pass from silently deleting a catch-up scheduled a moment
+    /// earlier — both ids hang off the event prefix, and the old
+    /// prefix sweep could not tell them apart (audit 04 D5).
+    static func ownedPendingIdentifiers(
+        _ pending: [String],
+        eventId: UUID,
+        kind: BriefingPlanKind
+    ) -> [String] {
+        let prefix = eventId.uuidString
+        let catchUp = catchUpIdentifier(eventId: eventId)
+        switch kind {
+        case .cadence:
+            return pending.filter { $0.hasPrefix(prefix) && $0 != catchUp }
+        case .catchUp:
+            return pending.filter { $0 == catchUp }
+        }
+    }
+
     /// The one reconcile entry point. Cancels this device's pending
     /// requests for the context's event, then re-plans from the
     /// context's CANONICAL state and submits the result, awaiting
@@ -609,7 +632,6 @@ enum BriefingReconciler {
         ledger: BriefingOnCreateLedger,
         onCreateBodyProvider: (() async -> String)? = nil
     ) async {
-        let prefix = ctx.eventId.uuidString
         let pending = await sink.pendingIdentifiers()
         let delivered = await sink.deliveredIdentifiers()
         let onCreateId = identifier(
@@ -629,8 +651,10 @@ enum BriefingReconciler {
             && !delivered.contains(onCreateId)
             && gateSilence(ctx) == nil
 
-        let stale = pending.filter {
-            $0.hasPrefix(prefix) && !(keepOnCreate && $0 == onCreateId)
+        let stale = ownedPendingIdentifiers(
+            pending, eventId: ctx.eventId, kind: ctx.kind
+        ).filter {
+            !(keepOnCreate && $0 == onCreateId)
         }
         if !stale.isEmpty {
             sink.removePending(identifiers: stale)

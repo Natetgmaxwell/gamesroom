@@ -388,40 +388,28 @@ final class RoomService: ObservableObject {
 
     /// W2.7 — builds and schedules the joined-late catch-up push.
     /// The identifier is stable per event, so a re-join overwrites
-    /// instead of stacking — no duplicate pushes. V0.54 — gated
-    /// on the room-level `notifications_enabled` opt-in; a joiner
-    /// who hasn't opted in to this room's nights receives no
-    /// push. They can still see the briefing slot in-app.
+    /// instead of stacking — no duplicate pushes.
+    ///
+    /// It goes through the same `BriefingContext` as the cadence, so
+    /// the body reads the CANONICAL seat (never a hardcoded
+    /// `.unclaimed`) and the planner honours the room opt-out, the
+    /// per-event mute and the hidden-from-member flag (audit 04 D4).
     private func scheduleCatchUpIfNeeded(room: Room) async {
-        guard room.notificationsEnabled else { return }
         guard let event = await loadActiveEvent(roomId: room.id) else { return }
         let board = await loadLeaderboard(roomId: room.id)
         let summary = board.prefix(3)
             .map { "\($0.displayName) \($0.pointsBalance)" }
             .joined(separator: " · ")
-        await NotificationDispatcher.shared.scheduleCatchUp(
+        guard let ctx = await briefingContext(
             eventId: event.id,
             roomId: room.id,
             eventName: event.name,
             playedAt: event.playedAt,
-            mascotName: room.mascotName,
-            leaderboardSummary: summary,
-            rsvpState: .unclaimed,
-            memberName: await memberName(for: room),
-            personality: room.mascotPersonality,
-            ideology: room.mascotPoliticalIdeology
-        )
-    }
-
-    /// V0.87 — the signed-in member's display name in `room`, or
-    /// `nil` when the roster cache has no row for the caller. Used
-    /// to personalise the joined-late catch-up push.
-    private func memberName(for room: Room) async -> String? {
-        guard
-            let uid = await SupabaseClientProvider.currentSession()?.user.id,
-            let member = membersByRoom[room.id]?.first(where: { $0.userId == uid })
-        else { return nil }
-        return member.displayName
+            event: event,
+            kind: .catchUp,
+            leaderboardSummary: summary
+        ) else { return }
+        await NotificationDispatcher.shared.reconcileBriefing(context: ctx)
     }
 
     // MARK: - Room detail (event + briefing + leaderboard + RSVP)
@@ -2044,67 +2032,89 @@ final class RoomService: ObservableObject {
         let cachedEvent = activeEventByRoom.values.first(where: { $0.id == eventId })
         let roomId = cachedEvent?.roomId ?? hint?.roomId
         guard let roomId else { return }
-        let room = rooms.first(where: { $0.id == roomId })
-        guard
-            let callerId = await SupabaseClientProvider.currentSession()?.user.id
-        else { return }
-
-        // V0.94 — per-event hidden members get nothing. The server
-        // already filters get_active_event; this guards a cache-
-        // warm non-filtered row and the realtime payload path.
-        if let hidden = cachedEvent?.hiddenFromUserIds, hidden.contains(callerId) {
-            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
-            return
-        }
-
-        // Room-level opt-out — cancel rather than leave stale
-        // requests pending.
-        if let room, !room.notificationsEnabled {
-            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
-            return
-        }
-
-        // Per-event mute for this device's user.
-        let muted = cachedEventRSVPs(eventId: eventId).contains {
-            $0.memberId == callerId && $0.notificationsMuted
-        }
-        if muted {
-            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
-            return
-        }
-
-        // Canonical state — fresh from the store. A throw means
-        // unknown: fail quiet (cancel, schedule nothing).
-        let state: MemberRSVPState
-        do {
-            state = try await store.fetchCurrentMemberRSVP(eventId: eventId)
-            rsvpByEvent[eventId] = state
-            cacheTimestamps["currentMemberRSVP:\(eventId.uuidString)"] = Date()
-        } catch {
-            await NotificationDispatcher.shared.cancelBriefingTrio(eventId: eventId)
-            return
-        }
-
         let eventName = cachedEvent?.name ?? hint?.name
         let playedAt = cachedEvent?.playedAt ?? hint?.playedAt
         guard let eventName, let playedAt else { return }
 
-        let callerName = membersByRoom[roomId]?
-            .first(where: { $0.userId == callerId })?.displayName
-
-        await NotificationDispatcher.shared.reconcileBriefing(
+        guard let ctx = await briefingContext(
             eventId: eventId,
             roomId: roomId,
             eventName: eventName,
             playedAt: playedAt,
-            mascotName: room?.mascotName ?? "Your mascot",
+            event: cachedEvent,
+            kind: .cadence
+        ) else { return }
+
+        await NotificationDispatcher.shared.reconcileBriefing(
+            context: ctx,
+            mascotState: .idle
+        )
+    }
+
+    /// Every input one briefing decision needs, read once: the room,
+    /// the caller's CANONICAL RSVP state (fresh from the store, never
+    /// the `.unclaimed` cache default), the room opt-in, the per-event
+    /// mute and the hidden-from-member flag. `nil` only when there is
+    /// no signed-in caller.
+    ///
+    /// Both the cadence path (`reconcileBriefing`) and the joined-late
+    /// catch-up (`scheduleCatchUpIfNeeded`) build this same context, so
+    /// no path can forget an input (audit 04 §3.2).
+    private func briefingContext(
+        eventId: UUID,
+        roomId: UUID,
+        eventName: String,
+        playedAt: Date,
+        event: Event?,
+        kind: BriefingPlanKind,
+        leaderboardSummary: String = ""
+    ) async -> BriefingContext? {
+        guard
+            let callerId = await SupabaseClientProvider.currentSession()?.user.id
+        else { return nil }
+
+        let room = rooms.first(where: { $0.id == roomId })
+
+        // Canonical state — fresh from the store. A throw means
+        // unknown: the plan silences with `.unknownSeat` rather than
+        // guessing the naggy `.unclaimed` default.
+        var seat: MemberRSVPState?
+        do {
+            seat = try await store.fetchCurrentMemberRSVP(eventId: eventId)
+            if let seat {
+                rsvpByEvent[eventId] = seat
+                cacheTimestamps["currentMemberRSVP:\(eventId.uuidString)"] = Date()
+            }
+        } catch {
+            seat = nil
+        }
+
+        let muted = cachedEventRSVPs(eventId: eventId).contains {
+            $0.memberId == callerId && $0.notificationsMuted
+        }
+        let hidden = event?.hiddenFromUserIds?.contains(callerId) ?? false
+        let callerName = membersByRoom[roomId]?
+            .first(where: { $0.userId == callerId })?.displayName
+
+        return BriefingContext(
+            eventId: eventId,
+            roomId: roomId,
+            eventName: eventName,
+            playedAt: playedAt,
             userId: callerId,
             memberName: callerName,
-            state: state,
-            hostNote: cachedEvent?.hostNote,
-            mascotPersonality: room?.mascotPersonality ?? .friendly,
-            mascotIdeology: room?.mascotPoliticalIdeology ?? .centrist,
-            mascotState: .idle
+            mascotName: room?.mascotName ?? "Your mascot",
+            seat: seat,
+            // A room that is not in the cache yet reads as opted in,
+            // exactly as the pre-context code did.
+            roomOptIn: room?.notificationsEnabled ?? true,
+            eventMuted: muted,
+            hidden: hidden,
+            hostNote: event?.hostNote,
+            leaderboardSummary: leaderboardSummary,
+            kind: kind,
+            personality: room?.mascotPersonality ?? .friendly,
+            ideology: room?.mascotPoliticalIdeology ?? .centrist
         )
     }
 

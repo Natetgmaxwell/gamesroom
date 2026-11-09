@@ -484,13 +484,14 @@ func runBriefingReconcileTests() {
         roomOptIn: Bool = true,
         muted: Bool = false,
         hidden: Bool = false,
-        kind: BriefingPlanKind = .cadence
+        kind: BriefingPlanKind = .cadence,
+        playedAt: Date? = nil
     ) -> BriefingContext {
         BriefingContext(
             eventId: ctxEventId,
             roomId: ctxRoomId,
             eventName: "Friday Night Hold'em",
-            playedAt: brPlayedAt,
+            playedAt: playedAt ?? brPlayedAt,
             userId: ctxUserId,
             memberName: "Nathan",
             mascotName: "Ace",
@@ -569,6 +570,93 @@ func runBriefingReconcileTests() {
         runner.assertEqual(
             sink.log.reduce(0) { $1.hasPrefix("add:") ? $0 + 1 : $0 }, 4
         )
+    }
+
+    // MARK: - Joined-late catch-up on the same context (audit 04 D4/D5)
+
+    // CatchUpMessage branches on `playedAt > Date()`, so these use a
+    // playedAt that is genuinely upcoming.
+    let upcomingPlayedAt = Date().addingTimeInterval(30 * 24 * 3600)
+
+    // The body follows the canonical seat: a claimed member is framed
+    // like the claimed logistics reminder, never as a claim prompt.
+    runner.run("briefing catch-up: the body follows the canonical seat") {
+        let claimed = BriefingReconciler.plan(
+            context(seat: .claimed, kind: .catchUp, playedAt: upcomingPlayedAt)
+        )
+        let unclaimed = BriefingReconciler.plan(
+            context(seat: .unclaimed, kind: .catchUp, playedAt: upcomingPlayedAt)
+        )
+        guard
+            case .scheduled(let claimedPlanned) = claimed,
+            case .scheduled(let unclaimedPlanned) = unclaimed
+        else {
+            runner.assertTrue(false, "expected .scheduled for both seats")
+            return
+        }
+        runner.assertEqual(claimedPlanned.count, 1)
+        runner.assertEqual(
+            claimedPlanned.first?.identifier,
+            BriefingReconciler.catchUpIdentifier(eventId: ctxEventId)
+        )
+        runner.assertEqual(claimedPlanned.first?.kindRaw, BriefingReconciler.catchUpKindRaw)
+        let claimedBody = claimedPlanned.first?.body ?? ""
+        let unclaimedBody = unclaimedPlanned.first?.body ?? ""
+        runner.assertFalse(claimedBody.isEmpty)
+        runner.assertTrue(
+            claimedBody != unclaimedBody,
+            "the catch-up body ignores the seat: \(claimedBody)"
+        )
+        runner.assertFalse(
+            claimedBody.lowercased().contains("claim"),
+            "a claimed member is told to claim: \(claimedBody)"
+        )
+    }
+
+    runner.run("briefing catch-up: mute, opt-out and an unknown seat are silenced") {
+        runner.assertEqual(
+            BriefingReconciler.plan(context(seat: .claimed, muted: true, kind: .catchUp)),
+            .silenced(.muted)
+        )
+        runner.assertEqual(
+            BriefingReconciler.plan(context(roomOptIn: false, kind: .catchUp)),
+            .silenced(.roomOptOut)
+        )
+        runner.assertEqual(
+            BriefingReconciler.plan(context(seat: nil, kind: .catchUp)),
+            .silenced(.unknownSeat)
+        )
+    }
+
+    // D5 — a cadence sweep must not eat a catch-up scheduled a moment
+    // earlier, and a catch-up must not eat the cadence.
+    runner.runAsync("briefing reconcile: the catch-up survives a cadence pass and vice versa") {
+        let sink = FakeBriefingSink()
+        let ledger = FakeOnCreateLedger()
+        let catchUpId = BriefingReconciler.catchUpIdentifier(eventId: ctxEventId)
+
+        await BriefingReconciler.reconcile(
+            context: context(kind: .catchUp), sink: sink, ledger: ledger
+        )
+        runner.assertTrue(sink.pending.contains(catchUpId))
+        runner.assertEqual(sink.pending.count, 1)
+
+        // The room-open cadence pass that used to sweep it.
+        await BriefingReconciler.reconcile(
+            context: context(), sink: sink, ledger: ledger
+        )
+        runner.assertTrue(
+            sink.pending.contains(catchUpId),
+            "a cadence pass cancelled the catch-up: \(sink.pending)"
+        )
+        runner.assertEqual(sink.pending.count, 5)
+
+        // And the catch-up pass leaves the cadence alone.
+        await BriefingReconciler.reconcile(
+            context: context(kind: .catchUp), sink: sink, ledger: ledger
+        )
+        runner.assertEqual(sink.pending.count, 5)
+        runner.assertTrue(sink.pending.contains(catchUpId))
     }
 }
 
