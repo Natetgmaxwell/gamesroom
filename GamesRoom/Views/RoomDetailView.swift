@@ -151,18 +151,13 @@ struct RoomDetailView: View {
     /// leaderboard rows.
     @State private var hasLoadedInitialData: Bool = false
 
-    /// S3.6 — the join code the empty-room invite shares. There is
-    /// no read RPC for the live code (only `generate_join_code`), so
-    /// it is minted on demand when the host opens a room with
-    /// nobody in it, and kept for as long as the hero is up.
-    @State private var heroJoinCode: String?
-
-    /// S3.6 — true while the invite code is being minted.
-    @State private var isMintingHeroCode: Bool = false
-
-    /// S3.6 — why the invite code could not be minted, shown as a
-    /// quiet line under the invite action.
-    @State private var heroCodeError: String?
+    /// S3.6 / P2 (audit 03 C6) — the join code the empty-room invite
+    /// shares, as one phase instead of three flags. There is no read RPC
+    /// for the live code (only `generate_join_code`), so it is minted on
+    /// demand when the host opens a room with nobody in it, and kept for
+    /// as long as the hero is up. A retry clears the old error at mint
+    /// start rather than at success.
+    @State private var inviteCode: InviteCodePhase = .idle
 
     private var isHost: Bool {
         guard let uid = authService.currentUser?.id else { return false }
@@ -1220,8 +1215,8 @@ struct RoomDetailView: View {
                     .multilineTextAlignment(.center)
             }
             .buttonStyle(.plain)
-            if let heroCodeError {
-                Text(heroCodeError)
+            if let message = inviteCode.errorMessage {
+                Text(message)
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.secondaryText)
                     .frame(maxWidth: .infinity)
@@ -1237,7 +1232,7 @@ struct RoomDetailView: View {
     /// when minting failed) the same action mints one instead.
     @ViewBuilder
     private var inviteFriendsCTA: some View {
-        if let code = heroJoinCode {
+        if let code = inviteCode.code {
             ShareLink(
                 item: inviteShareText(for: code),
                 preview: SharePreview("Join my Games Room")
@@ -1252,7 +1247,7 @@ struct RoomDetailView: View {
                 inviteFriendsLabel
             }
             .buttonStyle(.plain)
-            .disabled(isMintingHeroCode)
+            .disabled(inviteCode.isMinting)
         }
     }
 
@@ -1275,14 +1270,15 @@ struct RoomDetailView: View {
     /// one; it is minted once per empty room and then shared.
     @MainActor
     private func mintHeroJoinCode() async {
-        guard inviteFirst, !isMintingHeroCode, heroJoinCode == nil else { return }
-        isMintingHeroCode = true
-        defer { isMintingHeroCode = false }
+        guard inviteFirst, inviteCode.code == nil, !inviteCode.isMinting else { return }
+        // P2 (audit 03 C6) — the retry clears the previous error HERE,
+        // at mint start. It used to clear only on success, so a second
+        // attempt showed the old failure for its whole round trip.
+        inviteCode = .minting
         do {
-            heroJoinCode = try await roomService.generateJoinCode(roomId: room.id)
-            heroCodeError = nil
+            inviteCode = .ready(try await roomService.generateJoinCode(roomId: room.id))
         } catch {
-            heroCodeError = "Couldn't make a join code. Try again."
+            inviteCode = .failed(InviteCodePhase.failureMessage)
         }
     }
 
