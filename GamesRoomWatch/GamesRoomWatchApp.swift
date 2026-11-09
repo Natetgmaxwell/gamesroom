@@ -21,6 +21,7 @@ import WatchKit
 /// GamesRoom/Models/ScoreSnapshot.swift (the watch compiles its
 /// own copy — no shared framework). Keep in sync.
 struct ScoreSnapshot: Codable {
+    var roomId: UUID
     var roomName: String
     var leaderboardLine: String
     var isLive: Bool

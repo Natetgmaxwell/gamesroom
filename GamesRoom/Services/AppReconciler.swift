@@ -63,9 +63,10 @@ final class AppReconciler {
         )
         for roomId in removed {
             await roomService.purgeRoom(roomId: roomId)
-            if let name = oldRooms.first(where: { $0.id == roomId })?.name {
-                Self.endRoomSurfaces(roomName: name)
-            }
+            // The room's surfaces are ended by ID, not by name: two
+            // rooms may share a name, and a rename used to orphan them
+            // (audit 01 D11, 04 D9).
+            Self.endRoomSurfaces(roomId: roomId)
         }
 
         // 2. Re-read each room's night and re-plan this user's
@@ -92,6 +93,15 @@ final class AppReconciler {
             if let fresh {
                 await roomService.reconcileBriefing(eventId: fresh.id)
             }
+            // A night that ended while the app was asleep takes its
+            // scoreboard with it; the old code ended the activity only
+            // from a room refresh or a host settle, so a member's
+            // lock screen kept showing a finished night (audit 04
+            // commit 9).
+            ScoreLiveActivityDriver.endIfNightNotLive(
+                roomId: step.roomId,
+                isLive: Self.isNightLive(fresh)
+            )
         }
 
         // 3. Restart the realtime subscription.
@@ -122,22 +132,27 @@ final class AppReconciler {
         }
     }
 
+    /// True when the night is live by the predicate this lane's
+    /// surfaces still use: started and not settled.
+    ///
+    /// TODO(SM-P): replace with `NightPhase == .live` — which also
+    /// honours `rooms.autoCloseHours` and names the overrunning night —
+    /// when lane P lands. Do not add a second phase type here.
+    private static func isNightLive(_ event: Event?, now: Date = Date()) -> Bool {
+        guard let event else { return false }
+        return event.playedAt <= now && event.settledAt == nil
+    }
+
     /// Ends the room's Live Activity and clears the widget snapshot
-    /// when it is showing that room. Both surfaces key on the room's
-    /// name (the widget target has no room id). Best-effort.
-    static func endRoomSurfaces(roomName: String) {
-        for activity in Activity<ScoreActivityAttributes>.activities
-        where activity.attributes.roomName == roomName {
-            Task {
-                await activity.end(nil, dismissalPolicy: .immediate)
-            }
-        }
-        if ScoreSnapshotStore.load()?.roomName == roomName,
-           let defaults = UserDefaults(suiteName: ScoreSnapshotStore.suiteName) {
-            // Same key `ScoreSnapshotStore` writes (private there).
-            defaults.removeObject(forKey: "scoreSnapshot")
-            WidgetCenter.shared.reloadAllTimelines()
-        }
+    /// when it is showing that room. Both surfaces key on the room ID
+    /// now: the widget target has one snapshot slot, and keying it by
+    /// name ended the wrong room's activity when two rooms shared a
+    /// name (audit 01 D11, 04 D9). Best-effort.
+    static func endRoomSurfaces(roomId: UUID) {
+        ScoreLiveActivityDriver.endNight(roomId: roomId)
+        guard ScoreSnapshotStore.load()?.roomId == roomId else { return }
+        ScoreSnapshotStore.clear()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }
 

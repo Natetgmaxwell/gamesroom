@@ -303,6 +303,7 @@ final class RoomService: ObservableObject {
             // Glance reads the App Group suite; best-effort write.
             if let room = result.first {
                 ScoreSnapshotStore.write(
+                    roomId: room.id,
                     roomName: room.name,
                     leaderboardLine: "",
                     isLive: room.isLive

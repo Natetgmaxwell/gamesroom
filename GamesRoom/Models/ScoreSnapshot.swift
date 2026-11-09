@@ -16,6 +16,11 @@ import Foundation
 /// widget + watch read. Keep the mirrors in `GamesRoomWidgets/` and
 /// `GamesRoomWatch/` in sync with this struct.
 struct ScoreSnapshot: Codable {
+    /// The room this snapshot belongs to. The widget renders
+    /// `roomName`, but every identity decision — "is this snapshot the
+    /// room that just went away?" — keys on the id: two rooms may
+    /// share a name (audit 01 D11, 04 D9).
+    var roomId: UUID
     var roomName: String
     var leaderboardLine: String
     var isLive: Bool
@@ -60,5 +65,21 @@ enum LiveActivityRule {
         }
         // No active event: end whatever is running, schedule nothing.
         return isRunning ? .end : .none
+    }
+
+    /// The reconcile's question, which it answers for every room it
+    /// visits: a running activity whose night is no longer live must
+    /// go. It knows no leaderboard line, so it never starts one
+    /// (audit 04 commit 9).
+    static func reconcileAction(isLive: Bool) -> Action {
+        isLive ? .none : .end
+    }
+
+    /// When the activity goes stale: the moment the server stops
+    /// treating the night as live (`playedAt + rooms.auto_close_hours`).
+    /// Without a staleDate the scoreboard sat pinned on the lock screen
+    /// past the night with no stale marker (audit 04 D10).
+    static func staleDate(playedAt: Date, autoCloseHours: Int) -> Date {
+        playedAt.addingTimeInterval(TimeInterval(max(autoCloseHours, 0)) * 3600)
     }
 }
