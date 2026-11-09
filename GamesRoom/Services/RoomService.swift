@@ -257,7 +257,6 @@ final class RoomService: ObservableObject {
         rooms = []
         activeEventByRoom = [:]
         recentlySettledByRoom = [:]
-        scheduledNextByRoom = [:]
         briefingByEvent = [:]
         leaderboardByRoom = [:]
         rsvpByEvent = [:]
