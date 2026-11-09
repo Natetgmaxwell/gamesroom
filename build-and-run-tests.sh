@@ -41,7 +41,6 @@ SRC_FILES=(main.swift
            GamesRoom/Services/BriefingReconciler.swift
            TestsBriefingReconcile.swift
            TestsDeviceState.swift
-           TestsS2.swift)
            TestsS2.swift
            TestsV.swift)
 

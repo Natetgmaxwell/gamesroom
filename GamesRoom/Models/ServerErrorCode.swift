@@ -29,8 +29,8 @@ enum ServerErrorCode: String, CaseIterable {
     case forfeitedSeat = "forfeited_seat"
     /// Arrivals are not open yet.
     case tooEarly = "too_early"
-    /// The night was called off.
-    case cancelled = "cancelled"
+    /// The room already has a night booked (migration 115's trigger).
+    case oneUpcomingNight = "one_upcoming_night"
 
     /// The code behind an error, or `nil` when the server said something
     /// the app has no copy for.
@@ -51,8 +51,8 @@ enum ServerErrorCode: String, CaseIterable {
             return "Your deposit was kept for this night."
         case .tooEarly:
             return "Arrivals aren't open yet."
-        case .cancelled:
-            return "This night was called off."
+        case .oneUpcomingNight:
+            return "This room already has a night booked. Change that one instead."
         }
     }
 }

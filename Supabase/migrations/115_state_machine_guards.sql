@@ -734,7 +734,9 @@ begin
   -- Check-in is a physical arrival. The button only exists once the
   -- night has started, so a client that fires earlier is stale; it
   -- must not void the host's arrival signal before the night begins.
-  if exists (select 1 from public.events e where e.id = p_event_id and e.played_at > now()) then
+  -- Five minutes of slack absorbs a phone clock running ahead of the
+  -- server's, so a member tapping right at start time is never refused.
+  if exists (select 1 from public.events e where e.id = p_event_id and e.played_at > now() + interval '5 minutes') then
     raise exception 'too_early' using errcode = 'P0001';
   end if;
 

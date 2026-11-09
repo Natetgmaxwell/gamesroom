@@ -99,7 +99,11 @@ final class AppReconciler {
             // commit 9).
             ScoreLiveActivityDriver.endIfNightNotLive(
                 roomId: step.roomId,
-                isLive: Self.isNightLive(fresh)
+                isLive: NightPhaseResolver.phase(
+                    for: fresh,
+                    autoCloseHours: roomService.rooms.first { $0.id == step.roomId }?.autoCloseHours
+                        ?? NightPhaseResolver.defaultAutoCloseHours
+                ) == .live
             )
         }
 
@@ -129,17 +133,6 @@ final class AppReconciler {
                 UserDefaults.standard.set(true, forKey: key)
             }
         }
-    }
-
-    /// True when the night is live by the predicate this lane's
-    /// surfaces still use: started and not settled.
-    ///
-    /// TODO(SM-P): replace with `NightPhase == .live` — which also
-    /// honours `rooms.autoCloseHours` and names the overrunning night —
-    /// when lane P lands. Do not add a second phase type here.
-    private static func isNightLive(_ event: Event?, now: Date = Date()) -> Bool {
-        guard let event else { return false }
-        return event.playedAt <= now && event.settledAt == nil
     }
 
     /// Ends the room's Live Activity and clears the widget snapshot

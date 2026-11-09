@@ -1340,10 +1340,11 @@ struct RoomDetailView: View {
         let topLine = leaderboard.prefix(3)
             .map { "\($0.displayName) \($0.pointsBalance)" }
             .joined(separator: " · ")
-        // TODO(SM-P): this predicate becomes `NightPhase == .live`
-        // (which also honours `rooms.autoCloseHours`) when lane P lands.
-        let isLiveNow = (activeEvent?.playedAt ?? .distantFuture) <= Date()
-            && activeEvent?.settledAt == nil
+        // The one night-phase resolver decides, so the Live Activity and
+        // widget stop at the room's auto-close window like the server.
+        let isLiveNow = NightPhaseResolver.phase(
+            for: activeEvent, autoCloseHours: room.autoCloseHours
+        ) == .live
         ScoreSnapshotStore.write(
             roomId: room.id,
             roomName: room.name,

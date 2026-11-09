@@ -315,7 +315,8 @@ struct AddEventSheet: View {
             onSaved(newEventId)
             dismiss()
         } catch {
-            errorMessage = (error as NSError).localizedDescription
+            errorMessage = ServerErrorCode.code(in: error)?.message
+                ?? (error as NSError).localizedDescription
         }
     }
 }

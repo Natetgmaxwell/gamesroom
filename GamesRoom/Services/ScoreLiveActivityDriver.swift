@@ -82,9 +82,8 @@ enum ScoreLiveActivityDriver {
     /// night is no longer live. It never starts one — a pass has no
     /// leaderboard line to show (audit 04 commit 9).
     ///
-    /// TODO(SM-P): `isLive` becomes `NightPhase == .live` once lane P
-    /// lands `NightPhase`; this call site must not grow its own phase
-    /// type.
+    /// `isLive` is `NightPhaseResolver.phase(...) == .live` at every call
+    /// site; this driver must not grow its own phase type.
     static func endIfNightNotLive(roomId: UUID, isLive: Bool) {
         guard LiveActivityRule.reconcileAction(isLive: isLive) == .end else { return }
         end(roomId: roomId)
