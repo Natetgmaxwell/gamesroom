@@ -24,7 +24,6 @@
 //  runner covers them.
 //
 
-import ActivityKit
 import Foundation
 import WidgetKit
 
