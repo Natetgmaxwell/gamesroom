@@ -24,8 +24,12 @@ struct CatchUpMessage {
 
     /// Builds the push body for a late joiner.
     ///
-    /// - Upcoming event: voiced claim-prompt (`.briefingOnCreate`
-    ///   flavour), then the standings line when present.
+    /// - Upcoming event, seat unclaimed: voiced claim-prompt
+    ///   (`.briefingOnCreate` flavour), then the standings line when
+    ///   present.
+    /// - Upcoming event, seat already claimed: logistics voice
+    ///   (`.briefing48h` flavour) — a member who already holds a seat
+    ///   must never be told to claim one (audit 04 D4).
     /// - Live event: voiced in-play line (`.inPlay` flavour), then
     ///   the standings line when present.
     static func body(
@@ -51,7 +55,7 @@ struct CatchUpMessage {
                 roomName: "",
                 personality: personality,
                 ideology: ideology,
-                kind: .briefingOnCreate,
+                kind: rsvpState == .unclaimed ? .briefingOnCreate : .briefing48h,
                 context: context,
                 eventDate: playedAt
             )

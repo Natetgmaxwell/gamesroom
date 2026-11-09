@@ -1509,6 +1509,7 @@ runner.run("ScanConfidenceGate prompts rescan below 0.3, not at/above") {
 
 runner.run("ScoreSnapshot.shouldPersist accepts first write") {
     let snapshot = ScoreSnapshot(
+        roomId: UUID(),
         roomName: "R", leaderboardLine: "A 10 · B 5", isLive: false, updatedAt: Date()
     )
     runner.assertTrue(ScoreSnapshot.shouldPersist(snapshot, existing: nil))
@@ -1516,9 +1517,11 @@ runner.run("ScoreSnapshot.shouldPersist accepts first write") {
 
 runner.run("ScoreSnapshot.shouldPersist rejects stale empty over real line") {
     let existing = ScoreSnapshot(
+        roomId: UUID(),
         roomName: "R", leaderboardLine: "A 10 · B 5", isLive: false, updatedAt: Date()
     )
     let incoming = ScoreSnapshot(
+        roomId: UUID(),
         roomName: "R", leaderboardLine: "", isLive: false, updatedAt: Date().addingTimeInterval(60)
     )
     runner.assertFalse(ScoreSnapshot.shouldPersist(incoming, existing: existing))
@@ -1526,9 +1529,11 @@ runner.run("ScoreSnapshot.shouldPersist rejects stale empty over real line") {
 
 runner.run("ScoreSnapshot.shouldPersist accepts newer non-empty write") {
     let existing = ScoreSnapshot(
+        roomId: UUID(),
         roomName: "R", leaderboardLine: "A 10", isLive: false, updatedAt: Date()
     )
     let incoming = ScoreSnapshot(
+        roomId: UUID(),
         roomName: "R", leaderboardLine: "A 12 · B 6", isLive: false,
         updatedAt: Date().addingTimeInterval(60)
     )
@@ -1537,6 +1542,7 @@ runner.run("ScoreSnapshot.shouldPersist accepts newer non-empty write") {
 
 runner.run("ScoreSnapshot.shouldPersist accepts empty when nothing yet") {
     let incoming = ScoreSnapshot(
+        roomId: UUID(),
         roomName: "R", leaderboardLine: "", isLive: false, updatedAt: Date()
     )
     runner.assertTrue(ScoreSnapshot.shouldPersist(incoming, existing: nil))
@@ -5210,7 +5216,28 @@ runner.runAsync("InMemoryRoomStore anchor_push_enabled round-trips both ways fro
     try await store.setAnchorPushEnabled(roomId: room.id, on: true)
     runner.assertTrue(try await store.fetchAnchorPushEnabled(roomId: room.id))
 }
+// Audit 04 commit 9 — the foreground reconcile ends a running Live
+// Activity when its night is no longer live, and never starts one.
+
+runner.run("LiveActivityRule reconcile ends a non-live night") {
+    runner.assertEqual(LiveActivityRule.reconcileAction(isLive: false), .end)
+    runner.assertEqual(LiveActivityRule.reconcileAction(isLive: true), .none)
+}
+
+runner.run("LiveActivityRule staleDate is playedAt plus autoCloseHours") {
+    let playedAt = Date(timeIntervalSince1970: 1_792_000_000)
+    runner.assertEqual(
+        LiveActivityRule.staleDate(playedAt: playedAt, autoCloseHours: 8),
+        playedAt.addingTimeInterval(8 * 3600)
+    )
+    runner.assertEqual(
+        LiveActivityRule.staleDate(playedAt: playedAt, autoCloseHours: 0),
+        playedAt
+    )
+}
+
 runBriefingReconcileTests()
+runDeviceStateTests()
 runS2Tests()
 
 // MARK: - S1 lane tests (night lifecycle)

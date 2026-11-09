@@ -11,8 +11,10 @@
 //      from the phone: its pending and delivered notifications,
 //      its calendar rows, its Live Activity and the widget's
 //      snapshot when it shows that room;
-//   2. every room with a cached night re-reads that night and
-//      re-plans this user's reminders for their current seat;
+//   2. every room the user is a member of re-reads its night — even
+//      one this device never opened, whose cached night therefore
+//      does not exist — and re-plans this user's reminders for their
+//      current seat;
 //   3. the realtime subscription is restarted, because iOS drops
 //      the socket while the app is suspended and the INSERTs it
 //      missed are exactly the nights step 2 just caught up on.
@@ -22,7 +24,6 @@
 //  runner covers them.
 //
 
-import ActivityKit
 import Foundation
 import WidgetKit
 
@@ -61,24 +62,45 @@ final class AppReconciler {
         )
         for roomId in removed {
             await roomService.purgeRoom(roomId: roomId)
-            if let name = oldRooms.first(where: { $0.id == roomId })?.name {
-                Self.endRoomSurfaces(roomName: name)
-            }
+            // The room's surfaces are ended by ID, not by name: two
+            // rooms may share a name, and a rename used to orphan them
+            // (audit 01 D11, 04 D9).
+            Self.endRoomSurfaces(roomId: roomId)
         }
 
-        // 2. Re-read each cached night and re-plan this user's
-        // reminders for their current seat. A night that ended or
-        // was replaced while the app slept has its old requests
-        // swept first.
-        let current = Set(currentRoomIds)
-        for (roomId, oldEventId) in cachedEventIdByRoom where current.contains(roomId) {
-            let fresh = await roomService.loadActiveEvent(roomId: roomId, force: true)
-            if fresh?.id != oldEventId {
-                await NotificationDispatcher.shared.cancelBriefingTrio(eventId: oldEventId)
+        // 2. Re-read each room's night and re-plan this user's
+        // reminders for their current seat. EVERY member room is
+        // visited, not only the ones with a cached night: a room this
+        // device has never opened still has a night the host may have
+        // scheduled while the member was away, and it is the only way
+        // that member learns about it while server push is off
+        // (audit 04 D3). A night that ended or was replaced while the
+        // app slept has its old requests swept first.
+        let plan = BriefingReconciler.foregroundRoomPlan(
+            memberRoomIds: currentRoomIds,
+            cachedEventIdByRoom: cachedEventIdByRoom
+        )
+        for step in plan {
+            let fresh = await roomService.loadActiveEvent(
+                roomId: step.roomId, force: true
+            )
+            if let staleEventId = step.staleEventId, fresh?.id != staleEventId {
+                await NotificationDispatcher.shared.cancelBriefingTrio(
+                    eventId: staleEventId
+                )
             }
             if let fresh {
                 await roomService.reconcileBriefing(eventId: fresh.id)
             }
+            // A night that ended while the app was asleep takes its
+            // scoreboard with it; the old code ended the activity only
+            // from a room refresh or a host settle, so a member's
+            // lock screen kept showing a finished night (audit 04
+            // commit 9).
+            ScoreLiveActivityDriver.endIfNightNotLive(
+                roomId: step.roomId,
+                isLive: Self.isNightLive(fresh)
+            )
         }
 
         // 3. Restart the realtime subscription.
@@ -109,22 +131,27 @@ final class AppReconciler {
         }
     }
 
+    /// True when the night is live by the predicate this lane's
+    /// surfaces still use: started and not settled.
+    ///
+    /// TODO(SM-P): replace with `NightPhase == .live` — which also
+    /// honours `rooms.autoCloseHours` and names the overrunning night —
+    /// when lane P lands. Do not add a second phase type here.
+    private static func isNightLive(_ event: Event?, now: Date = Date()) -> Bool {
+        guard let event else { return false }
+        return event.playedAt <= now && event.settledAt == nil
+    }
+
     /// Ends the room's Live Activity and clears the widget snapshot
-    /// when it is showing that room. Both surfaces key on the room's
-    /// name (the widget target has no room id). Best-effort.
-    static func endRoomSurfaces(roomName: String) {
-        for activity in Activity<ScoreActivityAttributes>.activities
-        where activity.attributes.roomName == roomName {
-            Task {
-                await activity.end(nil, dismissalPolicy: .immediate)
-            }
-        }
-        if ScoreSnapshotStore.load()?.roomName == roomName,
-           let defaults = UserDefaults(suiteName: ScoreSnapshotStore.suiteName) {
-            // Same key `ScoreSnapshotStore` writes (private there).
-            defaults.removeObject(forKey: "scoreSnapshot")
-            WidgetCenter.shared.reloadAllTimelines()
-        }
+    /// when it is showing that room. Both surfaces key on the room ID
+    /// now: the widget target has one snapshot slot, and keying it by
+    /// name ended the wrong room's activity when two rooms shared a
+    /// name (audit 01 D11, 04 D9). Best-effort.
+    static func endRoomSurfaces(roomId: UUID) {
+        ScoreLiveActivityDriver.endNight(roomId: roomId)
+        guard ScoreSnapshotStore.load()?.roomId == roomId else { return }
+        ScoreSnapshotStore.clear()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }
 

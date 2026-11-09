@@ -29,12 +29,14 @@ enum ScoreSnapshotStore {
     /// A stale empty write never clobbers real standings
     /// (`ScoreSnapshot.shouldPersist`).
     static func write(
+        roomId: UUID,
         roomName: String,
         leaderboardLine: String,
         isLive: Bool
     ) {
         guard let defaults = UserDefaults(suiteName: suiteName) else { return }
         let snapshot = ScoreSnapshot(
+            roomId: roomId,
             roomName: roomName,
             leaderboardLine: leaderboardLine,
             isLive: isLive,
@@ -44,6 +46,21 @@ enum ScoreSnapshotStore {
         guard ScoreSnapshot.shouldPersist(snapshot, existing: existing) else { return }
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    /// Stops persisting the snapshot when it is showing `roomId` — the
+    /// room went away (left, kicked, deleted). Keyed on the id, not the
+    /// name: a rename used to orphan the snapshot (audit 04 D9).
+    static func clear(roomId: UUID) {
+        guard load()?.roomId == roomId else { return }
+        clear()
+    }
+
+    /// Stops persisting the room's snapshot. Used when the room goes
+    /// away (left, kicked, deleted) and by the sign-out purge.
+    static func clear() {
+        guard let defaults = UserDefaults(suiteName: suiteName) else { return }
+        defaults.removeObject(forKey: key)
     }
 
     /// Reads the current snapshot, if any.

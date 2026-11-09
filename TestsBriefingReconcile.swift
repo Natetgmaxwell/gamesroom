@@ -28,6 +28,13 @@ func runBriefingReconcileTests() {
         var pending: [String] = []
         var delivered: [String] = []
         var added: [PlannedBriefingNotification] = []
+        /// Every add and removal, in the order the reconciler issued
+        /// them: `"add:<id>"` / `"remove:<id>"`. Audit 04 D1.
+        var log: [String] = []
+        /// When true, `add` suspends once before landing. A detached
+        /// add (the pre-fix shape) would then lose the race against
+        /// an assertion that runs right after `reconcile` returns.
+        var yieldsOnAdd = false
 
         func pendingIdentifiers() async -> [String] { pending }
         func deliveredIdentifiers() async -> [String] { delivered }
@@ -35,6 +42,7 @@ func runBriefingReconcileTests() {
         func removePending(identifiers: [String]) {
             pending.removeAll { identifiers.contains($0) }
             added.removeAll { identifiers.contains($0.identifier) }
+            for id in identifiers { log.append("remove:\(id)") }
         }
 
         func add(
@@ -44,7 +52,8 @@ func runBriefingReconcileTests() {
             kindRaw: String,
             eventId: UUID,
             fireAt: Date
-        ) {
+        ) async throws {
+            if yieldsOnAdd { await Task.yield() }
             pending.append(identifier)
             added.append(PlannedBriefingNotification(
                 identifier: identifier,
@@ -54,10 +63,26 @@ func runBriefingReconcileTests() {
                 eventId: eventId,
                 fireAt: fireAt
             ))
+            log.append("add:\(identifier)")
         }
 
         func claimLanguageCount() -> Int {
             added.filter { $0.body.lowercased().contains("claim") }.count
+        }
+
+        /// True when some identifier was removed before it was ever
+        /// added — the exact inversion D1 describes.
+        func hasRemoveBeforeMatchingAdd() -> Bool {
+            var addedIds = Set<String>()
+            for entry in log {
+                if entry.hasPrefix("add:") {
+                    addedIds.insert(String(entry.dropFirst(4)))
+                } else if entry.hasPrefix("remove:") {
+                    let id = String(entry.dropFirst(7))
+                    if !addedIds.contains(id) { return true }
+                }
+            }
+            return false
         }
     }
 
@@ -402,6 +427,295 @@ func runBriefingReconcileTests() {
         runner.assertFalse(ledger.hasFiredOnCreate(eventId: event1, userId: user2))
         runner.assertFalse(ledger.hasFiredOnCreate(eventId: event2, userId: user1))
         defaults.removePersistentDomain(forName: suite)
+    }
+
+    // Audit 04 D1 — the add is awaited. The fake sink suspends once
+    // inside `add`; a detached add (the pre-fix shape) would leave
+    // `pending` empty at the moment `reconcile` returns, so a claim
+    // followed by a mute in the same second cancelled nothing.
+    runner.runAsync("briefing reconcile: every add lands before reconcile returns") {
+        let sink = FakeBriefingSink()
+        sink.yieldsOnAdd = true
+        let ledger = FakeOnCreateLedger()
+        let eventId = UUID(), userId = UUID()
+
+        await runBriefingReconcile(
+            sink: sink, ledger: ledger, state: .unclaimed,
+            eventId: eventId, userId: userId,
+            now: brNow, playedAt: brPlayedAt
+        )
+        runner.assertEqual(sink.pending.count, 4)
+        runner.assertEqual(sink.log.filter { $0.hasPrefix("add:") }.count, 4)
+    }
+
+    // Audit 04 D1 — the ordered log. Across claim → mute-while-claimed
+    // → decline, no `remove` may precede the matching `add`: a cancel
+    // that runs before its request exists is the bug.
+    runner.runAsync("briefing reconcile: remove never precedes a matching add") {
+        let sink = FakeBriefingSink()
+        sink.yieldsOnAdd = true
+        let ledger = FakeOnCreateLedger()
+        let eventId = UUID(), userId = UUID()
+
+        // Scheduled as unclaimed, then claimed, then declined — the
+        // claim → mute → decline sequence in one sitting.
+        for state in [MemberRSVPState.unclaimed, .claimed, .declined] {
+            await runBriefingReconcile(
+                sink: sink, ledger: ledger, state: state,
+                eventId: eventId, userId: userId,
+                now: brNow, playedAt: brPlayedAt
+            )
+        }
+        runner.assertFalse(
+            sink.hasRemoveBeforeMatchingAdd(),
+            "a removal landed before the request it cancels: \(sink.log)"
+        )
+        runner.assertEqual(sink.pending.count, 0)
+    }
+
+    // MARK: - BriefingContext / BriefingOutcome (2026-11-09, audit 04 §3.2)
+
+    let ctxEventId = UUID()
+    let ctxRoomId = UUID()
+    let ctxUserId = UUID()
+
+    func context(
+        seat: MemberRSVPState? = .unclaimed,
+        roomOptIn: Bool = true,
+        muted: Bool = false,
+        hidden: Bool = false,
+        kind: BriefingPlanKind = .cadence,
+        playedAt: Date? = nil
+    ) -> BriefingContext {
+        BriefingContext(
+            eventId: ctxEventId,
+            roomId: ctxRoomId,
+            eventName: "Friday Night Hold'em",
+            playedAt: playedAt ?? brPlayedAt,
+            userId: ctxUserId,
+            memberName: "Nathan",
+            mascotName: "Ace",
+            seat: seat,
+            roomOptIn: roomOptIn,
+            eventMuted: muted,
+            hidden: hidden,
+            kind: kind,
+            now: brNow
+        )
+    }
+
+    // One test per SilenceReason — the planner names every gate that
+    // can produce silence, so a silenced device is diagnosable.
+
+    runner.run("briefing plan: declined is silenced(.declined)") {
+        let outcome = BriefingReconciler.plan(context(seat: .declined), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.declined))
+        runner.assertEqual(outcome.planned.count, 0)
+    }
+
+    runner.run("briefing plan: room opt-out is silenced(.roomOptOut)") {
+        let outcome = BriefingReconciler.plan(context(roomOptIn: false), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.roomOptOut))
+    }
+
+    runner.run("briefing plan: per-event mute is silenced(.muted)") {
+        let outcome = BriefingReconciler.plan(context(muted: true), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.muted))
+    }
+
+    runner.run("briefing plan: a hidden night is silenced(.hidden)") {
+        let outcome = BriefingReconciler.plan(context(hidden: true), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.hidden))
+    }
+
+    runner.run("briefing plan: an unreadable seat is silenced(.unknownSeat)") {
+        let outcome = BriefingReconciler.plan(context(seat: nil), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.unknownSeat))
+    }
+
+    runner.run("briefing plan: a live context schedules the cadence") {
+        let outcome = BriefingReconciler.plan(context(), includeOnCreate: true)
+        guard case .scheduled(let planned) = outcome else {
+            runner.assertTrue(false, "expected .scheduled, got \(outcome)")
+            return
+        }
+        runner.assertEqual(planned.count, 4)
+        runner.assertEqual(planned.first?.kindRaw, BriefingReconciler.onCreateKindRaw)
+    }
+
+    // The plan is pure: same context, same outcome, twice, and it
+    // touches no sink.
+    runner.run("briefing plan: same context yields the same outcome") {
+        let first = BriefingReconciler.plan(context(), includeOnCreate: false)
+        let second = BriefingReconciler.plan(context(), includeOnCreate: false)
+        runner.assertEqual(first, second)
+        runner.assertEqual(first.planned.count, 3)
+    }
+
+    // A silenced context reconciles to zero pending requests: the
+    // sweep runs, the plan says nothing.
+    runner.runAsync("briefing reconcile(context): opt-out sweeps and schedules nothing") {
+        let sink = FakeBriefingSink()
+        let ledger = FakeOnCreateLedger()
+
+        await BriefingReconciler.reconcile(
+            context: context(), sink: sink, ledger: ledger
+        )
+        runner.assertEqual(sink.pending.count, 4)
+
+        await BriefingReconciler.reconcile(
+            context: context(roomOptIn: false), sink: sink, ledger: ledger
+        )
+        runner.assertEqual(sink.pending.count, 0)
+        runner.assertEqual(
+            sink.log.reduce(0) { $1.hasPrefix("add:") ? $0 + 1 : $0 }, 4
+        )
+    }
+
+    // MARK: - Joined-late catch-up on the same context (audit 04 D4/D5)
+
+    // CatchUpMessage branches on `playedAt > Date()`, so these use a
+    // playedAt that is genuinely upcoming.
+    let upcomingPlayedAt = Date().addingTimeInterval(30 * 24 * 3600)
+
+    // The body follows the canonical seat: a claimed member is framed
+    // like the claimed logistics reminder, never as a claim prompt.
+    runner.run("briefing catch-up: the body follows the canonical seat") {
+        let claimed = BriefingReconciler.plan(
+            context(seat: .claimed, kind: .catchUp, playedAt: upcomingPlayedAt)
+        )
+        let unclaimed = BriefingReconciler.plan(
+            context(seat: .unclaimed, kind: .catchUp, playedAt: upcomingPlayedAt)
+        )
+        guard
+            case .scheduled(let claimedPlanned) = claimed,
+            case .scheduled(let unclaimedPlanned) = unclaimed
+        else {
+            runner.assertTrue(false, "expected .scheduled for both seats")
+            return
+        }
+        runner.assertEqual(claimedPlanned.count, 1)
+        runner.assertEqual(
+            claimedPlanned.first?.identifier,
+            BriefingReconciler.catchUpIdentifier(eventId: ctxEventId)
+        )
+        runner.assertEqual(claimedPlanned.first?.kindRaw, BriefingReconciler.catchUpKindRaw)
+        let claimedBody = claimedPlanned.first?.body ?? ""
+        let unclaimedBody = unclaimedPlanned.first?.body ?? ""
+        runner.assertFalse(claimedBody.isEmpty)
+        runner.assertTrue(
+            claimedBody != unclaimedBody,
+            "the catch-up body ignores the seat: \(claimedBody)"
+        )
+        runner.assertFalse(
+            claimedBody.lowercased().contains("claim"),
+            "a claimed member is told to claim: \(claimedBody)"
+        )
+    }
+
+    runner.run("briefing catch-up: mute, opt-out and an unknown seat are silenced") {
+        runner.assertEqual(
+            BriefingReconciler.plan(context(seat: .claimed, muted: true, kind: .catchUp)),
+            .silenced(.muted)
+        )
+        runner.assertEqual(
+            BriefingReconciler.plan(context(roomOptIn: false, kind: .catchUp)),
+            .silenced(.roomOptOut)
+        )
+        runner.assertEqual(
+            BriefingReconciler.plan(context(seat: nil, kind: .catchUp)),
+            .silenced(.unknownSeat)
+        )
+    }
+
+    // D5 — a cadence sweep must not eat a catch-up scheduled a moment
+    // earlier, and a catch-up must not eat the cadence.
+    runner.runAsync("briefing reconcile: the catch-up survives a cadence pass and vice versa") {
+        let sink = FakeBriefingSink()
+        let ledger = FakeOnCreateLedger()
+        let catchUpId = BriefingReconciler.catchUpIdentifier(eventId: ctxEventId)
+
+        await BriefingReconciler.reconcile(
+            context: context(kind: .catchUp), sink: sink, ledger: ledger
+        )
+        runner.assertTrue(sink.pending.contains(catchUpId))
+        runner.assertEqual(sink.pending.count, 1)
+
+        // The room-open cadence pass that used to sweep it.
+        await BriefingReconciler.reconcile(
+            context: context(), sink: sink, ledger: ledger
+        )
+        runner.assertTrue(
+            sink.pending.contains(catchUpId),
+            "a cadence pass cancelled the catch-up: \(sink.pending)"
+        )
+        runner.assertEqual(sink.pending.count, 5)
+
+        // And the catch-up pass leaves the cadence alone.
+        await BriefingReconciler.reconcile(
+            context: context(kind: .catchUp), sink: sink, ledger: ledger
+        )
+        runner.assertEqual(sink.pending.count, 5)
+        runner.assertTrue(sink.pending.contains(catchUpId))
+    }
+
+    // MARK: - Cadence source (audit 04 D12)
+
+    // The one switch the 109 header promised. `.local` schedules the
+    // whole arc; `.server` schedules no timed slot at all, because
+    // the server's slot ledger is meant to own them.
+    runner.run("briefing cadence: .server drops t168h, t48h and morning-of") {
+        var ctx = context()
+        ctx.cadence = .server
+        let outcome = BriefingReconciler.plan(ctx, includeOnCreate: true)
+        let kinds = Set(outcome.planned.map(\.kindRaw))
+        runner.assertFalse(kinds.contains(BriefingReconciler.t168hKindRaw))
+        runner.assertFalse(kinds.contains(BriefingReconciler.t84hKindRaw))
+        runner.assertFalse(kinds.contains(BriefingReconciler.morningOfKindRaw))
+        // The on-create prompt is local-only either way.
+        runner.assertEqual(outcome.planned.count, 1)
+        runner.assertEqual(kinds, [BriefingReconciler.onCreateKindRaw])
+    }
+
+    runner.run("briefing cadence: .local keeps the full arc") {
+        var ctx = context()
+        ctx.cadence = .local
+        let outcome = BriefingReconciler.plan(ctx, includeOnCreate: true)
+        runner.assertEqual(outcome.planned.count, 4)
+        runner.assertEqual(BriefingCadence.current, .local)
+    }
+
+    // MARK: - Foreground pass plan (audit 04 D3)
+
+    // A room with no cached night still gets a step. The old loop
+    // iterated the cache, so the room was invisible to the pass.
+    runner.run("foreground plan: a room with no cached event is still visited") {
+        let cachedRoom = UUID()
+        let uncachedRoom = UUID()
+        let cachedEvent = UUID()
+        let plan = BriefingReconciler.foregroundRoomPlan(
+            memberRoomIds: [cachedRoom, uncachedRoom],
+            cachedEventIdByRoom: [cachedRoom: cachedEvent]
+        )
+        runner.assertEqual(plan.count, 2)
+        runner.assertEqual(
+            plan,
+            [
+                .init(roomId: cachedRoom, staleEventId: cachedEvent),
+                .init(roomId: uncachedRoom, staleEventId: nil)
+            ]
+        )
+    }
+
+    // A room that was left is not visited: the pass reads the member
+    // list, not the cache.
+    runner.run("foreground plan: a room the user left is not visited") {
+        let left = UUID()
+        let plan = BriefingReconciler.foregroundRoomPlan(
+            memberRoomIds: [],
+            cachedEventIdByRoom: [left: UUID()]
+        )
+        runner.assertEqual(plan.count, 0)
     }
 }
 

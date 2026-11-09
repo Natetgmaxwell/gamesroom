@@ -15,11 +15,11 @@ import UserNotifications
 /// surface.
 enum RoomNotifPrompt {
     static func isAnswered(roomId: UUID) -> Bool {
-        UserDefaults.standard.bool(forKey: "notifPromptAnswered.\(roomId.uuidString)")
+        UserDefaults.standard.bool(forKey: StorageKeys.notifPromptAnswered(roomId: roomId))
     }
 
     static func markAnswered(roomId: UUID) {
-        UserDefaults.standard.set(true, forKey: "notifPromptAnswered.\(roomId.uuidString)")
+        UserDefaults.standard.set(true, forKey: StorageKeys.notifPromptAnswered(roomId: roomId))
     }
 }
 

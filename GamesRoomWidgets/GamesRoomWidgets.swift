@@ -29,6 +29,7 @@ import ActivityKit
 /// is the shared channel. Mirrors GamesRoom/Models/ScoreSnapshot.swift
 /// (the app target compiles its own copy — no shared framework).
 struct ScoreSnapshot: Codable {
+    var roomId: UUID
     var roomName: String
     var leaderboardLine: String
     var isLive: Bool
@@ -116,6 +117,9 @@ struct ScoreActivityAttributes: ActivityAttributes {
         var leaderboardLine: String
     }
 
+    /// The room this activity belongs to. The app matches on the id;
+    /// two rooms may share a name.
+    var roomId: UUID
     var roomName: String
 }
 

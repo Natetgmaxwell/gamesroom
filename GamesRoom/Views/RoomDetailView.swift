@@ -1340,17 +1340,31 @@ struct RoomDetailView: View {
         let topLine = leaderboard.prefix(3)
             .map { "\($0.displayName) \($0.pointsBalance)" }
             .joined(separator: " · ")
+        // TODO(SM-P): this predicate becomes `NightPhase == .live`
+        // (which also honours `rooms.autoCloseHours`) when lane P lands.
+        let isLiveNow = (activeEvent?.playedAt ?? .distantFuture) <= Date()
+            && activeEvent?.settledAt == nil
         ScoreSnapshotStore.write(
+            roomId: room.id,
             roomName: room.name,
             leaderboardLine: topLine,
-            isLive: (activeEvent?.playedAt ?? .distantFuture) <= Date() && activeEvent?.settledAt == nil
+            isLive: isLiveNow
         )
         // V0.98 — drive the Live Activity only while the event is
-        // in progress (starts at play, ends at settle).
+        // in progress (starts at play, ends at settle). The staleDate
+        // is the moment the server stops treating the night as live,
+        // so a phone that never hears about the settle still ages the
+        // scoreboard out instead of pinning it (audit 04 D10).
         ScoreLiveActivityDriver.apply(
+            roomId: room.id,
             roomName: room.name,
             leaderboardLine: topLine,
-            isLive: (activeEvent?.playedAt ?? .distantFuture) <= Date() && activeEvent?.settledAt == nil
+            isLive: isLiveNow,
+            staleDate: activeEvent.map {
+                LiveActivityRule.staleDate(
+                    playedAt: $0.playedAt, autoCloseHours: room.autoCloseHours
+                )
+            }
         )
     }
 
@@ -2202,7 +2216,7 @@ struct RoomDetailView: View {
         do {
             _ = try await roomService.settleEvent(eventId: event.id)
             Haptics.success()
-            ScoreLiveActivityDriver.endNight(roomName: room.name)
+            ScoreLiveActivityDriver.endNight(roomId: room.id)
             async let active: Event? = roomService.loadActiveEvent(roomId: room.id, force: true)
             async let board: [LeaderboardEntry] = roomService.loadLeaderboard(roomId: room.id, force: true)
             async let season: () = loadSeasonIfNeeded(force: true)

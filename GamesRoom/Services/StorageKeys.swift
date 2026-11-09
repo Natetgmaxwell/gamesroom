@@ -60,12 +60,32 @@ enum StorageKeys {
         "claimReminderAskAnswered-\(roomId.uuidString)"
     }
 
+    /// V0.79: the one-time "Notify me" / "Not now" prompt above the
+    /// room page was answered in this room. Per device; the room's
+    /// notification setting is the durable surface.
+    static func notifPromptAnswered(roomId: UUID) -> String {
+        "notifPromptAnswered.\(roomId.uuidString)"
+    }
+
     /// Lane S2: this install has reported the device time zone for a
     /// room it hosts (`set_room_time_zone`). Set only on success, so
     /// a missing RPC is retried on a later room open.
     static func roomTimeZoneReported(roomId: UUID) -> String {
         "roomTimeZoneReported-\(roomId.uuidString)"
     }
+
+    /// Every key this enum owns. A key added here without a decision in
+    /// `DeviceStateKeys` (purged on sign-out) or `devicePreferences`
+    /// (kept) fails `runDeviceStateTests`.
+    static let persistedKeys: [String] = [
+        lastViewedRoomId,
+        keepScanPhotos,
+        calendarRowIdentifiers
+    ]
+
+    /// Keys that describe the PHONE, not the person: they survive a
+    /// sign-out because the next account uses the same hardware.
+    static let devicePreferences: [String] = [keepScanPhotos]
 }
 
 /// Lane S2: this device's calendar rows, eventId -> EventKit
@@ -92,6 +112,13 @@ enum CalendarRowStore {
         var rows = map(defaults)
         guard rows.removeValue(forKey: eventId.uuidString) != nil else { return }
         defaults.set(rows, forKey: StorageKeys.calendarRowIdentifiers)
+    }
+
+    /// Every row this device has written: eventId string → EventKit
+    /// identifier. Used by the sign-out purge to delete the rows
+    /// themselves before the map is dropped (audit 04 D6).
+    static func all(defaults: UserDefaults = .standard) -> [String: String] {
+        map(defaults)
     }
 
     private static func map(_ defaults: UserDefaults) -> [String: String] {
