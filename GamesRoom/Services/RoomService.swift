@@ -2188,7 +2188,7 @@ final class RoomService: ObservableObject {
     /// the server said "claimed" while the room page still showed
     /// an open chair until the next pull-to-refresh.
     func claimSeat(eventId: UUID) async throws -> MemberRSVP {
-        if roomTriggeringEscrow(forEvent: eventId) {
+        if depositMode(forEvent: eventId) != .off {
             try await store.claimSeatWithDeposit(eventId: eventId)
             await loadMySeatDeposit(eventId: eventId, force: true)
             // Notification-etiquette fix (2026-11-04) — the escrow
@@ -2234,9 +2234,11 @@ final class RoomService: ObservableObject {
     /// got fined for changing their mind.
     ///
     /// A room that runs deposits off has no deposit to return, so it
-    /// keeps the plain RSVP upsert. A room the cache cannot resolve
-    /// is treated as an escrow room: a stranded deposit is worse
-    /// than one extra RPC.
+    /// keeps the plain RSVP upsert. A room the cache cannot resolve is
+    /// treated as an escrow room: `release_seat` moves the RSVP either
+    /// way, and a stranded deposit is worse than one extra RPC. The two
+    /// old derivers had opposite defaults on that miss; there is one
+    /// rule now (audit 02 D5).
     ///
     /// The plain `upsert_event_rsvp` path is also kept for a
     /// `.claimed` state (the host answering for somebody else),
@@ -2246,7 +2248,7 @@ final class RoomService: ObservableObject {
         guard state == .unclaimed || state == .declined else {
             return try await upsertEventRSVP(eventId: eventId, state: state)
         }
-        guard roomRunsEscrow(forEvent: eventId) != false else {
+        guard depositMode(forEvent: eventId) != .off else {
             return try await upsertEventRSVP(eventId: eventId, state: state)
         }
         try await store.releaseSeat(eventId: eventId, state: state)
@@ -2262,14 +2264,19 @@ final class RoomService: ObservableObject {
         )
     }
 
-    /// S3.3 — does the event's room run the seat-deposit escrow?
-    /// `nil` means the room could not be resolved from the cache, so
-    /// the caller must assume the worst rather than strand a held
-    /// deposit.
-    private func roomRunsEscrow(forEvent eventId: UUID) -> Bool? {
-        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }),
-              let room = rooms.first(where: { $0.id == event.roomId }) else { return nil }
-        return room.seatDepositTrigger == .escrow && room.seatDepositAmount > 0
+    /// The event's room deposit mode. `nil` means the room could not be
+    /// resolved from the cache — the one caller that cares treats that
+    /// as "assume a deposit", because stranding one is the worse error.
+    /// There is one rule after this, `Room.depositMode` (audit 02 C1/D5).
+    private func depositMode(forEvent eventId: UUID) -> DepositMode? {
+        guard let event = roomIdForActiveEvent(eventId),
+              let room = rooms.first(where: { $0.id == event }) else { return nil }
+        return room.depositMode
+    }
+
+    /// The room id that owns an event in the active-event cache.
+    private func roomIdForActiveEvent(_ eventId: UUID) -> UUID? {
+        activeEventByRoom.values.first(where: { $0.id == eventId })?.roomId
     }
 
     /// S3.3 — true when the server refused a claim because every
@@ -2400,15 +2407,6 @@ final class RoomService: ObservableObject {
         cacheTimestamps.removeValue(forKey: "arrivalCandidates:\(eventId.uuidString)")
     }
 
-    /// True when the event's room runs the deposit escrow. Reads
-    /// the cached rooms list; a miss (room not loaded yet) runs
-    /// the plain claim path — the server RPC re-guards anyway.
-    private func roomTriggeringEscrow(forEvent eventId: UUID) -> Bool {
-        guard let room = rooms.first(where: { r in
-            activeEventByRoom.values.contains { $0.id == eventId && $0.roomId == r.id }
-        }) else { return false }
-        return room.seatDepositTrigger == .escrow && room.seatDepositAmount > 0
-    }
 }
 
 // MARK: - Preview support

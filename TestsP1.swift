@@ -20,6 +20,7 @@ func runP1Tests(_ runner: TestRunner) {
     runP1StoreNightTests(runner)
     runP1V0StateTests(runner)
     runP1NightPlanPhaseTests(runner)
+    runP1SeatModelTests(runner)
 }
 
 // MARK: - NightPhase table (audit 01 §3.1)
@@ -462,5 +463,108 @@ private func runP1NightPlanPhaseTests(_ runner: TestRunner) {
         next = settled.withSettledAt(nil)
         runner.assertNil(NightPlan.recapAboveNextNight(recent: settled, active: next, now: now),
                          "an older settled night is not the slot's night")
+    }
+}
+
+
+// MARK: - DepositMode / SeatPhase / SeatAvailability (audit 02 C1, C2; 03 C3)
+
+private func runP1SeatModelTests(_ runner: TestRunner) {
+    func room(trigger: SeatDepositTrigger, amount: Int) -> Room {
+        Room(
+            id: UUID(), name: "Room", mascotName: "Felty",
+            mascotPersonality: .friendly, mascotPoliticalIdeology: .centrist,
+            createdBy: UUID(), createdAt: Date(), updatedAt: Date(),
+            isLive: false,
+            joinStartingBonus: 200, userRole: .member,
+            seatDepositAmount: amount, seatDepositTrigger: trigger
+        )
+    }
+
+    func deposit(_ status: SeatDeposit.Status) -> SeatDeposit {
+        SeatDeposit(id: UUID(), amount: 50, status: status, heldAt: Date())
+    }
+
+    runner.run("P1: DepositMode is escrow only when the trigger is escrow and the amount is above zero") {
+        runner.assertEqual(room(trigger: .escrow, amount: 200).depositMode, .escrow(amount: 200))
+        runner.assertEqual(room(trigger: .escrow, amount: 0).depositMode, .off)
+        runner.assertEqual(room(trigger: .off, amount: 200).depositMode, .off)
+        runner.assertEqual(room(trigger: .off, amount: 0).depositMode, .off)
+        runner.assertNil(room(trigger: .off, amount: 200).depositMode.amount)
+        runner.assertEqual(room(trigger: .escrow, amount: 50).depositMode.amount, 50)
+    }
+
+    runner.run("P1: SeatPhase has exactly one answer for every rsvp x deposit x mode") {
+        let statuses: [SeatDeposit.Status?] = [nil, .held, .returned, .forfeited, .waived]
+        let modes: [DepositMode] = [.off, .escrow(amount: 50)]
+        for rsvp in [MemberRSVPState.unclaimed, .claimed, .declined] {
+            for status in statuses {
+                for mode in modes {
+                    let phase = SeatPhase.phase(
+                        rsvp: rsvp,
+                        deposit: status.map(deposit),
+                        mode: mode
+                    )
+                    // Every combination lands somewhere; the switch has
+                    // no nil and no fall-through.
+                    switch phase {
+                    case .open, .declined, .claimedNoDeposit, .held, .arrived, .noShow, .missingDeposit:
+                        break
+                    }
+                }
+            }
+        }
+        runner.assertTrue(true, "every combination resolves")
+    }
+
+    runner.run("P1: an unclaimed seat is open whatever deposit row is lying around") {
+        runner.assertEqual(SeatPhase.phase(rsvp: .unclaimed, deposit: deposit(.returned), mode: .escrow(amount: 50)), .open)
+        runner.assertEqual(SeatPhase.phase(rsvp: .unclaimed, deposit: nil, mode: .escrow(amount: 50)), .open)
+    }
+
+    runner.run("P1: a declined seat is declined whatever deposit row is lying around") {
+        runner.assertEqual(SeatPhase.phase(rsvp: .declined, deposit: deposit(.held), mode: .escrow(amount: 50)), .declined)
+    }
+
+    runner.run("P1: claimed with deposits off is claimedNoDeposit") {
+        runner.assertEqual(
+            SeatPhase.phase(rsvp: .claimed, deposit: nil, mode: .off),
+            .claimedNoDeposit
+        )
+    }
+
+    runner.run("P1: claimed with deposits on and no deposit row is the named impossible state") {
+        runner.assertEqual(
+            SeatPhase.phase(rsvp: .claimed, deposit: nil, mode: .escrow(amount: 50)),
+            .missingDeposit
+        )
+    }
+
+    runner.run("P1: the deposit status picks held, arrived or no-show") {
+        let mode = DepositMode.escrow(amount: 50)
+        let held = deposit(.held)
+        runner.assertEqual(SeatPhase.phase(rsvp: .claimed, deposit: held, mode: mode), .held(deposit: held))
+        let returned = deposit(.returned)
+        runner.assertEqual(SeatPhase.phase(rsvp: .claimed, deposit: returned, mode: mode), .arrived(deposit: returned))
+        let forfeited = deposit(.forfeited)
+        runner.assertEqual(SeatPhase.phase(rsvp: .claimed, deposit: forfeited, mode: mode), .noShow(deposit: forfeited))
+        let waived = deposit(.waived)
+        runner.assertEqual(SeatPhase.phase(rsvp: .claimed, deposit: waived, mode: mode), .noShow(deposit: waived))
+    }
+
+    runner.run("P1: SeatAvailability is full only when every chair is taken and the viewer holds none") {
+        runner.assertEqual(SeatAvailability.compute(rsvp: .unclaimed, seatsClaimed: 6, maxSeats: 6), .full)
+        runner.assertEqual(SeatAvailability.compute(rsvp: .unclaimed, seatsClaimed: 5, maxSeats: 6), .open)
+        runner.assertEqual(SeatAvailability.compute(rsvp: .unclaimed, seatsClaimed: 7, maxSeats: 6), .full)
+        runner.assertEqual(SeatAvailability.compute(rsvp: .claimed, seatsClaimed: 6, maxSeats: 6), .youHoldOne)
+        runner.assertEqual(SeatAvailability.compute(rsvp: .declined, seatsClaimed: 6, maxSeats: 6), .full)
+    }
+
+    runner.run("P1: a full night whose counts drop back to 7 of 8 is open again (the latch is gone)") {
+        // Audit 03 D1 — the old latch said "All 8 seats are taken."
+        // until the same member claimed, so a release by anyone else
+        // never brought the button back.
+        runner.assertEqual(SeatAvailability.compute(rsvp: .unclaimed, seatsClaimed: 8, maxSeats: 8), .full)
+        runner.assertEqual(SeatAvailability.compute(rsvp: .unclaimed, seatsClaimed: 7, maxSeats: 8), .open)
     }
 }

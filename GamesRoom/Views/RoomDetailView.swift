@@ -150,14 +150,6 @@ struct RoomDetailView: View {
     @State private var seatActionError: String?
     @State private var showSeatActionError: Bool = false
 
-    /// S3.3 — the nights this member found full. The server
-    /// refuses a claim on a full night (`night_full`, migration
-    /// 113) and the cached seat counts can still be stale, so the
-    /// refusal is remembered per event: the Claim seat button is
-    /// replaced with the grey "All N seats are taken." line until
-    /// the seat counts come back with a free chair.
-    @State private var nightFullEventIds: Set<UUID> = []
-
     /// S3.3 — the release toast. Holds the event whose seat was
     /// released so "Undo" can put it back. Five seconds, then it
     /// goes.
@@ -740,7 +732,7 @@ struct RoomDetailView: View {
                 if let event = activeEvent,
                    isHost,
                    nightPhase(for: event) == .live,
-                   liveRoom.seatDepositTrigger == .escrow {
+                   liveRoom.depositMode.isEscrow {
                     let candidates = roomService.cachedArrivalCandidates(eventId: event.id)
                     if !candidates.isEmpty {
                         if ArrivalGrace.isOpen(
@@ -910,6 +902,16 @@ struct RoomDetailView: View {
         )
     }
 
+    /// This viewer's chair for a night, from the RSVP, the deposit and
+    /// the room's deposit mode (audit 02 C2).
+    private func seatPhase(for event: Event) -> SeatPhase {
+        SeatPhase.phase(
+            rsvp: myRSVP,
+            deposit: roomService.cachedMySeatDeposit(eventId: event.id),
+            mode: liveRoom.depositMode
+        )
+    }
+
     /// "The viewer has played", one definition for the whole page: a
     /// working hand, a casino withdrawal, or a scan. `V0State` and
     /// `NightInput` both read this, so the card and its primary action
@@ -1039,7 +1041,6 @@ struct RoomDetailView: View {
                     room: liveRoom,
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
                     onCheckIn: { Task { await checkInSeat(eventId: event.id) } },
-                    nightFullOverride: nightFullEventIds.contains(event.id)
                 )
             case .claimed(let event):
                 BriefingSlot(
@@ -1551,7 +1552,7 @@ struct RoomDetailView: View {
     /// RPC's host check.
     private func loadArrivalCandidatesIfNeeded(force: Bool = false) async {
         guard isHost else { return }
-        guard liveRoom.seatDepositTrigger == .escrow else { return }
+        guard liveRoom.depositMode.isEscrow else { return }
         guard let event = activeEvent else { return }
         await roomService.loadArrivalCandidates(eventId: event.id, force: force)
     }
@@ -1615,13 +1616,11 @@ struct RoomDetailView: View {
         do {
             _ = try await roomService.claimSeat(eventId: eventId)
             seatActionError = nil
-            nightFullEventIds.remove(eventId)
             Haptics.success()
             await roomService.eventDidChange(eventId: eventId)
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
             if RoomService.isNightFullError(error) {
-                nightFullEventIds.insert(eventId)
                 // The counts in the cache are the ones that sent us
                 // here: re-read them so the card agrees with the
                 // server about how many chairs are gone.
@@ -1955,7 +1954,7 @@ struct RoomDetailView: View {
         for round in rounds {
             arrivedIds.formUnion(round.entries.map(\.memberId))
         }
-        if liveRoom.seatDepositTrigger == .escrow {
+        if liveRoom.depositMode.isEscrow {
             let waiting = Set(roomService.cachedArrivalCandidates(eventId: event.id).map(\.userId))
             arrivedIds.formUnion(claimedIds.subtracting(waiting))
         } else {
@@ -1972,7 +1971,7 @@ struct RoomDetailView: View {
             arrivedCount: arrivedIds.count,
             claimedCount: max(claimedIds.count, arrivedIds.count),
             roundsScored: scoredRounds.count,
-            iHaveHeldDeposit: roomService.cachedMySeatDeposit(eventId: event.id)?.status == .held,
+            iHaveHeldDeposit: seatPhase(for: event).deposit?.status == .held,
             iHaveWithdrawn: hasWithdrawn
         )
     }
@@ -2235,11 +2234,6 @@ private struct BriefingSlot: View {
     /// instantly; the reclaim IS the check-in. Wired up only
     /// when the parent passes a non-nil callback.
     let onCheckIn: (() -> Void)?
-    /// S3.3 — the server refused a claim on this night
-    /// (`night_full`). The cached seat counts can still be stale,
-    /// so the parent remembers the refusal and the card keeps
-    /// saying the table is full until a chair frees up.
-    let nightFullOverride: Bool
     // V0.79 — notification toggle params removed. Preferences moved
     // to the one-time RoomNotifPromptCard (main room page) and
     // RoomSettingsSheet's "My notifications" section.
@@ -2264,8 +2258,7 @@ private struct BriefingSlot: View {
         onEdit: (() -> Void)? = nil,
         room: Room,
         heldDeposit: SeatDeposit? = nil,
-        onCheckIn: (() -> Void)? = nil,
-        nightFullOverride: Bool = false
+        onCheckIn: (() -> Void)? = nil
     ) {
         self.event = event
         self.briefing = briefing
@@ -2283,7 +2276,6 @@ private struct BriefingSlot: View {
         self.room = room
         self.heldDeposit = heldDeposit
         self.onCheckIn = onCheckIn
-        self.nightFullOverride = nightFullOverride
     }
 
     /// The night's phase, read from the room's own auto-close window.
@@ -2291,24 +2283,34 @@ private struct BriefingSlot: View {
         NightPhaseResolver.phase(for: event, autoCloseHours: room.autoCloseHours)
     }
 
-    /// S3.3 — a table has a fixed number of chairs. The night is
-    /// full when every chair is taken and this member does not hold
-    /// one: the Claim seat button is replaced with a plain grey
-    /// line saying so, because there is no chair to take.
-    ///
-    /// The count comes from the server's briefing summary; the
-    /// seat-grid rows are the fallback while the summary is still
-    /// loading. `nightFullOverride` is the server's own refusal
-    /// (`night_full`), which wins over both.
-    private var isNightFull: Bool {
-        if nightFullOverride { return true }
-        guard event.maxSeats > 0, myRSVP != .claimed else { return false }
-        let claimed = max(
-            briefing?.seatsClaimed ?? 0,
-            rsvps.filter { $0.state == .claimed }.count
+    /// This member's chair, from the three facts the server keeps.
+    private var seatPhase: SeatPhase {
+        SeatPhase.phase(
+            rsvp: myRSVP,
+            deposit: heldDeposit,
+            mode: room.depositMode
         )
-        return claimed >= event.maxSeats
     }
+
+    /// S3.3 — a table has a fixed number of chairs. The count comes from
+    /// the server's briefing summary; the seat-grid rows are the
+    /// fallback while the summary is still loading.
+    ///
+    /// C3 (audit 03 D1) — this is derived, never latched. A `night_full`
+    /// refusal reloads the briefing, so the moment a chair frees up the
+    /// Claim button comes back without the page being recreated.
+    private var seatAvailability: SeatAvailability {
+        SeatAvailability.compute(
+            rsvp: myRSVP,
+            seatsClaimed: max(
+                briefing?.seatsClaimed ?? 0,
+                rsvps.filter { $0.state == .claimed }.count
+            ),
+            maxSeats: event.maxSeats
+        )
+    }
+
+    private var isNightFull: Bool { seatAvailability == .full }
 
     var body: some View {
         // v1.2.2 S6 T2 — the card body is ONE stack on two spacing
@@ -2466,9 +2468,7 @@ private struct BriefingSlot: View {
                     // started (playedAt <= now). Before that a claimed seat
                     // shows only "Release my seat" — you can't walk in two
                     // days early.
-                       if let deposit = heldDeposit,
-                       deposit.status == .held,
-                       room.seatDepositTrigger == .escrow,
+                       if case .held(let deposit) = seatPhase,
                        nightPhase == .live,
                        let onCheckIn {
                         // v1.2.4 S4.6 — the explainer and the button it
