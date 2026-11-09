@@ -5256,6 +5256,10 @@ runS3Tests(runner)
 
 runVTests(runner)
 
+// MARK: - P2 lane tests (state machines: room page presentation, settle, invite code)
+
+runP2Tests(runner)
+
 // MARK: - Summary
 
 print("")
