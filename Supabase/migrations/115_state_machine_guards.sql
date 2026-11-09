@@ -405,7 +405,7 @@ begin
       and sd.user_id = v_caller
       and sd.status = 'forfeited'
   ) then
-    raise exception 'forfeited_seat' using errcode = 'P0001';
+    raise exception 'forfeited_seat: Your deposit was kept for this night.' using errcode = 'P0001';
   end if;
 
   -- One claim at a time per night: two members cannot both take the
@@ -562,7 +562,7 @@ begin
           and sd.user_id = v_caller
           and sd.status = 'forfeited'
     ) then
-        raise exception 'forfeited_seat' using errcode = 'P0001';
+        raise exception 'forfeited_seat: Your deposit was kept for this night.' using errcode = 'P0001';
     end if;
 
     -- Capacity. Only a claim can hit a full table; the caller who
@@ -883,7 +883,7 @@ begin
       and e.played_at > now()
       and e.settled_at is null
   ) then
-    raise exception 'one_upcoming_night' using errcode = 'P0001';
+    raise exception 'one_upcoming_night: This room already has a night booked. Change that one instead.' using errcode = 'P0001';
   end if;
 
   return new;

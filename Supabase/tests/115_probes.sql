@@ -232,13 +232,13 @@ begin
     perform public.claim_seat_with_deposit(e_f7);
     raise notice 'PROBE 115.d-claim-after-forfeit FAIL the member re-took a forfeited seat';
   exception when others then
-    raise notice 'PROBE 115.d-claim-after-forfeit %', case when sqlerrm = 'forfeited_seat' then 'PASS forfeited_seat' else 'FAIL '||sqlerrm end;
+    raise notice 'PROBE 115.d-claim-after-forfeit %', case when sqlerrm like 'forfeited_seat%' then 'PASS forfeited_seat' else 'FAIL '||sqlerrm end;
   end;
   begin
     perform public.upsert_event_rsvp(e_f7, 'claimed');
     raise notice 'PROBE 115.d-upsert-after-forfeit FAIL upsert re-claimed a forfeited seat';
   exception when others then
-    raise notice 'PROBE 115.d-upsert-after-forfeit %', case when sqlerrm = 'forfeited_seat' then 'PASS forfeited_seat' else 'FAIL '||sqlerrm end;
+    raise notice 'PROBE 115.d-upsert-after-forfeit %', case when sqlerrm like 'forfeited_seat%' then 'PASS forfeited_seat' else 'FAIL '||sqlerrm end;
   end;
   begin
     perform public.release_seat(e_f7, 'unclaimed');
@@ -295,7 +295,7 @@ begin
       values (e_fut9b, r9, 'Two weeks', v_now + interval '8 days', h);
     raise notice 'PROBE 115.h-one-upcoming FAIL a second future night was accepted';
   exception when others then
-    raise notice 'PROBE 115.h-one-upcoming %', case when sqlerrm = 'one_upcoming_night' then 'PASS one_upcoming_night' else 'FAIL '||sqlerrm end;
+    raise notice 'PROBE 115.h-one-upcoming %', case when sqlerrm like 'one_upcoming_night%' then 'PASS one_upcoming_night' else 'FAIL '||sqlerrm end;
   end;
   select count(*) into n from pg_indexes where schemaname = 'public' and indexname = 'one_upcoming_event_per_room';
   raise notice 'PROBE 115.h-no-frozen-index %', case when n = 0 then 'PASS the now()-frozen index is gone' else 'FAIL index still present' end;
