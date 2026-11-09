@@ -21,6 +21,7 @@ func runP1Tests(_ runner: TestRunner) {
     runP1V0StateTests(runner)
     runP1NightPlanPhaseTests(runner)
     runP1SeatModelTests(runner)
+    runP1SeatOutcomeTests(runner)
 }
 
 // MARK: - NightPhase table (audit 01 §3.1)
@@ -566,5 +567,89 @@ private func runP1SeatModelTests(_ runner: TestRunner) {
         // never brought the button back.
         runner.assertEqual(SeatAvailability.compute(rsvp: .unclaimed, seatsClaimed: 8, maxSeats: 8), .full)
         runner.assertEqual(SeatAvailability.compute(rsvp: .unclaimed, seatsClaimed: 7, maxSeats: 8), .open)
+    }
+}
+
+
+// MARK: - ServerErrorCode + SeatOutcomeCopy (audit 02 C3)
+
+private func runP1SeatOutcomeTests(_ runner: TestRunner) {
+    func serverError(_ token: String) -> NSError {
+        // PostgREST wraps the P0001 message, so the token arrives inside
+        // a longer string; the matcher has always searched, not compared.
+        NSError(
+            domain: "PostgrestError",
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "new row violates: \(token)"]
+        )
+    }
+
+    runner.run("P1: the server's refusal tokens map to one code each") {
+        runner.assertEqual(ServerErrorCode.code(in: serverError("night_full")), .nightFull)
+        runner.assertEqual(ServerErrorCode.code(in: serverError("night_started")), .nightStarted)
+        runner.assertEqual(ServerErrorCode.code(in: serverError("forfeited_seat")), .forfeitedSeat)
+        runner.assertEqual(ServerErrorCode.code(in: serverError("too_early")), .tooEarly)
+        runner.assertNil(ServerErrorCode.code(in: serverError("some_other_thing")))
+    }
+
+    runner.run("P1: the code match is case-insensitive and survives the wrapper") {
+        let error = NSError(
+            domain: "PostgrestError", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "P0001: NIGHT_STARTED"]
+        )
+        runner.assertEqual(ServerErrorCode.code(in: error), .nightStarted)
+    }
+
+    runner.run("P1: every refusal has its own plain line") {
+        runner.assertEqual(ServerErrorCode.nightStarted.message, "The night has started, so your seat stays.")
+        runner.assertEqual(ServerErrorCode.forfeitedSeat.message, "Your deposit was kept for this night.")
+        runner.assertEqual(ServerErrorCode.tooEarly.message, "Arrivals aren't open yet.")
+        runner.assertEqual(ServerErrorCode.nightFull.message, "All the seats are taken.")
+    }
+
+    func deposit(_ status: SeatDeposit.Status) -> SeatDeposit {
+        SeatDeposit(id: UUID(), amount: 50, status: status, heldAt: Date())
+    }
+
+    runner.run("P1: a check-in that returned the deposit says so") {
+        runner.assertEqual(
+            SeatOutcomeCopy.checkIn(before: deposit(.held), after: deposit(.returned)),
+            "Your deposit is back."
+        )
+    }
+
+    runner.run("P1: a check-in on an already-resolved deposit does not claim success") {
+        runner.assertEqual(
+            SeatOutcomeCopy.checkIn(before: deposit(.returned), after: deposit(.returned)),
+            "That deposit was already resolved."
+        )
+        runner.assertEqual(
+            SeatOutcomeCopy.checkIn(before: nil, after: deposit(.returned)),
+            "That deposit was already resolved."
+        )
+    }
+
+    runner.run("P1: a check-in with nothing held says nothing was held") {
+        runner.assertEqual(
+            SeatOutcomeCopy.checkIn(before: nil, after: nil),
+            "Nothing was held for this night."
+        )
+    }
+
+    runner.run("P1: a check-in the host already forfeited says already resolved") {
+        runner.assertEqual(
+            SeatOutcomeCopy.checkIn(before: deposit(.held), after: deposit(.forfeited)),
+            "That deposit was already resolved."
+        )
+    }
+
+    runner.run("P1: a check-in that changed nothing says nothing") {
+        runner.assertNil(SeatOutcomeCopy.checkIn(before: deposit(.held), after: deposit(.held)))
+    }
+
+    runner.run("P1: the host's Keep on a deposit somebody already resolved says already resolved") {
+        runner.assertEqual(SeatOutcomeCopy.hostResolved(deposit(.held)), "That deposit was already resolved.")
+        runner.assertNil(SeatOutcomeCopy.hostResolved(deposit(.forfeited)))
+        runner.assertEqual(SeatOutcomeCopy.hostResolved(nil), "Nothing was held for this night.")
     }
 }

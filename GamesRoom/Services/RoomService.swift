@@ -2285,9 +2285,7 @@ final class RoomService: ObservableObject {
     /// `upsert_event_rsvp`, so the client shows "All N seats are
     /// taken." instead of a raw error.
     nonisolated static func isNightFullError(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        let text = "\(nsError.localizedDescription) \(String(describing: error))"
-        return text.lowercased().contains("night_full")
+        ServerErrorCode.code(in: error) == .nightFull
     }
 
     /// V0.85 — host-only. The broke-member claim: seat claimed
@@ -2311,10 +2309,16 @@ final class RoomService: ObservableObject {
     /// returns instantly. Wraps `check_in_seat(p_event_id)`
     /// (migration 085) and refreshes the deposit cache so the
     /// chair card flips out of the reclaim state. Idempotent.
-    func checkInSeat(eventId: UUID) async throws {
+    ///
+    /// C3 (audit 02) — returns the deposit as it stands after the
+    /// reload instead of `true`: the server answers `true` for a no-op
+    /// too, so the view reads the post-state to choose its line
+    /// (`SeatOutcomeCopy.checkIn`).
+    @discardableResult
+    func checkInSeat(eventId: UUID) async throws -> SeatDeposit? {
         try await store.checkInSeat(eventId: eventId)
         self.lastError = nil
-        await loadMySeatDeposit(eventId: eventId, force: true)
+        return await loadMySeatDeposit(eventId: eventId, force: true)
     }
 
     /// V0.85 — the caller's seat deposit for an event, or nil
@@ -2379,10 +2383,11 @@ final class RoomService: ObservableObject {
     /// p_member_id)` (migration 085); on success removes the
     /// candidate from the cached list so the arrival card stops
     /// asking. Throws on non-host writes.
-    func forfeitSeatDeposit(eventId: UUID, memberId: UUID) async throws {
+    @discardableResult
+    func forfeitSeatDeposit(eventId: UUID, memberId: UUID) async throws -> SeatDeposit? {
         try await store.forfeitSeatDeposit(eventId: eventId, memberId: memberId)
         self.lastError = nil
-        removeArrivalCandidate(eventId: eventId, memberId: memberId)
+        return await reloadArrivalOutcome(eventId: eventId, memberId: memberId, status: .forfeited)
     }
 
     /// V0.85 — host-only. Returns a held deposit without the
@@ -2390,10 +2395,38 @@ final class RoomService: ObservableObject {
     /// `waive_seat_deposit(p_event_id, p_member_id)` (migration
     /// 085); on success removes the candidate from the cached
     /// list. `reason` is free-form; the mascot copy renders it.
-    func waiveSeatDeposit(eventId: UUID, memberId: UUID, reason: String?) async throws {
+    @discardableResult
+    func waiveSeatDeposit(eventId: UUID, memberId: UUID, reason: String?) async throws -> SeatDeposit? {
         try await store.waiveSeatDeposit(eventId: eventId, memberId: memberId)
         self.lastError = nil
+        return await reloadArrivalOutcome(eventId: eventId, memberId: memberId, status: .waived)
+    }
+
+    /// C3 (audit 02) — proves whether the host's tap actually applied.
+    /// The candidate list is the only per-member deposit read the app
+    /// has, so the reload is what decides: a member still on it is still
+    /// held (the tap changed nothing), a member gone from it was
+    /// resolved by this tap or an earlier one. Returns the deposit as it
+    /// now stands, or nil when the member never had one.
+    private func reloadArrivalOutcome(
+        eventId: UUID,
+        memberId: UUID,
+        status: SeatDeposit.Status
+    ) async -> SeatDeposit? {
+        let before = arrivalCandidatesByEvent[eventId]?.first { $0.userId == memberId }
+        guard let before else {
+            await loadArrivalCandidates(eventId: eventId, force: true)
+            return nil
+        }
         removeArrivalCandidate(eventId: eventId, memberId: memberId)
+        await loadArrivalCandidates(eventId: eventId, force: true)
+        let stillHeld = arrivalCandidatesByEvent[eventId]?.contains { $0.userId == memberId } ?? false
+        return SeatDeposit(
+            id: UUID(),
+            amount: before.depositAmount,
+            status: stillHeld ? .held : status,
+            heldAt: Date()
+        )
     }
 
     /// Removes one resolved candidate from the cached arrival

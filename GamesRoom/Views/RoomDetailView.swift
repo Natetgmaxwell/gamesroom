@@ -155,6 +155,11 @@ struct RoomDetailView: View {
     /// goes.
     @State private var seatReleaseToast: SeatReleaseToast?
 
+    /// C3 (audit 02) — what the last seat action actually did, for the
+    /// actions whose server answer is a bare `true` either way. A quiet
+    /// one-line toast; no modal, no haptic on a no-op.
+    @State private var seatOutcome: SeatOutcomeToast?
+
     /// V0.100 — first-refresh gate. Flips to `true` after the
     /// initial `refresh()` in `.task` resolves. The state machine
     /// uses this to distinguish "data fetch in flight" (true
@@ -383,6 +388,19 @@ struct RoomDetailView: View {
                         seatReleaseToast = nil
                     }
                 }
+            }
+            if let outcome = seatOutcome {
+                SeatOutcomeToastView(message: outcome.message)
+                    .padding(.horizontal, Theme.Layout.edgePadding)
+                    .padding(.bottom, 96)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .task(id: outcome.id) {
+                        try? await Task.sleep(for: .seconds(4))
+                        guard seatOutcome?.id == outcome.id else { return }
+                        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                            seatOutcome = nil
+                        }
+                    }
             }
         }
         // v1.2.2 S6 T6 — the one Question Box driver for this page,
@@ -1577,22 +1595,26 @@ struct RoomDetailView: View {
     ) async {
         guard let event = activeEvent else { return }
         do {
+            let outcome: SeatDeposit?
             if forfeit {
-                try await roomService.forfeitSeatDeposit(
+                outcome = try await roomService.forfeitSeatDeposit(
                     eventId: event.id, memberId: candidate.userId
                 )
             } else {
-                try await roomService.waiveSeatDeposit(
+                outcome = try await roomService.waiveSeatDeposit(
                     eventId: event.id, memberId: candidate.userId, reason: nil
                 )
             }
             seatActionError = nil
-            Haptics.light()
+            if let line = SeatOutcomeCopy.hostResolved(outcome) {
+                showSeatOutcome(line)
+            } else {
+                Haptics.light()
+            }
             _ = await roomService.loadLeaderboard(roomId: room.id, force: true)
             await loadArrivalCandidatesIfNeeded(force: true)
         } catch {
-            seatActionError = (error as NSError).localizedDescription
-            showSeatActionError = true
+            presentSeatError(error)
         }
     }
 
@@ -1620,16 +1642,17 @@ struct RoomDetailView: View {
             await roomService.eventDidChange(eventId: eventId)
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
-            if RoomService.isNightFullError(error) {
+            if ServerErrorCode.code(in: error) == .nightFull {
                 // The counts in the cache are the ones that sent us
                 // here: re-read them so the card agrees with the
-                // server about how many chairs are gone.
+                // server about how many chairs are gone. With the latch
+                // gone, that reload is also what brings the Claim
+                // button back once a chair frees up (audit 03 D1).
                 await roomService.loadEventRSVPs(eventId: eventId, force: true)
                 await roomService.loadBriefing(eventId: eventId, force: true)
                 return
             }
-            seatActionError = (error as NSError).localizedDescription
-            showSeatActionError = true
+            presentSeatError(error)
         }
     }
 
@@ -1676,8 +1699,7 @@ struct RoomDetailView: View {
             await roomService.eventDidChange(eventId: eventId)
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
-            seatActionError = (error as NSError).localizedDescription
-            showSeatActionError = true
+            presentSeatError(error)
         }
     }
 
@@ -1688,13 +1710,39 @@ struct RoomDetailView: View {
     /// the chair card drops the reclaim button. Errors surface
     /// via the shared seat-action alert.
     private func checkInSeat(eventId: UUID) async {
+        let before = roomService.cachedMySeatDeposit(eventId: eventId)
         do {
-            try await roomService.checkInSeat(eventId: eventId)
+            let after = try await roomService.checkInSeat(eventId: eventId)
             seatActionError = nil
-            Haptics.success()
+            // The RPC answers `true` whether it returned the deposit or
+            // found nothing to do; the reloaded row is what tells the
+            // member which happened (audit 02 D3).
+            if let line = SeatOutcomeCopy.checkIn(before: before, after: after) {
+                showSeatOutcome(line)
+            } else {
+                Haptics.success()
+            }
         } catch {
+            presentSeatError(error)
+        }
+    }
+
+    /// One place for a seat action's failure copy: a token the server
+    /// names gets the app's own line, anything else keeps the message
+    /// the SDK surfaced.
+    private func presentSeatError(_ error: Error) {
+        if let code = ServerErrorCode.code(in: error) {
+            seatActionError = code.message
+        } else {
             seatActionError = (error as NSError).localizedDescription
-            showSeatActionError = true
+        }
+        showSeatActionError = true
+    }
+
+    /// Shows the quiet one-line outcome under the page.
+    private func showSeatOutcome(_ message: String) {
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            seatOutcome = SeatOutcomeToast(message: message)
         }
     }
 
@@ -1722,8 +1770,7 @@ struct RoomDetailView: View {
             }
         } catch {
             _ = roomService.applyOptimisticRSVP(eventId: eventId, state: previous, currentUserId: currentUserId)
-            seatActionError = (error as NSError).localizedDescription
-            showSeatActionError = true
+            presentSeatError(error)
         }
     }
 
@@ -2584,6 +2631,34 @@ private struct TrailingTextAction: View {
 private struct SeatReleaseToast: Identifiable {
     let eventId: UUID
     let id: UUID = UUID()
+}
+
+/// C3 (audit 02) — the quiet line after a seat action whose result the
+/// member could not otherwise tell apart from a no-op.
+private struct SeatOutcomeToast: Identifiable {
+    let message: String
+    let id: UUID = UUID()
+}
+
+private struct SeatOutcomeToastView: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.Palette.primaryText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Theme.Layout.cardInset)
+            .padding(.vertical, Theme.Layout.cardLineGap)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Theme.Palette.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Theme.Palette.hairline, lineWidth: 1)
+            )
+    }
 }
 
 /// S3.3 — the bottom toast after a seat is released. Quiet by
