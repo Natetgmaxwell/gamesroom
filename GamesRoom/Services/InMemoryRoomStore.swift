@@ -326,17 +326,8 @@ actor InMemoryRoomStore: RoomStore {
             venue: "The dining room",
             hostNote: "Bring your own chips. Snacks on me.",
             maxSeats: 6,
-            // V0.92 — screenshot mode flips startedAt to "30 min
-            // ago" so the room surfaces the .inPlay casino state
-            // (chip counts, action chips, deposit escrow banner).
-            // Production runs (no screenshot arg) stay on `nil`
-            // (the pre-V0.92 pre-start state).
-            startedAt: CommandLine.arguments.contains("-screenshots-bypass-auth")
-                ? Date().addingTimeInterval(-1_800)
-                : nil,
             settledAt: nil,
-            sessionId: nil,
-            hostFinalized: false
+            sessionId: nil
         )
 
         let carwoolaBriefing = BriefingSummary(
@@ -674,13 +665,11 @@ actor InMemoryRoomStore: RoomStore {
         // captures are reproducible without touching real data.
         //
         // Keys:
-        //   witness   — `playedAt = 30 min ago`, `startedAt = 30
-        //                min ago`, `settledAt = nil`, no working
-        //                hand → `.tonightEvent` (WitnessSlot, the
-        //                existing V0.92 capture target).
-        //   settled   — `playedAt = 3h ago`, `startedAt = 3h ago`,
-        //                `settledAt = 30 min ago` →
-        //                `.justSettled` (CeremonialCard). Hosted
+        //   witness   — `playedAt = 30 min ago`, `settledAt = nil`, no
+        //                working hand → `.tonightEvent` (WitnessSlot,
+        //                the existing V0.92 capture target).
+        //   settled   — `playedAt = 3h ago`, `settledAt = 30 min ago`
+        //                → `.justSettled` (CeremonialCard). Hosted
         //                chapter line seeded for the host pick.
         //   awards    — Felt Faction surfaces its `.ended` season
         //                by being pushed first; its AwardsCard
@@ -703,13 +692,7 @@ actor InMemoryRoomStore: RoomStore {
             let mode = raw.dropFirst("-question-box-seed=".count)
             var event = carwoolaEvent
             if mode == "live" {
-                event = Event(
-                    id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name,
-                    playedAt: Date().addingTimeInterval(-60), createdAt: carwoolaEvent.createdAt,
-                    venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote,
-                    maxSeats: carwoolaEvent.maxSeats, startedAt: Date().addingTimeInterval(-60),
-                    settledAt: nil, sessionId: nil, hostFinalized: false
-                )
+                event = Event(id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name, playedAt: Date().addingTimeInterval(-60), createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: nil, sessionId: nil)
                 self.events[carwoola.id] = [event]
                 self.rsvps[event.id] = [carwoola.createdBy: .claimed, alex: .claimed, sam: .claimed]
                 self.questionBox.withdrawals[event.id] = [
@@ -733,26 +716,9 @@ actor InMemoryRoomStore: RoomStore {
 
         func rebuildCarwoolaEvent(
             playedAt: Date,
-            startedAt: Date?,
             settledAt: Date?
         ) -> Event {
-            Event(
-                id: carwoolaEvent.id,
-                roomId: carwoola.id,
-                name: carwoolaEvent.name,
-                playedAt: playedAt,
-                createdAt: carwoolaEvent.createdAt,
-                venue: carwoolaEvent.venue,
-                hostNote: carwoolaEvent.hostNote,
-                maxSeats: carwoolaEvent.maxSeats,
-                startedAt: startedAt,
-                settledAt: settledAt,
-                sessionId: carwoolaEvent.sessionId,
-                packSlug: carwoolaEvent.packSlug,
-                hostFinalized: false,
-                eventCalendarIdentifier: nil,
-                hiddenFromUserIds: []
-            )
+            Event(id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name, playedAt: playedAt, createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: settledAt, sessionId: carwoolaEvent.sessionId, packSlug: carwoolaEvent.packSlug, eventCalendarIdentifier: nil, hiddenFromUserIds: [])
         }
 
         switch screenState {
@@ -760,7 +726,6 @@ actor InMemoryRoomStore: RoomStore {
             // Just-started live, no working hand → `.tonightEvent`.
             events[carwoola.id] = [rebuildCarwoolaEvent(
                 playedAt: Date().addingTimeInterval(-1_800),
-                startedAt: Date().addingTimeInterval(-1_800),
                 settledAt: nil
             )]
 
@@ -770,7 +735,6 @@ actor InMemoryRoomStore: RoomStore {
             // voice renders with content.
             let e = rebuildCarwoolaEvent(
                 playedAt: Date().addingTimeInterval(-10_800),
-                startedAt: Date().addingTimeInterval(-10_800),
                 settledAt: Date().addingTimeInterval(-1_800)
             )
             events[carwoola.id] = [e]
@@ -1728,28 +1692,14 @@ actor InMemoryRoomStore: RoomStore {
     // MARK: Event create
 
     func addEvent(roomId: UUID, name: String, playedAt: Date, packSlugs: [String], hiddenFromUserIds: [UUID]) async throws -> UUID {
-        let new = Event(
-            id: UUID(),
-            roomId: roomId,
-            name: name,
-            playedAt: playedAt,
-            createdAt: Date(),
-            venue: nil,
-            hostNote: nil,
-            maxSeats: rooms.first(where: { $0.id == roomId })?.maxSeats ?? 6,
-            startedAt: nil,
-            settledAt: nil,
-            sessionId: nil,
-            hostFinalized: false,
-            // V0.94 — events.hiddenFromUserIds is honored by
+        let new = Event(id: UUID(), roomId: roomId, name: name, playedAt: playedAt, createdAt: Date(), venue: nil, hostNote: nil, maxSeats: rooms.first(where: { $0.id == roomId })?.maxSeats ?? 6, settledAt: nil, sessionId: nil, // V0.94 — events.hiddenFromUserIds is honored by
             // get_active_event / get_briefing_summary / get_event_rsvps
             // in the live DB. The in-memory store doesn't replicate
             // the gate (the in-memory store is for tests, where
             // filtering isn't load-bearing), but the field is
             // present on the Event model for the iOS read path to
             // mirror. We pass it through below.
-            hiddenFromUserIds: hiddenFromUserIds
-        )
+            hiddenFromUserIds: hiddenFromUserIds)
         events[roomId, default: []].append(new)
         briefings[new.id] = BriefingSummary(
             eventId: new.id,
@@ -1839,24 +1789,7 @@ actor InMemoryRoomStore: RoomStore {
         name: String? = nil,
         playedAt: Date? = nil
     ) -> Event {
-        Event(
-            id: event.id,
-            roomId: event.roomId,
-            name: name ?? event.name,
-            playedAt: playedAt ?? event.playedAt,
-            createdAt: event.createdAt,
-            venue: event.venue,
-            hostNote: event.hostNote,
-            maxSeats: event.maxSeats,
-            startedAt: event.startedAt,
-            settledAt: event.settledAt,
-            sessionId: event.sessionId,
-            packSlugs: event.packSlugs,
-            packSlug: event.packSlug,
-            hostFinalized: event.hostFinalized,
-            eventCalendarIdentifier: event.eventCalendarIdentifier,
-            hiddenFromUserIds: event.hiddenFromUserIds
-        )
+        Event(id: event.id, roomId: event.roomId, name: name ?? event.name, playedAt: playedAt ?? event.playedAt, createdAt: event.createdAt, venue: event.venue, hostNote: event.hostNote, maxSeats: event.maxSeats, settledAt: event.settledAt, sessionId: event.sessionId, packSlugs: event.packSlugs, packSlug: event.packSlug, eventCalendarIdentifier: event.eventCalendarIdentifier, hiddenFromUserIds: event.hiddenFromUserIds)
     }
 
     /// In-memory mirror of `update_event_member_fields` (migration
@@ -1870,21 +1803,7 @@ actor InMemoryRoomStore: RoomStore {
                 userInfo: [NSLocalizedDescriptionKey: "Event not found"]
             )
         }
-        event = Event(
-            id: event.id,
-            roomId: event.roomId,
-            name: event.name,
-            playedAt: event.playedAt,
-            createdAt: event.createdAt,
-            venue: (venue?.isEmpty ?? true) ? nil : venue,
-            hostNote: (note?.isEmpty ?? true) ? nil : note,
-            maxSeats: event.maxSeats,
-            startedAt: event.startedAt,
-            settledAt: event.settledAt,
-            sessionId: event.sessionId,
-            packSlug: event.packSlug,
-            hostFinalized: event.hostFinalized
-        )
+        event = Event(id: event.id, roomId: event.roomId, name: event.name, playedAt: event.playedAt, createdAt: event.createdAt, venue: (venue?.isEmpty ?? true) ? nil : venue, hostNote: (note?.isEmpty ?? true) ? nil : note, maxSeats: event.maxSeats, settledAt: event.settledAt, sessionId: event.sessionId, packSlug: event.packSlug)
         upsertEvent(event)
     }
 
@@ -2119,22 +2038,7 @@ actor InMemoryRoomStore: RoomStore {
     /// it back. Idempotent (overwrites).
     func reportCalendarIdentifier(eventId: UUID, identifier: String) async throws {
         guard let existing = eventById(eventId) else { return }
-        upsertEvent(Event(
-            id: existing.id,
-            roomId: existing.roomId,
-            name: existing.name,
-            playedAt: existing.playedAt,
-            createdAt: existing.createdAt,
-            venue: existing.venue,
-            hostNote: existing.hostNote,
-            maxSeats: existing.maxSeats,
-            startedAt: existing.startedAt,
-            settledAt: existing.settledAt,
-            sessionId: existing.sessionId,
-            packSlug: existing.packSlug,
-            hostFinalized: existing.hostFinalized,
-            eventCalendarIdentifier: identifier
-        ))
+        upsertEvent(Event(id: existing.id, roomId: existing.roomId, name: existing.name, playedAt: existing.playedAt, createdAt: existing.createdAt, venue: existing.venue, hostNote: existing.hostNote, maxSeats: existing.maxSeats, settledAt: existing.settledAt, sessionId: existing.sessionId, packSlug: existing.packSlug, eventCalendarIdentifier: identifier))
     }
 
     // MARK: Host journal (P1.5)

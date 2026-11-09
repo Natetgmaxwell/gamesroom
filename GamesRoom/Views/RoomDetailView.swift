@@ -5164,19 +5164,9 @@ private struct MascotFooterCaption: View {
         let lastSessionDaysAgo = daysSinceLastPlay
 
         return RoomStateInputs.resolve(
-            RoomStateInputs(
-                activeEvent: activeEvent.map {
+            RoomStateInputs(activeEvent: activeEvent.map {
                     .init(playedAt: $0.playedAt, settledAt: $0.settledAt)
-                },
-                activeEventSettled: activeEvent?.settledAt != nil,
-                hostFinalized: activeEvent?.hostFinalized ?? false,
-                withdrawnAmount: withdrawnAmount,
-                leaderMargin: leaderMargin,
-                lastRoundFlippedLeader: lastRoundFlippedLeader,
-                consecutiveWins: consecutiveWins,
-                openDispute: openDispute,
-                lastSessionDaysAgo: lastSessionDaysAgo
-            )
+                }, activeEventSettled: activeEvent?.settledAt != nil, withdrawnAmount: withdrawnAmount, leaderMargin: leaderMargin, lastRoundFlippedLeader: lastRoundFlippedLeader, consecutiveWins: consecutiveWins, openDispute: openDispute, lastSessionDaysAgo: lastSessionDaysAgo)
         )
     }
 

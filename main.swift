@@ -461,16 +461,7 @@ runner.run("BriefingSummary seatsLeft floors at zero") {
 // MARK: - Event round-trip
 
 runner.run("Event JSON round-trip preserves venue + hostNote") {
-    let event = Event(
-        id: UUID(), roomId: UUID(),
-        name: "Friday Night Hold'em",
-        playedAt: Date(timeIntervalSince1970: 1_700_000_000),
-        createdAt: Date(timeIntervalSince1970: 1_699_900_000),
-        venue: "The dining room",
-        hostNote: "Bring snacks.",
-        maxSeats: 6,
-        startedAt: nil, settledAt: nil, sessionId: nil, hostFinalized: false
-    )
+    let event = Event(id: UUID(), roomId: UUID(), name: "Friday Night Hold'em", playedAt: Date(timeIntervalSince1970: 1_700_000_000), createdAt: Date(timeIntervalSince1970: 1_699_900_000), venue: "The dining room", hostNote: "Bring snacks.", maxSeats: 6, settledAt: nil, sessionId: nil)
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     let data = try encoder.encode(event)
@@ -2134,13 +2125,7 @@ private func makeEvent(
     playedAt: Date,
     settledAt: Date? = nil
 ) -> Event {
-    Event(
-        id: UUID(),
-        roomId: UUID(),
-        name: "Friday Night Hold'em",
-        playedAt: playedAt,
-        createdAt: playedAt.addingTimeInterval(-86_400)
-    )
+    Event(id: UUID(), roomId: UUID(), name: "Friday Night Hold'em", playedAt: playedAt, createdAt: playedAt.addingTimeInterval(-86_400))
     .withSettledAt(settledAt)
 }
 
@@ -2169,11 +2154,7 @@ private func makeWinnerRound(
 
 runner.run("MascotEngine.footerKind returns .postPlayRecap when settledAt is set") {
     let past = Date().addingTimeInterval(-3600)
-    let event = Event(
-        id: UUID(), roomId: UUID(), name: "Poker",
-        playedAt: past, createdAt: past.addingTimeInterval(-86_400),
-        settledAt: past.addingTimeInterval(1800)
-    )
+    let event = Event(id: UUID(), roomId: UUID(), name: "Poker", playedAt: past, createdAt: past.addingTimeInterval(-86_400), settledAt: past.addingTimeInterval(1800))
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: Date()
     )
@@ -2182,11 +2163,7 @@ runner.run("MascotEngine.footerKind returns .postPlayRecap when settledAt is set
 
 runner.run("MascotEngine.footerKind returns .tonightEvent when live, not settled, no withdrawal") {
     let now = Date()
-    let event = Event(
-        id: UUID(), roomId: UUID(), name: "Poker",
-        playedAt: now.addingTimeInterval(-600),
-        createdAt: now.addingTimeInterval(-86_400)
-    )
+    let event = Event(id: UUID(), roomId: UUID(), name: "Poker", playedAt: now.addingTimeInterval(-600), createdAt: now.addingTimeInterval(-86_400))
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: now
     )
@@ -2195,11 +2172,7 @@ runner.run("MascotEngine.footerKind returns .tonightEvent when live, not settled
 
 runner.run("MascotEngine.footerKind returns .inPlayWithWithdrawal when live and withdrawn > 0") {
     let now = Date()
-    let event = Event(
-        id: UUID(), roomId: UUID(), name: "Poker",
-        playedAt: now.addingTimeInterval(-600),
-        createdAt: now.addingTimeInterval(-86_400)
-    )
+    let event = Event(id: UUID(), roomId: UUID(), name: "Poker", playedAt: now.addingTimeInterval(-600), createdAt: now.addingTimeInterval(-86_400))
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: now,
         withdrawnAmount: 500
@@ -2213,11 +2186,7 @@ runner.run("MascotEngine.footerKind returns .settleRound for a stranded night") 
     // was unreachable in production (audit 01 D7). The settle voice now
     // belongs to the phase that actually needs a settle: stranded.
     let now = Date()
-    let event = Event(
-        id: UUID(), roomId: UUID(), name: "Poker",
-        playedAt: now.addingTimeInterval(-30 * 3_600),
-        createdAt: now.addingTimeInterval(-86_400)
-    )
+    let event = Event(id: UUID(), roomId: UUID(), name: "Poker", playedAt: now.addingTimeInterval(-30 * 3_600), createdAt: now.addingTimeInterval(-86_400))
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: now,
         withdrawnAmount: 500
@@ -2245,11 +2214,7 @@ runner.run("MascotEngine.footerKind returns .postPlayRecap when settled even if 
     // still resolves .postPlayRecap.
     let now = Date()
     let past = now.addingTimeInterval(-3600)
-    let event = Event(
-        id: UUID(), roomId: UUID(), name: "Poker",
-        playedAt: past, createdAt: past.addingTimeInterval(-86_400),
-        settledAt: past.addingTimeInterval(1800)
-    )
+    let event = Event(id: UUID(), roomId: UUID(), name: "Poker", playedAt: past, createdAt: past.addingTimeInterval(-86_400), settledAt: past.addingTimeInterval(1800))
     let season = Season(
         id: UUID(), roomId: UUID(), ordinal: 2, subtitle: "Arc",
         status: .active, startedAt: now.addingTimeInterval(-30 * 86_400)
@@ -2263,11 +2228,7 @@ runner.run("MascotEngine.footerKind returns .postPlayRecap when settled even if 
 
 runner.run("MascotEngine.footerKind returns .briefingOnCreate when playedAt is in the future") {
     let now = Date()
-    let event = Event(
-        id: UUID(), roomId: UUID(), name: "Poker",
-        playedAt: now.addingTimeInterval(86_400),
-        createdAt: now.addingTimeInterval(-3600)
-    )
+    let event = Event(id: UUID(), roomId: UUID(), name: "Poker", playedAt: now.addingTimeInterval(86_400), createdAt: now.addingTimeInterval(-3600))
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: now
     )
@@ -3154,6 +3115,30 @@ runner.run("MascotEngine.stripThinkingBlocks is case-insensitive on the tags") {
 
 // MARK: - Event active-event decode (W-EVT-01 — get_active_event RPC shape)
 
+runner.run("Event ignores started_at / host_finalized if a caller still sends them") {
+    // Both columns were deleted from the model (lane P): no migration
+    // defines either, no RPC returns them, and every branch on them was
+    // unreachable. Decoding stays tolerant: unknown keys are ignored, so
+    // an old row or a hand-written fixture that still carries them
+    // decodes fine.
+    let json = """
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "room_id": "22222222-2222-2222-2222-222222222222",
+      "name": "Friday Night Hold'em",
+      "played_at": "2026-08-15T19:00:00Z",
+      "created_at": "2026-08-01T19:00:00Z",
+      "started_at": "2026-08-15T19:05:00Z",
+      "host_finalized": true
+    }
+    """
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let decoded = try decoder.decode(Event.self, from: json.data(using: .utf8)!)
+    runner.assertEqual(decoded.name, "Friday Night Hold'em")
+    runner.assertNil(decoded.settledAt)
+}
+
 runner.run("Event decodes get_active_event RPC shape (event_id, no room_id/created_at)") {
     // The current remote `get_active_event` (migration 012) returns
     // only event_id, name, played_at, seat_count, max_seats, pack_slug,
@@ -3189,8 +3174,10 @@ runner.run("Event decodes get_active_event RPC shape (event_id, no room_id/creat
     )
     runner.assertEqual(decoded.maxSeats, 6)
     runner.assertEqual(decoded.packSlug, "casino")
-    runner.assertEqual(decoded.hostFinalized, false)
     runner.assertNil(decoded.settledAt)
+    // `started_at` / `host_finalized` are gone from the model: no
+    // migration defines either column and no RPC returns them, so both
+    // read as nil/false forever and every branch on them was dead.
 }
 
 // MARK: - RPC contract audit (061) — server shape conformance
@@ -4217,13 +4204,7 @@ runner.runAsync("InMemoryRoomStore updateRoom passthrough carries the four seat_
 // MARK: - V0.86 — server-side calendar persistence + per-member toggle
 
 runner.runAsync("V0.86: Event model carries eventCalendarIdentifier, default nil") {
-    let event = Event(
-        id: UUID(),
-        roomId: UUID(),
-        name: "Friday",
-        playedAt: Date(),
-        createdAt: Date()
-    )
+    let event = Event(id: UUID(), roomId: UUID(), name: "Friday", playedAt: Date(), createdAt: Date())
     runner.assertEqual(event.eventCalendarIdentifier, nil)
 }
 
@@ -4605,93 +4586,33 @@ runner.run("V0.94 mascot face 11 ideology brows are pairwise distinct") {
 
 runner.run("V0.94 RoomStateInputs.resolve matches MascotEngine footer flavours") {
     // 1. openDispute always wins → controversy
-    let disputeInputs = RoomStateInputs(
-        activeEvent: nil,
-        activeEventSettled: false,
-        hostFinalized: false,
-        withdrawnAmount: 0,
-        leaderMargin: 0,
-        lastRoundFlippedLeader: false,
-        consecutiveWins: 0,
-        openDispute: true,
-        lastSessionDaysAgo: 5
-    )
+    let disputeInputs = RoomStateInputs(activeEvent: nil, activeEventSettled: false, withdrawnAmount: 0, leaderMargin: 0, lastRoundFlippedLeader: false, consecutiveWins: 0, openDispute: true, lastSessionDaysAgo: 5)
     runner.assertEqual(RoomStateInputs.resolve(disputeInputs), .controversy)
 
     // 2. Live event + last round flipped leader → comeback
-    let comebackInputs = RoomStateInputs(
-        activeEvent: RoomStateInputs.ActiveEventSnapshot(
+    let comebackInputs = RoomStateInputs(activeEvent: RoomStateInputs.ActiveEventSnapshot(
             playedAt: Date(timeIntervalSinceNow: -600),
             settledAt: nil
-        ),
-        activeEventSettled: false,
-        hostFinalized: false,
-        withdrawnAmount: 50,
-        leaderMargin: 5,
-        lastRoundFlippedLeader: true,
-        consecutiveWins: 1,
-        openDispute: false,
-        lastSessionDaysAgo: 0
-    )
+        ), activeEventSettled: false, withdrawnAmount: 50, leaderMargin: 5, lastRoundFlippedLeader: true, consecutiveWins: 1, openDispute: false, lastSessionDaysAgo: 0)
     runner.assertEqual(RoomStateInputs.resolve(comebackInputs), .comeback)
 
     // 3. Live event, no dispute, no comeback → playing
-    let playingInputs = RoomStateInputs(
-        activeEvent: RoomStateInputs.ActiveEventSnapshot(
+    let playingInputs = RoomStateInputs(activeEvent: RoomStateInputs.ActiveEventSnapshot(
             playedAt: Date(timeIntervalSinceNow: -120),
             settledAt: nil
-        ),
-        activeEventSettled: false,
-        hostFinalized: false,
-        withdrawnAmount: 0,
-        leaderMargin: 5,
-        lastRoundFlippedLeader: false,
-        consecutiveWins: 1,
-        openDispute: false,
-        lastSessionDaysAgo: 0
-    )
+        ), activeEventSettled: false, withdrawnAmount: 0, leaderMargin: 5, lastRoundFlippedLeader: false, consecutiveWins: 1, openDispute: false, lastSessionDaysAgo: 0)
     runner.assertEqual(RoomStateInputs.resolve(playingInputs), .playing)
 
     // 4. No active event, leader margin huge → blowout
-    let blowoutInputs = RoomStateInputs(
-        activeEvent: nil,
-        activeEventSettled: false,
-        hostFinalized: false,
-        withdrawnAmount: 0,
-        leaderMargin: 120,
-        lastRoundFlippedLeader: false,
-        consecutiveWins: 1,
-        openDispute: false,
-        lastSessionDaysAgo: 1
-    )
+    let blowoutInputs = RoomStateInputs(activeEvent: nil, activeEventSettled: false, withdrawnAmount: 0, leaderMargin: 120, lastRoundFlippedLeader: false, consecutiveWins: 1, openDispute: false, lastSessionDaysAgo: 1)
     runner.assertEqual(RoomStateInputs.resolve(blowoutInputs), .blowout)
 
     // 5. No active event, leader streak → streak
-    let streakInputs = RoomStateInputs(
-        activeEvent: nil,
-        activeEventSettled: false,
-        hostFinalized: false,
-        withdrawnAmount: 0,
-        leaderMargin: 0,
-        lastRoundFlippedLeader: false,
-        consecutiveWins: 4,
-        openDispute: false,
-        lastSessionDaysAgo: 1
-    )
+    let streakInputs = RoomStateInputs(activeEvent: nil, activeEventSettled: false, withdrawnAmount: 0, leaderMargin: 0, lastRoundFlippedLeader: false, consecutiveWins: 4, openDispute: false, lastSessionDaysAgo: 1)
     runner.assertEqual(RoomStateInputs.resolve(streakInputs), .streak)
 
     // 6. No data → idle
-    let idleInputs = RoomStateInputs(
-        activeEvent: nil,
-        activeEventSettled: false,
-        hostFinalized: false,
-        withdrawnAmount: 0,
-        leaderMargin: 0,
-        lastRoundFlippedLeader: false,
-        consecutiveWins: 0,
-        openDispute: false,
-        lastSessionDaysAgo: nil
-    )
+    let idleInputs = RoomStateInputs(activeEvent: nil, activeEventSettled: false, withdrawnAmount: 0, leaderMargin: 0, lastRoundFlippedLeader: false, consecutiveWins: 0, openDispute: false, lastSessionDaysAgo: nil)
     runner.assertEqual(RoomStateInputs.resolve(idleInputs), .idle)
 }
 

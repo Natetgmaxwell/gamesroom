@@ -1299,7 +1299,7 @@ final class RoomService: ObservableObject {
             } else {
                 event = await loadActiveEvent(roomId: room.id)
             }
-            guard let event, event.startedAt == nil else { continue }
+            guard let event else { continue }
             if eventRSVPsByEvent[event.id] == nil {
                 _ = await loadEventRSVPs(eventId: event.id)
             }

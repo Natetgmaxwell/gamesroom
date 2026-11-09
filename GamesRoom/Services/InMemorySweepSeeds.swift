@@ -86,48 +86,17 @@ extension InMemoryRoomStore {
             packSlug: String,
             packSlugs: [String] = []
         ) -> Event {
-            Event(
-                id: carwoolaEvent.id,
-                roomId: carwoola.id,
-                name: name,
-                playedAt: Date().addingTimeInterval(-1_500),
-                createdAt: carwoolaEvent.createdAt,
-                venue: carwoolaEvent.venue,
-                hostNote: carwoolaEvent.hostNote,
-                maxSeats: carwoolaEvent.maxSeats,
-                startedAt: Date().addingTimeInterval(-1_500),
-                settledAt: nil,
-                sessionId: nil,
-                packSlugs: packSlugs,
-                packSlug: packSlug,
-                hostFinalized: false
-            )
+            Event(id: carwoolaEvent.id, roomId: carwoola.id, name: name, playedAt: Date().addingTimeInterval(-1_500), createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: nil, sessionId: nil, packSlugs: packSlugs, packSlug: packSlug)
         }
 
         func upcomingEvent() -> Event {
-            Event(
-                id: carwoolaEvent.id,
-                roomId: carwoola.id,
-                name: carwoolaEvent.name,
-                playedAt: sweepNextFridayEvening(),
-                createdAt: carwoolaEvent.createdAt,
-                venue: carwoolaEvent.venue,
-                hostNote: carwoolaEvent.hostNote,
-                maxSeats: carwoolaEvent.maxSeats,
-                startedAt: nil,
-                settledAt: nil,
-                sessionId: carwoolaEvent.sessionId,
-                packSlug: carwoolaEvent.packSlug,
-                hostFinalized: false,
-                eventCalendarIdentifier: nil,
-                hiddenFromUserIds: []
-            )
+            Event(id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name, playedAt: sweepNextFridayEvening(), createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: nil, sessionId: carwoolaEvent.sessionId, packSlug: carwoolaEvent.packSlug, eventCalendarIdentifier: nil, hiddenFromUserIds: [])
         }
 
         switch key {
         case "briefing":
             // V0.107 — the pre-V0.107 briefing seed (a night two days
-            // out, no `startedAt` → `.upcoming`) plus the four rows a
+            // out → `.upcoming`) plus the four rows a
             // brought-by caption reads. Each one is load-bearing:
             //   rsvps         claimed seats, so the seat grid shows
             //                 who is in
@@ -219,21 +188,7 @@ extension InMemoryRoomStore {
             questionBox.settings[carwoola.id] = questionBoxOff
 
         case "settled-rich":
-            let settled = Event(
-                id: carwoolaEvent.id,
-                roomId: carwoola.id,
-                name: carwoolaEvent.name,
-                playedAt: Date().addingTimeInterval(-10_800),
-                createdAt: carwoolaEvent.createdAt,
-                venue: carwoolaEvent.venue,
-                hostNote: carwoolaEvent.hostNote,
-                maxSeats: carwoolaEvent.maxSeats,
-                startedAt: Date().addingTimeInterval(-10_800),
-                settledAt: Date().addingTimeInterval(-1_800),
-                sessionId: carwoolaEvent.sessionId,
-                packSlug: carwoolaEvent.packSlug,
-                hostFinalized: false
-            )
+            let settled = Event(id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name, playedAt: Date().addingTimeInterval(-10_800), createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: Date().addingTimeInterval(-1_800), sessionId: carwoolaEvent.sessionId, packSlug: carwoolaEvent.packSlug)
             events[carwoola.id] = [settled]
             chapterLines[settled.id] = ChapterLine(
                 id: UUID(),

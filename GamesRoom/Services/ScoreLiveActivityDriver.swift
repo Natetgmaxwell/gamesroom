@@ -4,13 +4,16 @@
 //
 //  Track F-MVP-12 (W2.3) — the app-side Live Activity driver.
 //
-//  The widget target declares the Live Activity surface; this is
-//  the app-side counterpart that starts, updates, and ends it per
-//  the vision lifecycle: surface for pre-play briefing and
-//  post-settle ceremonial, never during play ("No Live Activity
-//  during play"). The widget stays in the system UI for up to
-//  8 hours (system cap), so a settle ends the activity and the
-//  next pre-play event starts a fresh one.
+//  The widget target declares the Live Activity surface; this is the
+//  app-side counterpart that starts, updates, and ends it.
+//
+//  The rule is the 2026-09-02 reversal: the activity runs ONLY while a
+//  night is live (`NightPhase == .live`), and ends when the night
+//  settles or its auto-close window goes. The earlier "pre-play briefing
+//  and post-settle ceremonial, never during play" wording described the
+//  rule the reversal replaced; the code has followed the reversal since.
+//  (Lane P corrected this header only - the driver's behaviour is lane
+//  N's.)
 //
 //  All calls are best-effort: ActivityKit requests can fail
 //  (permission, system limits) and the app must keep working.

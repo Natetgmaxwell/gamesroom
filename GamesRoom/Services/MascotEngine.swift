@@ -240,16 +240,21 @@ enum MascotEngine {
     /// `.inPlay` flavour. Resolution order (first match wins —
     /// mirrors the `V0State` precedence in `RoomDetailView`):
     ///
+    /// The night branches read `NightPhase`, one rule shared with every
+    /// screen and with the server.
+    ///
     /// 1. `currentSeason?.status == .ended` → `.seasonClose`
-    /// 2. `activeEvent?.settledAt != nil`   → `.postPlayRecap`
+    /// 2. phase `.recap`                    → `.postPlayRecap`
     ///    (`.justSettled` reuses this kind — see `V0State.justSettled`.)
-    /// 3. `activeEvent != nil`, live, `hostFinalized` → `.settleRound`
-    /// 4. `activeEvent != nil`, live, `withdrawnAmount == 0` → `.tonightEvent`
-    /// 5. `activeEvent != nil`, live, `withdrawnAmount > 0` → `.inPlayWithWithdrawal`
-    /// 6. `activeEvent != nil` (upcoming)   → `.briefingOnCreate`
-    /// 7. `leaderboard.isEmpty`             → `.roomWelcome`
-    /// 8. Last play > 14 days ago           → `.roomStale`
-    /// 9. Otherwise                         → `.standings`
+    /// 3. phase `.stranded`                 → `.settleRound`
+    /// 4. phase `.live`, `withdrawnAmount == 0` → `.tonightEvent`
+    /// 5. phase `.live`, `withdrawnAmount > 0`  → `.inPlayWithWithdrawal`
+    /// 6. phase `.upcoming`                 → `.briefingOnCreate`
+    /// 7. phase `.past` / `.cancelled` / none → falls through to the room
+    ///    branches below (a month-old night is not a fresh recap)
+    /// 8. `leaderboard.isEmpty`             → `.roomWelcome`
+    /// 9. Last play > 14 days ago           → `.roomStale`
+    /// 10. Otherwise                        → `.standings`
     ///
     /// The `withdrawnAmount` and `currentSeason` params default to
     /// `0` / `nil` so the V0.36 call sites (which never knew about
