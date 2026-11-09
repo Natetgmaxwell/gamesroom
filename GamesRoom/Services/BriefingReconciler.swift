@@ -43,6 +43,86 @@ struct PlannedBriefingNotification: Equatable {
     let fireAt: Date
 }
 
+// MARK: - Context (the one input to every scheduling decision)
+
+/// What one briefing decision is FOR. The cadence is a night's whole
+/// local reminder arc; the catch-up is a single prompt for a member
+/// who joined after the night was created.
+enum BriefingPlanKind: Equatable, Sendable {
+    case cadence
+    case catchUp
+}
+
+/// Why a context produced no notification at all. Each case names a
+/// gate that used to be scattered across `RoomService` early
+/// returns; now the planner says which one fired.
+enum SilenceReason: String, Equatable, CaseIterable, Sendable {
+    /// The night is hidden from this member (`hiddenFromUserIds`).
+    case hidden
+    /// The member opted out of this room's notifications.
+    case roomOptOut
+    /// The member muted this event.
+    case muted
+    /// The canonical RSVP read failed — unknown, so the device says
+    /// nothing rather than guessing a nagging `.unclaimed`.
+    case unknownSeat
+    /// The member declined. Terminal for the event.
+    case declined
+}
+
+/// What the planner decided: silence with a reason, or the exact
+/// requests that should be pending on this device.
+enum BriefingOutcome: Equatable {
+    case silenced(SilenceReason)
+    case scheduled([PlannedBriefingNotification])
+
+    /// The planned requests, empty when silenced.
+    var planned: [PlannedBriefingNotification] {
+        if case .scheduled(let items) = self { return items }
+        return []
+    }
+}
+
+/// Every input one briefing decision needs, built once by the
+/// caller. The 2026-11-09 refactor (audit 04 §3.2) exists because the
+/// old 10-argument `reconcile` let a call site forget an input — the
+/// joined-late catch-up forgot the canonical seat, the room opt-out
+/// and the per-event mute all at once (D4). A context cannot be
+/// partially filled.
+struct BriefingContext: Sendable {
+    var eventId: UUID
+    /// The room the request's payload routes a tap to. Not read by
+    /// the plan; the sink stamps it on the request.
+    var roomId: UUID?
+    var eventName: String
+    var playedAt: Date
+    var userId: UUID
+    var memberName: String?
+    var mascotName: String
+
+    /// The caller's CANONICAL RSVP state, read fresh from the store.
+    /// `nil` means the read failed: unknown, not `.unclaimed`.
+    var seat: MemberRSVPState?
+
+    /// `room.notificationsEnabled` — the member's per-room opt-in.
+    var roomOptIn: Bool = true
+    /// The member's per-event mute (`events_rsvps.notifications_muted`).
+    var eventMuted: Bool = false
+    /// The night is hidden from this member.
+    var hidden: Bool = false
+
+    var hostNote: String? = nil
+    /// Standings line for the joined-late catch-up body. Empty for
+    /// the cadence.
+    var leaderboardSummary: String = ""
+    var kind: BriefingPlanKind = .cadence
+
+    var personality: MascotPersonality = .friendly
+    var ideology: MascotPoliticalIdeology = .centrist
+    var now: Date = Date()
+    var calendar: Calendar = .current
+}
+
 // MARK: - Sink (the edge the real dispatcher sits on)
 
 /// The notification-center surface `BriefingReconciler` needs.
@@ -239,12 +319,75 @@ enum BriefingReconciler {
         )
     }
 
-    /// Pure planning pass — the testable core. Returns every
-    /// notification that should be pending on this device for
-    /// `(eventId, userId)` given the caller's CURRENT canonical
-    /// RSVP state. Declined → empty. On-create included only when
-    /// `shouldFireOnCreate` says yes (callers that already hold a
-    /// fired-ledger answer pass `includeOnCreate` directly).
+    /// Pure planning pass — the testable core. Every scheduling
+    /// decision on this device is one of these: a silence with a
+    /// named reason, or the exact list of requests that should be
+    /// pending. Nothing here touches a sink, a clock beyond `now`,
+    /// or the ledger.
+    static func plan(
+        _ ctx: BriefingContext,
+        includeOnCreate: Bool = false
+    ) -> BriefingOutcome {
+        // The gate order: something the event hides outranks
+        // something the member turned off, which outranks a seat
+        // that says "no".
+        if let gate = gateSilence(ctx) { return .silenced(gate) }
+        guard let seat = ctx.seat else { return .silenced(.unknownSeat) }
+        if seat == .declined { return .silenced(.declined) }
+
+        switch ctx.kind {
+        case .catchUp:
+            return .scheduled([catchUpRequest(ctx, seat: seat)])
+        case .cadence:
+            return .scheduled(
+                cadencePlan(ctx, seat: seat, includeOnCreate: includeOnCreate)
+            )
+        }
+    }
+
+    /// The gates that silence a context regardless of seat: the night
+    /// is hidden from this member, the member opted the room out, or
+    /// the member muted the event.
+    static func gateSilence(_ ctx: BriefingContext) -> SilenceReason? {
+        if ctx.hidden { return .hidden }
+        if !ctx.roomOptIn { return .roomOptOut }
+        if ctx.eventMuted { return .muted }
+        return nil
+    }
+
+    /// The joined-late catch-up request. Its body is built from the
+    /// CANONICAL seat, so a member who already claimed (or declined,
+    /// though that is silenced earlier) is never told to claim a seat
+    /// they hold (audit 04 D4).
+    private static func catchUpRequest(
+        _ ctx: BriefingContext,
+        seat: MemberRSVPState
+    ) -> PlannedBriefingNotification {
+        let body = CatchUpMessage.body(
+            eventName: ctx.eventName,
+            playedAt: ctx.playedAt,
+            mascotName: ctx.mascotName,
+            leaderboardSummary: ctx.leaderboardSummary,
+            rsvpState: seat,
+            memberName: ctx.memberName,
+            personality: ctx.personality,
+            ideology: ctx.ideology
+        )
+        return PlannedBriefingNotification(
+            identifier: catchUpIdentifier(eventId: ctx.eventId),
+            title: "\(ctx.mascotName): \(ctx.eventName)",
+            body: body,
+            kindRaw: catchUpKindRaw,
+            eventId: ctx.eventId,
+            fireAt: ctx.now.addingTimeInterval(1)
+        )
+    }
+
+    /// The pre-2026-11-09 pure signature, kept as a thin adapter so
+    /// untouched call sites and the existing harness keep compiling.
+    /// An input it cannot express (room opt-out, per-event mute,
+    /// hidden) defaults to "allowed" — a caller that knows better
+    /// builds a `BriefingContext` instead.
     static func plan(
         eventId: UUID,
         eventName: String,
@@ -260,23 +403,48 @@ enum BriefingReconciler {
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [PlannedBriefingNotification] {
-        // Declined is terminal — silence, not a reschedule.
-        if state == .declined { return [] }
+        plan(
+            BriefingContext(
+                eventId: eventId,
+                roomId: nil,
+                eventName: eventName,
+                playedAt: playedAt,
+                userId: userId,
+                memberName: memberName,
+                mascotName: mascotName,
+                seat: state,
+                hostNote: hostNote,
+                personality: personality,
+                ideology: ideology,
+                now: now,
+                calendar: calendar
+            ),
+            includeOnCreate: includeOnCreate
+        ).planned
+    }
 
+    /// The cadence arc: the once-per-install on-create prompt (when
+    /// the caller says so) plus whatever of the three reminder slots
+    /// have not passed.
+    private static func cadencePlan(
+        _ ctx: BriefingContext,
+        seat: MemberRSVPState,
+        includeOnCreate: Bool
+    ) -> [PlannedBriefingNotification] {
         var planned: [PlannedBriefingNotification] = []
 
         if includeOnCreate {
-            let address = memberName ?? "friend"
+            let address = ctx.memberName ?? "friend"
             planned.append(
                 PlannedBriefingNotification(
                     identifier: identifier(
-                        eventId: eventId, kindRaw: onCreateKindRaw, userId: userId
+                        eventId: ctx.eventId, kindRaw: onCreateKindRaw, userId: ctx.userId
                     ),
-                    title: "\(mascotName): \(eventName)",
-                    body: "\(mascotName): \(address), \(eventName) is on the books. Open the room to claim your seat.",
+                    title: "\(ctx.mascotName): \(ctx.eventName)",
+                    body: "\(ctx.mascotName): \(address), \(ctx.eventName) is on the books. Open the room to claim your seat.",
                     kindRaw: onCreateKindRaw,
-                    eventId: eventId,
-                    fireAt: now.addingTimeInterval(1)
+                    eventId: ctx.eventId,
+                    fireAt: ctx.now.addingTimeInterval(1)
                 )
             )
         }
@@ -286,8 +454,8 @@ enum BriefingReconciler {
         // The on-create prompt is the head of the cadence: it fires
         // one second after this pass runs, so `now` IS the on-create
         // time and every other slot is measured from it.
-        let slots = Self.reminderSlots(playedAt: playedAt, calendar: calendar)
-        let onCreateTime = now
+        let slots = Self.reminderSlots(playedAt: ctx.playedAt, calendar: ctx.calendar)
+        let onCreateTime = ctx.now
 
         var weekBefore: Date? = slots.weekBefore
         var fewDays: Date? = slots.fewDays
@@ -322,25 +490,25 @@ enum BriefingReconciler {
             guard let fireAt else { continue }
             let isMorning = kindRaw == morningOfKindRaw
             let body = reminderBody(
-                eventName: eventName,
-                playedAt: playedAt,
-                state: state,
-                memberName: memberName,
+                eventName: ctx.eventName,
+                playedAt: ctx.playedAt,
+                state: seat,
+                memberName: ctx.memberName,
                 morning: isMorning,
-                hostNote: isMorning ? nil : hostNote,
-                personality: personality,
-                ideology: ideology,
-                mascotName: mascotName
+                hostNote: isMorning ? nil : ctx.hostNote,
+                personality: ctx.personality,
+                ideology: ctx.ideology,
+                mascotName: ctx.mascotName
             )
             planned.append(
                 PlannedBriefingNotification(
                     identifier: identifier(
-                        eventId: eventId, kindRaw: kindRaw, userId: userId
+                        eventId: ctx.eventId, kindRaw: kindRaw, userId: ctx.userId
                     ),
-                    title: "\(mascotName): \(eventName) \(isMorning ? "today" : "in a few days")",
+                    title: "\(ctx.mascotName): \(ctx.eventName) \(isMorning ? "today" : "in a few days")",
                     body: body,
                     kindRaw: kindRaw,
-                    eventId: eventId,
+                    eventId: ctx.eventId,
                     fireAt: fireAt
                 )
             )
@@ -427,34 +595,25 @@ enum BriefingReconciler {
         return body
     }
 
-    /// The one reconcile entry point. Cancels every pending
-    /// request for `eventId` on the sink, then re-plans from the
-    /// caller's CURRENT canonical state and submits the result.
+    /// The one reconcile entry point. Cancels this device's pending
+    /// requests for the context's event, then re-plans from the
+    /// context's CANONICAL state and submits the result, awaiting
+    /// every add.
     ///
     /// `onCreateBodyProvider` (optional, async) is consulted only
     /// when the on-create prompt will actually fire — the
     /// dispatcher passes the mascot-voice LLM generator there.
     static func reconcile(
+        context ctx: BriefingContext,
         sink: BriefingNotificationSink,
         ledger: BriefingOnCreateLedger,
-        eventId: UUID,
-        eventName: String,
-        playedAt: Date,
-        mascotName: String,
-        userId: UUID,
-        memberName: String?,
-        state: MemberRSVPState,
-        hostNote: String? = nil,
-        personality: MascotPersonality = .friendly,
-        ideology: MascotPoliticalIdeology = .centrist,
-        now: Date = Date(),
         onCreateBodyProvider: (() async -> String)? = nil
     ) async {
-        let prefix = eventId.uuidString
+        let prefix = ctx.eventId.uuidString
         let pending = await sink.pendingIdentifiers()
         let delivered = await sink.deliveredIdentifiers()
         let onCreateId = identifier(
-            eventId: eventId, kindRaw: onCreateKindRaw, userId: userId
+            eventId: ctx.eventId, kindRaw: onCreateKindRaw, userId: ctx.userId
         )
         let onCreatePending = pending.contains(onCreateId)
 
@@ -463,9 +622,12 @@ enum BriefingReconciler {
         // marked at schedule time, so treating a fired ledger as
         // "done" would cancel a prompt that never delivered.
         // Keep it untouched: original body, original fire date.
-        let keepOnCreate = state == .unclaimed
+        // A gated context (opt-out, mute, hidden) keeps nothing: the
+        // member asked to stop hearing from this room or night.
+        let keepOnCreate = ctx.seat == .unclaimed
             && onCreatePending
             && !delivered.contains(onCreateId)
+            && gateSilence(ctx) == nil
 
         let stale = pending.filter {
             $0.hasPrefix(prefix) && !(keepOnCreate && $0 == onCreateId)
@@ -474,28 +636,14 @@ enum BriefingReconciler {
             sink.removePending(identifiers: stale)
         }
         if keepOnCreate {
-            ledger.markOnCreateFired(eventId: eventId, userId: userId)
+            ledger.markOnCreateFired(eventId: ctx.eventId, userId: ctx.userId)
         }
 
-        let includeOnCreate = shouldFireOnCreate(
-            state: state, eventId: eventId, userId: userId, ledger: ledger
-        )
-        guard state != .declined else { return }
+        let includeOnCreate = ctx.seat == .unclaimed
+            && !ledger.hasFiredOnCreate(eventId: ctx.eventId, userId: ctx.userId)
 
-        let planned = plan(
-            eventId: eventId,
-            eventName: eventName,
-            playedAt: playedAt,
-            mascotName: mascotName,
-            userId: userId,
-            memberName: memberName,
-            state: state,
-            includeOnCreate: includeOnCreate,
-            hostNote: hostNote,
-            personality: personality,
-            ideology: ideology,
-            now: now
-        )
+        let outcome = plan(ctx, includeOnCreate: includeOnCreate)
+        guard case .scheduled(let planned) = outcome else { return }
 
         // Belt-and-braces on top of the fired ledger: a delivered
         // on-create banner must never be re-added even if the
@@ -512,7 +660,7 @@ enum BriefingReconciler {
                 if let provider = onCreateBodyProvider {
                     body = await provider()
                 }
-                ledger.markOnCreateFired(eventId: eventId, userId: userId)
+                ledger.markOnCreateFired(eventId: ctx.eventId, userId: ctx.userId)
                 try? await sink.add(
                     identifier: item.identifier,
                     title: item.title,
@@ -532,6 +680,49 @@ enum BriefingReconciler {
                 )
             }
         }
+    }
+
+    /// The pre-2026-11-09 signature, kept as a thin adapter. It
+    /// builds a context that cannot express the room opt-out, the
+    /// per-event mute or a hidden night — all three default to
+    /// "allowed", exactly as they did before. Callers that can answer
+    /// those questions should build a `BriefingContext` instead.
+    static func reconcile(
+        sink: BriefingNotificationSink,
+        ledger: BriefingOnCreateLedger,
+        eventId: UUID,
+        eventName: String,
+        playedAt: Date,
+        mascotName: String,
+        userId: UUID,
+        memberName: String?,
+        state: MemberRSVPState,
+        hostNote: String? = nil,
+        personality: MascotPersonality = .friendly,
+        ideology: MascotPoliticalIdeology = .centrist,
+        now: Date = Date(),
+        onCreateBodyProvider: (() async -> String)? = nil
+    ) async {
+        let ctx = BriefingContext(
+            eventId: eventId,
+            roomId: nil,
+            eventName: eventName,
+            playedAt: playedAt,
+            userId: userId,
+            memberName: memberName,
+            mascotName: mascotName,
+            seat: state,
+            hostNote: hostNote,
+            personality: personality,
+            ideology: ideology,
+            now: now
+        )
+        await reconcile(
+            context: ctx,
+            sink: sink,
+            ledger: ledger,
+            onCreateBodyProvider: onCreateBodyProvider
+        )
     }
 }
 

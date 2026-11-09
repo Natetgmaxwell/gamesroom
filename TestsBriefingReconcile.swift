@@ -472,5 +472,103 @@ func runBriefingReconcileTests() {
         )
         runner.assertEqual(sink.pending.count, 0)
     }
+
+    // MARK: - BriefingContext / BriefingOutcome (2026-11-09, audit 04 §3.2)
+
+    let ctxEventId = UUID()
+    let ctxRoomId = UUID()
+    let ctxUserId = UUID()
+
+    func context(
+        seat: MemberRSVPState? = .unclaimed,
+        roomOptIn: Bool = true,
+        muted: Bool = false,
+        hidden: Bool = false,
+        kind: BriefingPlanKind = .cadence
+    ) -> BriefingContext {
+        BriefingContext(
+            eventId: ctxEventId,
+            roomId: ctxRoomId,
+            eventName: "Friday Night Hold'em",
+            playedAt: brPlayedAt,
+            userId: ctxUserId,
+            memberName: "Nathan",
+            mascotName: "Ace",
+            seat: seat,
+            roomOptIn: roomOptIn,
+            eventMuted: muted,
+            hidden: hidden,
+            kind: kind,
+            now: brNow
+        )
+    }
+
+    // One test per SilenceReason — the planner names every gate that
+    // can produce silence, so a silenced device is diagnosable.
+
+    runner.run("briefing plan: declined is silenced(.declined)") {
+        let outcome = BriefingReconciler.plan(context(seat: .declined), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.declined))
+        runner.assertEqual(outcome.planned.count, 0)
+    }
+
+    runner.run("briefing plan: room opt-out is silenced(.roomOptOut)") {
+        let outcome = BriefingReconciler.plan(context(roomOptIn: false), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.roomOptOut))
+    }
+
+    runner.run("briefing plan: per-event mute is silenced(.muted)") {
+        let outcome = BriefingReconciler.plan(context(muted: true), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.muted))
+    }
+
+    runner.run("briefing plan: a hidden night is silenced(.hidden)") {
+        let outcome = BriefingReconciler.plan(context(hidden: true), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.hidden))
+    }
+
+    runner.run("briefing plan: an unreadable seat is silenced(.unknownSeat)") {
+        let outcome = BriefingReconciler.plan(context(seat: nil), includeOnCreate: true)
+        runner.assertEqual(outcome, .silenced(.unknownSeat))
+    }
+
+    runner.run("briefing plan: a live context schedules the cadence") {
+        let outcome = BriefingReconciler.plan(context(), includeOnCreate: true)
+        guard case .scheduled(let planned) = outcome else {
+            runner.assertTrue(false, "expected .scheduled, got \(outcome)")
+            return
+        }
+        runner.assertEqual(planned.count, 4)
+        runner.assertEqual(planned.first?.kindRaw, BriefingReconciler.onCreateKindRaw)
+    }
+
+    // The plan is pure: same context, same outcome, twice, and it
+    // touches no sink.
+    runner.run("briefing plan: same context yields the same outcome") {
+        let first = BriefingReconciler.plan(context(), includeOnCreate: false)
+        let second = BriefingReconciler.plan(context(), includeOnCreate: false)
+        runner.assertEqual(first, second)
+        runner.assertEqual(first.planned.count, 3)
+    }
+
+    // A silenced context reconciles to zero pending requests: the
+    // sweep runs, the plan says nothing.
+    runner.runAsync("briefing reconcile(context): opt-out sweeps and schedules nothing") {
+        let sink = FakeBriefingSink()
+        let ledger = FakeOnCreateLedger()
+
+        await BriefingReconciler.reconcile(
+            context: context(), sink: sink, ledger: ledger
+        )
+        runner.assertEqual(sink.pending.count, 4)
+
+        await BriefingReconciler.reconcile(
+            context: context(roomOptIn: false), sink: sink, ledger: ledger
+        )
+        runner.assertEqual(sink.pending.count, 0)
+        runner.assertEqual(
+            sink.log.reduce(0) { $1.hasPrefix("add:") ? $0 + 1 : $0 }, 4
+        )
+    }
 }
 
