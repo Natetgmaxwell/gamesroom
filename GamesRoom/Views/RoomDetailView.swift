@@ -97,11 +97,9 @@ struct RoomDetailView: View {
     // `roomConfirm`. The pack the host picked still carries its slug so
     // a Casino + Monopoly Deal night scores Monopoly Deal, never the
     // headline pack.
-    /// S1.5 — the settle waiting out its 5 s Undo window. The cached
-    /// event already reads as settled; nothing has been sent yet.
-    @State private var pendingSettle: PendingSettle?
-    /// S1.5 — the last settle RPC failed; the live card says so.
-    @State private var settleFailed: Bool = false
+    /// S1.5 — the settle with Undo, and the window that will send it.
+    @State private var settle: SettlePhase = .idle
+    @State private var settleTask: Task<Void, Never>?
     /// S1.7 — flips when the awards are dismissed so SwiftUI
     /// re-renders (UserDefaults isn't observed).
     @State private var seasonAwardsDismissedFlip: Bool = false
@@ -493,18 +491,22 @@ struct RoomDetailView: View {
             }
         }
         // S1.5 — "Night settled." with Undo, for the 5 s before the
-        // settle is sent.
+        // settle is sent. P2: the same toast stays up while the settle
+        // RPC is in flight; Undo is only offered while nothing has been
+        // sent (`SettlePhase.showsToast` / `.undoingEvent`).
         .overlay(alignment: .bottom) {
-            if pendingSettle != nil {
+            if settle.showsToast {
                 HStack(spacing: Theme.Layout.cardLineGap) {
                     Text("Night settled.")
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.primaryText)
                     Spacer()
-                    Button("Undo") { undoSettle() }
-                        .font(Theme.Typography.body.weight(.semibold))
-                        .foregroundStyle(Theme.Palette.accent)
-                        .accessibilityHint(Text("Puts the night back live"))
+                    if let undoEvent = settle.undoingEvent {
+                        Button("Undo") { undoSettle(undoEvent) }
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.accent)
+                            .accessibilityHint(Text("Puts the night back live"))
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -518,7 +520,7 @@ struct RoomDetailView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(reduceMotion ? nil : Theme.Motion.fade, value: pendingSettle != nil)
+        .animation(reduceMotion ? nil : Theme.Motion.fade, value: settle.showsToast)
         .alert("Seat action failed", isPresented: $showSeatActionError) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -2081,6 +2083,9 @@ struct RoomDetailView: View {
             secondaries.append(WitnessSlot.Line(title: "Count your CAH cards", style: .button, action: { presenting = .cahScan(event) }))
         }
         let inHand = memberActions.contains(.withdrawChips) && casinoWithdrawn > 0 ? casinoWithdrawn : nil
+        // P2 (audit 03 C2) — a failed settle is this card's own line,
+        // scoped to the night it failed on, and the line is the retry.
+        let settleFailedHere = isHost && settle.failedEventId == event.id
         return WitnessSlot(
             event: event,
             attestations: openAttestations,
@@ -2091,7 +2096,8 @@ struct RoomDetailView: View {
             workingHand: inHand,
             hasScanned: myScanState.hasScanned,
             scannedValue: myScanState.scannedValue,
-            note: settleFailed && isHost ? "Couldn't settle. Try again." : plan.caption
+            note: settleFailedHere ? (settle.failedMessage ?? SettlePhase.failureMessage) : plan.caption,
+            noteAction: settleFailedHere ? { settleNight(event: event) } : nil
         )
     }
 
@@ -2181,36 +2187,51 @@ struct RoomDetailView: View {
         )
     }
 
-    /// S1.5 — "Settle the night". Optimistic: the cached night reads
-    /// as settled at once (the recap renders) and "Night settled."
-    /// offers Undo for 5 s. Only after 5 s without Undo does the
-    /// settle go to the server.
+    /// S1.5 / P2 (audit 03 C2) — "Settle the night". Optimistic: the
+    /// cached night reads as settled at once (the recap renders) and
+    /// "Night settled." offers Undo for 5 s. Only after 5 s without Undo
+    /// does the settle go to the server; the toast then stays up through
+    /// `.committing`, and a failure lands on the live card as a retry.
     private func settleNight(event: Event) {
-        settleFailed = false
-        pendingSettle?.task.cancel()
+        // An in-flight RPC owns the phase; sending the same night twice
+        // is the one thing this machine must not do.
+        guard !settle.isCommitting else { return }
+        // A second settle replaces the first: the old 5 s window must
+        // not fire against the new one.
+        settleTask?.cancel()
         roomService.setCachedSettledAt(eventId: event.id, Date())
         let task = Task { @MainActor in
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
             await commitSettle(event: event)
         }
-        pendingSettle = PendingSettle(event: event, task: task)
+        settleTask = task
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            settle = settle.reduce(.begin(event))
+        }
     }
 
-    /// S1.5 — Undo: the night goes back live and nothing is sent.
-    private func undoSettle() {
-        guard let pending = pendingSettle else { return }
-        pending.task.cancel()
-        roomService.setCachedSettledAt(eventId: pending.event.id, nil)
-        pendingSettle = nil
+    /// S1.5 — Undo: the night goes back live and nothing is sent. Only
+    /// offered inside the 5 s window (`SettlePhase.undoingEvent`).
+    private func undoSettle(_ event: Event) {
+        settleTask?.cancel()
+        settleTask = nil
+        roomService.setCachedSettledAt(eventId: event.id, nil)
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            settle = settle.reduce(.undo)
+        }
     }
 
     /// S1.5 — the settle itself, once the Undo window has passed.
     private func commitSettle(event: Event) async {
-        pendingSettle = nil
+        settle = settle.reduce(.commitStarted(event.id))
         do {
             _ = try await roomService.settleEvent(eventId: event.id)
             Haptics.success()
+            settleTask = nil
+            withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                settle = settle.reduce(.commitSucceeded(event.id))
+            }
             ScoreLiveActivityDriver.endNight(roomId: room.id)
             async let active: Event? = roomService.loadActiveEvent(roomId: room.id, force: true)
             async let board: [LeaderboardEntry] = roomService.loadLeaderboard(roomId: room.id, force: true)
@@ -2218,7 +2239,9 @@ struct RoomDetailView: View {
             _ = await (active, board, season)
         } catch {
             roomService.setCachedSettledAt(eventId: event.id, nil)
-            settleFailed = true
+            withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                settle = settle.reduce(.commitFailed(event.id, SettlePhase.failureMessage))
+            }
         }
     }
 
@@ -2229,12 +2252,6 @@ struct RoomDetailView: View {
             seed: Calendar.current.date(byAdding: .day, value: 7, to: event.playedAt)
         )
     }
-}
-
-/// S1.5 — a settle waiting out its Undo window.
-private struct PendingSettle {
-    let event: Event
-    let task: Task<Void, Never>
 }
 
 // MARK: - Briefing slot
@@ -3021,6 +3038,9 @@ private struct WitnessSlot: View {
     /// S1.5 — grey caption under the primary ("Couldn't settle.
     /// Try again.").
     var note: String? = nil
+    /// P2 (audit 03 C2) — when set, the note is the retry: the same
+    /// grey line, tappable. nil keeps it plain text.
+    var noteAction: (() -> Void)? = nil
 
     var body: some View {
         // v1.2.2 S6 T7 — same rule `BriefingSlot` follows (S6 T2):
@@ -3144,11 +3164,24 @@ private struct WitnessSlot: View {
             }
 
             if let note {
-                Text(note)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.secondaryText)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+                if let noteAction {
+                    // P2 — a failed settle's line is the retry, so it is
+                    // a button that looks exactly like the caption.
+                    Button(action: noteAction) {
+                        Text(note)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.secondaryText)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(note)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
             }
 
             // S1.4 — secondaries: grey caption text centred under
