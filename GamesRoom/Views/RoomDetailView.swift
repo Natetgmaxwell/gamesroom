@@ -1058,7 +1058,7 @@ struct RoomDetailView: View {
                     onEdit: isHost ? { editEvent = event } : nil,
                     room: liveRoom,
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
-                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } },
+                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
                 )
             case .claimed(let event):
                 BriefingSlot(
