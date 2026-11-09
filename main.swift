@@ -1595,9 +1595,14 @@ runner.run("LiveActivityRule no-ops outside play without a line") {
 runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents stamps stale events, leaves fresh") {
     let store = InMemoryRoomStore()
     let hosted = try await store.fetchRooms().first!
-    // The in-memory store holds ONE event per room (addEvent wins
-    // the slot). Case 1: an event 3 days old (past the 8h default
-    // window) gets closed.
+    // The fake holds every night a room has (D13), so clear the seeded
+    // future night first: this case is about one night crossing the
+    // auto-close window, not about which night the slot ranks first.
+    if let seeded = try await store.fetchActiveEvent(roomId: hosted.id) {
+        try await store.cancelEvent(eventId: seeded.id)
+    }
+    // Case 1: an event 3 days old (past the 8h default window) gets
+    // closed.
     _ = try await store.addEvent(
         roomId: hosted.id, name: "Stale Night",
         playedAt: Date().addingTimeInterval(-3 * 86_400), packSlugs: ["casino"],
@@ -1627,6 +1632,9 @@ runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents stamps stale events, lea
 runner.runAsync("InMemoryRoomStore.autoCloseStaleEvents honors the room's autoCloseHours window") {
     let store = InMemoryRoomStore()
     let hosted = try await store.fetchRooms().first!
+    if let seeded = try await store.fetchActiveEvent(roomId: hosted.id) {
+        try await store.cancelEvent(eventId: seeded.id)
+    }
     // V0.83 — the window is per-room. Narrow it to 1h: an event
     // 2 hours old is now stale and gets closed.
     _ = try await store.updateRoom(

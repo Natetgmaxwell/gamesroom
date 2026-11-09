@@ -34,11 +34,19 @@ actor InMemoryRoomStore: RoomStore {
     /// previews still render.
     private var rooms: [Room]
 
-    /// Map of `roomId → active event`. The first seeded room has a
-    /// future-dated event so the Briefing slot renders against real
-    /// data; the others stay empty until the host creates one.
+    /// Map of `roomId → that room's nights`.
+    ///
+    /// D13 (audit 01) — this used to hold ONE event per room, so the
+    /// multi-night machine (a settled night plus next week's night, or
+    /// a night nobody settled) was unrepresentable in the test double
+    /// and no unit test could pin the recap. Reads rank the list with
+    /// `NightPhaseResolver`, the same rule the server applies.
+    ///
+    /// The first seeded room carries one future-dated night so the
+    /// Briefing slot renders against real data; the others stay empty
+    /// until the host creates one.
     // private dropped for InMemorySweepSeeds (file at token cap).
-    var events: [UUID: Event]
+    var events: [UUID: [Event]]
 
     /// Map of `eventId → briefing summary`.
     var briefings: [UUID: BriefingSummary]
@@ -391,7 +399,7 @@ actor InMemoryRoomStore: RoomStore {
         ]
 
         self.rooms = [carwoola, dealSundays, felt, testSandbox]
-        self.events = [carwoola.id: carwoolaEvent]
+        self.events = [carwoola.id: [carwoolaEvent]]
         self.briefings = [carwoolaEvent.id: carwoolaBriefing]
         self.leaderboards = [carwoola.id: carwoolaLeaderboard]
         self.rsvps = [:]
@@ -702,7 +710,7 @@ actor InMemoryRoomStore: RoomStore {
                     maxSeats: carwoolaEvent.maxSeats, startedAt: Date().addingTimeInterval(-60),
                     settledAt: nil, sessionId: nil, hostFinalized: false
                 )
-                self.events[carwoola.id] = event
+                self.events[carwoola.id] = [event]
                 self.rsvps[event.id] = [carwoola.createdBy: .claimed, alex: .claimed, sam: .claimed]
                 self.questionBox.withdrawals[event.id] = [
                     .init(memberId: sam, at: Date().addingTimeInterval(-50)),
@@ -750,11 +758,11 @@ actor InMemoryRoomStore: RoomStore {
         switch screenState {
         case "witness":
             // Just-started live, no working hand → `.tonightEvent`.
-            events[carwoola.id] = rebuildCarwoolaEvent(
+            events[carwoola.id] = [rebuildCarwoolaEvent(
                 playedAt: Date().addingTimeInterval(-1_800),
                 startedAt: Date().addingTimeInterval(-1_800),
                 settledAt: nil
-            )
+            )]
 
         case "settled":
             // Settled within last 24h → `.justSettled`. Seed a
@@ -765,7 +773,7 @@ actor InMemoryRoomStore: RoomStore {
                 startedAt: Date().addingTimeInterval(-10_800),
                 settledAt: Date().addingTimeInterval(-1_800)
             )
-            events[carwoola.id] = e
+            events[carwoola.id] = [e]
             chapterLines[e.id] = ChapterLine(
                 id: UUID(),
                 roomId: carwoola.id,
@@ -1069,8 +1077,54 @@ actor InMemoryRoomStore: RoomStore {
 
     // MARK: Active event
 
+    /// The room's active slot, ranked the way `get_active_event` ranks
+    /// it: a live night outranks a night whose window ran out unresolved
+    /// (that one still needs its settle), which outranks the next
+    /// scheduled night, which outranks a settled night still inside its
+    /// 24-hour recap window. The server guards its settled branch so it
+    /// returns exactly one row; the fake mirrors that by picking one
+    /// night here instead of handing back a list.
     func fetchActiveEvent(roomId: UUID) async throws -> Event? {
-        return events[roomId]
+        let now = Date()
+        let nights = events[roomId] ?? []
+        let window = autoCloseHours(roomId: roomId)
+        func phase(_ event: Event) -> NightPhase {
+            NightPhaseResolver.phase(NightFacts(
+                playedAt: event.playedAt,
+                settledAt: event.settledAt,
+                autoCloseHours: window,
+                now: now
+            ))
+        }
+        if let live = nights.filter({ phase($0) == .live }).min(by: { $0.playedAt < $1.playedAt }) {
+            return live
+        }
+        if let stranded = nights.filter({ phase($0) == .stranded }).max(by: { $0.playedAt < $1.playedAt }) {
+            return stranded
+        }
+        if let upcoming = nights.filter({ phase($0) == .upcoming }).min(by: { $0.playedAt < $1.playedAt }) {
+            return upcoming
+        }
+        return try await fetchRecentSettledEvent(roomId: roomId)
+    }
+
+    /// The room's most recently settled night, while it is still inside
+    /// the 24-hour recap window. Mirrors `get_recent_settled_event`
+    /// (migration 107), which the live store calls directly.
+    func fetchRecentSettledEvent(roomId: UUID) async throws -> Event? {
+        let now = Date()
+        return (events[roomId] ?? [])
+            .filter { event in
+                guard let settledAt = event.settledAt else { return false }
+                return settledAt > now.addingTimeInterval(-NightPhaseResolver.recapWindow)
+            }
+            .max { ($0.settledAt ?? .distantPast) < ($1.settledAt ?? .distantPast) }
+    }
+
+    /// The room's `auto_close_hours`, or the schema default.
+    private func autoCloseHours(roomId: UUID) -> Int {
+        rooms.first(where: { $0.id == roomId })?.autoCloseHours
+            ?? NightPhaseResolver.defaultAutoCloseHours
     }
 
     /// V0.82 — in-memory mirror of `auto_close_stale_events`.
@@ -1079,28 +1133,17 @@ actor InMemoryRoomStore: RoomStore {
     /// default 8), so previews exercise the same transition the
     /// live RPC produces.
     func autoCloseStaleEvents(roomId: UUID) async throws -> Int {
-        let windowHours = rooms.first(where: { $0.id == roomId })?.autoCloseHours ?? 8
-        guard let event = events[roomId],
-              event.settledAt == nil,
-              event.playedAt < Date().addingTimeInterval(-Double(windowHours) * 3600) else {
-            return 0
+        let windowHours = autoCloseHours(roomId: roomId)
+        guard var nights = events[roomId] else { return 0 }
+        let now = Date()
+        let cutoff = now.addingTimeInterval(-Double(windowHours) * 3600)
+        var closed = 0
+        for idx in nights.indices where nights[idx].settledAt == nil && nights[idx].playedAt < cutoff {
+            nights[idx] = nights[idx].withSettledAt(now)
+            closed += 1
         }
-        events[roomId] = Event(
-            id: event.id,
-            roomId: event.roomId,
-            name: event.name,
-            playedAt: event.playedAt,
-            createdAt: event.createdAt,
-            venue: event.venue,
-            hostNote: event.hostNote,
-            maxSeats: event.maxSeats,
-            startedAt: event.startedAt,
-            settledAt: Date(),
-            sessionId: event.sessionId,
-            packSlug: event.packSlug,
-            hostFinalized: event.hostFinalized
-        )
-        return 1
+        events[roomId] = nights
+        return closed
     }
 
     /// In-memory mirror of `settle_event(p_event_id)` (migration
@@ -1109,7 +1152,7 @@ actor InMemoryRoomStore: RoomStore {
     /// not started; the preview path only mirrors the stamp, the
     /// same way the other in-memory mirrors skip the server guards.
     func settleEvent(eventId: UUID) async throws -> Date {
-        guard let entry = events.first(where: { $0.value.id == eventId }) else {
+        guard let event = eventById(eventId) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
                 code: -1,
@@ -1117,7 +1160,7 @@ actor InMemoryRoomStore: RoomStore {
             )
         }
         let settledAt = Date()
-        events[entry.key] = entry.value.withSettledAt(settledAt)
+        upsertEvent(event.withSettledAt(settledAt))
         return settledAt
     }
 
@@ -1675,7 +1718,7 @@ actor InMemoryRoomStore: RoomStore {
         return MemberRSVP(
             id: UUID(),
             eventId: eventId,
-            roomId: events.values.first(where: { $0.id == eventId })?.roomId ?? UUID(),
+            roomId: eventById(eventId)?.roomId ?? UUID(),
             memberId: memberId,
             state: state,
             respondedAt: Date()
@@ -1707,7 +1750,7 @@ actor InMemoryRoomStore: RoomStore {
             // mirror. We pass it through below.
             hiddenFromUserIds: hiddenFromUserIds
         )
-        events[roomId] = new
+        events[roomId, default: []].append(new)
         briefings[new.id] = BriefingSummary(
             eventId: new.id,
             roomId: roomId,
@@ -1724,7 +1767,7 @@ actor InMemoryRoomStore: RoomStore {
     /// p_name)` (migration 114). Renames the night. An empty name is
     /// refused, the same way the server refuses it.
     func updateEventName(eventId: UUID, name: String) async throws {
-        guard let event = events.values.first(where: { $0.id == eventId }) else {
+        guard let event = eventById(eventId) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
                 code: -1,
@@ -1739,14 +1782,14 @@ actor InMemoryRoomStore: RoomStore {
                 userInfo: [NSLocalizedDescriptionKey: "Event name cannot be empty"]
             )
         }
-        events[event.roomId] = replacingEvent(event, name: trimmed)
+        upsertEvent(replacingEvent(event, name: trimmed))
     }
 
     /// S3.4 — in-memory mirror of `update_event_played_at(p_event_id,
     /// p_played_at)` (migration 114). Moves the night. A date in the
     /// past is refused, the same way the server refuses it.
     func updateEventPlayedAt(eventId: UUID, playedAt: Date) async throws {
-        guard let event = events.values.first(where: { $0.id == eventId }) else {
+        guard let event = eventById(eventId) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
                 code: -1,
@@ -1760,7 +1803,7 @@ actor InMemoryRoomStore: RoomStore {
                 userInfo: [NSLocalizedDescriptionKey: "Events must be in the future"]
             )
         }
-        events[event.roomId] = replacingEvent(event, playedAt: playedAt)
+        upsertEvent(replacingEvent(event, playedAt: playedAt))
     }
 
     /// S3.4 — in-memory mirror of `cancel_event(p_event_id)`
@@ -1768,7 +1811,7 @@ actor InMemoryRoomStore: RoomStore {
     /// held for it goes back to its owner, then the night and its
     /// rows go away. A cancelled night costs nobody their deposit.
     func cancelEvent(eventId: UUID) async throws {
-        guard let event = events.values.first(where: { $0.id == eventId }) else {
+        guard let event = eventById(eventId) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
                 code: -1,
@@ -1781,7 +1824,7 @@ actor InMemoryRoomStore: RoomStore {
                 id: deposit.id, amount: deposit.amount, status: .returned, heldAt: deposit.heldAt
             )
         }
-        events.removeValue(forKey: event.roomId)
+        events[event.roomId]?.removeAll { $0.id == eventId }
         briefings.removeValue(forKey: eventId)
         rsvps.removeValue(forKey: eventId)
         arrivalCandidatesByEvent.removeValue(forKey: eventId)
@@ -1820,7 +1863,7 @@ actor InMemoryRoomStore: RoomStore {
     /// 050). Mutates the seeded event's note + venue so previews
     /// reflect the edit.
     func updateEventMemberFields(eventId: UUID, note: String?, venue: String?) async throws {
-        guard var event = events.values.first(where: { $0.id == eventId }) else {
+        guard var event = eventById(eventId) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
                 code: -1,
@@ -1842,14 +1885,14 @@ actor InMemoryRoomStore: RoomStore {
             packSlug: event.packSlug,
             hostFinalized: event.hostFinalized
         )
-        events[event.roomId] = event
+        upsertEvent(event)
     }
 
     /// In-memory mirror of `write_chapter_line` (migration 051).
     /// Stores the line in a local dict so the ceremonial card can
     /// render it in previews.
     func writeChapterLine(eventId: UUID, title: String, callForward: String?) async throws {
-        guard let event = events.values.first(where: { $0.id == eventId }) else {
+        guard let event = eventById(eventId) else {
             throw NSError(
                 domain: "InMemoryRoomStore",
                 code: -1,
@@ -1927,17 +1970,15 @@ actor InMemoryRoomStore: RoomStore {
             joinCodes.removeValue(forKey: code)
         }
 
-        // Drop the room's active event (and any briefing attached
-        // to it). The room's events map is keyed by roomId (one
-        // active event per room); also clean briefings keyed by
-        // the event id, and any round breakdowns / RSVPs that
-        // belong to the event.
-        if let event = events[roomId] {
-            events.removeValue(forKey: roomId)
+        // Drop every night the room holds (and the briefing, RSVP set
+        // and chapter line attached to each). A room can hold more than
+        // one night now, so the cleanup loops instead of taking one.
+        for event in events[roomId] ?? [] {
             briefings.removeValue(forKey: event.id)
             rsvps.removeValue(forKey: event.id)
             chapterLines.removeValue(forKey: event.id)
         }
+        events.removeValue(forKey: roomId)
 
         // Per-room caches that aren't room-id-keyed directly.
         leaderboards.removeValue(forKey: roomId)
@@ -2077,11 +2118,8 @@ actor InMemoryRoomStore: RoomStore {
     /// onto the Event so the next fetchActiveEvent round-trip reads
     /// it back. Idempotent (overwrites).
     func reportCalendarIdentifier(eventId: UUID, identifier: String) async throws {
-        guard let roomId = events.values.first(where: { $0.id == eventId })?.roomId,
-              let existing = events[roomId], existing.id == eventId else {
-            return
-        }
-        events[roomId] = Event(
+        guard let existing = eventById(eventId) else { return }
+        upsertEvent(Event(
             id: existing.id,
             roomId: existing.roomId,
             name: existing.name,
@@ -2096,7 +2134,7 @@ actor InMemoryRoomStore: RoomStore {
             packSlug: existing.packSlug,
             hostFinalized: existing.hostFinalized,
             eventCalendarIdentifier: identifier
-        )
+        ))
     }
 
     // MARK: Host journal (P1.5)
@@ -2160,7 +2198,7 @@ actor InMemoryRoomStore: RoomStore {
     /// got a claimed seat with no deposit behind it. Migration 113
     /// only skips the insert while a deposit is still held.
     func claimSeatWithDeposit(eventId: UUID) async throws {
-        guard let event = events.values.first(where: { $0.id == eventId }),
+        guard let event = eventById(eventId),
               let room = rooms.first(where: { $0.id == event.roomId }) else { return }
         rsvps[eventId, default: [:]][room.createdBy] = .claimed
         let existing = seatDepositsByEventMember[eventId]?[room.createdBy]
@@ -2225,7 +2263,7 @@ actor InMemoryRoomStore: RoomStore {
     /// p_member_id)` (migration 085). Claims the seat with a
     /// zero-amount held row — chip-neutral at every resolution.
     func claimSeatWaived(eventId: UUID, memberId: UUID) async throws {
-        guard let event = events.values.first(where: { $0.id == eventId }) else { return }
+        guard let event = eventById(eventId) else { return }
         rsvps[eventId, default: [:]][memberId] = .claimed
         guard seatDepositsByEventMember[eventId]?[memberId] == nil else { return }
         seatDepositsByEventMember[eventId, default: [:]][memberId] = SeatDeposit(
@@ -2237,7 +2275,7 @@ actor InMemoryRoomStore: RoomStore {
     /// (migration 085). Resolves the caller's held deposit to
     /// `.returned`. Idempotent.
     func checkInSeat(eventId: UUID) async throws {
-        guard let event = events.values.first(where: { $0.id == eventId }),
+        guard let event = eventById(eventId),
               let room = rooms.first(where: { $0.id == event.roomId }) else { return }
         resolveDeposit(eventId: eventId, memberId: room.createdBy, status: .returned)
     }
@@ -2247,7 +2285,7 @@ actor InMemoryRoomStore: RoomStore {
     /// has a claimed RSVP — the arrival card source. Empty when
     /// every deposit is resolved.
     func loadArrivalCandidates(eventId: UUID) async throws -> [SeatDepositCandidate] {
-        guard let event = events.values.first(where: { $0.id == eventId }),
+        guard let event = eventById(eventId),
               let room = rooms.first(where: { $0.id == event.roomId }) else { return [] }
         let members = try await fetchRoomMembers(roomId: event.roomId)
         let deposits = seatDepositsByEventMember[eventId] ?? [:]
@@ -2284,7 +2322,7 @@ actor InMemoryRoomStore: RoomStore {
     /// (migration 085). The seeded caller is the room's host
     /// (the synthetic current member).
     func fetchMySeatDeposit(eventId: UUID) async throws -> SeatDeposit? {
-        guard let event = events.values.first(where: { $0.id == eventId }),
+        guard let event = eventById(eventId),
               let room = rooms.first(where: { $0.id == event.roomId }) else { return nil }
         return seatDepositsByEventMember[eventId]?[room.createdBy]
     }
@@ -2304,10 +2342,35 @@ actor InMemoryRoomStore: RoomStore {
         arrivalCandidatesByEvent[eventId] = candidates
     }
 
+    /// Test support: stamps `settledAt` on one night with a caller-
+    /// supplied clock. `settleEvent` always stamps "now", the same way
+    /// migration 107 does, so a case that needs a night settled weeks
+    /// ago writes the row it means to test.
+    func backdateSettledAt(eventId: UUID, settledAt: Date) {
+        guard let event = eventById(eventId) else { return }
+        upsertEvent(event.withSettledAt(settledAt))
+    }
+
     // MARK: V0.106 helpers (QuestionBoxStore conformance)
 
     func eventById(_ eventId: UUID) -> Event? {
-        events.values.first { $0.id == eventId }
+        for nights in events.values {
+            if let match = nights.first(where: { $0.id == eventId }) { return match }
+        }
+        return nil
+    }
+
+    /// Replaces one night in its room's list, or appends it when the
+    /// room has never held it. Matching is by id, so a night keeps its
+    /// place in the list across a rename, a move or a settle.
+    func upsertEvent(_ event: Event) {
+        var nights = events[event.roomId] ?? []
+        if let idx = nights.firstIndex(where: { $0.id == event.id }) {
+            nights[idx] = event
+        } else {
+            nights.append(event)
+        }
+        events[event.roomId] = nights
     }
 
     func roomIdForEvent(_ eventId: UUID) -> UUID? {
@@ -2366,7 +2429,7 @@ actor InMemoryRoomStore: RoomStore {
         // positive. The seeded leaderboard is keyed by roomId
         // rather than by event, so we use the leader's row as the
         // synthetic winner so previews render something real.
-        guard let roomId = events.first(where: { $0.value.id == eventId })?.key,
+        guard let roomId = eventById(eventId)?.roomId,
               let board = leaderboards[roomId],
               let leader = board.first(where: { !$0.role.lowercased().contains("host") })
                 ?? board.first
@@ -2390,7 +2453,7 @@ actor InMemoryRoomStore: RoomStore {
         category: TonightStarOverrideCategory,
         customText: String?
     ) async throws {
-        guard events.values.contains(where: { $0.id == eventId }) else {
+        guard eventById(eventId) != nil else {
             throw NSError(
                 domain: "InMemoryRoomStore",
                 code: -1,
@@ -2398,7 +2461,7 @@ actor InMemoryRoomStore: RoomStore {
             )
         }
         let displayName: String
-        if let roomId = events.first(where: { $0.value.id == eventId })?.key,
+        if let roomId = eventById(eventId)?.roomId,
            let members = try? await fetchRoomMembers(roomId: roomId),
            let member = members.first(where: { $0.userId == memberId }) {
             displayName = member.displayName

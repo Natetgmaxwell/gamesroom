@@ -139,7 +139,7 @@ extension InMemoryRoomStore {
             //   currentlyInto Sam's own fresh words, so the caption's
             //                 third part renders too
             let brief = upcomingEvent()
-            events[carwoola.id] = brief
+            events[carwoola.id] = [brief]
             rsvps[brief.id] = [
                 carwoola.createdBy: .claimed,
                 alex: .claimed,
@@ -197,25 +197,25 @@ extension InMemoryRoomStore {
             ]
 
         case "tonight-live":
-            events[carwoola.id] = liveEvent(
+            events[carwoola.id] = [liveEvent(
                 name: carwoolaEvent.name,
                 packSlug: carwoolaEvent.packSlug
-            )
+            )]
             questionBox.settings[carwoola.id] = questionBoxOff
 
         case "score-live":
-            events[carwoola.id] = liveEvent(
+            events[carwoola.id] = [liveEvent(
                 name: "Monopoly Deal Night",
                 packSlug: "monopoly_deal"
-            )
+            )]
             questionBox.settings[carwoola.id] = questionBoxOff
 
         case "chip-scan":
-            events[carwoola.id] = liveEvent(
+            events[carwoola.id] = [liveEvent(
                 name: carwoolaEvent.name,
                 packSlug: "casino",
                 packSlugs: ["casino", "monopoly_deal"]
-            )
+            )]
             questionBox.settings[carwoola.id] = questionBoxOff
 
         case "settled-rich":
@@ -234,7 +234,7 @@ extension InMemoryRoomStore {
                 packSlug: carwoolaEvent.packSlug,
                 hostFinalized: false
             )
-            events[carwoola.id] = settled
+            events[carwoola.id] = [settled]
             chapterLines[settled.id] = ChapterLine(
                 id: UUID(),
                 roomId: carwoola.id,
@@ -328,11 +328,11 @@ extension InMemoryRoomStore {
             ]
 
         case "member-idle":
-            events[carwoola.id] = nil
+            events[carwoola.id] = []
 
         case "upcoming-partial":
             let partial = upcomingEvent()
-            events[carwoola.id] = partial
+            events[carwoola.id] = [partial]
             rsvps[partial.id] = [
                 carwoola.createdBy: .claimed,
                 alex: .claimed,
@@ -359,7 +359,7 @@ extension InMemoryRoomStore {
 
         case "claim-card":
             let claimable = upcomingEvent()
-            events[carwoola.id] = claimable
+            events[carwoola.id] = [claimable]
             rsvps[claimable.id] = [
                 alex: .claimed,
                 sam: .claimed
@@ -385,7 +385,7 @@ extension InMemoryRoomStore {
                 packSlug: "monopoly_deal",
                 packSlugs: ["monopoly_deal"]
             )
-            events[carwoola.id] = night
+            events[carwoola.id] = [night]
             rsvps[night.id] = [
                 carwoola.createdBy: .claimed,
                 alex: .claimed,
@@ -405,7 +405,7 @@ extension InMemoryRoomStore {
                 packSlug: "monopoly_deal",
                 packSlugs: ["monopoly_deal"]
             )
-            events[carwoola.id] = night
+            events[carwoola.id] = [night]
             rsvps[night.id] = [
                 carwoola.createdBy: .claimed,
                 alex: .claimed,
@@ -432,7 +432,7 @@ extension InMemoryRoomStore {
                 packSlugs: ["monopoly_deal"]
             )
             let settled = live.withSettledAt(Date().addingTimeInterval(-1_800))
-            events[carwoola.id] = settled
+            events[carwoola.id] = [settled]
             chapterLines[settled.id] = ChapterLine(
                 id: UUID(),
                 roomId: carwoola.id,

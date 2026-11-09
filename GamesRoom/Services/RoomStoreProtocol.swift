@@ -140,7 +140,24 @@ protocol RoomStore: Sendable {
     /// The room's currently-relevant event. Returns `nil` when the
     /// room has no scheduled event, no at-play event, and no
     /// recently-settled event.
+    ///
+    /// Ranked the way `get_active_event` ranks it (migration 115):
+    /// live / stranded outranks the next scheduled night, which
+    /// outranks a settled night still inside its 24-hour recap
+    /// window. Exactly one row comes back.
     func fetchActiveEvent(roomId: UUID) async throws -> Event?
+
+    /// The room's most recently settled night while it is still inside
+    /// the 24-hour recap window, or `nil`.
+    ///
+    /// A recap belongs to the night, not to the room's active slot, so
+    /// this is a second read rather than a second branch of
+    /// `fetchActiveEvent`: a room with next week's night booked still
+    /// has last night's recap to show for 24 hours.
+    ///
+    /// Server side: `get_recent_settled_event(p_room_id)` (migration
+    /// 107, same return shape as `get_active_event`).
+    func fetchRecentSettledEvent(roomId: UUID) async throws -> Event?
 
     /// V0.82 — lazy auto-close. Stamps `settled_at` on the room's
     /// events whose night passed 24h ago and were never settled.

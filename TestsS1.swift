@@ -50,6 +50,12 @@ func runS1Tests(_ runner: TestRunner) {
         // stamp back, so the service can mirror it into its cache.
         let store = InMemoryRoomStore()
         let hosted = try await store.fetchRooms().first!
+        // The fake holds every night a room has, so clear the seeded
+        // future night: this case settles the night it adds, and the
+        // active slot ranks a live night above a future one anyway.
+        if let seeded = try await store.fetchActiveEvent(roomId: hosted.id) {
+            try await store.cancelEvent(eventId: seeded.id)
+        }
         let eventId = try await store.addEvent(
             roomId: hosted.id,
             name: "Friday Night",

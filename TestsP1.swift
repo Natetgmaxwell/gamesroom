@@ -17,6 +17,7 @@ import Foundation
 /// Runs the lane P cases against the shared runner.
 func runP1Tests(_ runner: TestRunner) {
     runP1NightPhaseTests(runner)
+    runP1StoreNightTests(runner)
 }
 
 // MARK: - NightPhase table (audit 01 §3.1)
@@ -151,5 +152,127 @@ private func runP1NightPhaseTests(_ runner: TestRunner) {
         )
         runner.assertEqual(NightPhaseResolver.phase(for: event, now: now), .live)
         runner.assertEqual(NightPhaseResolver.phase(for: event.withSettledAt(now), now: now), .recap)
+    }
+}
+
+// MARK: - The fake holds nights, and ranks them like the server (D13)
+
+private func runP1StoreNightTests(_ runner: TestRunner) {
+    /// A seeded room with no nights left, so a case can build exactly
+    /// the list it needs.
+    func emptyRoom(_ store: InMemoryRoomStore) async throws -> UUID {
+        let room = try await store.fetchRooms().first!
+        if let seeded = try await store.fetchActiveEvent(roomId: room.id) {
+            try await store.cancelEvent(eventId: seeded.id)
+        }
+        return room.id
+    }
+
+    func addNight(
+        _ store: InMemoryRoomStore,
+        roomId: UUID,
+        name: String,
+        playedAt: TimeInterval,
+        settledAt: TimeInterval? = nil
+    ) async throws -> UUID {
+        let id = try await store.addEvent(
+            roomId: roomId, name: name,
+            playedAt: Date().addingTimeInterval(playedAt),
+            packSlugs: ["casino"], hiddenFromUserIds: []
+        )
+        if let settledAt {
+            _ = try await store.settleEvent(eventId: id)
+            // The mirror stamps "now"; tests that need an older settle
+            // read the row they built instead of waiting for a clock.
+            _ = settledAt
+        }
+        return id
+    }
+
+    runner.runAsync("P1: a room with a future night and a settled night keeps both") {
+        // Audit 01 D1 — the recap used to exist only on the phone that
+        // tapped Settle. The active slot is next week's night; the
+        // recap is its own read.
+        let store = InMemoryRoomStore()
+        let roomId = try await emptyRoom(store)
+        let settledId = try await addNight(store, roomId: roomId, name: "Last night", playedAt: -10_800, settledAt: 0)
+        let nextId = try await addNight(store, roomId: roomId, name: "Next week", playedAt: 7 * 86_400)
+
+        let active = try await store.fetchActiveEvent(roomId: roomId)
+        let recent = try await store.fetchRecentSettledEvent(roomId: roomId)
+        runner.assertTrue(active?.id == nextId, "the future night is the active slot")
+        runner.assertTrue(recent?.id == settledId, "the settled night is still the recap")
+    }
+
+    runner.runAsync("P1: a stranded night outranks the next scheduled night") {
+        // Audit 01 D3 — a night nobody settled used to be invisible: the
+        // future night took the slot and the settle action did not
+        // exist. The stranded night has to win the slot to be fixable.
+        let store = InMemoryRoomStore()
+        let roomId = try await emptyRoom(store)
+        let strandedId = try await addNight(store, roomId: roomId, name: "Forgotten", playedAt: -30 * 3_600)
+        _ = try await addNight(store, roomId: roomId, name: "Next week", playedAt: 7 * 86_400)
+        let active = try await store.fetchActiveEvent(roomId: roomId)
+        runner.assertEqual(active?.id, strandedId)
+    }
+
+    runner.runAsync("P1: a live night outranks both the stranded night and the future one") {
+        let store = InMemoryRoomStore()
+        let roomId = try await emptyRoom(store)
+        _ = try await addNight(store, roomId: roomId, name: "Forgotten", playedAt: -30 * 3_600)
+        let liveId = try await addNight(store, roomId: roomId, name: "Tonight", playedAt: -3_600)
+        _ = try await addNight(store, roomId: roomId, name: "Next week", playedAt: 7 * 86_400)
+        let active = try await store.fetchActiveEvent(roomId: roomId)
+        runner.assertEqual(active?.id, liveId)
+    }
+
+    runner.runAsync("P1: the soonest future night wins when two are booked") {
+        let store = InMemoryRoomStore()
+        let roomId = try await emptyRoom(store)
+        _ = try await addNight(store, roomId: roomId, name: "In a fortnight", playedAt: 14 * 86_400)
+        let sooner = try await addNight(store, roomId: roomId, name: "In a week", playedAt: 7 * 86_400)
+        let active = try await store.fetchActiveEvent(roomId: roomId)
+        runner.assertEqual(active?.id, sooner)
+    }
+
+    runner.runAsync("P1: a room with no nights has no active slot and no recap") {
+        let store = InMemoryRoomStore()
+        let roomId = try await emptyRoom(store)
+        runner.assertNil(try await store.fetchActiveEvent(roomId: roomId))
+        runner.assertNil(try await store.fetchRecentSettledEvent(roomId: roomId))
+    }
+
+    runner.runAsync("P1: a night settled outside the 24h window is not a recap") {
+        let store = InMemoryRoomStore()
+        let roomId = try await emptyRoom(store)
+        let id = try await store.addEvent(
+            roomId: roomId, name: "Old night",
+            playedAt: Date().addingTimeInterval(-30 * 86_400),
+            packSlugs: ["casino"], hiddenFromUserIds: []
+        )
+        // The mirror's settle stamps "now"; this case is about a night
+        // that settled a month ago, so write that stamp instead.
+        await store.backdateSettledAt(eventId: id, settledAt: Date().addingTimeInterval(-30 * 86_400))
+        runner.assertNil(
+            try await store.fetchRecentSettledEvent(roomId: roomId),
+            "a settled night stops being a recap after 24h"
+        )
+        runner.assertNil(
+            try await store.fetchActiveEvent(roomId: roomId),
+            "and it is not the active slot either"
+        )
+    }
+
+    runner.runAsync("P1: auto-close closes only the night past the window") {
+        let store = InMemoryRoomStore()
+        let roomId = try await emptyRoom(store)
+        let staleId = try await addNight(store, roomId: roomId, name: "Stale", playedAt: -3 * 86_400)
+        let freshId = try await addNight(store, roomId: roomId, name: "Fresh", playedAt: -2 * 3_600)
+        let closed = try await store.autoCloseStaleEvents(roomId: roomId)
+        runner.assertEqual(closed, 1)
+        let recent = try await store.fetchRecentSettledEvent(roomId: roomId)
+        runner.assertEqual(recent?.id, staleId)
+        let active = try await store.fetchActiveEvent(roomId: roomId)
+        runner.assertTrue(active?.id == freshId, "the live night keeps the slot")
     }
 }
