@@ -2279,15 +2279,6 @@ final class RoomService: ObservableObject {
         activeEventByRoom.values.first(where: { $0.id == eventId })?.roomId
     }
 
-    /// S3.3 — true when the server refused a claim because every
-    /// chair is taken. Migration 113 raises `P0001` with the message
-    /// `night_full` from `claim_seat_with_deposit` and
-    /// `upsert_event_rsvp`, so the client shows "All N seats are
-    /// taken." instead of a raw error.
-    nonisolated static func isNightFullError(_ error: Error) -> Bool {
-        ServerErrorCode.code(in: error) == .nightFull
-    }
-
     /// V0.85 — host-only. The broke-member claim: seat claimed
     /// with a zero-amount held deposit row. Wraps
     /// `claim_seat_waived(p_event_id, p_member_id)` (migration
