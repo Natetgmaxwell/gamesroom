@@ -2207,13 +2207,16 @@ runner.run("MascotEngine.footerKind returns .inPlayWithWithdrawal when live and 
     runner.assertEqual(kind, .inPlayWithWithdrawal)
 }
 
-runner.run("MascotEngine.footerKind returns .settleRound when live and host finalized") {
+runner.run("MascotEngine.footerKind returns .settleRound for a stranded night") {
+    // The old fixture set `hostFinalized: true` on a live event. That
+    // column exists in no migration and no RPC returns it, so the case
+    // was unreachable in production (audit 01 D7). The settle voice now
+    // belongs to the phase that actually needs a settle: stranded.
     let now = Date()
     let event = Event(
         id: UUID(), roomId: UUID(), name: "Poker",
-        playedAt: now.addingTimeInterval(-600),
-        createdAt: now.addingTimeInterval(-86_400),
-        hostFinalized: true
+        playedAt: now.addingTimeInterval(-30 * 3_600),
+        createdAt: now.addingTimeInterval(-86_400)
     )
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: now,

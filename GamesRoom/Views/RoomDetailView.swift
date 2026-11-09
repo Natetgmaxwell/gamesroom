@@ -225,8 +225,7 @@ struct RoomDetailView: View {
         guard hSize == .regular else { return false }
         guard isHost else { return false }
         guard let event = activeEvent else { return false }
-        guard event.playedAt <= Date() else { return false }
-        guard event.settledAt == nil else { return false }
+        guard nightPhase(for: event) == .live else { return false }
         guard let pack = PackRegistry.shared.definition(for: event.packSlug) else { return false }
         return pack.scoringType == .singleWinner
     }
@@ -235,10 +234,12 @@ struct RoomDetailView: View {
         authService.currentUser?.id
     }
 
-    /// V0.106 — the active event while it is live (started, not
-    /// settled). Question turns only exist inside this window.
+    /// V0.106 — the active event while it is live. Question turns only
+    /// exist inside this window, and the window now ends at
+    /// `played_at + auto_close_hours`, the same place the server stops
+    /// them (audit 01 D14).
     private var questionBoxLiveEvent: Event? {
-        guard let event = activeEvent, event.playedAt <= Date(), event.settledAt == nil else { return nil }
+        guard let event = activeEvent, nightPhase(for: event) == .live else { return nil }
         return event
     }
 
@@ -332,9 +333,7 @@ struct RoomDetailView: View {
     /// the table" section.
     private var isCasinoPlayActive: Bool {
         guard let event = activeEvent else { return false }
-        return event.packSlugs.contains(CasinoPack.slug)
-            && event.playedAt <= Date()
-            && event.settledAt == nil
+        return event.packSlugs.contains(CasinoPack.slug) && nightPhase(for: event) == .live
     }
 
     /// V0.72 (072) — the current member's scan state for the active
@@ -740,8 +739,7 @@ struct RoomDetailView: View {
                 // back" and a red "Keep" behind a confirmation.
                 if let event = activeEvent,
                    isHost,
-                   event.playedAt <= Date(),
-                   event.settledAt == nil,
+                   nightPhase(for: event) == .live,
                    liveRoom.seatDepositTrigger == .escrow {
                     let candidates = roomService.cachedArrivalCandidates(eventId: event.id)
                     if !candidates.isEmpty {
@@ -2288,6 +2286,11 @@ private struct BriefingSlot: View {
         self.nightFullOverride = nightFullOverride
     }
 
+    /// The night's phase, read from the room's own auto-close window.
+    private var nightPhase: NightPhase {
+        NightPhaseResolver.phase(for: event, autoCloseHours: room.autoCloseHours)
+    }
+
     /// S3.3 — a table has a fixed number of chairs. The night is
     /// full when every chair is taken and this member does not hold
     /// one: the Claim seat button is replaced with a plain grey
@@ -2466,7 +2469,7 @@ private struct BriefingSlot: View {
                        if let deposit = heldDeposit,
                        deposit.status == .held,
                        room.seatDepositTrigger == .escrow,
-                       event.playedAt <= Date(),
+                       nightPhase == .live,
                        let onCheckIn {
                         // v1.2.4 S4.6 — the explainer and the button it
                         // explains are one group, so they sit

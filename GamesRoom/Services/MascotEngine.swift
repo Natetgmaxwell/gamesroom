@@ -263,19 +263,28 @@ enum MascotEngine {
         leaderboard: [LeaderboardEntry],
         now: Date = Date(),
         withdrawnAmount: Int = 0,
-        currentSeason: Season? = nil
+        currentSeason: Season? = nil,
+        autoCloseHours: Int = NightPhaseResolver.defaultAutoCloseHours
     ) -> NotificationKind {
         if let season = currentSeason, season.status == .ended {
             return .seasonClose
         }
         if let event = activeEvent {
-            if event.settledAt != nil { return .postPlayRecap }
-            if event.playedAt <= now {
-                if event.hostFinalized { return .settleRound }
-                if withdrawnAmount == 0 { return .tonightEvent }
-                return .inPlayWithWithdrawal
+            switch NightPhaseResolver.phase(for: event, autoCloseHours: autoCloseHours, now: now) {
+            case .recap:
+                return .postPlayRecap
+            case .live:
+                return withdrawnAmount == 0 ? .tonightEvent : .inPlayWithWithdrawal
+            case .stranded:
+                // Started, window gone, never settled: the one thing the
+                // room is waiting for is the settle.
+                return .settleRound
+            case .upcoming:
+                return .briefingOnCreate
+            case .past, .cancelled, .none:
+                // History speaks through the standings, not the recap.
+                break
             }
-            return .briefingOnCreate
         }
         if leaderboard.isEmpty { return .roomWelcome }
         let lastPlay = leaderboard.compactMap(\.lastSessionAt).max()

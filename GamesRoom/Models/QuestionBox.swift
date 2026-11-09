@@ -207,9 +207,21 @@ enum QuestionBoxCadence {
         settledAt: Date?,
         enabled: Bool,
         cadenceMinutes: Int,
-        lastTurnAt: Date?
+        lastTurnAt: Date?,
+        autoCloseHours: Int = NightPhaseResolver.defaultAutoCloseHours
     ) -> Decision {
-        guard enabled, settledAt == nil, playedAt <= now else { return .none }
+        guard enabled else { return .none }
+        // Turns exist only while the night is live, and live ends at
+        // `played_at + auto_close_hours` whether or not it was settled:
+        // the fake used to keep the box turning for a night the server
+        // had already stopped (audit 01 D14).
+        let phase = NightPhaseResolver.phase(NightFacts(
+            playedAt: playedAt,
+            settledAt: settledAt,
+            autoCloseHours: autoCloseHours,
+            now: now
+        ))
+        guard phase == .live else { return .none }
         guard let last = lastTurnAt else { return .opener }
         guard cadenceMinutes > 0 else { return .none }
         let due = last.addingTimeInterval(TimeInterval(cadenceMinutes * 60))

@@ -687,17 +687,27 @@ struct RoomPage: View {
     /// three weeks out says "Fri 7:30pm", never "Live now".
     private func scheduleCaption(for room: Room) -> String? {
         guard let event = roomService.cachedActiveEvent(roomId: room.id) else { return nil }
-        if event.playedAt <= Date(), event.settledAt == nil {
+        if nightPhase(for: room) == .live {
             return "Live now"
         }
         return shortNightCaption(for: event.playedAt)
     }
 
-    /// S3.6 — true when the room's night is on right now: it has
-    /// started and has not been settled.
+    /// S3.6 — true when the room's night is on right now. The window
+    /// ends at the room's `auto_close_hours`, the same place the night
+    /// stops being live to the server (audit 01 D17).
     private func isLiveNow(for room: Room) -> Bool {
-        guard let event = roomService.cachedActiveEvent(roomId: room.id) else { return false }
-        return event.playedAt <= Date() && event.settledAt == nil
+        nightPhase(for: room) == .live
+    }
+
+    /// The room's active night's phase, read from the same resolver the
+    /// room page and the server use.
+    private func nightPhase(for room: Room, now: Date = Date()) -> NightPhase {
+        NightPhaseResolver.phase(
+            for: roomService.cachedActiveEvent(roomId: room.id),
+            autoCloseHours: room.autoCloseHours,
+            now: now
+        )
     }
 
     /// S3.6 — "Fri 7:30pm". Short weekday, 12-hour clock, lower-case
