@@ -781,6 +781,32 @@ enum BriefingReconciler {
 
 extension BriefingReconciler {
 
+    /// One room the foreground pass must visit, plus the cached night
+    /// the fresh read is about to supersede. `staleEventId` is `nil`
+    /// for a room this device has never cached a night for.
+    struct ForegroundRoomStep: Equatable {
+        let roomId: UUID
+        let staleEventId: UUID?
+    }
+
+    /// The rooms a foreground pass visits: EVERY room the user is a
+    /// member of, in the rooms-list order — not only the ones that
+    /// already have a cached night.
+    ///
+    /// Deriving the visit list from the cache was the bug: a member
+    /// who never opened room X had no cached night for it, so a host
+    /// scheduling a night while they were away produced no reminder of
+    /// any kind on their phone, and the pass that exists to repair
+    /// exactly that could not see the room (audit 04 D3).
+    static func foregroundRoomPlan(
+        memberRoomIds: [UUID],
+        cachedEventIdByRoom: [UUID: UUID]
+    ) -> [ForegroundRoomStep] {
+        memberRoomIds.map {
+            ForegroundRoomStep(roomId: $0, staleEventId: cachedEventIdByRoom[$0])
+        }
+    }
+
     /// The rooms in `old` that are missing from `new`, in `old`'s
     /// order: the rooms the user left or was removed from since the
     /// last read.

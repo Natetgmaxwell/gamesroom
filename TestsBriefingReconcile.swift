@@ -684,5 +684,38 @@ func runBriefingReconcileTests() {
         runner.assertEqual(outcome.planned.count, 4)
         runner.assertEqual(BriefingCadence.current, .local)
     }
+
+    // MARK: - Foreground pass plan (audit 04 D3)
+
+    // A room with no cached night still gets a step. The old loop
+    // iterated the cache, so the room was invisible to the pass.
+    runner.run("foreground plan: a room with no cached event is still visited") {
+        let cachedRoom = UUID()
+        let uncachedRoom = UUID()
+        let cachedEvent = UUID()
+        let plan = BriefingReconciler.foregroundRoomPlan(
+            memberRoomIds: [cachedRoom, uncachedRoom],
+            cachedEventIdByRoom: [cachedRoom: cachedEvent]
+        )
+        runner.assertEqual(plan.count, 2)
+        runner.assertEqual(
+            plan,
+            [
+                .init(roomId: cachedRoom, staleEventId: cachedEvent),
+                .init(roomId: uncachedRoom, staleEventId: nil)
+            ]
+        )
+    }
+
+    // A room that was left is not visited: the pass reads the member
+    // list, not the cache.
+    runner.run("foreground plan: a room the user left is not visited") {
+        let left = UUID()
+        let plan = BriefingReconciler.foregroundRoomPlan(
+            memberRoomIds: [],
+            cachedEventIdByRoom: [left: UUID()]
+        )
+        runner.assertEqual(plan.count, 0)
+    }
 }
 
