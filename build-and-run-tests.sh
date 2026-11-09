@@ -25,6 +25,7 @@ SRC_FILES=(main.swift
            GamesRoom/Models/*.swift
            GamesRoom/Packs/*.swift
            GamesRoom/Services/StorageKeys.swift
+           GamesRoom/Services/DeviceStateKeys.swift
            GamesRoom/Services/RoomStoreProtocol.swift
            GamesRoom/Services/InMemoryRoomStore.swift
            GamesRoom/Services/InMemorySweepSeeds.swift
@@ -37,6 +38,7 @@ SRC_FILES=(main.swift
            GamesRoom/Services/NightPlan.swift
            GamesRoom/Services/BriefingReconciler.swift
            TestsBriefingReconcile.swift
+           TestsDeviceState.swift
            TestsS2.swift)
 
 echo "Compiling ${BIN} against $SDK..."

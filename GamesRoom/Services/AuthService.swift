@@ -57,8 +57,13 @@ final class AuthService: ObservableObject {
     /// row. Does not throw — `auth.signOut()` failures are swallowed
     /// because the local state is already cleared and the next
     /// `loadCurrentUser()` will reconcile.
+    ///
+    /// The device purge runs FIRST: it ends this member's Live Activity
+    /// and notifications while their session still identifies them,
+    /// and leaves the phone with nothing of theirs on it (audit 04 D6).
+    /// Sign-out is now complete on its own, whatever the caller does.
     func signOut() async {
-        UserDefaults.standard.removeObject(forKey: StorageKeys.lastViewedRoomId)
+        await DeviceStateReset.purgeDeviceState()
         try? await SupabaseClientProvider.shared.auth.signOut()
         self.currentUser = nil
     }
@@ -110,10 +115,13 @@ final class AuthService: ObservableObject {
             .rpc("delete_my_account")
             .execute()
 
-        // Server-side delete invalidates the JWT. Clear local state
-        // so the next loadCurrentUser() returns nil and the root
-        // view flips to the sign-in surface.
-        UserDefaults.standard.removeObject(forKey: StorageKeys.lastViewedRoomId)
+        // Server-side delete invalidates the JWT. Clear every local
+        // trace of this account (notifications, Live Activity, widget
+        // snapshot, calendar rows, device flags, cached rooms) so the
+        // next loadCurrentUser() returns nil and the root view flips to
+        // the sign-in surface with nothing of theirs left behind
+        // (audit 04 D6).
+        await DeviceStateReset.purgeDeviceState()
         try? await SupabaseClientProvider.shared.auth.signOut()
         self.currentUser = nil
     }

@@ -5279,6 +5279,7 @@ runner.runAsync("InMemoryRoomStore anchor_push_enabled round-trips both ways fro
     runner.assertTrue(try await store.fetchAnchorPushEnabled(roomId: room.id))
 }
 runBriefingReconcileTests()
+runDeviceStateTests()
 runS2Tests()
 
 // MARK: - S1 lane tests (night lifecycle)

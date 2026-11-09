@@ -46,6 +46,13 @@ enum ScoreSnapshotStore {
         defaults.set(data, forKey: key)
     }
 
+    /// Stops persisting the room's snapshot. Used when the room goes
+    /// away (left, kicked, deleted) and by the sign-out purge.
+    static func clear() {
+        guard let defaults = UserDefaults(suiteName: suiteName) else { return }
+        defaults.removeObject(forKey: key)
+    }
+
     /// Reads the current snapshot, if any.
     static func load() -> ScoreSnapshot? {
         guard let defaults = UserDefaults(suiteName: suiteName),

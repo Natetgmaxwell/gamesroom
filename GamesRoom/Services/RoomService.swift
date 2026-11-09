@@ -56,12 +56,20 @@ final class RoomService: ObservableObject {
     /// the project is configured with a URL + key.
     private let store: RoomStore
 
+    /// The app's live service. `GamesRoomApp` creates exactly one; the
+    /// last one created wins (the preview helper is the only other
+    /// caller). `DeviceStateReset.purgeDeviceState()` needs a handle on
+    /// it from `AuthService`, which has no view environment to read it
+    /// from.
+    private(set) static weak var current: RoomService?
+
     /// Designated initialiser. The default `store` parameter makes
     /// this a drop-in replacement for the V0.8 `RoomService()` call
     /// sites (no arguments) — every existing view continues to
     /// work without a wiring change.
     init(store: RoomStore = InMemoryRoomStore.shared) {
         self.store = store
+        RoomService.current = self
     }
 
     /// Cache freshness window. Loads within this window reuse the
@@ -236,6 +244,48 @@ final class RoomService: ObservableObject {
     /// consumed by the chair card to render the "I'm here"
     /// reclaim while a deposit is held. `nil` = no held deposit.
     @Published private(set) var mySeatDepositByEvent: [UUID: SeatDeposit] = [:]
+
+    // MARK: - Sign-out purge
+
+    /// Drops every cached room, night, roster and ledger value for the
+    /// member who just signed out (audit 04 D6). The next account must
+    /// never read the previous one's cached rows — room names and the
+    /// event titles in briefing bodies are private.
+    ///
+    /// Called only by `DeviceStateReset.purgeDeviceState()`. Event-keyed
+    /// caches are cleared too: `purgeRoom(roomId:)` leaves the ones
+    /// keyed by an event id it never learned about, which is harmless
+    /// per-room but wrong per-account.
+    func resetInMemoryState() {
+        rooms = []
+        activeEventByRoom = [:]
+        recentlySettledByRoom = [:]
+        scheduledNextByRoom = [:]
+        briefingByEvent = [:]
+        leaderboardByRoom = [:]
+        rsvpByEvent = [:]
+        membersByRoom = [:]
+        showBroughtByByRoom = [:]
+        anchorPushEnabledByRoom = [:]
+        currentSeasonByRoom = [:]
+        awardsBySeason = [:]
+        seasonHistoryByRoom = [:]
+        seasonGrids = [:]
+        roomPacksByRoom = [:]
+        systemEventsByRoom = [:]
+        eventRSVPsByEvent = [:]
+        packConfigsByRoom = [:]
+        roundsByEvent = [:]
+        chapterLineByEvent = [:]
+        tonightStarCardByEvent = [:]
+        unconsumedNotesByRoom = [:]
+        arrivalCandidatesByEvent = [:]
+        mySeatDepositByEvent = [:]
+        cacheTimestamps = [:]
+        activeEventInFlight = [:]
+        lastAutoCloseAt = [:]
+        lastError = nil
+    }
 
     // MARK: - Rooms list
 
