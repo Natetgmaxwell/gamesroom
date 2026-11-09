@@ -376,9 +376,11 @@ struct QuestionBoxSettingsView: View {
             await writeSettings()
         }
         // Flush a pending edit when the page closes. The values are captured
-        // now: the view's state is gone by the time the write runs.
+        // now: the view's state is gone by the time the write runs. A write
+        // already in flight owns the queue — its refire carries the newest
+        // values, so this must not start a second one (D15).
         .onDisappear {
-            guard isDirty else { return }
+            guard isDirty, !gate.isWriting else { return }
             let pending = settings
             Task { try? await questionBox.saveSettings(roomId: roomId, settings: pending) }
         }
