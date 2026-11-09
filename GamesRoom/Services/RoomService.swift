@@ -111,14 +111,11 @@ final class RoomService: ObservableObject {
     @Published private(set) var activeEventByRoom: [UUID: Event] = [:]
     /// S1.7 — the room's most recently settled night, kept apart from
     /// the active event so the recap can sit above the next night's
-    /// card for 24h after the settle. Filled when `settleEvent`
-    /// succeeds and whenever `get_active_event` returns a settled night.
+    /// card for 24h after the settle. Filled from
+    /// `get_recent_settled_event`, so it is the same on every phone and
+    /// survives a cold launch (audit 01 D1), and mirrored locally when
+    /// `settleEvent` succeeds so the page flips without a second read.
     @Published private(set) var recentlySettledByRoom: [UUID: Event] = [:]
-    /// S1.7 — a night this device just scheduled while the server
-    /// still answers `get_active_event` with the settled night
-    /// (migration 107 ranks a settled night inside 24h above a future
-    /// one). Held so the host lands on the new night's card.
-    private var scheduledNextByRoom: [UUID: Event] = [:]
 
     /// Briefing summary cache keyed by eventId. Populated lazily
     /// by `loadBriefing(eventId:)`; consumed by `RoomDetailView`.
@@ -465,22 +462,23 @@ final class RoomService: ObservableObject {
         let task = Task<Event?, Error> { [weak self] () -> Event? in
             guard let self else { return nil }
             do {
-                var event = try await Perf.span("rpc get_active_event") {
+                let event = try await Perf.span("rpc get_active_event") {
                     try await self.store.fetchActiveEvent(roomId: roomId)
                 }
-                // S1.7 — remember the settled night for the recap.
-                if let fetched = event, fetched.settledAt != nil {
-                    self.recentlySettledByRoom[roomId] = fetched
-                }
-                // S1.7 — a night scheduled here outranks the settled
-                // night the server still returns; drop it once it has
-                // started or the server returns it itself.
-                if let next = self.scheduledNextByRoom[roomId] {
-                    if next.playedAt <= Date() || event?.id == next.id || (event != nil && event?.settledAt == nil) {
-                        self.scheduledNextByRoom[roomId] = nil
-                    } else if event?.settledAt != nil {
-                        event = next
+                // A recap belongs to the night, not to the room's active
+                // slot (audit 01 D1): read it separately so the recap and
+                // next week's card coexist. The read also fills the cache
+                // on a cold launch and on every phone, not just the one
+                // that tapped Settle.
+                do {
+                    if let recent = try await self.store.fetchRecentSettledEvent(roomId: roomId) {
+                        self.recentlySettledByRoom[roomId] = recent
+                    } else {
+                        self.recentlySettledByRoom.removeValue(forKey: roomId)
                     }
+                } catch {
+                    // A failed read is not evidence that the night stopped
+                    // being a recap; keep whatever the cache already has.
                 }
                 self.activeEventByRoom[roomId] = event
                 self.cacheTimestamps[key] = Date()
@@ -968,23 +966,6 @@ final class RoomService: ObservableObject {
         // Eagerly refresh the active-event cache so the parent's
         // post-create flow doesn't need a second round-trip.
         _ = await loadActiveEvent(roomId: roomId)
-        // S1.7 — inside the 24h after a settle the server still
-        // returns the settled night (migration 107). Hold the new
-        // night here so the host lands on its card, with the recap
-        // above it.
-        if let current = activeEventByRoom[roomId], current.id != newId, current.settledAt != nil {
-            let next = Event(
-                id: newId,
-                roomId: roomId,
-                name: name,
-                playedAt: playedAt,
-                createdAt: Date(),
-                packSlugs: packSlugs,
-                packSlug: packSlugs.first ?? "casino"
-            )
-            scheduledNextByRoom[roomId] = next
-            activeEventByRoom[roomId] = next
-        }
         // T1.1 — calendar auto-add. Best-effort: a denied prompt
         // or a failed write never blocks the event flow. Uses the
         // server-canonical event from the cache when available.
@@ -1318,7 +1299,7 @@ final class RoomService: ObservableObject {
             } else {
                 event = await loadActiveEvent(roomId: room.id)
             }
-            guard let event, event.startedAt == nil else { continue }
+            guard let event else { continue }
             if eventRSVPsByEvent[event.id] == nil {
                 _ = await loadEventRSVPs(eventId: event.id)
             }
@@ -2207,7 +2188,7 @@ final class RoomService: ObservableObject {
     /// the server said "claimed" while the room page still showed
     /// an open chair until the next pull-to-refresh.
     func claimSeat(eventId: UUID) async throws -> MemberRSVP {
-        if roomTriggeringEscrow(forEvent: eventId) {
+        if depositMode(forEvent: eventId) != .off {
             try await store.claimSeatWithDeposit(eventId: eventId)
             await loadMySeatDeposit(eventId: eventId, force: true)
             // Notification-etiquette fix (2026-11-04) — the escrow
@@ -2253,9 +2234,11 @@ final class RoomService: ObservableObject {
     /// got fined for changing their mind.
     ///
     /// A room that runs deposits off has no deposit to return, so it
-    /// keeps the plain RSVP upsert. A room the cache cannot resolve
-    /// is treated as an escrow room: a stranded deposit is worse
-    /// than one extra RPC.
+    /// keeps the plain RSVP upsert. A room the cache cannot resolve is
+    /// treated as an escrow room: `release_seat` moves the RSVP either
+    /// way, and a stranded deposit is worse than one extra RPC. The two
+    /// old derivers had opposite defaults on that miss; there is one
+    /// rule now (audit 02 D5).
     ///
     /// The plain `upsert_event_rsvp` path is also kept for a
     /// `.claimed` state (the host answering for somebody else),
@@ -2265,7 +2248,7 @@ final class RoomService: ObservableObject {
         guard state == .unclaimed || state == .declined else {
             return try await upsertEventRSVP(eventId: eventId, state: state)
         }
-        guard roomRunsEscrow(forEvent: eventId) != false else {
+        guard depositMode(forEvent: eventId) != .off else {
             return try await upsertEventRSVP(eventId: eventId, state: state)
         }
         try await store.releaseSeat(eventId: eventId, state: state)
@@ -2281,25 +2264,19 @@ final class RoomService: ObservableObject {
         )
     }
 
-    /// S3.3 — does the event's room run the seat-deposit escrow?
-    /// `nil` means the room could not be resolved from the cache, so
-    /// the caller must assume the worst rather than strand a held
-    /// deposit.
-    private func roomRunsEscrow(forEvent eventId: UUID) -> Bool? {
-        guard let event = activeEventByRoom.values.first(where: { $0.id == eventId }),
-              let room = rooms.first(where: { $0.id == event.roomId }) else { return nil }
-        return room.seatDepositTrigger == .escrow && room.seatDepositAmount > 0
+    /// The event's room deposit mode. `nil` means the room could not be
+    /// resolved from the cache — the one caller that cares treats that
+    /// as "assume a deposit", because stranding one is the worse error.
+    /// There is one rule after this, `Room.depositMode` (audit 02 C1/D5).
+    private func depositMode(forEvent eventId: UUID) -> DepositMode? {
+        guard let event = roomIdForActiveEvent(eventId),
+              let room = rooms.first(where: { $0.id == event }) else { return nil }
+        return room.depositMode
     }
 
-    /// S3.3 — true when the server refused a claim because every
-    /// chair is taken. Migration 113 raises `P0001` with the message
-    /// `night_full` from `claim_seat_with_deposit` and
-    /// `upsert_event_rsvp`, so the client shows "All N seats are
-    /// taken." instead of a raw error.
-    nonisolated static func isNightFullError(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        let text = "\(nsError.localizedDescription) \(String(describing: error))"
-        return text.lowercased().contains("night_full")
+    /// The room id that owns an event in the active-event cache.
+    private func roomIdForActiveEvent(_ eventId: UUID) -> UUID? {
+        activeEventByRoom.values.first(where: { $0.id == eventId })?.roomId
     }
 
     /// V0.85 — host-only. The broke-member claim: seat claimed
@@ -2323,10 +2300,16 @@ final class RoomService: ObservableObject {
     /// returns instantly. Wraps `check_in_seat(p_event_id)`
     /// (migration 085) and refreshes the deposit cache so the
     /// chair card flips out of the reclaim state. Idempotent.
-    func checkInSeat(eventId: UUID) async throws {
+    ///
+    /// C3 (audit 02) — returns the deposit as it stands after the
+    /// reload instead of `true`: the server answers `true` for a no-op
+    /// too, so the view reads the post-state to choose its line
+    /// (`SeatOutcomeCopy.checkIn`).
+    @discardableResult
+    func checkInSeat(eventId: UUID) async throws -> SeatDeposit? {
         try await store.checkInSeat(eventId: eventId)
         self.lastError = nil
-        await loadMySeatDeposit(eventId: eventId, force: true)
+        return await loadMySeatDeposit(eventId: eventId, force: true)
     }
 
     /// V0.85 — the caller's seat deposit for an event, or nil
@@ -2391,10 +2374,11 @@ final class RoomService: ObservableObject {
     /// p_member_id)` (migration 085); on success removes the
     /// candidate from the cached list so the arrival card stops
     /// asking. Throws on non-host writes.
-    func forfeitSeatDeposit(eventId: UUID, memberId: UUID) async throws {
+    @discardableResult
+    func forfeitSeatDeposit(eventId: UUID, memberId: UUID) async throws -> SeatDeposit? {
         try await store.forfeitSeatDeposit(eventId: eventId, memberId: memberId)
         self.lastError = nil
-        removeArrivalCandidate(eventId: eventId, memberId: memberId)
+        return await reloadArrivalOutcome(eventId: eventId, memberId: memberId, status: .forfeited)
     }
 
     /// V0.85 — host-only. Returns a held deposit without the
@@ -2402,10 +2386,38 @@ final class RoomService: ObservableObject {
     /// `waive_seat_deposit(p_event_id, p_member_id)` (migration
     /// 085); on success removes the candidate from the cached
     /// list. `reason` is free-form; the mascot copy renders it.
-    func waiveSeatDeposit(eventId: UUID, memberId: UUID, reason: String?) async throws {
+    @discardableResult
+    func waiveSeatDeposit(eventId: UUID, memberId: UUID, reason: String?) async throws -> SeatDeposit? {
         try await store.waiveSeatDeposit(eventId: eventId, memberId: memberId)
         self.lastError = nil
+        return await reloadArrivalOutcome(eventId: eventId, memberId: memberId, status: .waived)
+    }
+
+    /// C3 (audit 02) — proves whether the host's tap actually applied.
+    /// The candidate list is the only per-member deposit read the app
+    /// has, so the reload is what decides: a member still on it is still
+    /// held (the tap changed nothing), a member gone from it was
+    /// resolved by this tap or an earlier one. Returns the deposit as it
+    /// now stands, or nil when the member never had one.
+    private func reloadArrivalOutcome(
+        eventId: UUID,
+        memberId: UUID,
+        status: SeatDeposit.Status
+    ) async -> SeatDeposit? {
+        let before = arrivalCandidatesByEvent[eventId]?.first { $0.userId == memberId }
+        guard let before else {
+            await loadArrivalCandidates(eventId: eventId, force: true)
+            return nil
+        }
         removeArrivalCandidate(eventId: eventId, memberId: memberId)
+        await loadArrivalCandidates(eventId: eventId, force: true)
+        let stillHeld = arrivalCandidatesByEvent[eventId]?.contains { $0.userId == memberId } ?? false
+        return SeatDeposit(
+            id: UUID(),
+            amount: before.depositAmount,
+            status: stillHeld ? .held : status,
+            heldAt: Date()
+        )
     }
 
     /// Removes one resolved candidate from the cached arrival
@@ -2419,15 +2431,6 @@ final class RoomService: ObservableObject {
         cacheTimestamps.removeValue(forKey: "arrivalCandidates:\(eventId.uuidString)")
     }
 
-    /// True when the event's room runs the deposit escrow. Reads
-    /// the cached rooms list; a miss (room not loaded yet) runs
-    /// the plain claim path — the server RPC re-guards anyway.
-    private func roomTriggeringEscrow(forEvent eventId: UUID) -> Bool {
-        guard let room = rooms.first(where: { r in
-            activeEventByRoom.values.contains { $0.id == eventId && $0.roomId == r.id }
-        }) else { return false }
-        return room.seatDepositTrigger == .escrow && room.seatDepositAmount > 0
-    }
 }
 
 // MARK: - Preview support

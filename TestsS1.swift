@@ -50,6 +50,12 @@ func runS1Tests(_ runner: TestRunner) {
         // stamp back, so the service can mirror it into its cache.
         let store = InMemoryRoomStore()
         let hosted = try await store.fetchRooms().first!
+        // The fake holds every night a room has, so clear the seeded
+        // future night: this case settles the night it adds, and the
+        // active slot ranks a live night above a future one anyway.
+        if let seeded = try await store.fetchActiveEvent(roomId: hosted.id) {
+            try await store.cancelEvent(eventId: seeded.id)
+        }
         let eventId = try await store.addEvent(
             roomId: hosted.id,
             name: "Friday Night",
@@ -397,8 +403,9 @@ func runS1SeedTests(_ runner: TestRunner) {
         runner.assertEqual(rounds.count, 1)
         runner.assertEqual(NextRound.after(rounds).index, 2)
         let plan = NightPlan.plan(for: NightInput(
-            isHost: true, packSlugs: event.packSlugs, playedAt: event.playedAt,
-            settledAt: nil, now: Date(), arrivedCount: 3, claimedCount: 3,
+            isHost: true, packSlugs: event.packSlugs,
+            phase: NightPhaseResolver.phase(for: event),
+            arrivedCount: 3, claimedCount: 3,
             roundsScored: rounds.count, iHaveHeldDeposit: false, iHaveWithdrawn: false
         ))
         runner.assertEqual(plan.primary, .settleNight)
@@ -436,9 +443,12 @@ private func nightInput(
     NightInput(
         isHost: isHost,
         packSlugs: packSlugs,
-        playedAt: playedAt ?? nightBase.addingTimeInterval(-3_600),
-        settledAt: settledAt,
-        now: now,
+        phase: NightPhaseResolver.phase(NightFacts(
+            playedAt: playedAt ?? nightBase.addingTimeInterval(-3_600),
+            settledAt: settledAt,
+            autoCloseHours: NightPhaseResolver.defaultAutoCloseHours,
+            now: now
+        )),
         arrivedCount: arrivedCount,
         claimedCount: claimedCount,
         roundsScored: roundsScored,

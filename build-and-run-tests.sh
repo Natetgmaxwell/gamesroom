@@ -21,10 +21,12 @@ TARGET="arm64-apple-macosx14.0"
 BIN="games-room-tests"
 SRC_FILES=(main.swift
            TestsS1.swift
+           TestsP1.swift
            TestsS3.swift
            GamesRoom/Models/*.swift
            GamesRoom/Packs/*.swift
            GamesRoom/Services/StorageKeys.swift
+           GamesRoom/Services/NightPhase.swift
            GamesRoom/Services/RoomStoreProtocol.swift
            GamesRoom/Services/InMemoryRoomStore.swift
            GamesRoom/Services/InMemorySweepSeeds.swift

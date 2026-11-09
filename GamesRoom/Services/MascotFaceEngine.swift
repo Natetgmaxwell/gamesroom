@@ -67,8 +67,6 @@ struct RoomStateInputs {
     let activeEvent: ActiveEventSnapshot?
     /// Whether the active event has settled (post-play window).
     let activeEventSettled: Bool
-    /// Whether the host has finalised the live event (settle in progress).
-    let hostFinalized: Bool
     /// Caller's withdrawn chip count for the active event.
     let withdrawnAmount: Int
     /// The leader's margin over second place (positive = leader ahead).

@@ -395,11 +395,28 @@ final class LiveRoomStore: RoomStore, @unchecked Sendable {
     // MARK: Active event
 
     /// The live RPC is `get_active_event(p_room_id)` (migration 060,
-    /// returns the next upcoming, in-play, or recently-settled event
-    /// for the room; `null` when the room has no recent activity).
+    /// re-ranked by 115; returns the room's live or stranded night,
+    /// else the next upcoming one, else a settled night still inside
+    /// its 24-hour recap window; `null` when the room has no recent
+    /// activity.
     func fetchActiveEvent(roomId: UUID) async throws -> Event? {
         let rows: [Event] = try await SupabaseClientProvider.shared
             .rpc("get_active_event", params: [
+                "p_room_id": roomId.uuidString
+            ])
+            .execute()
+            .value
+        return rows.first
+    }
+
+    /// The live RPC is `get_recent_settled_event(p_room_id)` (migration
+    /// 107). Same row shape as `get_active_event`; it is the settled
+    /// night while that night is still inside the 24-hour recap
+    /// window, so the recap renders on every phone even when the room
+    /// already has its next night booked.
+    func fetchRecentSettledEvent(roomId: UUID) async throws -> Event? {
+        let rows: [Event] = try await SupabaseClientProvider.shared
+            .rpc("get_recent_settled_event", params: [
                 "p_room_id": roomId.uuidString
             ])
             .execute()

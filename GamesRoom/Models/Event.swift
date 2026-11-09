@@ -10,18 +10,23 @@ import Foundation
 /// One scheduled games-night event. The central entity in V0.8's
 /// three-slot layout (Briefing / Witness Screen / Ceremonial Card).
 ///
-/// Lifecycle in V0.8:
+/// Lifecycle in V0.8 (the phases themselves live in `NightPhase`):
 /// 1. **Pre-play Briefing** — `event.createdAt → playedAt`. Three
 ///    notification cadences (on-create / T-48h / morning-of) branch
 ///    on the recipient's RSVP state. Briefing renders *always*, even
 ///    when push permission is denied.
-/// 2. **At-play Witness Screen** — `playedAt → settledAt`. The host
-///    finalizes at the table; members receive the chip-scan CTA only
-///    after finalization.
+/// 2. **At-play Witness Screen** — `playedAt → playedAt +
+///    auto_close_hours`. The host settles at the table; the night stops
+///    being live when the window goes, settled or not.
 /// 3. **Post-play Ceremonial Card** — `settledAt → +24h`. Chapter
 ///    title (28pt serif) + ledger delta (monospaced) + 64pt gap + a
 ///    single call-forward line. Renders the ambient chapter strip's
 ///    tail.
+///
+/// `started_at` and `host_finalized` were removed (lane P): neither
+/// column exists in any migration and no RPC returns them, so both read
+/// as `nil`/`false` forever and every branch on them was dead. Rows that
+/// still carry the keys decode fine — unknown keys are ignored.
 struct Event: Identifiable, Codable, Hashable {
     let id: UUID
     let roomId: UUID
@@ -50,10 +55,6 @@ struct Event: Identifiable, Codable, Hashable {
     /// `joinStartingBonus`-friendly default of 6.
     let maxSeats: Int
 
-    /// When the host pressed "Start Play" — i.e. flipped the room
-    /// from pre-play to at-play. `nil` until then.
-    let startedAt: Date?
-
     /// When the host pressed "Finalize" at the settle step. `nil`
     /// until settle.
     let settledAt: Date?
@@ -68,10 +69,6 @@ struct Event: Identifiable, Codable, Hashable {
     /// V0.95 G — every pack selected for this event. Empty/missing
     /// (pre-092 rows) falls back to [packSlug] at decode.
     let packSlugs: [String]
-
-    /// `true` once the host has finalized. Drives the `Scan your
-    /// chips` CTA visibility on the Witness Screen.
-    let hostFinalized: Bool
 
     /// V0.86 — the EventKit row identifier that maps back to this
     /// event on the device. Server-side persisted in
@@ -110,12 +107,10 @@ struct Event: Identifiable, Codable, Hashable {
         case venue
         case hostNote = "host_note"
         case maxSeats = "max_seats"
-        case startedAt = "started_at"
         case settledAt = "settled_at"
         case sessionId = "session_id"
         case packSlug = "pack_slug"
         case packSlugs = "pack_slugs"
-        case hostFinalized = "host_finalized"
         case eventCalendarIdentifier = "event_calendar_identifier"
         case hiddenFromUserIds = "hidden_from_user_ids"
     }
@@ -129,12 +124,10 @@ struct Event: Identifiable, Codable, Hashable {
         venue: String? = nil,
         hostNote: String? = nil,
         maxSeats: Int = 6,
-        startedAt: Date? = nil,
         settledAt: Date? = nil,
         sessionId: UUID? = nil,
         packSlugs: [String] = [],
         packSlug: String = "casino",
-        hostFinalized: Bool = false,
         eventCalendarIdentifier: String? = nil,
         hiddenFromUserIds: [UUID]? = nil
     ) {
@@ -146,12 +139,10 @@ struct Event: Identifiable, Codable, Hashable {
         self.venue = venue
         self.hostNote = hostNote
         self.maxSeats = maxSeats
-        self.startedAt = startedAt
         self.settledAt = settledAt
         self.sessionId = sessionId
         self.packSlug = packSlug
         self.packSlugs = packSlugs.isEmpty ? [packSlug] : packSlugs
-        self.hostFinalized = hostFinalized
         self.eventCalendarIdentifier = eventCalendarIdentifier
         self.hiddenFromUserIds = hiddenFromUserIds
     }
@@ -170,12 +161,10 @@ struct Event: Identifiable, Codable, Hashable {
         venue = try c.decodeIfPresent(String.self, forKey: .venue)
         hostNote = try c.decodeIfPresent(String.self, forKey: .hostNote)
         maxSeats = try c.decodeIfPresent(Int.self, forKey: .maxSeats) ?? 6
-        startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
         settledAt = try c.decodeIfPresent(Date.self, forKey: .settledAt)
         sessionId = try c.decodeIfPresent(UUID.self, forKey: .sessionId)
         packSlug = try c.decodeIfPresent(String.self, forKey: .packSlug) ?? "casino"
         packSlugs = try c.decodeIfPresent([String].self, forKey: .packSlugs) ?? [packSlug]
-        hostFinalized = try c.decodeIfPresent(Bool.self, forKey: .hostFinalized) ?? false
         // V0.86 — server-side identifier (migration 087). Legacy
         // rows from before the column existed decode as nil (the
         // event was never written to any calendar).
@@ -200,12 +189,10 @@ struct Event: Identifiable, Codable, Hashable {
         try c.encodeIfPresent(venue, forKey: .venue)
         try c.encodeIfPresent(hostNote, forKey: .hostNote)
         try c.encode(maxSeats, forKey: .maxSeats)
-        try c.encodeIfPresent(startedAt, forKey: .startedAt)
         try c.encodeIfPresent(settledAt, forKey: .settledAt)
         try c.encodeIfPresent(sessionId, forKey: .sessionId)
         try c.encode(packSlug, forKey: .packSlug)
         try c.encode(packSlugs, forKey: .packSlugs)
-        try c.encode(hostFinalized, forKey: .hostFinalized)
         try c.encodeIfPresent(eventCalendarIdentifier, forKey: .eventCalendarIdentifier)
         // V0.94 — only encode when the server returned the column.
         // Pre-V0.94 events never carry the field; we omit rather
@@ -224,23 +211,6 @@ extension Event {
     /// copy. Used when the night is settled (migration 107's
     /// `settle_event`) and when the cache mirrors that stamp.
     func withSettledAt(_ settledAt: Date?) -> Event {
-        Event(
-            id: id,
-            roomId: roomId,
-            name: name,
-            playedAt: playedAt,
-            createdAt: createdAt,
-            venue: venue,
-            hostNote: hostNote,
-            maxSeats: maxSeats,
-            startedAt: startedAt,
-            settledAt: settledAt,
-            sessionId: sessionId,
-            packSlugs: packSlugs,
-            packSlug: packSlug,
-            hostFinalized: hostFinalized,
-            eventCalendarIdentifier: eventCalendarIdentifier,
-            hiddenFromUserIds: hiddenFromUserIds
-        )
+        Event(id: id, roomId: roomId, name: name, playedAt: playedAt, createdAt: createdAt, venue: venue, hostNote: hostNote, maxSeats: maxSeats, settledAt: settledAt, sessionId: sessionId, packSlugs: packSlugs, packSlug: packSlug, eventCalendarIdentifier: eventCalendarIdentifier, hiddenFromUserIds: hiddenFromUserIds)
     }
 }

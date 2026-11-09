@@ -21,6 +21,17 @@
 //
 //  The rules, in one place:
 //
+//  The plan reads `NightPhase`, never a pair of date comparisons: the
+//  phase is the one answer to "where is this night", and every screen
+//  that used to derive it separately now asks the same question. The
+//  rules per phase:
+//
+//    recap                -> the host plans the next night
+//    past / cancelled     -> nothing (the page shows the standings)
+//    upcoming / none      -> nothing (the RSVP CTA is the briefing slot)
+//    stranded             -> the host settles it, with the caption
+//                            "The night is still open"; members nothing
+//
 //    Member, live night:
 //      held deposit and not withdrawn -> checkIn
 //      else casino in packs            -> withdrawChips
@@ -73,12 +84,10 @@ struct NightInput: Equatable {
     var isHost: Bool
     /// Every pack the host picked for this night (`event.packSlugs`).
     var packSlugs: [String]
-    /// When the night starts.
-    var playedAt: Date
-    /// When the night was settled, if it has been.
-    var settledAt: Date?
-    /// The clock, passed in so the plan stays pure.
-    var now: Date
+    /// The night's phase, from `NightPhaseResolver`. The plan reads the
+    /// phase, never `playedAt`/`settledAt` comparisons of its own: one
+    /// rule, one place (audit 01 §3.1).
+    var phase: NightPhase
     /// Members who have arrived (checked in or played).
     var arrivedCount: Int
     /// Members who claimed a seat.
@@ -100,29 +109,46 @@ struct NightPlan: Equatable {
     /// The secondary actions, rendered as grey caption text under the
     /// primary.
     var secondaries: [NightAction]
+    /// A grey line under the primary, for a state that needs a word of
+    /// explanation. `nil` for every state that speaks for itself.
+    var caption: String? = nil
 
     /// How long after a night is settled the recap still counts as
     /// the night that just happened (24 hours, the same window the
     /// room page's ceremonial card uses).
-    static let recapWindow: TimeInterval = 86_400
+    static let recapWindow: TimeInterval = NightPhaseResolver.recapWindow
+
+    /// The caption on a night whose auto-close window has gone and
+    /// which nobody settled. New copy for a state that did not exist
+    /// until the phase did.
+    static let strandedCaption = "The night is still open"
 
     /// The plan for the night as it stands.
     static func plan(for input: NightInput) -> NightPlan {
-        if let settledAt = input.settledAt {
-            // The night is over. Inside the recap window the host
-            // plans the next one; outside it the night is history and
-            // the page shows the standings.
-            guard settledAt > input.now.addingTimeInterval(-recapWindow) else {
-                return NightPlan(primary: nil, secondaries: [])
-            }
-            return NightPlan(primary: input.isHost ? .planNextNight : nil, secondaries: [])
-        }
-        guard input.playedAt <= input.now else {
-            // The night has not started. The RSVP CTA still belongs to
-            // the briefing slot; the plan has no claim state to work
-            // from, so it offers nothing.
+        switch input.phase {
+        case .none, .upcoming:
+            // No night, or one that has not started. The RSVP CTA still
+            // belongs to the briefing slot; the plan has no claim state
+            // to work from, so it offers nothing.
             return NightPlan(primary: nil, secondaries: [])
+        case .recap:
+            // Inside the recap window the host plans the next one.
+            return NightPlan(primary: input.isHost ? .planNextNight : nil, secondaries: [])
+        case .past, .cancelled:
+            // History. The page shows the standings.
+            return NightPlan(primary: nil, secondaries: [])
+        case .stranded:
+            // The window has gone and nobody settled. The night is still
+            // the host's to close; there is nothing for a member to do.
+            guard input.isHost else { return NightPlan(primary: nil, secondaries: []) }
+            return NightPlan(primary: .settleNight, secondaries: [], caption: strandedCaption)
+        case .live:
+            return livePlan(for: input)
         }
+    }
+
+    /// The plan for a night that is live right now.
+    private static func livePlan(for input: NightInput) -> NightPlan {
         let memberAction = memberAction(for: input)
         guard input.isHost else {
             return NightPlan(primary: memberAction, secondaries: [])
@@ -236,11 +262,24 @@ extension NightPlan {
     /// (the next one is on the books, or under way). When the active
     /// event IS the settled night, the recap is the page's slot and
     /// this returns nil.
-    static func recapAboveNextNight(recent: Event?, active: Event?, now: Date) -> Event? {
-        guard let recent, let settledAt = recent.settledAt else { return nil }
-        guard settledAt > now.addingTimeInterval(-recapWindow) else { return nil }
-        guard let active, active.id != recent.id, active.settledAt == nil else { return nil }
-        return recent
+    static func recapAboveNextNight(
+        recent: Event?,
+        active: Event?,
+        now: Date,
+        autoCloseHours: Int = NightPhaseResolver.defaultAutoCloseHours
+    ) -> Event? {
+        guard let recent,
+              NightPhaseResolver.phase(
+                for: recent, autoCloseHours: autoCloseHours, now: now
+              ) == .recap else { return nil }
+        guard let active, active.id != recent.id else { return nil }
+        // The recap sits above a night that is still ahead of it: the
+        // next one on the books, or one under way (including a night
+        // whose window has run out - it still owns the slot).
+        switch NightPhaseResolver.phase(for: active, autoCloseHours: autoCloseHours, now: now) {
+        case .upcoming, .live, .stranded: return recent
+        case .none, .recap, .past, .cancelled: return nil
+        }
     }
 }
 
