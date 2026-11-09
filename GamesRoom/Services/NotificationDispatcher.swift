@@ -415,7 +415,7 @@ private final class UNCenterSink: BriefingNotificationSink, @unchecked Sendable 
         kindRaw: String,
         eventId: UUID,
         fireAt: Date
-    ) {
+    ) async throws {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -437,14 +437,9 @@ private final class UNCenterSink: BriefingNotificationSink, @unchecked Sendable 
             content: content,
             trigger: UNCenterSink.trigger(for: kindRaw, fireAt: fireAt)
         )
-        Task {
-            do {
-                try await center.add(request)
-            } catch {
-                // Per-request failure is non-fatal — the next
-                // reconcile overwrites via the same stable
-                // identifier.
-            }
-        }
+        // Awaited, not detached (audit 04 D1): the request exists on
+        // the center when this returns, so a cancel issued after a
+        // reconcile can see it.
+        try await center.add(request)
     }
 }

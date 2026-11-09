@@ -28,6 +28,13 @@ func runBriefingReconcileTests() {
         var pending: [String] = []
         var delivered: [String] = []
         var added: [PlannedBriefingNotification] = []
+        /// Every add and removal, in the order the reconciler issued
+        /// them: `"add:<id>"` / `"remove:<id>"`. Audit 04 D1.
+        var log: [String] = []
+        /// When true, `add` suspends once before landing. A detached
+        /// add (the pre-fix shape) would then lose the race against
+        /// an assertion that runs right after `reconcile` returns.
+        var yieldsOnAdd = false
 
         func pendingIdentifiers() async -> [String] { pending }
         func deliveredIdentifiers() async -> [String] { delivered }
@@ -35,6 +42,7 @@ func runBriefingReconcileTests() {
         func removePending(identifiers: [String]) {
             pending.removeAll { identifiers.contains($0) }
             added.removeAll { identifiers.contains($0.identifier) }
+            for id in identifiers { log.append("remove:\(id)") }
         }
 
         func add(
@@ -44,7 +52,8 @@ func runBriefingReconcileTests() {
             kindRaw: String,
             eventId: UUID,
             fireAt: Date
-        ) {
+        ) async throws {
+            if yieldsOnAdd { await Task.yield() }
             pending.append(identifier)
             added.append(PlannedBriefingNotification(
                 identifier: identifier,
@@ -54,10 +63,26 @@ func runBriefingReconcileTests() {
                 eventId: eventId,
                 fireAt: fireAt
             ))
+            log.append("add:\(identifier)")
         }
 
         func claimLanguageCount() -> Int {
             added.filter { $0.body.lowercased().contains("claim") }.count
+        }
+
+        /// True when some identifier was removed before it was ever
+        /// added — the exact inversion D1 describes.
+        func hasRemoveBeforeMatchingAdd() -> Bool {
+            var addedIds = Set<String>()
+            for entry in log {
+                if entry.hasPrefix("add:") {
+                    addedIds.insert(String(entry.dropFirst(4)))
+                } else if entry.hasPrefix("remove:") {
+                    let id = String(entry.dropFirst(7))
+                    if !addedIds.contains(id) { return true }
+                }
+            }
+            return false
         }
     }
 
@@ -402,6 +427,50 @@ func runBriefingReconcileTests() {
         runner.assertFalse(ledger.hasFiredOnCreate(eventId: event1, userId: user2))
         runner.assertFalse(ledger.hasFiredOnCreate(eventId: event2, userId: user1))
         defaults.removePersistentDomain(forName: suite)
+    }
+
+    // Audit 04 D1 — the add is awaited. The fake sink suspends once
+    // inside `add`; a detached add (the pre-fix shape) would leave
+    // `pending` empty at the moment `reconcile` returns, so a claim
+    // followed by a mute in the same second cancelled nothing.
+    runner.runAsync("briefing reconcile: every add lands before reconcile returns") {
+        let sink = FakeBriefingSink()
+        sink.yieldsOnAdd = true
+        let ledger = FakeOnCreateLedger()
+        let eventId = UUID(), userId = UUID()
+
+        await runBriefingReconcile(
+            sink: sink, ledger: ledger, state: .unclaimed,
+            eventId: eventId, userId: userId,
+            now: brNow, playedAt: brPlayedAt
+        )
+        runner.assertEqual(sink.pending.count, 4)
+        runner.assertEqual(sink.log.filter { $0.hasPrefix("add:") }.count, 4)
+    }
+
+    // Audit 04 D1 — the ordered log. Across claim → mute-while-claimed
+    // → decline, no `remove` may precede the matching `add`: a cancel
+    // that runs before its request exists is the bug.
+    runner.runAsync("briefing reconcile: remove never precedes a matching add") {
+        let sink = FakeBriefingSink()
+        sink.yieldsOnAdd = true
+        let ledger = FakeOnCreateLedger()
+        let eventId = UUID(), userId = UUID()
+
+        // Scheduled as unclaimed, then claimed, then declined — the
+        // claim → mute → decline sequence in one sitting.
+        for state in [MemberRSVPState.unclaimed, .claimed, .declined] {
+            await runBriefingReconcile(
+                sink: sink, ledger: ledger, state: state,
+                eventId: eventId, userId: userId,
+                now: brNow, playedAt: brPlayedAt
+            )
+        }
+        runner.assertFalse(
+            sink.hasRemoveBeforeMatchingAdd(),
+            "a removal landed before the request it cancels: \(sink.log)"
+        )
+        runner.assertEqual(sink.pending.count, 0)
     }
 }
 

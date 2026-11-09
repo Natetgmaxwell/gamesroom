@@ -48,6 +48,14 @@ struct PlannedBriefingNotification: Equatable {
 /// The notification-center surface `BriefingReconciler` needs.
 /// Production wraps `UNUserNotificationCenter`; tests install a
 /// fake that records adds and removals.
+///
+/// `add` is `async throws` on purpose (2026-11-09, audit 04 D1).
+/// It used to spawn a detached `Task` inside the adapter, so
+/// `reconcile` returned before the request existed: a claim then
+/// mute (or decline) within the same second read
+/// `pendingNotificationRequests` before the add landed, cancelled
+/// nothing, and the silenced member kept the morning-of push. An
+/// awaited add makes the ordering a property of the type.
 protocol BriefingNotificationSink: AnyObject, Sendable {
     func pendingIdentifiers() async -> [String]
     func deliveredIdentifiers() async -> [String]
@@ -59,7 +67,7 @@ protocol BriefingNotificationSink: AnyObject, Sendable {
         kindRaw: String,
         eventId: UUID,
         fireAt: Date
-    )
+    ) async throws
 }
 
 // MARK: - On-create fired ledger
@@ -492,6 +500,11 @@ enum BriefingReconciler {
         // Belt-and-braces on top of the fired ledger: a delivered
         // on-create banner must never be re-added even if the
         // ledger was somehow reset.
+        //
+        // Every add is AWAITED (audit 04 D1): a caller's later
+        // `cancelBriefingTrio` must observe the request it is meant
+        // to cancel. A per-request failure stays non-fatal — the
+        // next reconcile overwrites via the same stable identifier.
         for item in planned {
             if item.kindRaw == onCreateKindRaw {
                 if delivered.contains(item.identifier) { continue }
@@ -500,7 +513,7 @@ enum BriefingReconciler {
                     body = await provider()
                 }
                 ledger.markOnCreateFired(eventId: eventId, userId: userId)
-                sink.add(
+                try? await sink.add(
                     identifier: item.identifier,
                     title: item.title,
                     body: body,
@@ -509,7 +522,7 @@ enum BriefingReconciler {
                     fireAt: item.fireAt
                 )
             } else {
-                sink.add(
+                try? await sink.add(
                     identifier: item.identifier,
                     title: item.title,
                     body: item.body,
