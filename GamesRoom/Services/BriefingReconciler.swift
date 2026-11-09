@@ -53,6 +53,25 @@ enum BriefingPlanKind: Equatable, Sendable {
     case catchUp
 }
 
+/// Where the timed reminder slots come from. The `109_briefing_push.sql`
+/// header promised a client switch for the day server push shipped:
+/// while `BRIEFING_PUSH_ENABLED` is on, the server's slot ledger owns
+/// `t168h` / `t48h` / `morning_of` and the client must not schedule a
+/// second copy of each slot under a different identifier (audit 04
+/// D12). This enum is that switch, in ONE place.
+enum BriefingCadence: String, Equatable, Sendable {
+    /// The client schedules every slot itself.
+    case local
+    /// The server pushes the timed slots; the client schedules none.
+    case server
+
+    /// The single source of the switch. It defaults to `.local`
+    /// because server push ships disabled (`BRIEFING_PUSH_ENABLED`
+    /// lives in the edge function and is not on). Flip this — and
+    /// nothing else — on the day it is.
+    static let current: BriefingCadence = .local
+}
+
 /// Why a context produced no notification at all. Each case names a
 /// gate that used to be scattered across `RoomService` early
 /// returns; now the planner says which one fired.
@@ -116,6 +135,8 @@ struct BriefingContext: Sendable {
     /// the cadence.
     var leaderboardSummary: String = ""
     var kind: BriefingPlanKind = .cadence
+    /// Where the timed slots come from. See `BriefingCadence.current`.
+    var cadence: BriefingCadence = .local
 
     var personality: MascotPersonality = .friendly
     var ideology: MascotPoliticalIdeology = .centrist
@@ -481,6 +502,12 @@ enum BriefingReconciler {
             abs(f.timeIntervalSince(slots.weekBefore)) < 24 * 3600 {
             fewDays = nil
         }
+
+        // D12 — the cadence source. With server push on, the slot
+        // ledger owns the three timed reminders and the client must
+        // not schedule a duplicate of each under its own identifier.
+        // The on-create prompt is local-only either way.
+        guard ctx.cadence == .local else { return planned }
 
         for (kindRaw, fireAt) in [
             (t168hKindRaw, weekBefore),

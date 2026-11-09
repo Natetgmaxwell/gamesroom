@@ -658,5 +658,31 @@ func runBriefingReconcileTests() {
         runner.assertEqual(sink.pending.count, 5)
         runner.assertTrue(sink.pending.contains(catchUpId))
     }
+
+    // MARK: - Cadence source (audit 04 D12)
+
+    // The one switch the 109 header promised. `.local` schedules the
+    // whole arc; `.server` schedules no timed slot at all, because
+    // the server's slot ledger is meant to own them.
+    runner.run("briefing cadence: .server drops t168h, t48h and morning-of") {
+        var ctx = context()
+        ctx.cadence = .server
+        let outcome = BriefingReconciler.plan(ctx, includeOnCreate: true)
+        let kinds = Set(outcome.planned.map(\.kindRaw))
+        runner.assertFalse(kinds.contains(BriefingReconciler.t168hKindRaw))
+        runner.assertFalse(kinds.contains(BriefingReconciler.t84hKindRaw))
+        runner.assertFalse(kinds.contains(BriefingReconciler.morningOfKindRaw))
+        // The on-create prompt is local-only either way.
+        runner.assertEqual(outcome.planned.count, 1)
+        runner.assertEqual(kinds, [BriefingReconciler.onCreateKindRaw])
+    }
+
+    runner.run("briefing cadence: .local keeps the full arc") {
+        var ctx = context()
+        ctx.cadence = .local
+        let outcome = BriefingReconciler.plan(ctx, includeOnCreate: true)
+        runner.assertEqual(outcome.planned.count, 4)
+        runner.assertEqual(BriefingCadence.current, .local)
+    }
 }
 

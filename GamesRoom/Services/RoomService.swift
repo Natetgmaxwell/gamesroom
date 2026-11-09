@@ -2113,6 +2113,7 @@ final class RoomService: ObservableObject {
             hostNote: event?.hostNote,
             leaderboardSummary: leaderboardSummary,
             kind: kind,
+            cadence: .current,
             personality: room?.mascotPersonality ?? .friendly,
             ideology: room?.mascotPoliticalIdeology ?? .centrist
         )

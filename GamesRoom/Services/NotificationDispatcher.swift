@@ -201,6 +201,7 @@ final class NotificationDispatcher {
                 seat: state,
                 hostNote: hostNote,
                 kind: .cadence,
+                cadence: .current,
                 personality: mascotPersonality,
                 ideology: mascotIdeology,
                 now: Date()
