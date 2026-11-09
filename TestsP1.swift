@@ -18,6 +18,7 @@ import Foundation
 func runP1Tests(_ runner: TestRunner) {
     runP1NightPhaseTests(runner)
     runP1StoreNightTests(runner)
+    runP1V0StateTests(runner)
 }
 
 // MARK: - NightPhase table (audit 01 §3.1)
@@ -274,5 +275,109 @@ private func runP1StoreNightTests(_ runner: TestRunner) {
         runner.assertEqual(recent?.id, staleId)
         let active = try await store.fetchActiveEvent(roomId: roomId)
         runner.assertTrue(active?.id == freshId, "the live night keeps the slot")
+    }
+}
+
+
+// MARK: - V0State (audit 03 C4: D2, D3, D4)
+
+private func runP1V0StateTests(_ runner: TestRunner) {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let roomId = UUID()
+
+    func event(playedAt: TimeInterval, settledAt: TimeInterval? = nil) -> Event {
+        Event(
+            id: UUID(), roomId: roomId, name: "Friday",
+            playedAt: now.addingTimeInterval(playedAt),
+            createdAt: now.addingTimeInterval(-7 * 86_400)
+        ).withSettledAt(settledAt.map { now.addingTimeInterval($0) })
+    }
+
+    func state(
+        _ event: Event?,
+        phase: NightPhase? = nil,
+        rsvp: MemberRSVPState = .unclaimed,
+        hasWithdrawn: Bool = false,
+        hasLoaded: Bool = true,
+        autoCloseHours: Int = 8
+    ) -> V0State {
+        let resolved = phase ?? NightPhaseResolver.phase(
+            for: event, autoCloseHours: autoCloseHours, now: now
+        )
+        return V0State.resolve(
+            hasLoaded: hasLoaded, phase: resolved, activeEvent: event,
+            myRSVP: rsvp, hasWithdrawn: hasWithdrawn
+        )
+    }
+
+    runner.run("P1: nothing loaded is .loading") {
+        runner.assertEqual(state(nil, hasLoaded: false), .loading)
+    }
+
+    runner.run("P1: a loaded room with no night reads the standings") {
+        runner.assertEqual(state(nil), .readStandings)
+    }
+
+    runner.run("P1: an upcoming unclaimed night is .upcoming") {
+        let e = event(playedAt: 3_600)
+        runner.assertEqual(state(e), .upcoming(e))
+    }
+
+    runner.run("P1: an upcoming claimed night is .claimed") {
+        let e = event(playedAt: 3_600)
+        runner.assertEqual(state(e, rsvp: .claimed), .claimed(e))
+    }
+
+    runner.run("P1: an upcoming declined night is .declined") {
+        let e = event(playedAt: 3_600)
+        runner.assertEqual(state(e, rsvp: .declined), .declined(e))
+    }
+
+    runner.run("P1: a live night before the viewer plays is .tonightEvent") {
+        let e = event(playedAt: -3_600)
+        runner.assertEqual(state(e), .tonightEvent(e))
+    }
+
+    runner.run("P1: a live night after the viewer plays is .inPlay") {
+        let e = event(playedAt: -3_600)
+        runner.assertEqual(state(e, hasWithdrawn: true), .inPlay(e))
+    }
+
+    runner.run("P1: a night settled 25 hours ago is .readStandings, never live") {
+        // Audit 03 D2 — this used to fall through to the live card:
+        // "The night has started" on a finished night.
+        let e = event(playedAt: -30 * 3_600, settledAt: -25 * 3_600)
+        runner.assertEqual(state(e), .readStandings)
+    }
+
+    runner.run("P1: a night settled an hour ago is .justSettled") {
+        let e = event(playedAt: -10_800, settledAt: -3_600)
+        runner.assertEqual(state(e), .justSettled(e))
+    }
+
+    runner.run("P1: a stranded night is .inPlay") {
+        // Audit 01 D3 — the settle action has to exist somewhere.
+        let e = event(playedAt: -30 * 3_600)
+        runner.assertEqual(state(e), .inPlay(e))
+    }
+
+    runner.run("P1: a stranded night stays .inPlay even before the viewer plays") {
+        // Stranded is not the play-just-started moment: the table is
+        // long gone, the card is waiting on the host.
+        let e = event(playedAt: -30 * 3_600)
+        runner.assertEqual(state(e, hasWithdrawn: false), .inPlay(e))
+    }
+
+    runner.run("P1: a cancelled night reads the standings") {
+        let e = event(playedAt: 3_600)
+        runner.assertEqual(state(e, phase: .cancelled), .readStandings)
+    }
+
+    runner.run("P1: played-then-settled chips keeps the page in .inPlay") {
+        // Audit 03 D3 — `myWorkingHand` returns to 0 when the chips are
+        // settled, which used to flip the header back to "The night has
+        // started". `hasWithdrawn` is sticky for the night.
+        let e = event(playedAt: -3_600)
+        runner.assertEqual(state(e, hasWithdrawn: true), .inPlay(e))
     }
 }

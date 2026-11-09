@@ -893,57 +893,31 @@ struct RoomDetailView: View {
     // MARK: - State resolution
 
     private var state: V0State {
-        // V0.100 — distinguish "still loading" from "loaded empty".
-        // The old gate `activeEvent == nil, briefing == nil,
-        // leaderboard.isEmpty` conflated the two: a freshly-created
-        // room with no events ever would keep this true forever,
-        // pinning the state machine at `.loading` and showing a
-        // spinner on a room that will never load. `hasLoadedInitialData`
-        // flips after the first `refresh()` resolves; below that,
-        // trust the spinner; after that, the room has *loaded*
-        // and any empty sub-state must fall through to `.readStandings`,
-        // or the active-event branches — never
-        // spinner-on-forever.
-        //
-        // The legacy `if activeEvent == nil && briefing == nil &&
-        // leaderboard.isEmpty { return .loading }` check is gone:
-        // once the gate has flipped, an empty room is a real
-        // empty state, not a loading state.
-        if !hasLoadedInitialData {
-            return .loading
-        }
-        // S1.7 — the season awards are their own section above
-        // this slot (`seasonToCelebrate`); they never replace the
-        // claim or live card (02-workflows #12, #13).
-        if let event = activeEvent {
-            let isLive = event.playedAt <= Date()
-            let isSettled = event.settledAt != nil
-            if isSettled,
-               let s = event.settledAt,
-               s > Date().addingTimeInterval(-86_400) {
-                return .justSettled(event)
-            }
-            // M1.1 — `.tonightEvent` is the play-just-started
-            // moment: live, member hasn't moved chips yet, the
-            // host hasn't finalised. Distinct from `.inPlay` so
-            // the witness hero can carry the started-time caption
-            // in isolation. The collapse-into-`.inPlay` that the
-            // audit flags (V0State used to mix these) is undone
-            // here — the brief's 10-state machine wins.
-            if isLive && myWorkingHand == 0 {
-                return .tonightEvent(event)
-            }
-            if isLive {
-                return .inPlay(event)
-            }
-            // playedAt > now ⇒ pre-play
-            switch myRSVP {
-            case .unclaimed: return .upcoming(event)
-            case .claimed:   return .claimed(event)
-            case .declined:  return .declined(event)
-            }
-        }
-        return .readStandings
+        V0State.resolve(
+            hasLoaded: hasLoadedInitialData,
+            phase: nightPhase(for: activeEvent),
+            activeEvent: activeEvent,
+            myRSVP: myRSVP,
+            hasWithdrawn: hasWithdrawn
+        )
+    }
+
+    /// The room's auto-close window, the same one `NightPhaseResolver`
+    /// and the server use.
+    private func nightPhase(for event: Event?, now: Date = Date()) -> NightPhase {
+        NightPhaseResolver.phase(
+            for: event,
+            autoCloseHours: liveRoom.autoCloseHours,
+            now: now
+        )
+    }
+
+    /// "The viewer has played", one definition for the whole page: a
+    /// working hand, a casino withdrawal, or a scan. `V0State` and
+    /// `NightInput` both read this, so the card and its primary action
+    /// cannot disagree (audit 03 D3/D4).
+    private var hasWithdrawn: Bool {
+        myWorkingHand > 0 || casinoWithdrawn > 0 || myScanState.hasScanned
     }
 
     /// M1.1 — current season cached read. `nil` only when the
@@ -2003,7 +1977,7 @@ struct RoomDetailView: View {
             claimedCount: max(claimedIds.count, arrivedIds.count),
             roundsScored: scoredRounds.count,
             iHaveHeldDeposit: roomService.cachedMySeatDeposit(eventId: event.id)?.status == .held,
-            iHaveWithdrawn: myWorkingHand > 0 || casinoWithdrawn > 0 || myScanState.hasScanned
+            iHaveWithdrawn: hasWithdrawn
         )
     }
 
@@ -2221,25 +2195,6 @@ private struct HostScoreTarget: Identifiable {
 private struct ScoreChoice {
     let event: Event
     let packs: [String]
-}
-
-// MARK: - States
-
-private enum V0State: Equatable {
-    case loading
-    case justSettled(Event)
-    /// M1.1 — the play-just-started moment: the event is live
-    /// but the member hasn't moved any chips yet. Distinct from
-    /// `.inPlay` so the witness hero can render the started-time
-    /// caption + the full-width "Withdraw chips" CTA in
-    /// isolation. Transitions to `.inPlay` once a withdrawal
-    /// lands.
-    case tonightEvent(Event)
-    case inPlay(Event)
-    case upcoming(Event)
-    case claimed(Event)
-    case declined(Event)
-    case readStandings
 }
 
 // MARK: - Briefing slot
