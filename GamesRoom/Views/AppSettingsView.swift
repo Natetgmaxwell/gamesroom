@@ -39,11 +39,17 @@ struct AppSettingsView: View {
     @EnvironmentObject private var authService: AuthService
     @Environment(\.dismiss) private var dismiss
     @State private var name: String = ""
-    @State private var displayNameError: String?
+    // V0.81 promoted — the display name runs the same write machine the
+    // room settings sheet does. `displayNameError` was a private copy of
+    // `.failed`; keeping it here meant "Saved" could outlive a later
+    // failure (D8).
+    @State private var writeState: WriteState = .idle
+    /// The `isWriting` / `refireAfterWrite` serializer, wrapped. D7: an
+    /// edit that lands while a save is in flight queues one refire, so the
+    /// final character is persisted instead of dropped.
+    @State private var gate = WriteGate()
     @State private var showLogoutConfirm = false
     @State private var showDeleteConfirm = false
-    @State private var isSaving = false
-    @State private var showSaved = false
     @State private var isDeleting = false
     @State private var deleteError: String?
 
@@ -61,15 +67,15 @@ struct AppSettingsView: View {
                         .submitLabel(.done)
                         .onSubmit { Task { await save() } }
 
-                    if let displayNameError {
-                        Text(displayNameError)
+                    if let nameError = writeState.failure(for: .displayName) {
+                        Text(nameError)
                             .font(Theme.Typography.footnote)
                             .foregroundStyle(.red)
                     }
                 } header: {
                     Text("Display name")
                 } footer: {
-                    Text(isSaving ? "Saving…" : (showSaved ? "Saved" : "Edits save automatically"))
+                    Text(displayNameFooter)
                 }
 
                 Section {
@@ -126,7 +132,10 @@ struct AppSettingsView: View {
             // v1.1 — autosave like Room settings: the name writes
             // 800ms after the last keystroke (or on Return). No
             // Cancel/Save toolbar; this is a tab, not a sheet.
+            // D8 — the edit clears "Saved" (or a stale failure) at once;
+            // the debounce alone left the footer saying "Saved" forever.
             .task(id: name) {
+                writeState = writeState.reduce(.edited)
                 try? await Task.sleep(for: .milliseconds(800))
                 guard !Task.isCancelled else { return }
                 await save()
@@ -179,20 +188,42 @@ struct AppSettingsView: View {
         }
     }
 
+    /// The footer reads the write machine, never a separate flag: a save in
+    /// flight says so, the last save says "Saved" until the next edit clears
+    /// it (D8), and a failure never sits behind "Saved".
+    private var displayNameFooter: String {
+        switch writeState {
+        case .saving:
+            return "Saving…"
+        case .saved:
+            return "Saved"
+        case .failed(_, _):
+            return "Edits save automatically"
+        case .idle:
+            return "Edits save automatically"
+        }
+    }
+
     private func save() async {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
-              trimmed != authService.currentUser?.displayName,
-              !isSaving
+              trimmed != authService.currentUser?.displayName
         else { return }
-        displayNameError = nil
-        isSaving = true
-        defer { isSaving = false }
+        // D7 — one write at a time. An edit that lands while a write is in
+        // flight queues a single refire instead of being dropped on the
+        // floor (the old `guard !isSaving` returned and nothing rescheduled).
+        guard gate.begin() else { return }
+        defer {
+            if gate.end() {
+                Task { await save() }
+            }
+        }
+        writeState = writeState.reduce(.begin(.displayName))
         do {
             try await authService.updateDisplayName(trimmed)
-            showSaved = true
+            writeState = writeState.reduce(.succeed(at: Date()))
         } catch {
-            displayNameError = error.localizedDescription
+            writeState = writeState.reduce(.fail(.displayName, error.localizedDescription))
         }
     }
 

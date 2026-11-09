@@ -33,6 +33,10 @@ struct ClaimedCardAskField: View {
     @State private var seededFor: String?
     @State private var savedFlash = false
     @FocusState private var focused: Bool
+    /// D16 — Return submits, and Return also resigns focus, and focus loss
+    /// submits. `SubmitOnce` makes the second of those an echo: one value,
+    /// one write.
+    @State private var submitOnce = SubmitOnce()
 
     private var ask: ClaimedCardAsk { questionBox.ask(roomId: roomId) }
 
@@ -94,7 +98,7 @@ struct ClaimedCardAskField: View {
                     .onChange(of: text) { _, newValue in
                         if newValue.count > limit { text = String(newValue.prefix(limit)) }
                     }
-                    .onSubmit { Task { await submit(text); flash() } }
+                    .onSubmit { Task { await send(text, via: submit) } }
                 if savedFlash {
                     Image(systemName: Theme.Icon.checkmarkCircleFill)
                         .foregroundStyle(Theme.Palette.accent)
@@ -106,9 +110,20 @@ struct ClaimedCardAskField: View {
         }
         .onAppear { reseed(seed, initial) }
         .onChange(of: seed) { _, newSeed in reseed(newSeed, initial) }
+        // Both submit paths (Return and focus loss) go through `send`, so the
+        // echo of one gesture never writes twice (D16).
         .onChange(of: focused) { _, isFocused in
-            if !isFocused { Task { await submit(text) } }
+            if !isFocused { Task { await send(text, via: submit) } }
         }
+    }
+
+    /// One write per value per gesture. `SubmitOnce` drops the echo that
+    /// Return-plus-focus-loss produces; the flash rides the write, so it
+    /// fires once too.
+    private func send(_ value: String, via submit: (String) async -> Void) async {
+        guard submitOnce.claim(value, now: Date()) else { return }
+        await submit(value)
+        flash()
     }
 
     private func reseed(_ seed: String, _ initial: String) {
@@ -306,7 +321,14 @@ struct QuestionBoxSettingsView: View {
     @EnvironmentObject private var questionBox: QuestionBoxService
     @State private var settings = QuestionBoxSettings.default
     @State private var loaded = false
-    @State private var error: String?
+    // D15 — the settings write is debounced and serialised like the room
+    // settings sheet: one write at a time, the last edit always wins, and a
+    // per-keystroke burst can no longer land two `saveSettings` calls in
+    // whatever order the network chooses.
+    @State private var writeState: WriteState = .idle
+    @State private var gate = WriteGate()
+    @State private var draft = 0
+    @State private var isDirty = false
 
     var body: some View {
         Form {
@@ -329,8 +351,8 @@ struct QuestionBoxSettingsView: View {
                     QuestionBoxEditorView(roomId: roomId)
                 }
             }
-            if let error {
-                Section { Text(error).foregroundStyle(Theme.Palette.loss) }
+            if let message = writeState.failureMessage {
+                Section { Text(message).foregroundStyle(Theme.Palette.loss) }
             }
         }
         .navigationTitle("Questions")
@@ -338,16 +360,48 @@ struct QuestionBoxSettingsView: View {
             settings = await questionBox.loadSettings(roomId: roomId)
             loaded = true
         }
-        .onChange(of: settings) { _, newValue in
+        .onChange(of: settings) { _, _ in
+            // Loading is not an edit: the seed would otherwise fire a write
+            // that changes nothing.
             guard loaded else { return }
-            Task {
-                do {
-                    try await questionBox.saveSettings(roomId: roomId, settings: newValue)
-                    error = nil
-                } catch {
-                    self.error = error.localizedDescription
-                }
+            draft += 1
+            isDirty = true
+            writeState = writeState.reduce(.edited)
+        }
+        // The 600ms trailing debounce, the same rhythm as Room settings.
+        .task(id: draft) {
+            guard draft > 0 else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            await writeSettings()
+        }
+        // Flush a pending edit when the page closes. The values are captured
+        // now: the view's state is gone by the time the write runs. A write
+        // already in flight owns the queue — its refire carries the newest
+        // values, so this must not start a second one (D15).
+        .onDisappear {
+            guard isDirty, !gate.isWriting else { return }
+            let pending = settings
+            Task { try? await questionBox.saveSettings(roomId: roomId, settings: pending) }
+        }
+    }
+
+    /// One write at a time; an edit that lands mid-write queues one refire.
+    private func writeSettings() async {
+        guard gate.begin() else { return }
+        defer {
+            if gate.end() {
+                Task { await writeSettings() }
             }
+        }
+        let value = settings
+        isDirty = false
+        writeState = writeState.reduce(.begin(.settings))
+        do {
+            try await questionBox.saveSettings(roomId: roomId, settings: value)
+            writeState = writeState.reduce(.succeed(at: Date()))
+        } catch {
+            writeState = writeState.reduce(.fail(.settings, error.localizedDescription))
         }
     }
 }
@@ -356,8 +410,9 @@ struct QuestionBoxEditorView: View {
     let roomId: UUID
 
     @EnvironmentObject private var questionBox: QuestionBoxService
-    @State private var editing: RoomQuestion?
-    @State private var adding = false
+    /// D14 — one sheet for the editor. Two `.sheet` modifiers on one `List`
+    /// let "+ then tap a row" (or the reverse) try to present both.
+    @State private var sheet: QBSheet?
 
     private var all: [RoomQuestion] { questionBox.questions(roomId: roomId) }
     private var undrawn: [RoomQuestion] { all.filter { $0.drawnAt == nil } }
@@ -367,7 +422,7 @@ struct QuestionBoxEditorView: View {
         List {
             Section("In the box") {
                 ForEach(undrawn) { q in
-                    row(q).onTapGesture { editing = q }
+                    row(q).onTapGesture { sheet = .editing(q) }
                 }
                 .onDelete { idx in
                     let ids = idx.map { undrawn[$0].id }
@@ -391,19 +446,21 @@ struct QuestionBoxEditorView: View {
         .navigationTitle("Questions")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { adding = true } label: { Image(systemName: "plus") }
+                Button { sheet = .adding } label: { Image(systemName: "plus") }
                     .accessibilityLabel(Text("Add a question"))
             }
         }
         .task { await questionBox.loadQuestions(roomId: roomId) }
-        .sheet(item: $editing) { q in
-            QuestionEditSheet(initialText: q.text, initialTag: q.tag) { text, tag in
-                try await questionBox.saveQuestion(roomId: roomId, id: q.id, text: text, tag: tag)
-            }
-        }
-        .sheet(isPresented: $adding) {
-            QuestionEditSheet(initialText: "", initialTag: nil) { text, tag in
-                try await questionBox.saveQuestion(roomId: roomId, id: nil, text: text, tag: tag)
+        .sheet(item: $sheet) { sheet in
+            switch sheet {
+            case .editing(let q):
+                QuestionEditSheet(initialText: q.text, initialTag: q.tag) { text, tag in
+                    try await questionBox.saveQuestion(roomId: roomId, id: q.id, text: text, tag: tag)
+                }
+            case .adding:
+                QuestionEditSheet(initialText: "", initialTag: nil) { text, tag in
+                    try await questionBox.saveQuestion(roomId: roomId, id: nil, text: text, tag: tag)
+                }
             }
         }
     }

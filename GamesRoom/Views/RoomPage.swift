@@ -115,9 +115,12 @@ struct RoomPage: View {
     }
     #endif
 
-    /// The room whose settings the user is editing. `nil` ⇒ the
-    /// settings sheet is dismissed. Only valid for host role rooms.
-    @State private var settingsRoom: Room?
+    /// Audit 03, note 3 — the four sheets the rooms list used to own as
+    /// separate bindings (room settings, create, join, iPad app settings)
+    /// are one value, presented by one `.sheet(item:)`. SwiftUI only allows
+    /// one sheet per node anyway; this makes that the type's job instead of
+    /// the reader's.
+    @State private var presentation: RoomListPresentation?
 
     /// S3.5 — the room the user is about to leave. Set by the row's
     /// trailing swipe action and by its context menu; both open the
@@ -126,21 +129,6 @@ struct RoomPage: View {
 
     /// S3.5 — inline error for a refused leave (the last host).
     @State private var leaveError: String?
-
-    /// Create-room sheet binding. Mirrors the empty-state "Create"
-    /// CTA (P0.2 onboarding).
-    @State private var showingCreateRoom: Bool = false
-
-    /// Join-room sheet binding. Mirrors the empty-state "Join with
-    /// code" CTA (P0.2 onboarding).
-    @State private var showingJoinRoom: Bool = false
-
-    /// V0.100 — iPad-only entry point for the App Settings page.
-    /// On iPhone the Settings tab in `ContentView` is the path; on
-    /// iPad the sidebar + this toolbar gear replace the removed
-    /// Settings tab so the user has exactly one way to reach
-    /// Settings per form factor.
-    @State private var showingAppSettings: Bool = false
 
     /// Mirror of the persisted last-viewed room id, kept live so the
     /// hero card re-renders if the user switches rooms in another
@@ -157,44 +145,44 @@ struct RoomPage: View {
                 stackView
             }
         }
-        .sheet(item: $settingsRoom) { room in
-            // W-04 — the sheet dismisses itself after a successful
-            // delete; the service's rooms-list cache update re-renders
-            // this page without the room (and the last-viewed hero
-            // resolves to nil because the room is gone).
-            // S3.5 — same for leaving: the room leaves the list, so
-            // the page pops back to the rooms list.
-            RoomSettingsSheet(room: room, onRoomLeft: {
-                popToRoomsList()
-            })
-                .environmentObject(roomService)
-                .environmentObject(casinoService)
-        }
-        .sheet(isPresented: $showingCreateRoom) {
-            // S3.6 — a created room opens straight away. The host
-            // lands in the room they just made, not back on the
-            // list with a new row they have to find.
-            CreateRoomSheet(onCreated: { roomId in
-                openRoom(id: roomId)
-            })
-                .environmentObject(roomService)
-        }
-        .sheet(isPresented: $showingJoinRoom) {
-            // S3.6 — same for a joined room: the member lands in
-            // the room they just joined.
-            JoinRoomSheet(onJoined: { roomId in
-                openRoom(id: roomId)
-            })
-                .environmentObject(roomService)
-        }
-        // V0.100 — iPad-only App Settings entry. The Settings tab
-        // in `ContentView` is gone on iPad (see ContentView.swift),
-        // so this sheet is the single Settings path on iPad.
-        // Gated on `isPad` so iPhone never double-presents — the
-        // Settings tab in ContentView handles iPhone.
-        .sheet(isPresented: $showingAppSettings) {
-            if isPad {
-                SettingsPage()
+        .sheet(item: $presentation) { presentation in
+            switch presentation {
+            case .settings(let room):
+                // W-04 — the sheet dismisses itself after a successful
+                // delete; the service's rooms-list cache update re-renders
+                // this page without the room (and the last-viewed hero
+                // resolves to nil because the room is gone).
+                // S3.5 — same for leaving: the room leaves the list, so
+                // the page pops back to the rooms list.
+                RoomSettingsSheet(room: room, onRoomLeft: {
+                    popToRoomsList()
+                })
+                    .environmentObject(roomService)
+                    .environmentObject(casinoService)
+            case .createRoom:
+                // S3.6 — a created room opens straight away. The host
+                // lands in the room they just made, not back on the
+                // list with a new row they have to find.
+                CreateRoomSheet(onCreated: { roomId in
+                    openRoom(id: roomId)
+                })
+                    .environmentObject(roomService)
+            case .joinRoom:
+                // S3.6 — same for a joined room: the member lands in
+                // the room they just joined.
+                JoinRoomSheet(onJoined: { roomId in
+                    openRoom(id: roomId)
+                })
+                    .environmentObject(roomService)
+            case .appSettings:
+                // V0.100 — iPad-only App Settings entry. The Settings tab
+                // in `ContentView` is gone on iPad (see ContentView.swift),
+                // so this sheet is the single Settings path on iPad.
+                // Gated on `isPad` so iPhone never double-presents — the
+                // Settings tab in ContentView handles iPhone.
+                if isPad {
+                    SettingsPage()
+                }
             }
         }
         // V0.102 — re-run refresh when the signed-in user changes.
@@ -415,7 +403,7 @@ struct RoomPage: View {
             // the empty state too (zero-room users still need settings).
             Divider().overlay(Theme.Palette.hairline)
             Button {
-                showingAppSettings = true
+                presentation = .appSettings
             } label: {
                 HStack(spacing: Theme.Layout.cardInset) {
                     Image(systemName: "gearshape")
@@ -935,11 +923,11 @@ struct RoomPage: View {
     // MARK: - Empty-state actions (P0.2 wired)
 
     private func openCreateRoom() {
-        showingCreateRoom = true
+        presentation = .createRoom
     }
 
     private func openJoinRoom() {
-        showingJoinRoom = true
+        presentation = .joinRoom
     }
 
     // MARK: - Toolbar
@@ -976,7 +964,7 @@ struct RoomPage: View {
         if let room = resolvedLastViewedRoom, isPad || room.userRole.isHost {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    settingsRoom = room
+                    presentation = .settings(room)
                 } label: {
                     Image(systemName: Theme.Icon.gearshape)
                         .foregroundStyle(Theme.Palette.primaryText)

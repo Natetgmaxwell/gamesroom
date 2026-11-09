@@ -42,6 +42,8 @@ SRC_FILES=(main.swift
            TestsBriefingReconcile.swift
            TestsDeviceState.swift
            TestsS2.swift)
+           TestsS2.swift
+           TestsV.swift)
 
 echo "Compiling ${BIN} against $SDK..."
 swiftc \

@@ -5252,6 +5252,10 @@ runP1Tests(runner)
 
 runS3Tests(runner)
 
+// MARK: - V lane tests (view-layer machines outside RoomDetailView)
+
+runVTests(runner)
+
 // MARK: - Summary
 
 print("")
