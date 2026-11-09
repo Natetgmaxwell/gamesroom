@@ -186,6 +186,18 @@ struct ContentView: View {
                 await RealtimeEventService.shared.start(roomService: roomService)
             }
         }
+        // Cold-launch reconcile (audit 04 D2). `.onChange(of: scenePhase)`
+        // never fires for the phase the app launched in, so a kill then
+        // relaunch into the room list ran no pass at all: no purge of
+        // the rooms left or been kicked from while the app was closed,
+        // no re-plan, no Live Activity end. This task runs once per
+        // signed-in user id — cold launch and fresh sign-in alike — and
+        // `AppReconciler.isRunning` coalesces it with the scenePhase
+        // `.active` pass that may follow.
+        .task(id: auth.currentUser?.id) {
+            guard auth.currentUser != nil else { return }
+            await AppReconciler.shared.appBecameActive(roomService: roomService)
+        }
         // A tapped briefing (on-create, the reminders, the catch-up)
         // or a tapped anchor nudge opens the room it belongs to.
         .onReceive(NotificationCenter.default.publisher(for: .gamesRoomOpenRoom)) { _ in
