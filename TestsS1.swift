@@ -403,8 +403,9 @@ func runS1SeedTests(_ runner: TestRunner) {
         runner.assertEqual(rounds.count, 1)
         runner.assertEqual(NextRound.after(rounds).index, 2)
         let plan = NightPlan.plan(for: NightInput(
-            isHost: true, packSlugs: event.packSlugs, playedAt: event.playedAt,
-            settledAt: nil, now: Date(), arrivedCount: 3, claimedCount: 3,
+            isHost: true, packSlugs: event.packSlugs,
+            phase: NightPhaseResolver.phase(for: event),
+            arrivedCount: 3, claimedCount: 3,
             roundsScored: rounds.count, iHaveHeldDeposit: false, iHaveWithdrawn: false
         ))
         runner.assertEqual(plan.primary, .settleNight)
@@ -442,9 +443,12 @@ private func nightInput(
     NightInput(
         isHost: isHost,
         packSlugs: packSlugs,
-        playedAt: playedAt ?? nightBase.addingTimeInterval(-3_600),
-        settledAt: settledAt,
-        now: now,
+        phase: NightPhaseResolver.phase(NightFacts(
+            playedAt: playedAt ?? nightBase.addingTimeInterval(-3_600),
+            settledAt: settledAt,
+            autoCloseHours: NightPhaseResolver.defaultAutoCloseHours,
+            now: now
+        )),
         arrivedCount: arrivedCount,
         claimedCount: claimedCount,
         roundsScored: roundsScored,

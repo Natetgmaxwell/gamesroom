@@ -1970,9 +1970,7 @@ struct RoomDetailView: View {
         return NightInput(
             isHost: isHost,
             packSlugs: event.packSlugs,
-            playedAt: event.playedAt,
-            settledAt: event.settledAt,
-            now: Date(),
+            phase: nightPhase(for: event),
             arrivedCount: arrivedIds.count,
             claimedCount: max(claimedIds.count, arrivedIds.count),
             roundsScored: scoredRounds.count,
@@ -2040,7 +2038,7 @@ struct RoomDetailView: View {
             workingHand: inHand,
             hasScanned: myScanState.hasScanned,
             scannedValue: myScanState.scannedValue,
-            note: settleFailed && isHost ? "Couldn't settle. Try again." : nil
+            note: settleFailed && isHost ? "Couldn't settle. Try again." : plan.caption
         )
     }
 

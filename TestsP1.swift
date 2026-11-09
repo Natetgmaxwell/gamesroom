@@ -19,6 +19,7 @@ func runP1Tests(_ runner: TestRunner) {
     runP1NightPhaseTests(runner)
     runP1StoreNightTests(runner)
     runP1V0StateTests(runner)
+    runP1NightPlanPhaseTests(runner)
 }
 
 // MARK: - NightPhase table (audit 01 §3.1)
@@ -379,5 +380,87 @@ private func runP1V0StateTests(_ runner: TestRunner) {
         // started". `hasWithdrawn` is sticky for the night.
         let e = event(playedAt: -3_600)
         runner.assertEqual(state(e, hasWithdrawn: true), .inPlay(e))
+    }
+}
+
+
+// MARK: - NightPlan reads the phase (audit 01 §3.3 commit 5)
+
+private func runP1NightPlanPhaseTests(_ runner: TestRunner) {
+    func input(
+        isHost: Bool,
+        phase: NightPhase,
+        packSlugs: [String] = ["monopoly_deal"],
+        arrived: Int = 2,
+        claimed: Int = 4,
+        rounds: Int = 0
+    ) -> NightInput {
+        NightInput(
+            isHost: isHost, packSlugs: packSlugs, phase: phase,
+            arrivedCount: arrived, claimedCount: claimed, roundsScored: rounds,
+            iHaveHeldDeposit: false, iHaveWithdrawn: true
+        )
+    }
+
+    runner.run("P1: a stranded night asks the host to settle it") {
+        let plan = NightPlan.plan(for: input(isHost: true, phase: .stranded))
+        runner.assertEqual(plan.primary, .settleNight)
+        runner.assertEqual(plan.caption, "The night is still open")
+        runner.assertEqual(plan.secondaries, [])
+    }
+
+    runner.run("P1: a stranded night gives a member nothing to do") {
+        let plan = NightPlan.plan(for: input(isHost: false, phase: .stranded))
+        runner.assertNil(plan.primary)
+        runner.assertEqual(plan.secondaries, [])
+        runner.assertNil(plan.caption, "the caption is the host's explanation")
+    }
+
+    runner.run("P1: a stranded night asks for the settle even with no round scored") {
+        // The window is gone, so the usual "score first" advice is moot:
+        // the only way out is to close the night.
+        let plan = NightPlan.plan(for: input(isHost: true, phase: .stranded, rounds: 0))
+        runner.assertEqual(plan.primary, .settleNight)
+    }
+
+    runner.run("P1: a live night carries no caption") {
+        let plan = NightPlan.plan(for: input(isHost: true, phase: .live))
+        runner.assertNil(plan.caption)
+    }
+
+    runner.run("P1: a recap night offers the host the next night and no caption") {
+        let plan = NightPlan.plan(for: input(isHost: true, phase: .recap))
+        runner.assertEqual(plan.primary, .planNextNight)
+        runner.assertNil(plan.caption)
+    }
+
+    runner.run("P1: a past night offers nothing to anyone") {
+        runner.assertNil(NightPlan.plan(for: input(isHost: true, phase: .past)).primary)
+        runner.assertNil(NightPlan.plan(for: input(isHost: false, phase: .past)).primary)
+    }
+
+    runner.run("P1: an upcoming night offers nothing - the RSVP CTA is the briefing slot") {
+        let plan = NightPlan.plan(for: input(isHost: false, phase: .upcoming))
+        runner.assertNil(plan.primary)
+    }
+
+    runner.run("P1: the recap sits above the next night and not above itself") {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let settled = Event(
+            id: UUID(), roomId: UUID(), name: "Last night",
+            playedAt: now.addingTimeInterval(-10_800), createdAt: now.addingTimeInterval(-86_400)
+        ).withSettledAt(now.addingTimeInterval(-3_600))
+        var next = Event(
+            id: UUID(), roomId: UUID(), name: "Next week",
+            playedAt: now.addingTimeInterval(7 * 86_400), createdAt: now
+        )
+        runner.assertTrue(
+            NightPlan.recapAboveNextNight(recent: settled, active: next, now: now)?.id == settled.id,
+            "recap above the next night"
+        )
+        runner.assertNil(NightPlan.recapAboveNextNight(recent: settled, active: settled, now: now))
+        next = settled.withSettledAt(nil)
+        runner.assertNil(NightPlan.recapAboveNextNight(recent: settled, active: next, now: now),
+                         "an older settled night is not the slot's night")
     }
 }
