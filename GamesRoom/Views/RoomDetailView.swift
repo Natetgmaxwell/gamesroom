@@ -2140,7 +2140,8 @@ struct RoomDetailView: View {
         NightPlan.recapAboveNextNight(
             recent: roomService.cachedRecentlySettledEvent(roomId: room.id),
             active: activeEvent,
-            now: Date()
+            now: Date(),
+            autoCloseHours: liveRoom.autoCloseHours
         )
     }
 
