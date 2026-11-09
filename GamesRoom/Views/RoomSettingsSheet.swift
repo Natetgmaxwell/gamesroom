@@ -93,52 +93,51 @@ struct RoomSettingsSheet: View {
     @State private var seatDepositGraceMinutes: Int
     @State private var hostJournal: String
 
-    // P0.2 — share-code surface state. Generated on demand.
+    // P0.2 — share-code surface state. Generated on demand. The mint runs
+    // in the Operations sub-sheet, next to the button and its own error row
+    // (D9); only the code itself is hoisted, because that is what the row
+    // renders.
     @State private var shareCode: String?
-    @State private var isGeneratingCode: Bool = false
 
-    // V0.81 — autosave state. `saveState` drives the status row;
-    // `draft` is bumped on every edit so `.task(id:)` restarts the
-    // debounce; `writeTask` lets `onDisappear` refire a write that
-    // was mid-flight so the newest state is never dropped.
-    enum SaveState: Equatable {
-        case idle
-        case saving
-        case saved
-        case failed(String)
-    }
-    @State private var saveState: SaveState = .idle
+    // V0.81 — autosave state. Promoted to `WriteState` (Models/): the
+    // machine was already right, it only lacked a name for *what* failed.
+    // `writeState` drives the settings status section; `draft` is bumped on
+    // every edit so `.task(id:)` restarts the debounce; `writeTask` lets
+    // `onDisappear` refire a write that was mid-flight so the newest state
+    // is never dropped.
+    @State private var writeState: WriteState = .idle
     @State private var draft = 0
     // V0.81 — true when an edit landed that no write has captured
     // yet. Cleared when a write starts; set again if an edit lands
     // while the write is in flight. Drives the dismiss-time retry.
     @State private var isDirty = false
     @State private var writeTask: Task<Void, Never>?
-    // V0.81 — write serialization: at most one writeAll runs at a
-    // time. An overlapping call (an edit landed while a write is in
-    // flight and the debounce fired again) queues a refire instead
-    // of running concurrently — concurrent writes could land out of
-    // order and persist stale values.
-    @State private var isWriting = false
-    @State private var refireAfterWrite = false
+    // V0.81 — write serialization, wrapped as a value type so the same
+    // behaviour is table-tested: at most one writeAll runs at a time. An
+    // overlapping call (an edit landed while a write is in flight and the
+    // debounce fired again) queues a refire instead of running concurrently
+    // — concurrent writes could land out of order and persist stale values.
+    @State private var gate = WriteGate()
     // W2.6 — the server subtitle value seeded on open; the
     // season-subtitle bumper compares against it so seeding never
     // triggers a spurious autosave.
     @State private var seededSeasonSubtitle: String = ""
 
     // W1.5 — host "Declare season end" CTA state.
-    @State private var showDeclareConfirm: Bool = false
-    @State private var isDeclaring: Bool = false
+    @State private var declareState: WriteState = .idle
 
-    // W-04 — host "Delete room" confirm state (US-04).
-    @State private var showDeleteConfirm: Bool = false
-    @State private var isDeleting: Bool = false
+    // W-04 — host "Delete room" state (US-04).
+    @State private var deleteState: WriteState = .idle
 
     // S3.5 — "Leave room" state. The confirm is a destructive
     // action (the caller's membership ends), so it goes through a
     // `confirmationDialog` like the other destructive actions.
-    @State private var showLeaveConfirm: Bool = false
     @State private var isLeaving: Bool = false
+
+    /// D11 — the three destructive confirms, as one value. Three Bools with
+    /// three dialogs had no name for the concept; one enum with one dialog
+    /// does, and only one can be up at a time by construction.
+    @State private var confirm: RoomSettingsConfirm?
     /// S3.5 — inline error for a refused leave (the last host).
     @State private var leaveError: String?
     /// S3.5 — true once the room roster has been read. A host may
@@ -337,6 +336,61 @@ struct RoomSettingsSheet: View {
                     onDismiss: { packDetailType = nil }
                 )
             }
+            // D11 — one destructive confirm for the whole sheet: declare
+            // season end, delete room, leave room. One dialog, one value, so
+            // two can never be up at once.
+            .confirmationDialog(
+                confirmTitle,
+                isPresented: Binding(
+                    get: { confirm != nil },
+                    set: { if !$0 { confirm = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: confirm
+            ) { action in
+                switch action {
+                case .declareSeason:
+                    Button("Declare", role: .destructive) {
+                        confirm = nil
+                        Task { await declareSeasonEnd() }
+                    }
+                case .deleteRoom:
+                    Button("Delete", role: .destructive) {
+                        confirm = nil
+                        Task { await deleteRoom() }
+                    }
+                case .leaveRoom:
+                    Button("Leave", role: .destructive) {
+                        confirm = nil
+                        Task { await leaveRoom() }
+                    }
+                }
+                Button("Cancel", role: .cancel) { confirm = nil }
+            } message: { action in
+                switch action {
+                case .declareSeason:
+                    Text("Awards will be computed and season scores reset. This cannot be undone.")
+                case .deleteRoom:
+                    Text("All join codes for this room expire immediately. This cannot be undone.")
+                case .leaveRoom:
+                    Text("Your season history stays with the room.")
+                }
+            }
+    }
+
+    /// The title of the one destructive confirm. The copy is unchanged from
+    /// the three dialogs it replaces.
+    private var confirmTitle: String {
+        switch confirm {
+        case .declareSeason:
+            return "Declare season end?"
+        case .deleteRoom:
+            return "Delete \(room.name)?"
+        case .leaveRoom:
+            return "Leave \(room.name)?"
+        case nil:
+            return ""
+        }
     }
 
 
@@ -450,8 +504,7 @@ struct RoomSettingsSheet: View {
                             seatDepositAmount: $seatDepositAmount,
                             seatDepositTrigger: $seatDepositTrigger,
                             seatDepositGraceMinutes: $seatDepositGraceMinutes,
-                            shareCode: $shareCode,
-                            isGeneratingCode: $isGeneratingCode
+                            shareCode: $shareCode
                         )
                     } label: {
                         settingsRow(
@@ -546,9 +599,12 @@ struct RoomSettingsSheet: View {
                 // V0.81 — autosave status. Replaces the manual
                 // Save button: edits write themselves after a
                 // 600ms pause; this row only reports state.
+                // D10 — this row reports the settings write and nothing
+                // else. Season-close, delete and share-code outcomes each
+                // render under their own control now.
                 Section {
                     HStack {
-                        switch saveState {
+                        switch writeState {
                         case .idle:
                             Text("Edits save automatically")
                                 .font(Theme.Typography.caption)
@@ -567,7 +623,7 @@ struct RoomSettingsSheet: View {
                             Text("Saved")
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(Theme.Palette.secondaryText)
-                        case .failed(let message):
+                        case .failed(_, let message):
                             Image(systemName: Theme.Icon.exclamationmarkTriangleFill)
                                 .font(Theme.Typography.caption)
                                 .foregroundStyle(.red.opacity(0.85))
@@ -596,35 +652,30 @@ struct RoomSettingsSheet: View {
                                 }
                             }
                         Button(role: .destructive) {
-                            showDeclareConfirm = true
+                            confirm = .declareSeason
                         } label: {
                             HStack {
                                 Text("Declare season end")
                                     .font(Theme.Typography.body.weight(.semibold))
                                 Spacer()
-                                if isDeclaring {
+                                if declareState.isBusy {
                                     ProgressView()
                                         .tint(Theme.Palette.accent)
                                 }
                             }
                         }
-                        .disabled(isDeclaring)
+                        .disabled(declareState.isBusy)
+                        // D9/D10 — the season-close outcome renders under the
+                        // button that caused it, not in the settings status row.
+                        if let declareError = declareState.failureMessage {
+                            Text(declareError)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(.red.opacity(0.85))
+                        }
                     } header: {
                         Text("Season")
                     } footer: {
                         Text("The subtitle shows on the awards card. Declaring closes the season, surfaces awards (Phoenix, Veteran, Whale, Drowning), and resets season scores.")
-                    }
-                    .confirmationDialog(
-                        "Declare season end?",
-                        isPresented: $showDeclareConfirm,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Declare", role: .destructive) {
-                            Task { await declareSeasonEnd() }
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("Awards will be computed and season scores reset. This cannot be undone.")
                     }
                 }
 
@@ -634,34 +685,29 @@ struct RoomSettingsSheet: View {
                 // claim-seat surfaces).
                 Section {
                     Button(role: .destructive) {
-                        showDeleteConfirm = true
+                        confirm = .deleteRoom
                     } label: {
                         HStack {
                             Image(systemName: Theme.Icon.trashFill)
                             Text("Delete room")
                                 .font(Theme.Typography.body.weight(.semibold))
                             Spacer()
-                            if isDeleting {
+                            if deleteState.isBusy {
                                 ProgressView()
                                     .tint(.red)
                             }
                         }
                     }
-                    .disabled(isDeleting)
+                    .disabled(deleteState.isBusy)
+                    // D10 — a failed delete says so under the Delete row. It
+                    // used to surface in the mascot status row, a section up.
+                    if let deleteError = deleteState.failureMessage {
+                        Text(deleteError)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(.red.opacity(0.85))
+                    }
                 } footer: {
                     Text("Expires all join codes and removes calendar rows. The score ledger is kept for disputes.")
-                }
-                .confirmationDialog(
-                    "Delete \(room.name)?",
-                    isPresented: $showDeleteConfirm,
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete", role: .destructive) {
-                        Task { await deleteRoom() }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("All join codes for this room expire immediately. This cannot be undone.")
                 }
     }
 
@@ -685,7 +731,7 @@ struct RoomSettingsSheet: View {
                         }
                     } else if canLeaveRoom {
                         Button(role: .destructive) {
-                            showLeaveConfirm = true
+                            confirm = .leaveRoom
                         } label: {
                             HStack {
                                 Text("Leave room")
@@ -703,18 +749,6 @@ struct RoomSettingsSheet: View {
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Palette.secondaryText)
                     }
-                }
-                .confirmationDialog(
-                    "Leave \(room.name)?",
-                    isPresented: $showLeaveConfirm,
-                    titleVisibility: .visible
-                ) {
-                    Button("Leave", role: .destructive) {
-                        Task { await leaveRoom() }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Your season history stays with the room.")
                 }
                 .alert(
                     "Couldn't leave the room",
@@ -788,43 +822,24 @@ struct RoomSettingsSheet: View {
         .padding(.vertical, 4)
     }
 
-    // MARK: - Share-code generation (P0.2)
-
-    /// Mints a fresh six-character join code via
-    /// `RoomService.generateJoinCode(roomId:)`. Called from the
-    /// Operations sub-sheet; the result hoists back through the
-    /// `@State` binding so the sub-sheet re-renders with the
-    /// fresh code.
-    func generateShareCode() async {
-        guard !isGeneratingCode else { return }
-        isGeneratingCode = true
-        defer { isGeneratingCode = false }
-        do {
-            let code = try await roomService.generateJoinCode(roomId: room.id)
-            shareCode = code
-        } catch {
-            // V0.81 — autosave status row carries the error.
-            saveState = .failed((error as NSError).localizedDescription)
-        }
-    }
-
     // MARK: - Actions (W1.5 / W-04)
 
     /// W1.5 — host "Declare season end" action. Fires the
     /// `close_season` RPC via `RoomService.closeSeason`, then
     /// refreshes the room page state so the awards card renders.
+    /// The outcome is its own `WriteState`: a failure renders under the
+    /// Declare button, not in the settings status row (D10).
     private func declareSeasonEnd() async {
-        guard !isDeclaring else { return }
-        isDeclaring = true
-        defer { isDeclaring = false }
+        guard !declareState.isBusy else { return }
+        declareState = declareState.reduce(.begin(.declareSeason))
         do {
             let closed = try await roomService.closeSeason(roomId: room.id)
             Haptics.success()
+            declareState = declareState.reduce(.succeed(at: Date()))
             dismiss()
             onSeasonClosed?(closed)
         } catch {
-            // V0.81 — autosave status row carries the error.
-            saveState = .failed((error as NSError).localizedDescription)
+            declareState = declareState.reduce(.fail(.declareSeason, (error as NSError).localizedDescription))
         }
     }
 
@@ -835,18 +850,17 @@ struct RoomSettingsSheet: View {
     /// deletes the room, expires open join codes, and removes
     /// calendar rows. On success the sheet dismisses; the service
     /// updates its rooms-list cache so the caller's list re-renders
-    /// without the room.
+    /// without the room. A failure renders under the Delete row (D10).
     private func deleteRoom() async {
-        guard !isDeleting else { return }
-        isDeleting = true
-        defer { isDeleting = false }
+        guard !deleteState.isBusy else { return }
+        deleteState = deleteState.reduce(.begin(.deleteRoom))
         do {
             try await roomService.deleteRoom(roomId: room.id)
+            deleteState = deleteState.reduce(.succeed(at: Date()))
             dismiss()
             onRoomDeleted?()
         } catch {
-            // V0.81 — autosave status row carries the error.
-            saveState = .failed((error as NSError).localizedDescription)
+            deleteState = deleteState.reduce(.fail(.deleteRoom, (error as NSError).localizedDescription))
         }
     }
 
@@ -857,13 +871,17 @@ struct RoomSettingsSheet: View {
     private func bumpDraft() {
         draft += 1
         isDirty = true
+        // D8 — an edit retires the last outcome: "Saved" stops claiming the
+        // current draft is on the wire, and a stale failure clears as the
+        // retry is already queued.
+        writeState = writeState.reduce(.edited)
     }
 
     /// True when a dismiss-time retry is warranted: an edit that
     /// no write captured, or a write that failed.
     private var needsRetry: Bool {
         if isDirty { return true }
-        if case .failed = saveState { return true }
+        if writeState.failureMessage != nil { return true }
         return false
     }
 
@@ -875,19 +893,13 @@ struct RoomSettingsSheet: View {
         // Serialize: if a write is already in flight, queue a
         // refire (runs when the current write completes) instead of
         // running concurrently.
-        guard !isWriting else {
-            refireAfterWrite = true
-            return
-        }
-        isWriting = true
+        guard gate.begin() else { return }
         defer {
-            isWriting = false
-            if refireAfterWrite {
-                refireAfterWrite = false
+            if gate.end() {
                 Task { await writeAll() }
             }
         }
-        saveState = .saving
+        writeState = writeState.reduce(.begin(.settings))
         let task = Task {
             // Mark clean at the moment the write captures state;
             // an edit landing mid-write re-dirties so the
@@ -939,9 +951,9 @@ struct RoomSettingsSheet: View {
                 // (host = user, same toggle applies — no
                 // special-case for hosts). This branch is empty
                 // intentionally; kept here to mark the migration.
-                saveState = .saved
+                writeState = writeState.reduce(.succeed(at: Date()))
             } catch {
-                saveState = .failed((error as NSError).localizedDescription)
+                writeState = writeState.reduce(.fail(.settings, (error as NSError).localizedDescription))
             }
         }
         writeTask = task
@@ -1033,12 +1045,15 @@ struct RoomSettingsOperationsSheet: View {
     @Binding var seatDepositTrigger: SeatDepositTrigger
     @Binding var seatDepositGraceMinutes: Int
     @Binding var shareCode: String?
-    @Binding var isGeneratingCode: Bool
 
     @EnvironmentObject private var roomService: RoomService
 
     @State private var enabledPackSlugs: Set<String> = []
     @State private var packsLoaded: Bool = false
+    /// D9 — the invite-code mint reports next to its own button. It used to
+    /// write the hub's settings status row, which is a section away and
+    /// behind this sub-sheet, so a failure looked like nothing happening.
+    @State private var shareState: WriteState = .idle
 
     // V0.9 Wave 2 Slice 2.1 - the pack the user tapped to view the
     // how-to body. nil = no detail sheet presented.
@@ -1057,8 +1072,7 @@ struct RoomSettingsOperationsSheet: View {
         seatDepositAmount: Binding<Int>,
         seatDepositTrigger: Binding<SeatDepositTrigger>,
         seatDepositGraceMinutes: Binding<Int>,
-        shareCode: Binding<String?>,
-        isGeneratingCode: Binding<Bool>
+        shareCode: Binding<String?>
     ) {
         self.roomId = roomId
         self.isHost = isHost
@@ -1073,7 +1087,6 @@ struct RoomSettingsOperationsSheet: View {
         _seatDepositTrigger = seatDepositTrigger
         _seatDepositGraceMinutes = seatDepositGraceMinutes
         _shareCode = shareCode
-        _isGeneratingCode = isGeneratingCode
     }
 
     var body: some View {
@@ -1179,7 +1192,7 @@ struct RoomSettingsOperationsSheet: View {
 
             Section {
                 HStack {
-                    if isGeneratingCode {
+                    if shareState.isBusy {
                         ProgressView()
                             .tint(Theme.Palette.accent)
                         Text("Generating…")
@@ -1197,22 +1210,19 @@ struct RoomSettingsOperationsSheet: View {
                     }
                     Spacer()
                     Button {
-                        // Share-code generation lives on the hub
-                        // (RoomSettingsSheet) — the sub-sheet
-                        // toggles a flag the parent watches via
-                        // .task. For now the sub-sheet has its own
-                        // local copy of the binding, but the hub
-                        // owns the side effect. The Operations
-                        // sheet invokes generation through the
-                        // EnvironmentObject chain in a follow-up
-                        // slice.
-                        Task { await regenerateOnHub() }
+                        Task { await mintShareCode() }
                     } label: {
                         Image(systemName: shareCode == nil ? Theme.Icon.plusCircle : Theme.Icon.arrowClockwise)
                             .foregroundStyle(Theme.Palette.accent)
                     }
-                    .disabled(isGeneratingCode)
+                    .disabled(shareState.isBusy)
                     .accessibilityLabel(Text("Generate fresh join code"))
+                }
+                // D9 — the failure renders under the button that caused it.
+                if let shareError = shareState.failureMessage {
+                    Text(shareError)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.red.opacity(0.85))
                 }
             } header: {
                 Text("Invite code")
@@ -1286,21 +1296,19 @@ struct RoomSettingsOperationsSheet: View {
         }
     }
 
-    /// Stub that mirrors the hub's `generateShareCode`. The full
-    /// wiring (EnvironmentObject + parent-call) is a follow-up
-    /// slice — the sub-sheet can't easily call back into the
-    /// hub without the hub exposing a closure. For now this
-    /// simply clears the local `shareCode` binding so the UX
-    /// matches "mint a fresh code" without firing the RPC.
-    private func regenerateOnHub() async {
-        // Future: bubble up to RoomSettingsSheet via a closure
-        // binding or EnvironmentObject key. For M2.2 the
-        // Operations sheet is structurally complete; the
-        // share-code generation still happens via the hub's
-        // generateShareCode() path (the code surfaces inline).
-        // Until the closure is wired, this button is a no-op
-        // placeholder.
-        _ = isGeneratingCode
+    /// Mints a fresh six-character join code via
+    /// `RoomService.generateJoinCode(roomId:)` and writes it to the hoisted
+    /// binding the invite-code row renders. The outcome stays local so a
+    /// failure lands under this button and not in the hub's status row (D9).
+    private func mintShareCode() async {
+        guard !shareState.isBusy else { return }
+        shareState = shareState.reduce(.begin(.shareCode))
+        do {
+            shareCode = try await roomService.generateJoinCode(roomId: roomId)
+            shareState = shareState.reduce(.succeed(at: Date()))
+        } catch {
+            shareState = shareState.reduce(.fail(.shareCode, (error as NSError).localizedDescription))
+        }
     }
 }
 
@@ -1333,10 +1341,10 @@ struct RoomSettingsMembersSheet: View {
     /// render the right copy and the confirm button can fire the
     /// right RPC call.
     @State private var pendingChange: PendingRoleChange?
-    /// Transient inline error (e.g. last_host on a single-host
-    /// room). Drives an alert at the sheet level so the message
-    /// has somewhere to render.
-    @State private var transferError: String?
+    /// D13 — the role-change confirm and its failure used to be two `.alert`
+    /// modifiers on one `Form`: the second could be dropped while the first
+    /// was dismissing. One alert, one value.
+    @State private var alert: RoleAlert?
 
     private var isHost: Bool {
         room.userRole == .host
@@ -1389,33 +1397,47 @@ struct RoomSettingsMembersSheet: View {
         // dialog must be promoted to the sheet so it survives the
         // menu's dismissal. The pending payload identifies which
         // row + action the alert is for.
+        // D13 — one alert for both the confirm and the failure it can
+        // produce, so a failed role change can never be dropped behind a
+        // dismissing confirm.
         .alert(
-            pendingChange?.confirmTitle ?? "",
+            alertTitle,
             isPresented: Binding(
-                get: { pendingChange != nil },
-                set: { if !$0 { pendingChange = nil } }
+                get: { alert != nil },
+                set: { if !$0 { alert = nil } }
             ),
-            presenting: pendingChange
-        ) { change in
-            Button(change.confirmButtonTitle, role: .destructive) {
-                Task { await applyPendingChange(change) }
+            presenting: alert
+        ) { alert in
+            switch alert {
+            case .confirm(let change):
+                Button(change.confirmButtonTitle, role: .destructive) {
+                    self.alert = nil
+                    Task { await applyPendingChange(change) }
+                }
+                Button("Cancel", role: .cancel) { self.alert = nil }
+            case .error:
+                Button("OK", role: .cancel) { self.alert = nil }
             }
-            Button("Cancel", role: .cancel) {
-                pendingChange = nil
+        } message: { alert in
+            switch alert {
+            case .confirm(let change):
+                Text(change.confirmMessage)
+            case .error(let message):
+                Text(message)
             }
-        } message: { change in
-            Text(change.confirmMessage)
         }
-        .alert(
-            "Couldn't change the role",
-            isPresented: Binding(
-                get: { transferError != nil },
-                set: { if !$0 { transferError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(transferError ?? "")
+    }
+
+    /// Title for the one role alert. The copy is unchanged from the two
+    /// alerts it replaces.
+    private var alertTitle: String {
+        switch alert {
+        case .confirm(let change):
+            return change.confirmTitle
+        case .error:
+            return "Couldn't change the role"
+        case nil:
+            return ""
         }
     }
 
@@ -1500,27 +1522,27 @@ struct RoomSettingsMembersSheet: View {
             switch role {
             case .member:
                 Button {
-                    pendingChange = PendingRoleChange(
+                    alert = .confirm(PendingRoleChange(
                         member: member,
                         action: .promote
-                    )
+                    ))
                 } label: {
                     Label("Make host", systemImage: "person.badge.shield.checkmark.fill")
                 }
                 Button(role: .destructive) {
-                    pendingChange = PendingRoleChange(
+                    alert = .confirm(PendingRoleChange(
                         member: member,
                         action: .kick
-                    )
+                    ))
                 } label: {
                     Label("Remove from room", systemImage: "person.slash.fill")
                 }
             case .host:
                 Button(role: .destructive) {
-                    pendingChange = PendingRoleChange(
+                    alert = .confirm(PendingRoleChange(
                         member: member,
                         action: .demote
-                    )
+                    ))
                 } label: {
                     Label("Demote to member", systemImage: "person.fill.xmark")
                 }
@@ -1556,7 +1578,7 @@ struct RoomSettingsMembersSheet: View {
     /// `pendingChange` payload drives the destructive remove flow
     /// with the same confirm-alert plumbing.
     private func applyPendingChange(_ change: PendingRoleChange) async {
-        pendingChange = nil
+        alert = nil
         do {
             let rows: [Member]
             switch change.action {
@@ -1574,11 +1596,27 @@ struct RoomSettingsMembersSheet: View {
             }
             roster = rows
         } catch let error as HostRoleTransferError {
-            transferError = error.errorDescription
+            alert = .error(error.errorDescription ?? "")
         } catch let error as HostKickError {
-            transferError = error.errorDescription
+            alert = .error(error.errorDescription ?? "")
         } catch {
-            transferError = error.localizedDescription
+            alert = .error(error.localizedDescription)
+        }
+    }
+}
+
+/// D13 — the one role alert on the members sheet: the confirm, and the
+/// failure it can produce.
+private enum RoleAlert: Identifiable {
+    case confirm(PendingRoleChange)
+    case error(String)
+
+    var id: String {
+        switch self {
+        case .confirm(let change):
+            return "confirm-\(change.id.uuidString)"
+        case .error(let message):
+            return "error-\(message)"
         }
     }
 }
