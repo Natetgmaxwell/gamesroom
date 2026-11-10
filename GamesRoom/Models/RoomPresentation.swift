@@ -24,8 +24,10 @@ enum RoomPresentation: Identifiable, Equatable {
     /// Member-side event edit.
     case editEvent(Event)
     /// AddEventSheet. `seed` is the pre-filled date ("Plan the next
-    /// night" passes playedAt + 7 days); nil opens on the default.
-    case addEvent(seed: Date?)
+    /// night" and "Pick another time" pass playedAt + 7 days); nil
+    /// opens on the default. `packs` pre-selects the settled night's
+    /// games (1.2.5); empty opens with none picked.
+    case addEvent(seed: Date?, packs: [String] = [])
     /// Casino chip withdrawal.
     case withdraw(Event)
     /// Vision chip scan: the cash-out.
@@ -39,7 +41,7 @@ enum RoomPresentation: Identifiable, Equatable {
             return "settings:\(room.id.uuidString)"
         case .editEvent(let event):
             return "editEvent:\(event.id.uuidString)"
-        case .addEvent(let seed):
+        case .addEvent(let seed, _):
             // A seed is part of the identity: "Plan the next night" on
             // two different nights opens two different sheets.
             return "addEvent:\(seed.map { String($0.timeIntervalSince1970) } ?? "none")"

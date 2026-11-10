@@ -82,7 +82,11 @@ struct NextNightOffer: Equatable {
         guard let next = sameTimeNextWeek(after: settled.playedAt, timeZone: timeZone),
               next > now else { return nil }
         let chips = CasinoPack.slug
-        let packs = [chips] + settled.packSlugs.filter { $0 != chips }
+        // Only games the catalog still knows: a retired pack on an old
+        // night must not make the one-tap booking fail.
+        let packs = [chips] + settled.packSlugs.filter {
+            $0 != chips && PackRegistry.shared.isRegistered(slug: $0)
+        }
         return NextNightOffer(
             playedAt: next,
             name: EventDefaultName.name(for: next, timeZone: timeZone),

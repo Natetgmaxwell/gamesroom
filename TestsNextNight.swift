@@ -108,7 +108,7 @@ private func runNextNightDateTests(_ runner: TestRunner) {
 
 private func runNextNightOfferTests(_ runner: TestRunner) {
     let tz = brisbane
-    let night = nnSettled(playedAt: nnDate(2026, 11, 10, 19, 0, tz), packs: ["monopoly_deal", "casino"])
+    let night = nnSettled(playedAt: nnDate(2026, 11, 10, 19, 0, tz), packs: ["monopoly_deal", "casino", "pluto_chess"])
     let now = nnDate(2026, 11, 10, 23, 0, tz)
 
     // (label, isHost, hasFutureNight, settleInFlight, now, offered?)
@@ -129,7 +129,7 @@ private func runNextNightOfferTests(_ runner: TestRunner) {
         }
     }
 
-    runner.run("NextNight: the offer keeps the packs (chips first) and the default name") {
+    runner.run("NextNight: the offer keeps the packs (chips first, retired packs dropped) and the default name") {
         let offer = NextNightOffer.offer(
             settled: night, isHost: true, hasFutureNight: false, settleInFlight: false,
             now: now, timeZone: tz
