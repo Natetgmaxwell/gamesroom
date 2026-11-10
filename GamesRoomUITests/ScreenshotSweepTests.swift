@@ -214,21 +214,49 @@ final class ScreenshotSweepTests: XCTestCase {
             witnessTitle.waitForExistence(timeout: 10),
             "WitnessSlot (.tonightEvent) never rendered."
         )
-        // fx30 (Nathan, walkthrough 2026-11-10): the sweep viewer is the
-        // host, and the host's live card leads with "Score a round"; the
-        // host's own chip actions live in its picker ("Casino chips"),
-        // not under the primary.
-        let score = app.buttons["Score a round (host)"].firstMatch
+        // Every night is scored in chips, and the host plays too: with
+        // no chips yet, the one thing to do is take them.
+        let take = app.buttons["Take your chips"].firstMatch
         XCTAssertTrue(
-            score.waitForExistence(timeout: 5),
-            "Host 'Score a round' primary missing on the witness slot."
+            take.waitForExistence(timeout: 5),
+            "'Take your chips' primary missing on the live card."
         )
         XCTAssertFalse(
-            app.buttons["Withdraw to play"].exists,
-            "The host's own withdraw line is back under the primary."
+            app.buttons["Score a round (host)"].exists,
+            "Round scoring is back; every night is scored in chips."
         )
 
         snap(app, "05-room-page-tonight-live")
+    }
+
+    // MARK: - 05b Chips night, waiting on one player
+
+    func test_05b_chips_night_waiting_on_a_player() throws {
+        // The host and Alex have cashed out, Sam is still playing. The
+        // board answers "who's up tonight?", and the host's card waits
+        // on Sam instead of offering to settle over his chips.
+        let app = launchSweep(arguments: ["-screenshots-state=night-chips"])
+
+        openRoom(app, named: "Carwoola Crew")
+
+        XCTAssertTrue(
+            app.staticTexts["Alex is up 40"].firstMatch.waitForExistence(timeout: 10),
+            "The Tonight board never named who is up."
+        )
+        XCTAssertTrue(
+            app.staticTexts["2 of 3 cashed out"].firstMatch.exists,
+            "The Tonight board's cash-out progress is missing."
+        )
+        XCTAssertTrue(
+            app.staticTexts["Waiting on Sam to cash out"].firstMatch.exists,
+            "The host's card should wait on Sam, not lead with Settle."
+        )
+        XCTAssertTrue(
+            app.buttons["Settle the night (host)"].firstMatch.exists,
+            "'Settle the night' should still be the quiet line under the wait."
+        )
+
+        snap(app, "05b-chips-night-waiting")
     }
 
     // MARK: - 06 Room page, settled last night
@@ -299,35 +327,32 @@ final class ScreenshotSweepTests: XCTestCase {
         snap(app, "08-claim-seat-card")
     }
 
-    // MARK: - 09 Host scoring dashboard (live)
+    // MARK: - 09 Settling early asks first
 
-    func test_09_host_scoring_dashboard_live() throws {
-        let app = launchSweep(arguments: ["-screenshots-state=score-live"])
+    func test_09_settle_early_asks_first() throws {
+        // Settling with Sam's chips still on the table is the one move
+        // that strands someone, so it names him and asks.
+        let app = launchSweep(arguments: ["-screenshots-state=night-chips"])
 
         openRoom(app, named: "Carwoola Crew")
 
-        // The WitnessSlot host button overrides its accessibility
-        // label to "Score a round (host)".
-        let scoreCTA = app.buttons["Score a round (host)"].firstMatch
+        let settle = app.buttons["Settle the night (host)"].firstMatch
         XCTAssertTrue(
-            scoreCTA.waitForExistence(timeout: 10),
-            "Host 'Score a round' CTA missing on the live single-winner night."
+            settle.waitForExistence(timeout: 10),
+            "'Settle the night' line missing on the chips night."
         )
-        scoreCTA.tap()
+        settle.tap()
 
-        let sheetBar = app.navigationBars["Score a round"].firstMatch
         XCTAssertTrue(
-            sheetBar.waitForExistence(timeout: 10),
-            "HostScoreEntrySheet never presented."
+            app.staticTexts["Sam hasn't cashed out. Settle the night anyway?"].firstMatch.waitForExistence(timeout: 5),
+            "Settling early did not warn about Sam."
         )
-        // The chip tray reads the in-memory roster; Alex's chip must
-        // be on screen before the capture.
         XCTAssertTrue(
-            app.staticTexts["Alex"].firstMatch.waitForExistence(timeout: 10),
-            "Member chip tray never populated."
+            app.buttons["Keep playing"].firstMatch.exists,
+            "The settle-early dialog has no way back."
         )
 
-        snap(app, "09-host-scoring-dashboard-live")
+        snap(app, "09-settle-early-asks-first")
     }
 
     // MARK: - 10 Question box reader card
@@ -360,45 +385,26 @@ final class ScreenshotSweepTests: XCTestCase {
         snap(app, "10-question-box-reader-card")
     }
 
-    // MARK: - 11 Casino chips from the score picker
+    // MARK: - 11 Take your chips
 
     func test_11_casino_chip_scan_sheet() throws {
         let app = launchSweep(arguments: ["-screenshots-state=chip-scan"])
 
         openRoom(app, named: "Carwoola Crew")
 
-        // The WitnessSlot host button overrides its accessibility
-        // label to "Score a round (host)".
-        let scoreCTA = app.buttons["Score a round (host)"].firstMatch
+        // The host has no chips yet, so the card's one button takes
+        // them, straight to the withdraw sheet (no picker in between).
+        let take = app.buttons["Take your chips"].firstMatch
         XCTAssertTrue(
-            scoreCTA.waitForExistence(timeout: 10),
-            "Host 'Score a round' CTA missing on the casino night with a side pack."
+            take.waitForExistence(timeout: 10),
+            "'Take your chips' CTA missing on the live night."
         )
-        scoreCTA.tap()
+        take.tap()
 
-        // fx30 — the host's card no longer carries the chip lines under
-        // it. "Score a round" opens the picker, which lists every pack
-        // on tonight's night, Casino chips first.
-        let casinoChips = app.buttons["Casino chips"].firstMatch
-        XCTAssertTrue(
-            casinoChips.waitForExistence(timeout: 10),
-            "Score picker never offered the Casino chips entry."
-        )
-        XCTAssertTrue(
-            app.buttons["Monopoly Deal"].firstMatch.exists,
-            "Score picker dropped the night's other pack."
-        )
-        casinoChips.tap()
-
-        // The `chip-scan` seed seeds no chips in hand (the working-hand
-        // read is network-backed and returns empty under
-        // `-screenshots-bypass-auth`), so "Casino chips" routes to the
-        // withdraw sheet. The chip-scan sheet is the same entry once a
-        // hand is out: `myWorkingHand > 0` routes to `.settleScan`.
         let withdrawBar = app.navigationBars["Withdraw chips"].firstMatch
         XCTAssertTrue(
             withdrawBar.waitForExistence(timeout: 10),
-            "WithdrawChipsSheet never presented from the Casino chips entry."
+            "WithdrawChipsSheet never presented from 'Take your chips'."
         )
 
         snap(app, "11-casino-chips-withdraw-sheet")

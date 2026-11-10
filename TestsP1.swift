@@ -389,19 +389,8 @@ private func runP1V0StateTests(_ runner: TestRunner) {
 // MARK: - NightPlan reads the phase (audit 01 §3.3 commit 5)
 
 private func runP1NightPlanPhaseTests(_ runner: TestRunner) {
-    func input(
-        isHost: Bool,
-        phase: NightPhase,
-        packSlugs: [String] = ["monopoly_deal"],
-        arrived: Int = 2,
-        claimed: Int = 4,
-        rounds: Int = 0
-    ) -> NightInput {
-        NightInput(
-            isHost: isHost, packSlugs: packSlugs, phase: phase,
-            arrivedCount: arrived, claimedCount: claimed, roundsScored: rounds,
-            iHaveHeldDeposit: false, iHaveWithdrawn: true
-        )
+    func input(isHost: Bool, phase: NightPhase) -> NightInput {
+        NightInput(isHost: isHost, phase: phase, myChips: .cashedOut)
     }
 
     runner.run("P1: a stranded night asks the host to settle it") {
@@ -418,14 +407,14 @@ private func runP1NightPlanPhaseTests(_ runner: TestRunner) {
         runner.assertNil(plan.caption, "the caption is the host's explanation")
     }
 
-    runner.run("P1: a stranded night asks for the settle even with no round scored") {
-        // The window is gone, so the usual "score first" advice is moot:
-        // the only way out is to close the night.
-        let plan = NightPlan.plan(for: input(isHost: true, phase: .stranded, rounds: 0))
+    runner.run("P1: a stranded night asks for the settle even with chips still out") {
+        // The window is gone, so "wait for the table" is moot: the only
+        // way out is to close the night.
+        let plan = NightPlan.plan(for: NightInput(isHost: true, phase: .stranded, myChips: .playing, othersPlaying: ["Sam"]))
         runner.assertEqual(plan.primary, .settleNight)
     }
 
-    runner.run("P1: a live night carries no caption") {
+    runner.run("P1: a live night carries no caption for the host") {
         let plan = NightPlan.plan(for: input(isHost: true, phase: .live))
         runner.assertNil(plan.caption)
     }

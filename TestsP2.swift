@@ -53,7 +53,6 @@ private func p2Room() -> Room {
 private func runP2PresentationTests(_ runner: TestRunner) {
     let room = p2Room()
     let night = p2Event()
-    let target = HostScoreTarget(event: night, packSlug: "casino")
 
     runner.run("P2: every RoomPresentation case has a stable, unique id") {
         let cases: [RoomPresentation] = [
@@ -63,8 +62,6 @@ private func runP2PresentationTests(_ runner: TestRunner) {
             .addEvent(seed: night.playedAt),
             .withdraw(night),
             .settleScan(night),
-            .cahScan(night),
-            .hostScore(target),
             .createRoom,
         ]
         let ids = cases.map(\.id)
@@ -93,25 +90,15 @@ private func runP2PresentationTests(_ runner: TestRunner) {
         )
     }
 
-    runner.run("P2: RoomConfirm ids separate the two pack lists on one night") {
-        let one = RoomConfirm.scoreChoice(event: night, packs: ["casino", "cah"])
-        let two = RoomConfirm.scoreChoice(event: night, packs: ["casino"])
+    runner.run("P2: RoomConfirm ids separate two settle-early warnings on one night") {
+        let one = RoomConfirm.settleEarly(event: night, stillPlaying: ["Sam", "Jo"])
+        let two = RoomConfirm.settleEarly(event: night, stillPlaying: ["Sam"])
         runner.assertTrue(one.id != two.id)
         runner.assertEqual(one.event.id, night.id)
-        runner.assertEqual(two.packs, ["casino"])
     }
 
-    runner.run("P2: PackEditor names the pack, and the Casino sheet names none") {
-        let payout = PackEditor.payout(packSlug: "cah")
-        let cah = PackEditor.cahConfig(packSlug: "cah")
-        let casino = PackEditor.casinoConfig
-        runner.assertEqual(payout.packSlug, "cah")
-        runner.assertEqual(cah.packSlug, "cah")
-        runner.assertNil(casino.packSlug)
-        // Same pack, two sheets: the ids must still differ, or the
-        // shelf would keep the first editor on screen for the second.
-        runner.assertTrue(payout.id != cah.id)
-        runner.assertTrue(cah.id != casino.id)
+    runner.run("P2: the pack shelf has one editor left - chip values") {
+        runner.assertEqual(PackEditor.casinoConfig.id, "casinoConfig")
     }
 }
 

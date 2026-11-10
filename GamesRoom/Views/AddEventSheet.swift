@@ -65,10 +65,11 @@ struct AddEventSheet: View {
     /// S3.4 — optional venue and note. One sheet sets the night up.
     @State private var venue: String = ""
     @State private var note: String = ""
-    /// V0.95 G — multi-select packs. The packs are a set: the first
-    /// selected pack in display order is the headline (it drives the
-    /// legacy pack_slug column + hero CTA flavour).
-    @State private var packSlugs: [String] = [AddEventSheet.initialPackSlug]
+    /// What the table is playing tonight: optional labels, never the
+    /// scoring. Every night is scored in chips, so the casino pack is
+    /// not offered here; `save()` always files it first (it is the
+    /// headline `pack_slug` the server and older builds read).
+    @State private var packSlugs: [String] = []
 
 
     @State private var isSaving: Bool = false
@@ -121,9 +122,9 @@ struct AddEventSheet: View {
                     }
                     .tint(Theme.Palette.accent)
                 } header: {
-                    Text("Pack")
+                    Text("What are you playing?")
                 } footer: {
-                    Text("Pick every pack the night will run.")
+                    Text("Optional. Play anything: winners get paid in chips, and everyone scans their chips at the end.")
                 }
 
                 Section {
@@ -234,22 +235,15 @@ struct AddEventSheet: View {
     /// on save so the host can never submit a slug the server doesn't
     /// know about.
     private var availablePacks: [PackOption] {
-        PackRegistry.shared.allPacks.map {
+        PackRegistry.shared.allPacks.filter { $0.slug != CasinoPack.slug }.map {
             PackOption(slug: $0.slug, displayName: $0.displayName)
         }
     }
 
-    private static var initialPackSlug: String {
-        PackRegistry.shared.allPacks.first?.slug ?? "casino"
-    }
-
-    /// S3.4 — the packs are a set. The headline is the first selected
-    /// pack in display order, so the order the host taps them in
-    /// never decides what the night leads with. At least one pack
-    /// stays selected.
+    /// S3.4 — the games are a set, kept in display order. None is
+    /// fine: the night is a chips night either way.
     private func togglePack(_ slug: String) {
         if let idx = packSlugs.firstIndex(of: slug) {
-            guard packSlugs.count > 1 else { return }
             packSlugs.remove(at: idx)
         } else {
             packSlugs.append(slug)
@@ -278,12 +272,11 @@ struct AddEventSheet: View {
         // server catalog." Refuse unknown slugs at the form layer
         // so the host sees a clear error before the network round-
         // trip.
+        // Chips first, always: the casino pack is how every night is
+        // scored, and the first slug is the event's headline pack.
+        let packSlugs = [CasinoPack.slug] + self.packSlugs.filter { $0 != CasinoPack.slug }
         for slug in packSlugs where !PackRegistry.shared.isRegistered(slug: slug) {
-            errorMessage = "Unknown pack: \(slug). Pick one of the registered packs."
-            return
-        }
-        guard !packSlugs.isEmpty else {
-            errorMessage = "Pick at least one pack."
+            errorMessage = "Unknown game: \(slug)."
             return
         }
 

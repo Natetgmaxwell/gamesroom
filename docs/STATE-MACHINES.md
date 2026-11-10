@@ -175,9 +175,8 @@ inherits it.
 ## 8. Presentation
 
 **States** one enum per presenter node: `RoomPresentation` (`settings`,
-`editEvent`, `addEvent(seed:)`, `withdraw`, `settleScan`, `cahScan`,
-`hostScore`, `createRoom`), `RoomConfirm` (`scoreChoice`),
-`PackEditor` (`payout`, `cahConfig`, `casinoConfig`),
+`editEvent`, `addEvent(seed:)`, `withdraw`, `settleScan`, `createRoom`),
+`RoomConfirm` (`settleEarly`), `PackEditor` (`casinoConfig`),
 `RoomListPresentation` (`settings`, `createRoom`, `joinRoom`, `appSettings`),
 `RoomSettingsConfirm` (`declareSeason`, `deleteRoom`, `leaveRoom`),
 `QBSheet` (`editing`, `adding`).
@@ -265,40 +264,58 @@ this machine was audited and left as it is (it is the best one in the app).
 
 ---
 
-## 12. Night plan *(left alone on purpose)*
+## 12. Night plan *(every night is scored in chips)*
 
-**States** `NightAction`: `claimSeat`, `checkIn`, `withdrawChips`, `countCAH`,
-`waitingForTable(arrived:claimed:)`, `scoreRound(packs:)`, `settleNight`,
-`planNextNight`. `NightPlan` carries `primary`, `secondaries`, `caption`.
+**States** `NightAction`: `claimSeat`, `checkIn`, `takeChips`, `cashOut`,
+`waitingForCashOut(names:)`, `settleNight`, `planNextNight`. `MyChips`:
+`none`, `playing`, `cashedOut`. `NightPlan` carries `primary`,
+`secondaries`, `caption`.
 
-**Moves it** `NightPlan.plan(for: NightInput)` — pure, clock-injected,
-phase-driven. fx30 changed the host's live rule, not the machine: a host
-gets ONE primary and at most ONE line under it.
-- nothing scored tonight, seats claimed and nobody arrived →
-  `waitingForTable` as the caption, with `scoreRound` as its one line;
-- nothing scored tonight → `scoreRound`, nothing under it;
-- something scored → `settleNight`, with `scoreRound` as its one line.
-
-"Scored" is a non-correction round (`roundsScored > 0`) **or** a casino
-settlement (`casinoSettlements > 0`, read from `WorkingHand.hasScanned`).
-`claimed == 0` never emits `waitingForTable` (no "0 of 0 here"). The host's
-own member actions are not lines: `NightAction.withdrawChips` and
-`countCAH` reach the host through the "Score which game?" picker, which
-lists `NightPlan.scorablePacks(in:)` — casino first when the night has it,
-then the night's own order — and labels the casino entry `Casino chips` via
-`NightPlan.pickerTitle(for:)`. One pack skips the picker.
+**Moves it** `NightPlan.plan(for: NightInput)` — pure, phase-driven. One
+loop for everyone, the host included: I'm here → Take your chips → Cash
+out (scan) → done. The host settles once nobody else is still playing;
+while anyone is, the host's primary is the wait ("Waiting on Sam to cash
+out") and "Settle the night" is the quiet line, behind a confirmation that
+names who has not cashed out (`RoomConfirm.settleEarly`).
 
 **Owner** `GamesRoom/Services/NightPlan.swift`
 
-**Server twin** none; its inputs are the seat RPCs' rows.
+**Server twin** none; its inputs are `get_event_working_hands` and the seat
+RPCs. Settling does not forfeit open chips (`settle_event`, `107`); only
+`finalize_casino_session` / auto-close (`074`, `080`) does.
 
-**Pinned by** `TestsP1.swift` — `P1: a stranded night asks the host to settle it`;
-`TestsS1.swift` — `S1.3: the host scores first with nothing under the primary`,
-`S1.3: the host settles after a casino settlement`,
-`S1.3: nobody claimed a seat means no '0 of 0 here' caption`.
+**Pinned by** `TestsS1.swift` — `S1.3: settle is never the primary while anyone is still playing`;
+`TestsP1.swift` — `P1: a stranded night asks the host to settle it`; sweep
+`test_05b_chips_night_waiting_on_a_player`, `test_09_settle_early_asks_first`.
 
-**Never** reorder or add an action here without a table row. The member action
-order is a product decision, not a refactor.
+**Never** make "Settle the night" the primary while someone has chips on
+the table, and never score a night any way but chips (round scoring, the
+CAH count and per-pack payouts were removed on 2026-11-10; their server
+RPCs remain because migrations are append-only).
+
+---
+
+## 13. Tonight's board *(a derivation, not a machine)*
+
+**States** `ChipStatus` per player: `noChips`, `playing`,
+`cashedOut(net:)`. `TonightScore` adds `leaders`, `headline`,
+`progressCaption`.
+
+**Moves it** `TonightScore.tally(hands:transactions:players:names:)` —
+pure. "Cashed out" is `WorkingHand.isCashedOut` (scanned, and no chips
+taken since); the net is the sum of the player's `casino_settlement` rows,
+the same rows the season leaderboard sums.
+
+**Owner** `GamesRoom/Models/TonightScore.swift` (with `NameList` and
+`NightWhen`, the "Tonight / Tomorrow / In 3 days" label)
+
+**Server twin** `get_event_working_hands` (`074`) and
+`get_event_transactions` (`106`).
+
+**Pinned by** `TestsTonight.swift` — `Tonight: the net is the server's settlement rows, cashed out first, highest first`.
+
+**Never** compute "cashed out" or a player's night net anywhere else, and
+never show the season total under the "Tonight" title.
 
 ---
 
@@ -307,7 +324,6 @@ order is a product decision, not a refactor.
 Copied from `~/gr-work/2026-11-09-state-machines/00-DECISION.md`:
 
 - ScanCameraController.State
-- NightPlan's member action order
 - ArrivalGrace
 - the auto-return-on-settle trigger
 - the 60-minute Question Box quiet rule

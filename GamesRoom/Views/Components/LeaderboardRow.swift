@@ -20,6 +20,12 @@ import SwiftUI
 //         isYou: false
 //     )
 struct LeaderboardRow: View {
+    /// The columns the standings header labels ("Last time", "Season"),
+    /// so the header and every row line up on the same edges.
+    static let deltaColumnWidth: CGFloat = 56
+    static let scoreColumnWidth: CGFloat = 72
+    static let chevronWidth: CGFloat = 16
+
     let rank: Int
     let name: String
     let score: Int
@@ -85,7 +91,7 @@ struct LeaderboardRow: View {
                             .foregroundStyle(Theme.Palette.accent)
                     }
                 }
-                Text(sessionsPlayed == 1 ? "1 session" : "\(sessionsPlayed) sessions")
+                Text(sessionsPlayed == 1 ? "1 night played" : "\(sessionsPlayed) nights played")
                     .font(Theme.Typography.footnote)
                     .foregroundStyle(Theme.Palette.secondaryText)
                     .accessibilityHidden(true)
@@ -108,20 +114,19 @@ struct LeaderboardRow: View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Layout.cardLineGap) {
             // No night played yet means no last delta: a lone score
             // reads cleaner than a "0 0" pair.
-            if sessionsPlayed > 0 {
-                Text(deltaLabel)
-                    .font(Theme.Typography.monoCaption)
-                    .foregroundStyle(deltaColor)
-            }
+            Text(sessionsPlayed > 0 ? deltaLabel : "")
+                .font(Theme.Typography.monoCaption)
+                .foregroundStyle(deltaColor)
+                .frame(width: Self.deltaColumnWidth, alignment: .trailing)
             Text("\(score)")
                 .font(Theme.Typography.mono)
                 .foregroundStyle(Theme.Palette.primaryText)
-                .frame(minWidth: 72, alignment: .trailing)
+                .frame(minWidth: Self.scoreColumnWidth, alignment: .trailing)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(sessionsPlayed > 0
-            ? "\(score) points, last delta \(deltaLabel), \(sessionsPlayed) sessions"
-            : "\(score) points, no sessions yet"))
+            ? "\(score) season points, \(deltaLabel) last time, \(sessionsPlayed) \(sessionsPlayed == 1 ? "night" : "nights") played"
+            : "\(score) season points, no nights played yet"))
     }
 
     private var chevron: some View {

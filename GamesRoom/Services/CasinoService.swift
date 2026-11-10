@@ -426,6 +426,7 @@ final class CasinoService: ObservableObject {
     /// mutation methods (`withdraw`, `submitMemberScan`) via
     /// `invalidateEventCaches`.
     func getEventTransactions(eventId: UUID) async -> [EventTransaction] {
+        if let seeded = SweepChipSeeds.shared.transactions(eventId: eventId) { return seeded }
         let now = Date()
         if let cached = eventTransactionsCache[eventId],
            now.timeIntervalSince(cached.at) < casinoCacheTTL {
@@ -534,6 +535,7 @@ final class CasinoService: ObservableObject {
     /// V0.69 — 30s TTL cache keyed by eventId; invalidated by
     /// mutation methods via `invalidateEventCaches`.
     func loadWorkingHands(eventId: UUID) async -> [WorkingHand] {
+        if let seeded = SweepChipSeeds.shared.hands(eventId: eventId) { return seeded }
         let now = Date()
         if let cached = workingHandsCache[eventId],
            now.timeIntervalSince(cached.at) < casinoCacheTTL {

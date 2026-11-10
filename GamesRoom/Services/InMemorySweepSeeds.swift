@@ -54,11 +54,11 @@
 //    night-arrivals     S1.8. Live Monopoly Deal night, host view,
 //                       five seats claimed and 2 of 5 arrived: Sam,
 //                       Jordan and Mike still hold their deposits, so
-//                       the host's arrival card lists them and the
-//                       live card offers "Score a round".
-//    night-one-round    S1.8. Live Monopoly Deal night after round 1
-//                       (Alex won): the host's primary is "Settle the
-//                       night" with "Score a round" in grey under it.
+//                       the host's arrival card lists them.
+//    night-chips        A chips night half cashed out: the host and
+//                       Alex scanned in (Alex up 40), Sam still
+//                       playing. The host's card
+//                       waits on Sam, "Settle the night" under it.
 //    night-settled      S1.8. The night settled 30 minutes ago:
 //                       `.justSettled` (CeremonialCard) with the
 //                       host's "Plan the next night" under it.
@@ -353,29 +353,35 @@ extension InMemoryRoomStore {
             }
             questionBox.settings[carwoola.id] = questionBoxOff
 
-        case "night-one-round":
-            // S1.8 — one round scored: the host settles next.
+        case "night-chips":
+            // Chips night, mid-way: the host and Alex have cashed out
+            // (Alex up 40, the host up 20), Sam still has chips on the
+            // table.
+            // The host's card waits on Sam; "Settle the night" is the
+            // quiet line under it.
+            let host = carwoola.createdBy
             let night = liveEvent(
-                name: "Monopoly Deal Night",
-                packSlug: "monopoly_deal",
-                packSlugs: ["monopoly_deal"]
+                name: "Friday Chips",
+                packSlug: "casino",
+                packSlugs: ["casino", "monopoly_deal"]
             )
             events[carwoola.id] = [night]
-            rsvps[night.id] = [
-                carwoola.createdBy: .claimed,
-                alex: .claimed,
-                sam: .claimed
-            ]
-            seedEventRound(EventRound(
-                id: UUID(),
+            rsvps[night.id] = [host: .claimed, alex: .claimed, sam: .claimed]
+            SweepChipSeeds.shared.set(
                 eventId: night.id,
-                roomId: carwoola.id,
-                packSlug: "monopoly_deal",
-                roundIndex: 1,
-                entries: [ScoreEntry(memberId: alex, pointsDelta: 3, meta: ["winner": .bool(true)])],
-                createdBy: carwoola.createdBy,
-                createdAt: Date().addingTimeInterval(-600)
-            ))
+                hands: [
+                    WorkingHand(memberId: host, displayName: "Host", workingHand: 220, pointsBalance: 1_220, hasScanned: true, scannedValue: 220),
+                    WorkingHand(memberId: alex, displayName: "Alex", workingHand: 240, pointsBalance: 1_020, hasScanned: true, scannedValue: 240),
+                    WorkingHand(memberId: sam, displayName: "Sam", workingHand: 200, pointsBalance: 540),
+                ],
+                transactions: [
+                    EventTransaction(id: UUID(), memberId: host, memberDisplayName: "Host", kind: "casino_withdrawal", amountPoints: -200, createdAt: Date().addingTimeInterval(-1_400)),
+                    EventTransaction(id: UUID(), memberId: alex, memberDisplayName: "Alex", kind: "casino_withdrawal", amountPoints: -200, createdAt: Date().addingTimeInterval(-1_400)),
+                    EventTransaction(id: UUID(), memberId: sam, memberDisplayName: "Sam", kind: "casino_withdrawal", amountPoints: -200, createdAt: Date().addingTimeInterval(-1_400)),
+                    EventTransaction(id: UUID(), memberId: host, memberDisplayName: "Host", kind: "casino_settlement", amountPoints: 20, createdAt: Date().addingTimeInterval(-300)),
+                    EventTransaction(id: UUID(), memberId: alex, memberDisplayName: "Alex", kind: "casino_settlement", amountPoints: 40, createdAt: Date().addingTimeInterval(-200)),
+                ]
+            )
             questionBox.settings[carwoola.id] = questionBoxOff
 
         case "night-settled":
@@ -410,4 +416,32 @@ func sweepNextFridayEvening(from now: Date = Date()) -> Date {
     var c = DateComponents(); c.weekday = 6; c.hour = 19; c.minute = 30
     let start = now.addingTimeInterval(86_400)
     return cal.nextDate(after: start, matching: c, matchingPolicy: .nextTime) ?? start
+}
+
+/// The sweep's chip reads. `CasinoService` reads working hands and
+/// event transactions straight from Supabase, which returns nothing
+/// under `-screenshots-bypass-auth`; a seed that needs a chips night
+/// files its rows here and the service answers from them first. Empty
+/// in production: nothing outside a sweep seed ever writes to it.
+final class SweepChipSeeds: @unchecked Sendable {
+    static let shared = SweepChipSeeds()
+    private let lock = NSLock()
+    private var hands: [UUID: [WorkingHand]] = [:]
+    private var transactions: [UUID: [EventTransaction]] = [:]
+
+    func set(eventId: UUID, hands: [WorkingHand], transactions: [EventTransaction]) {
+        lock.lock(); defer { lock.unlock() }
+        self.hands[eventId] = hands
+        self.transactions[eventId] = transactions
+    }
+
+    func hands(eventId: UUID) -> [WorkingHand]? {
+        lock.lock(); defer { lock.unlock() }
+        return hands[eventId]
+    }
+
+    func transactions(eventId: UUID) -> [EventTransaction]? {
+        lock.lock(); defer { lock.unlock() }
+        return transactions[eventId]
+    }
 }

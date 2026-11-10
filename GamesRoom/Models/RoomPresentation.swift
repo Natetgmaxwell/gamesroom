@@ -28,12 +28,8 @@ enum RoomPresentation: Identifiable, Equatable {
     case addEvent(seed: Date?)
     /// Casino chip withdrawal.
     case withdraw(Event)
-    /// Vision chip scan (settle with a camera).
+    /// Vision chip scan: the cash-out.
     case settleScan(Event)
-    /// CAH black-card count scan.
-    case cahScan(Event)
-    /// Host score entry for one pack of the night.
-    case hostScore(HostScoreTarget)
     /// Inline "+" on the room switcher.
     case createRoom
 
@@ -51,10 +47,6 @@ enum RoomPresentation: Identifiable, Equatable {
             return "withdraw:\(event.id.uuidString)"
         case .settleScan(let event):
             return "settleScan:\(event.id.uuidString)"
-        case .cahScan(let event):
-            return "cahScan:\(event.id.uuidString)"
-        case .hostScore(let target):
-            return "hostScore:\(target.id)"
         case .createRoom:
             return "createRoom"
         }
@@ -65,68 +57,34 @@ enum RoomPresentation: Identifiable, Equatable {
 /// from inside a sheet, so it keeps its own binding — but it is an enum,
 /// not a Bool.
 enum RoomConfirm: Identifiable, Equatable {
-    /// "Score which game?" — the night has more than one scorable pack.
-    case scoreChoice(event: Event, packs: [String])
+    /// "Sam hasn't cashed out. Settle the night anyway?" — the host
+    /// settling while players still have chips on the table.
+    case settleEarly(event: Event, stillPlaying: [String])
 
     var id: String {
         switch self {
-        case .scoreChoice(let event, let packs):
-            return "scoreChoice:\(event.id.uuidString):\(packs.joined(separator: ","))"
+        case .settleEarly(let event, let names):
+            return "settleEarly:\(event.id.uuidString):\(names.joined(separator: ","))"
         }
     }
 
     var event: Event {
         switch self {
-        case .scoreChoice(let event, _):
+        case .settleEarly(let event, _):
             return event
         }
     }
-
-    var packs: [String] {
-        switch self {
-        case .scoreChoice(_, let packs):
-            return packs
-        }
-    }
 }
 
-/// The host's chosen pack for "Score a round".
-struct HostScoreTarget: Identifiable, Equatable {
-    let event: Event
-    let packSlug: String
-    var id: String { "\(event.id.uuidString):\(packSlug)" }
-}
-
-/// The config sheet the pack shelf is showing. The shelf used to stack
-/// three `.sheet` modifiers on one VStack (audit 03 D12); this is the
-/// one presenter that replaces them.
 enum PackEditor: Identifiable, Equatable {
-    /// Single-winner payout ("how much a win pays out").
-    case payout(packSlug: String)
-    /// Count-based points-per-card (CAH).
-    case cahConfig(packSlug: String)
-    /// Withdraw/return chip values (Casino's RoomSettingsCasinoSheet).
+    /// The chip values and vision settings. Every night is scored in
+    /// chips, so this is the only scoring editor a room has.
     case casinoConfig
 
     var id: String {
         switch self {
-        case .payout(let slug):
-            return "payout:\(slug)"
-        case .cahConfig(let slug):
-            return "cahConfig:\(slug)"
         case .casinoConfig:
             return "casinoConfig"
-        }
-    }
-
-    /// The pack a config sheet edits. Casino's chip sheet is room-wide,
-    /// so it has none.
-    var packSlug: String? {
-        switch self {
-        case .payout(let slug), .cahConfig(let slug):
-            return slug
-        case .casinoConfig:
-            return nil
         }
     }
 }

@@ -5264,6 +5264,10 @@ runVTests(runner)
 
 runP2Tests(runner)
 
+// MARK: - Tonight (the night's own scoreboard, the score sheet's words)
+
+runTonightTests(runner)
+
 // MARK: - Summary
 
 print("")

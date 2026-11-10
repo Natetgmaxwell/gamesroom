@@ -229,6 +229,8 @@ enum Theme {
         static let activeSessionDot = "circle.fill"
         /// The "you're in" confirmation on a claimed seat.
         static let checkmarkCircleFill = "checkmark.circle.fill"
+        /// Who is ahead tonight, on the live card.
+        static let crownFill = "crown.fill"
         /// The host's "Score a round" CTA on the witness slot.
         static let checkmarkSealFill = "checkmark.seal.fill"
         /// Dismiss on the system banner and other dismiss buttons.

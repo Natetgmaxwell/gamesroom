@@ -2,64 +2,48 @@
 //  NightPlan.swift
 //  GamesRoom
 //
-//  S1 lane (night lifecycle) — the one action the night is waiting for.
+//  The one action the night is waiting for, per viewer.
 //
 //  Foundation only, no I/O, no clock, no network. The caller resolves
-//  every fact (who has arrived, how many rounds are scored, what the
-//  viewer has withdrawn) and hands them in as a `NightInput`; the plan
-//  turns those facts into ONE primary action plus the grey secondary
-//  lines under it.
+//  every fact and hands them in as a `NightInput`; the plan turns them
+//  into ONE primary action, the quiet lines under it, and a caption.
 //
-//  Why this file exists (audit 02-workflows #19 and #8): the room page
-//  decided the in-night button from `event.packSlug` — the "headline
-//  pack", whichever pack the host tapped last. On a Casino + Monopoly
-//  Deal night that sent the host's "Score a round" to the chip
-//  scanner; on a Monopoly Deal only night it sent every member to a
-//  casino withdrawal sheet for a pack that was not being played. The
-//  pack list (`event.packSlugs`) is the contract, and the plan reads
-//  the list, never the headline.
+//  Every night is scored in chips (product decision, 2026-11-10):
+//  everyone takes chips from the bank, plays anything (winners are paid
+//  out in chips), and scans what is in front of them at the end. The
+//  scan is the cash-out. There is no other way to score, so the night
+//  has one loop and the plan walks each person through it:
 //
-//  The rules, in one place:
+//    I'm here (held deposit)  ->  Take chips  ->  Cash out  ->  done
 //
-//  The plan reads `NightPhase`, never a pair of date comparisons: the
-//  phase is the one answer to "where is this night", and every screen
-//  that used to derive it separately now asks the same question. The
-//  rules per phase:
+//  The rules per phase:
 //
-//    recap                -> the host plans the next night
-//    past / cancelled     -> nothing (the page shows the standings)
-//    upcoming / none      -> nothing (the RSVP CTA is the briefing slot)
-//    stranded             -> the host settles it, with the caption
-//                            "The night is still open"; members nothing
+//    upcoming / none   -> nothing (the RSVP CTA is the briefing slot)
+//    past / cancelled  -> nothing (the page shows the standings)
+//    recap             -> the host plans the next night
+//    stranded          -> the host settles, caption "The night is still
+//                         open"; members nothing
 //
-//    Member, live night:
-//      held deposit and not withdrawn -> checkIn
-//      else casino in packs            -> withdrawChips
-//      else CAH in packs               -> countCAH
-//      else                            -> nil
+//    Live, everyone (host included — the host plays too):
+//      held deposit, no chips yet -> checkIn
+//      no chips yet               -> takeChips
+//      chips on the table         -> cashOut, with "Take more chips"
+//                                    as the one line under it
 //
-//    Host, live night (fx30 — ONE primary, at most ONE line under it):
-//      nobody arrived, seats claimed   -> waitingForTable as the caption,
-//                                         with scoreRound as the one line
-//                                         under it (a host can always
-//                                         record a round)
-//      nothing scored tonight          -> scoreRound, nothing under it
-//      something scored tonight        -> settleNight, with scoreRound
-//                                         as the one line under it
+//    Live, member who has cashed out -> nothing to tap; the caption
+//      says the host settles once everyone has cashed out.
 //
-//      "Scored" is a non-correction round OR a casino settlement (a
-//      scan) for this event. The host's own player actions (withdraw,
-//      settle chips, withdraw more, count CAH) are NOT lines under the
-//      primary: they live in the "Score a round" picker, which lists
-//      every pack on the night with Casino chips first.
+//    Live, host who has cashed out (or never took chips):
+//      someone still playing -> waitingForCashOut(names) as the primary
+//                               (a caption, no button), "Settle the night"
+//                               as the line under it (the view confirms,
+//                               naming who has not cashed out)
+//      nobody still playing, someone cashed out -> settleNight
+//      nobody has taken chips at all            -> takeChips
 //
-//    Host, night settled inside the recap window -> planNextNight
-//
-//  `claimSeat` is the RSVP action for a night that has not started. The
-//  plan does not emit it: `NightInput` carries no claim state, so it
-//  cannot tell "has not claimed" from "already claimed", and the RSVP
-//  CTA still belongs to the briefing slot. Offering an action the
-//  viewer cannot act on is worse than offering none.
+//  "Settle the night" is never the primary while anyone is still
+//  playing: settling early is the one move that can strand someone's
+//  chips, so it is the quiet line and it asks first.
 //
 
 import Foundation
@@ -70,89 +54,71 @@ enum NightAction: Equatable {
     case claimSeat
     /// "I'm here" — reclaim the deposit the room is holding.
     case checkIn
-    /// Withdraw casino chips to play.
-    case withdrawChips
-    /// Count the Cards Against Humanity cards.
-    case countCAH
-    /// Nobody has arrived yet. Caption only, no button.
-    case waitingForTable(arrived: Int, claimed: Int)
-    /// Open the score picker: one entry per pack on the night, casino
-    /// chips first. One pack routes straight into it.
-    case scoreRound(packs: [String])
+    /// Take chips from the bank. As a secondary line it is the top-up.
+    case takeChips
+    /// Scan the chips in front of you: the cash-out.
+    case cashOut
+    /// The host is waiting on these players to cash out. Caption only.
+    case waitingForCashOut(names: [String])
     /// Close the night out.
     case settleNight
     /// Schedule the next night.
     case planNextNight
 }
 
+/// Where the viewer is in tonight's chip loop.
+enum MyChips: Equatable {
+    case none
+    case playing
+    case cashedOut
+}
+
 /// Every fact the plan needs, handed in by the caller.
 struct NightInput: Equatable {
     /// The viewer hosts the room.
     var isHost: Bool
-    /// Every pack the host picked for this night (`event.packSlugs`).
-    var packSlugs: [String]
     /// The night's phase, from `NightPhaseResolver`. The plan reads the
-    /// phase, never `playedAt`/`settledAt` comparisons of its own: one
-    /// rule, one place (audit 01 §3.1).
+    /// phase, never `playedAt`/`settledAt` comparisons of its own.
     var phase: NightPhase
-    /// Members who have arrived (checked in or played).
-    var arrivedCount: Int
-    /// Members who claimed a seat.
-    var claimedCount: Int
-    /// Rounds already scored for this event.
-    var roundsScored: Int
-    /// fx30 — casino settlements (scans) already recorded for this
-    /// event. A settled hand is "something scored tonight" for the
-    /// host's card: the casino pack is played by settling chips, not
-    /// by scoring rounds, so rounds alone would leave a casino-only
-    /// night looking untouched.
-    var casinoSettlements: Int = 0
     /// The room is still holding a deposit for the viewer.
-    var iHaveHeldDeposit: Bool
-    /// The viewer has already withdrawn, so the deposit is spent.
-    var iHaveWithdrawn: Bool
+    var iHaveHeldDeposit: Bool = false
+    /// The viewer's own chips (`WorkingHand.tookChips` / `.isCashedOut`).
+    var myChips: MyChips = .none
+    /// Everyone else still playing (took chips, not cashed out), by name.
+    var othersPlaying: [String] = []
+    /// At least one other player has cashed out tonight.
+    var othersCashedOut: Bool = false
 }
 
-/// The plan for one viewer and one night: one primary action, the
-/// grey secondary lines under it.
+/// The plan for one viewer and one night.
 struct NightPlan: Equatable {
-    /// The one thing the viewer does next. `nil` when there is
-    /// nothing for them to do.
+    /// The one thing the viewer does next. `nil` when there is nothing
+    /// for them to do.
     var primary: NightAction?
-    /// The secondary actions, rendered as grey caption text under the
-    /// primary.
+    /// The quiet lines under the primary.
     var secondaries: [NightAction]
-    /// A grey line under the primary, for a state that needs a word of
-    /// explanation. `nil` for every state that speaks for itself.
+    /// A grey line for a state that needs a word of explanation.
     var caption: String? = nil
 
     /// How long after a night is settled the recap still counts as
-    /// the night that just happened (24 hours, the same window the
-    /// room page's ceremonial card uses).
+    /// the night that just happened.
     static let recapWindow: TimeInterval = NightPhaseResolver.recapWindow
 
     /// The caption on a night whose auto-close window has gone and
-    /// which nobody settled. New copy for a state that did not exist
-    /// until the phase did.
+    /// which nobody settled.
     static let strandedCaption = "The night is still open"
+
+    /// The caption for a member who has cashed out.
+    static let cashedOutCaption = "You've cashed out. The host settles the night once everyone has."
 
     /// The plan for the night as it stands.
     static func plan(for input: NightInput) -> NightPlan {
         switch input.phase {
-        case .none, .upcoming:
-            // No night, or one that has not started. The RSVP CTA still
-            // belongs to the briefing slot; the plan has no claim state
-            // to work from, so it offers nothing.
+        case .none, .upcoming, .past, .cancelled:
             return NightPlan(primary: nil, secondaries: [])
         case .recap:
-            // Inside the recap window the host plans the next one.
             return NightPlan(primary: input.isHost ? .planNextNight : nil, secondaries: [])
-        case .past, .cancelled:
-            // History. The page shows the standings.
-            return NightPlan(primary: nil, secondaries: [])
         case .stranded:
-            // The window has gone and nobody settled. The night is still
-            // the host's to close; there is nothing for a member to do.
             guard input.isHost else { return NightPlan(primary: nil, secondaries: []) }
             return NightPlan(primary: .settleNight, secondaries: [], caption: strandedCaption)
         case .live:
@@ -160,128 +126,49 @@ struct NightPlan: Equatable {
         }
     }
 
-    /// The plan for a night that is live right now.
-    ///
-    /// fx30 — the host gets ONE primary and at most ONE grey line under
-    /// it. The host's own player actions are not lines any more; they
-    /// live in the "Score a round" picker, so nothing under the primary
-    /// competes with the night's own progress.
     private static func livePlan(for input: NightInput) -> NightPlan {
-        let memberAction = memberAction(for: input)
-        guard input.isHost else {
-            return NightPlan(primary: memberAction, secondaries: [])
+        switch input.myChips {
+        case .none:
+            if input.iHaveHeldDeposit {
+                return NightPlan(primary: .checkIn, secondaries: [])
+            }
+            // A host who is only hosting: once the table has played
+            // and nobody is left playing, the night is theirs to close.
+            if input.isHost, input.othersCashedOut {
+                return hostClosing(input)
+            }
+            return NightPlan(primary: .takeChips, secondaries: [])
+        case .playing:
+            return NightPlan(primary: .cashOut, secondaries: [.takeChips])
+        case .cashedOut:
+            guard input.isHost else {
+                return NightPlan(primary: nil, secondaries: [], caption: cashedOutCaption)
+            }
+            return hostClosing(input)
         }
-        let scorable = scorablePacks(in: input.packSlugs)
-        let scoreLine = scorable.isEmpty ? nil : NightAction.scoreRound(packs: scorable)
-        // "Scored" means a non-correction round OR a casino settlement:
-        // the casino pack is played by settling a hand, not by scoring
-        // a round, and a night where the chips are settled is under way.
-        let hasScored = input.roundsScored > 0 || input.casinoSettlements > 0
-
-        if !hasScored, input.arrivedCount == 0, input.claimedCount > 0 {
-            // A room with claimed seats and nobody at the table yet.
-            // The caption is the primary slot (no button); the host can
-            // still record a round, so that is the one line under it.
-            // claimed == 0 never reaches here: "0 of 0 here" was noise.
-            return NightPlan(
-                primary: .waitingForTable(arrived: input.arrivedCount, claimed: input.claimedCount),
-                secondaries: scoreLine.map { [$0] } ?? []
-            )
-        }
-        if hasScored {
-            return NightPlan(primary: .settleNight, secondaries: scoreLine.map { [$0] } ?? [])
-        }
-        return NightPlan(primary: scoreLine ?? .settleNight, secondaries: [])
     }
 
-    /// The member's own action for the night. The held deposit comes
-    /// first: getting the deposit back is what they came for, and the
-    /// casino withdrawal waits until they have checked in.
-    private static func memberAction(for input: NightInput) -> NightAction? {
-        if input.iHaveHeldDeposit && !input.iHaveWithdrawn { return .checkIn }
-        if input.packSlugs.contains(CasinoPack.slug) { return .withdrawChips }
-        if input.packSlugs.contains(CardsAgainstHumanityPack.slug) { return .countCAH }
-        return nil
+    /// The host's own chips are done: settle, or wait for the table.
+    private static func hostClosing(_ input: NightInput) -> NightPlan {
+        if input.othersPlaying.isEmpty {
+            return NightPlan(primary: .settleNight, secondaries: [])
+        }
+        return NightPlan(
+            primary: .waitingForCashOut(names: input.othersPlaying),
+            secondaries: [.settleNight]
+        )
     }
 
-    /// The packs the host can score tonight, in picker order: the
-    /// casino pack first (it is played by settling chips, so its label
-    /// is "Casino chips"), then the rest in the night's own pack order.
-    ///
-    /// fx30 — the casino pack used to be excluded here because it is
-    /// `withdrawReturn` and the host "settles chips, not rounds". That
-    /// left the score picker offering only the side packs on a casino
-    /// night and put the host's chip actions in grey lines under the
-    /// primary. The picker is now the one place the host picks a pack.
-    ///
-    /// The pack list comes from the registry, the same source the room
-    /// page reads for its single-winner gate.
-    static func scorablePacks(in packSlugs: [String]) -> [String] {
-        var seen: Set<String> = []
-        var ordered = packSlugs.filter { slug in
-            guard let type = PackRegistry.shared.definition(for: slug)?.scoringType else { return false }
-            guard type == .singleWinner || type == .countBased || type == .withdrawReturn else { return false }
-            return seen.insert(slug).inserted
-        }
-        // Casino chips come first whenever the night has the pack.
-        if let index = ordered.firstIndex(of: CasinoPack.slug) {
-            ordered.remove(at: index)
-            ordered.insert(CasinoPack.slug, at: 0)
-        }
-        return ordered
+    /// "Waiting on Sam and Jo to cash out".
+    static func waitingCaption(names: [String]) -> String {
+        "Waiting on \(NameList.joined(names)) to cash out"
     }
 
-    /// The label for one pack in the "Score which game?" picker. The
-    /// casino option is the host's chip actions in one place, so it
-    /// says "Casino chips"; every other pack keeps its display name.
-    static func pickerTitle(for slug: String) -> String {
-        if slug == CasinoPack.slug { return "Casino chips" }
-        return PackRegistry.shared.definition(for: slug)?.displayName ?? slug
-    }
-}
-
-// MARK: - Next round (S1.6)
-
-/// Where the host's score sheet starts: the round after the highest
-/// round already scored for the night, across every pack, so a save
-/// never lands on a round that already has a result.
-struct NextRound: Equatable {
-    /// The round the sheet scores. 1 when nothing is scored yet.
-    let index: Int
-    /// Who won the round before it (positive points), in the order
-    /// they were entered. Empty for round 1 or a round with no
-    /// winner recorded.
-    let lastWinnerIds: [UUID]
-
-    /// The next round for a night, from the night's scored rounds
-    /// (every pack). A corrected round counts once: its latest row
-    /// names the winners.
-    static func after(_ rounds: [EventRound]) -> NextRound {
-        guard let last = rounds.map(\.roundIndex).max() else {
-            return NextRound(index: 1, lastWinnerIds: [])
-        }
-        let latest = rounds
-            .filter { $0.roundIndex == last }
-            .max { $0.createdAt < $1.createdAt }
-        var seen: Set<UUID> = []
-        let winners = (latest?.entries ?? [])
-            .filter { $0.pointsDelta > 0 }
-            .map(\.memberId)
-            .filter { seen.insert($0).inserted }
-        return NextRound(index: last + 1, lastWinnerIds: winners)
-    }
-
-    /// The caption under "Round {n}": "Last: Sam won round 2".
-    /// nil for round 1, or when the last round has no named winner.
-    static func lastLine(winnerNames: [String], round: Int) -> String? {
-        guard round > 1, !winnerNames.isEmpty else { return nil }
-        let names: String
-        if winnerNames.count == 1 {
-            names = winnerNames[0]
-        } else {
-            names = winnerNames.dropLast().joined(separator: ", ") + " and " + winnerNames[winnerNames.count - 1]
-        }
-        return "Last: \(names) won round \(round - 1)"
+    /// The confirmation before settling with people still playing.
+    static func settleEarlyWarning(names: [String]) -> String {
+        let who = NameList.joined(names)
+        let verb = names.count == 1 ? "hasn't" : "haven't"
+        return "\(who) \(verb) cashed out. Settle the night anyway?"
     }
 }
 
