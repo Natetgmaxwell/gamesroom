@@ -5268,6 +5268,10 @@ runP2Tests(runner)
 
 runTonightTests(runner)
 
+// MARK: - 1.2.5 Task 3 — give the newcomer a job (host's pre-night summary)
+
+runNewcomerJobTests(runner)
+
 // MARK: - Summary
 
 print("")
