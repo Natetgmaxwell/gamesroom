@@ -2101,7 +2101,15 @@ struct RoomDetailView: View {
                 secondaries.append(WitnessSlot.Line(title: "Count your CAH cards", style: .button, action: { presenting = .cahScan(event) }))
             }
         }
-        let inHand = memberActions.contains(.withdrawChips) && casinoWithdrawn > 0 ? casinoWithdrawn : nil
+        // Nathan (walkthrough, 2026-11-10): "Withdraw more" stays on the
+        // host's card. Topping up happens mid-game, often more than once,
+        // so it earns one tap; cashing out lives in the score picker.
+        let hostPlaysCasino = isHost && event.packSlugs.contains(CasinoPack.slug)
+        if hostPlaysCasino, myWorkingHand > 0 {
+            secondaries.append(WitnessSlot.Line(title: "Withdraw more", style: .button, action: { presenting = .withdraw(event) }))
+        }
+        let showsHand = memberActions.contains(.withdrawChips) || hostPlaysCasino
+        let inHand = showsHand && casinoWithdrawn > 0 ? casinoWithdrawn : nil
         // P2 (audit 03 C2) — a failed settle is this card's own line,
         // scoped to the night it failed on, and the line is the retry.
         let settleFailedHere = isHost && settle.failedEventId == event.id
