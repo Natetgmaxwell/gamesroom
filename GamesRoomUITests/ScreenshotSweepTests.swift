@@ -289,6 +289,69 @@ final class ScreenshotSweepTests: XCTestCase {
         snap(app, "06-room-page-settled-last-night")
     }
 
+    // MARK: - 06b Glad you came (1.2.5 Task 4)
+
+    func test_06b_glad_you_came() throws {
+        let app = launchSweep(arguments: ["-screenshots-state=glad-you-came"])
+
+        openRoom(app, named: "Carwoola Crew")
+
+        XCTAssertTrue(
+            app.staticTexts["Tonight's Star"].firstMatch.waitForExistence(timeout: 10),
+            "The recap never rendered."
+        )
+
+        // The recipient's line, quietly, under Tonight's Star.
+        let received = app.staticTexts["glad-received"].firstMatch
+        XCTAssertTrue(received.waitForExistence(timeout: 5), "The recipient's glad line never rendered.")
+        XCTAssertEqual(received.label, "Alex and Sam were glad you came.")
+        XCTAssertTrue(scrollIntoFrame(app, element: received))
+        snap(app, "06b-glad-you-came-line")
+
+        // The one grey caption opens the sheet of that night's table.
+        let prompt = app.buttons["glad-prompt"].firstMatch
+        XCTAssertTrue(prompt.waitForExistence(timeout: 5), "'Who were you glad to see?' never rendered for a seated viewer.")
+        XCTAssertTrue(scrollUntilHittable(app, element: prompt))
+        prompt.tap()
+
+        let send = app.buttons["glad-send"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 5), "The glad sheet never opened.")
+        for name in ["Host", "Alex", "Sam"] {
+            XCTAssertTrue(app.buttons["glad-row-\(name)"].firstMatch.exists, "\(name) held a seat but is not listed.")
+        }
+        // Never yourself.
+        XCTAssertFalse(app.buttons["glad-row-Nathan"].firstMatch.exists, "The sheet lists the viewer.")
+        XCTAssertFalse(send.isEnabled, "Send is live with nobody picked.")
+        app.buttons["glad-row-Alex"].firstMatch.tap()
+        app.buttons["glad-row-Sam"].firstMatch.tap()
+        snap(app, "06c-glad-you-came-sheet")
+
+        // Optimistic, with Undo, no confirmation alert.
+        send.tap()
+        let sent = app.staticTexts["glad-sent"].firstMatch
+        XCTAssertTrue(sent.waitForExistence(timeout: 5), "Send did not read as sent at once.")
+        XCTAssertEqual(sent.label, "Sent to Alex and Sam.")
+        XCTAssertTrue(app.buttons["glad-undo"].firstMatch.exists, "No Undo after Send.")
+        XCTAssertFalse(app.alerts.firstMatch.exists, "Send asked for confirmation.")
+        app.buttons["glad-undo"].firstMatch.tap()
+        XCTAssertFalse(app.staticTexts["glad-sent"].firstMatch.waitForExistence(timeout: 2), "Undo left it reading as sent.")
+
+        // Never a count of anything social anywhere on the recap.
+        let tally = NSPredicate(format: "label MATCHES %@", ".*[0-9]+ (people|person|friends|glad).*")
+        XCTAssertEqual(app.staticTexts.matching(tally).count, 0, "The recap shows a glad tally.")
+
+        // Negative: a viewer who held no seat that night (settled-rich
+        // seeds no seat for the caller) gets no caption.
+        app.terminate()
+        let unseated = launchSweep(arguments: ["-screenshots-state=settled-rich"])
+        openRoom(unseated, named: "Carwoola Crew")
+        XCTAssertTrue(unseated.staticTexts["Tonight's Star"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(
+            unseated.buttons["glad-prompt"].firstMatch.waitForExistence(timeout: 3),
+            "A viewer with no seat that night was offered 'Who were you glad to see?'."
+        )
+    }
+
     // MARK: - 07 Room detail, member idle
 
     func test_07_room_detail_member_idle() throws {

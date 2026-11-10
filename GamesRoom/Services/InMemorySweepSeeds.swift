@@ -62,6 +62,12 @@
 //    night-settled      S1.8. The night settled 30 minutes ago:
 //                       `.justSettled` (CeremonialCard) with the
 //                       host's "Plan the next night" under it.
+//    glad-you-came      1.2.5 Task 4. Settled 30 minutes ago; the
+//                       caller (Nathan) held a seat with Host, Alex
+//                       and Sam, and Alex and Sam told Nathan they
+//                       were glad he came. The recap shows the line
+//                       under Tonight's Star and the grey "Who were
+//                       you glad to see?" caption that opens the sheet.
 //
 
 import Foundation
@@ -418,6 +424,34 @@ extension InMemoryRoomStore {
                 nextEpisodeTeaser: nil,
                 writtenAt: Date().addingTimeInterval(-1_800)
             )
+
+        case "glad-you-came":
+            let settled = Event(id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name, playedAt: Date().addingTimeInterval(-10_800), createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: Date().addingTimeInterval(-1_800), sessionId: carwoolaEvent.sessionId, packSlug: carwoolaEvent.packSlug)
+            events[carwoola.id] = [settled]
+            let me = Self.screenshotCallerId
+            seedExtraMember(roomId: carwoola.id, userId: me, displayName: "Nathan")
+            rsvps[settled.id] = [
+                carwoola.createdBy: .claimed, alex: .claimed, sam: .claimed, me: .claimed,
+            ]
+            chapterLines[settled.id] = ChapterLine(
+                id: UUID(),
+                roomId: carwoola.id,
+                sessionId: settled.id,
+                title: "Alex read the whole table",
+                nextEpisodeTeaser: nil,
+                writtenAt: Date().addingTimeInterval(-1_800)
+            )
+            tonightStarCards[settled.id] = TonightStarCard(
+                memberId: alex,
+                memberDisplayName: "Alex",
+                overrideCategory: .custom,
+                customText: "Read the whole table all night.",
+                source: "host_pick"
+            )
+            InMemoryGladStore.shared.seed([
+                GladNote(eventId: settled.id, fromUser: alex, toUser: me, createdAt: Date().addingTimeInterval(-1_200)),
+                GladNote(eventId: settled.id, fromUser: sam, toUser: me, createdAt: Date().addingTimeInterval(-600)),
+            ])
 
         default:
             break
