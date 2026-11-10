@@ -208,16 +208,12 @@ struct AddEventSheet: View {
         return calendar.date(bySettingHour: 19, minute: 0, second: 0, of: threeWeeks) ?? threeWeeks
     }
 
-    /// The default event name — "<weekday d MMM · ha> session" —
-    /// computed off the currently selected `playedAt`. Lowercased so
-    /// the briefing card and the chapter title look like a casual
-    /// sentence ("fri 1 aug · 7pm session"), not a system timestamp.
+    /// The default event name — "tue 10 nov · 7pm session" — computed
+    /// off the currently selected `playedAt`. The format lives in
+    /// `EventDefaultName` because the edit-time flow needs the same
+    /// string for the old and the new time (fx30).
     private var defaultEventName: String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.dateFormat = "EEE d MMM · ha"
-        let stamp = formatter.string(from: playedAt).lowercased()
-        return "\(stamp) session"
+        EventDefaultName.name(for: playedAt)
     }
 
     /// The resolved event name — trimmed input if non-empty, the

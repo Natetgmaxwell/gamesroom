@@ -5244,6 +5244,10 @@ runS2Tests()
 
 runS1Tests(runner)
 
+// MARK: - fx30 tests (default night name)
+
+runFX30Tests(runner)
+
 // MARK: - P1 lane tests (state machines: night phase)
 
 runP1Tests(runner)

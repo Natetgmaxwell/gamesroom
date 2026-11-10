@@ -190,10 +190,20 @@ struct EditEventSheet: View {
             return
         }
         do {
-            if trimmedName != event.name {
-                try await roomService.updateEventName(eventId: event.id, name: trimmedName)
+            // fx30 — moving a night keeps its name in step with its time
+            // when the name is still the generated default. The old
+            // default is read off the OLD `playedAt`; the new one off
+            // the picker. A name the host typed is never touched.
+            let timeChanged = !hasStarted && abs(playedAt.timeIntervalSince(event.playedAt)) > 1
+            let stillTheOldDefault = trimmedName == event.name
+                && event.name == EventDefaultName.name(for: event.playedAt)
+            let resolvedName = timeChanged && stillTheOldDefault
+                ? EventDefaultName.name(for: playedAt)
+                : trimmedName
+            if resolvedName != event.name {
+                try await roomService.updateEventName(eventId: event.id, name: resolvedName)
             }
-            if !hasStarted, abs(playedAt.timeIntervalSince(event.playedAt)) > 1 {
+            if timeChanged {
                 try await roomService.updateEventPlayedAt(eventId: event.id, playedAt: playedAt)
             }
             if trimmedVenue != (event.venue ?? "") || trimmedNote != (event.hostNote ?? "") {
