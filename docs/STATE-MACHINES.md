@@ -319,6 +319,37 @@ never show the season total under the "Tonight" title.
 
 ---
 
+## 14. Glad you came *(1.2.5 Task 4)*
+
+**States** `GladSendPhase`: `idle`, `undoing([UUID])`, `committing([UUID])`,
+`sent([UUID])`, `failed([UUID])`. Server ledger `glad_push_queue.push_status`:
+`queued`, `sending`, `sent`, `failed`, `no_device`, `skipped_muted`, `expired`.
+
+**Moves it** `GladSendPhase.reduce(_:)` — `send` → `undoing` (5 s, nothing
+sent); `commitStarted` → `committing` (Undo gone); `succeeded` / `failed`.
+Who may send is `GladYouCame.canSend(phase:viewerHadSeat:)`, fed by
+`NightPhaseResolver` (`.recap` only). The push hour is
+`GladPushTime.deliverAt(settledAt:timeZone:)`; the sentence is
+`GladYouCame.line(senderNames:)`.
+
+**Owner** `GamesRoom/Models/GladYouCame.swift` (view:
+`GamesRoom/Views/GladYouCameSection.swift`, one line in `CeremonialCard`)
+
+**Server twin** `Supabase/migrations/119_glad_you_came.sql`: the insert
+policy via `glad_can_send` (uses `night_phase`), `glad_push_deliver_at`,
+`glad_push_cron_tick`; copy twin `composeGladCopy` in
+`Supabase/functions/glad-push/handler.ts`.
+
+**Pinned by** `TestsGladYouCame.swift` — `Glad: push time — 13:00 / 21:30 / 23:30 and the edges, in the room's zone`
+and `Glad: batching copy for 1, 2, 3 and 4 senders`; `Supabase/tests/119_probes.sql`;
+`glad-push/handler_test.ts`; sweep `test_06b_glad_you_came`.
+
+**Never** count, rank or total these rows anywhere, give the host a view of
+them, or add an RPC that returns anything but the caller's own sent rows and
+rows addressed to the caller.
+
+---
+
 ## Left alone on purpose
 
 Copied from `~/gr-work/2026-11-09-state-machines/00-DECISION.md`:

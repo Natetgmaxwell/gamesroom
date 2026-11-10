@@ -3397,6 +3397,9 @@ private struct CeremonialCard: View {
                 }
             }
 
+            // 1.2.5 Task 4: "Glad you came", under Tonight's Star.
+            GladYouCameSection(event: event, viewerId: currentUserId)
+
             // V0.84 C5 — one-line drop prompt. Member-only, gated on
             // both `memberNoteWindowOpen` (the next-morning window
             // has opened, ≥12h since settle) AND
