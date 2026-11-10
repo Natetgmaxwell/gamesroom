@@ -11,8 +11,9 @@
 //    2. Never more than one optional field on the claimed-state card,
 //       including after the Currently Into answer flips the ask.
 //    3. Host gets the opener at start time; subsequent turns rotate
-//       through members with a withdrawal (Sam withdrew before Alex),
-//       on the interval only. `-question-box-minute-seconds=0.25`
+//       through members with a withdrawal, on the interval only. Since
+//       1.2.5 (migration 118) the newer member reads first: Sam withdrew
+//       before Alex, but it is Alex's first night and Sam's eleventh. `-question-box-minute-seconds=0.25`
 //       scales the 20-minute default to 5 s.
 //    6. Currently Into older than 30 days does not render in the
 //       Briefing (Sam's is 40 days old; Alex's is 2 days old).
@@ -96,15 +97,18 @@ final class QuestionBoxAcceptanceTests: XCTestCase {
         app.buttons["reader-card-done"].tap()
         XCTAssertTrue(title.waitForNonExistence(timeout: 5), "Done must close the reader card")
 
-        // Interval turns go to withdrawers in first-withdrawal order: Sam, then Alex.
+        // Interval turns go to the withdrawers, newest member first (118):
+        // Alex (first night), then Sam (10 nights), never the same twice running.
         // The host sees only the quiet fallback, never the reader card.
         let fallback = app.buttons["host-question-fallback"]
         XCTAssertTrue(fallback.waitForExistence(timeout: 10), "Host fallback never appeared for the first interval turn")
-        XCTAssertTrue(fallback.label.contains("Sam's asking"), "First interval reader should be Sam, got: \(fallback.label)")
+        XCTAssertTrue(fallback.label.contains("Alex's asking"), "First interval reader should be Alex (first night), got: \(fallback.label)")
+        // Negative: the old withdrawal-order rotation handed it to the regular first.
+        XCTAssertFalse(fallback.label.contains("Sam's asking"), "The 10-night regular must not read before the first-night member")
         XCTAssertFalse(title.exists, "A turn for someone else must not open the reader card on this device")
 
-        let alex = NSPredicate(format: "label CONTAINS %@", "Alex's asking")
-        expectation(for: alex, evaluatedWith: fallback)
+        let sam = NSPredicate(format: "label CONTAINS %@", "Sam's asking")
+        expectation(for: sam, evaluatedWith: fallback)
         waitForExpectations(timeout: 10)
         XCTAssertFalse(title.exists)
     }
