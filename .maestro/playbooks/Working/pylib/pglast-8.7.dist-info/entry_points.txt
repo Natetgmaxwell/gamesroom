@@ -1,2 +1,0 @@
-[console_scripts]
-pgpp = pglast.__main__:main

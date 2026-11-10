@@ -29,3 +29,6 @@ GamesRoom/* 2.xcassets/
 
 # Supabase CLI transient state
 Supabase/supabase/.temp/
+
+# T3 tooling: vendored pglast (GPL-3.0) for SQL check scripts. Lives on the Studio, never in the app repo.
+.maestro/playbooks/Working/pylib/
