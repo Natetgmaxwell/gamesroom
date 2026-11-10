@@ -70,3 +70,33 @@ enum QuestionBoxHouseDeck {
         return "e.g. " + entries[index].text
     }
 }
+
+/// 118: the deeper questions. One of these is served once per night,
+/// after the table has warmed up (`QuestionBoxPacing`). Personal, not
+/// therapy, answerable in about a minute; no trauma, politics, sex or
+/// money. Migration 118 seeds the same list (`question_box_deep_deck`);
+/// `TestsQuestionDepth.swift` asserts the two copies match.
+enum QuestionBoxDeepDeck {
+    static let entries: [String] = [
+        "What's something you're quietly proud of this year?",
+        "Who's someone who changed your mind about something, and what was it?",
+        "What's a small thing that reliably makes your week better?",
+        "What did you want to be when you were ten, and how close did you get?",
+        "Who taught you something you still use every week?",
+        "What's a skill you'd love to be properly good at in five years?",
+        "What's a place that feels like home that isn't your house?",
+        "When did you last surprise yourself?",
+        "What's a compliment you got years ago that you still remember?",
+        "What's a meal that means more to you than it probably should?",
+        "Which friend would you call first with good news, and why them?",
+        "What's a tradition from growing up that you'd keep going?",
+        "What's something you're looking forward to that nobody here knows about yet?",
+        "What's the best decision you ever made on a whim?",
+        "What's something you do where you completely lose track of time?",
+        "Who made a bigger difference to you than they probably know?",
+        "What's a risk you're glad you took?",
+        "What's a habit you picked up from a parent or grandparent?",
+        "What would ten-year-old you be most surprised by about your life now?",
+        "What's a song that takes you straight back to one particular moment?",
+    ]
+}

@@ -73,17 +73,74 @@ struct RoomQuestion: Identifiable, Codable, Hashable {
     let createdAt: Date
     let authorId: UUID?
     let authorDisplayName: String?
+    /// 118: light unless a host ticked "Deeper". Never shown as a word.
+    var depth: QuestionDepth = .light
 
     static let maxLength = 140
 
     enum CodingKeys: String, CodingKey {
-        case id, source, text, tag
+        case id, source, text, tag, depth
         case roomId = "room_id"
         case eventId = "event_id"
         case drawnAt = "drawn_at"
         case createdAt = "created_at"
         case authorId = "author_id"
         case authorDisplayName = "author_display_name"
+    }
+}
+
+extension RoomQuestion {
+    /// Older servers (before 118) send no `depth`; those rows are light.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        roomId = try c.decode(UUID.self, forKey: .roomId)
+        eventId = try c.decodeIfPresent(UUID.self, forKey: .eventId)
+        source = try c.decode(QuestionSource.self, forKey: .source)
+        text = try c.decode(String.self, forKey: .text)
+        tag = try c.decodeIfPresent(QuestionTag.self, forKey: .tag)
+        drawnAt = try c.decodeIfPresent(Date.self, forKey: .drawnAt)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        authorId = try c.decodeIfPresent(UUID.self, forKey: .authorId)
+        authorDisplayName = try c.decodeIfPresent(String.self, forKey: .authorDisplayName)
+        depth = (try? c.decodeIfPresent(QuestionDepth.self, forKey: .depth)) ?? .light
+    }
+}
+
+// MARK: - Depth (118)
+
+/// `room_questions.depth`. The word never reaches the screen: the host
+/// sees a grey "Deeper" toggle, the table just gets the question.
+enum QuestionDepth: String, Codable, CaseIterable, Hashable {
+    case light
+    case deep
+}
+
+/// Once per night, after the table has warmed up, the next question is a
+/// deeper one; every other question is light. Server twin:
+/// `question_box_advance` (118). Pinned by `TestsQuestionDepth.swift`.
+enum QuestionBoxPacing {
+    /// The deep question may come once this many turns have been served
+    /// (opener and interval turns; passes do not count).
+    static let warmUpTurns = 3
+    /// ...or once this long has passed since `played_at`.
+    static let warmUpMinutes = 60
+
+    /// The depth of the next question the box serves.
+    /// - The opener is always light: the night opens light.
+    /// - Once a deep question has been served tonight, light for the rest.
+    /// - Otherwise deep once `turnsServed >= 3` or 60 minutes have passed.
+    static func depth(
+        isOpener: Bool,
+        turnsServed: Int,
+        deepServedTonight: Bool,
+        playedAt: Date,
+        now: Date
+    ) -> QuestionDepth {
+        if isOpener || deepServedTonight { return .light }
+        if turnsServed >= warmUpTurns { return .deep }
+        let warm = playedAt.addingTimeInterval(TimeInterval(warmUpMinutes * 60))
+        return now >= warm ? .deep : .light
     }
 }
 
@@ -186,6 +243,48 @@ enum QuestionBoxRotation {
         let pos = rotation.firstIndex(of: readerId).map { $0 + 1 } ?? 0
         let next = rotation[pos % rotation.count]
         return next == readerId ? nil : next
+    }
+}
+
+// MARK: - Reader pick (118)
+
+/// Who reads the next interval turn. Server twin: the reader loop in
+/// `question_box_advance` (118). Pinned by `TestsQuestionDepth.swift`.
+///
+/// Among the reachable people in the rotation, never the last reader:
+///   1. fewest turns read tonight (everyone gets the floor once before
+///      anyone gets it twice),
+///   2. then fewest nights attended in this room (newer members first),
+///   3. then rotation order from the cursor (the old behaviour, so a
+///      table of equals keeps its order).
+enum QuestionBoxReaderPick {
+    struct Pick: Equatable {
+        let reader: UUID
+        /// The cursor after this pick: the slot after the chosen reader.
+        let nextCursor: Int
+    }
+
+    static func pick(
+        rotation: [UUID],
+        cursor: Int,
+        lastReader: UUID?,
+        readsTonight: [UUID: Int] = [:],
+        nightsAttended: [UUID: Int] = [:],
+        reachable: (UUID) -> Bool = { _ in true }
+    ) -> Pick? {
+        let n = rotation.count
+        guard n > 0 else { return nil }
+        let start = ((cursor % n) + n) % n
+        var best: (key: (Int, Int, Int), slot: Int)?
+        for step in 0..<n {
+            let slot = (start + step) % n
+            let id = rotation[slot]
+            guard id != lastReader, reachable(id) else { continue }
+            let key = (readsTonight[id] ?? 0, nightsAttended[id] ?? 0, step)
+            if best == nil || key < best!.key { best = (key, slot) }
+        }
+        guard let best else { return nil }
+        return Pick(reader: rotation[best.slot], nextCursor: (best.slot + 1) % n)
     }
 }
 

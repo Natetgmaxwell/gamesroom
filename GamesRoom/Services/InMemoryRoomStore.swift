@@ -684,8 +684,9 @@ actor InMemoryRoomStore: RoomStore {
         // V0.106 — UI-test seeds for the Question Box. `briefing`:
         // upcoming night, Alex + Sam claimed, Alex's Currently Into is
         // fresh and Sam's is 40 days stale. `live`: the night started a
-        // minute ago, everyone claimed, Sam withdrew chips before Alex
-        // (so the rotation after the host's opener is Sam, then Alex).
+        // minute ago, everyone claimed, Sam withdrew chips before Alex.
+        // 118: Sam is a 10-night regular and it is Alex's first night, so
+        // the first interval turn after the host's opener is Alex's, then Sam's.
         if let raw = CommandLine.arguments.first(where: { $0.hasPrefix("-question-box-seed=") }) {
             let alex = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
             let sam = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
@@ -699,6 +700,7 @@ actor InMemoryRoomStore: RoomStore {
                     .init(memberId: sam, at: Date().addingTimeInterval(-50)),
                     .init(memberId: alex, at: Date().addingTimeInterval(-40))
                 ]
+                self.questionBox.nightsAttended[carwoola.id] = [sam: 10, alex: 0]
             } else {
                 self.rsvps[event.id] = [alex: .claimed, sam: .claimed]
                 self.questionBox.currentlyInto[carwoola.id] = [

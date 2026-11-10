@@ -319,6 +319,35 @@ never show the season total under the "Tonight" title.
 
 ---
 
+## 14. Question Box pacing and reader *(1.2.5)*
+
+**States** `QuestionDepth`: `light`, `deep`. Per night the depth runs
+`light` (opener) → `light` … → one `deep` → `light` for the rest of the night.
+
+**Moves it** `QuestionBoxPacing.depth(isOpener:turnsServed:deepServedTonight:playedAt:now:)`
+— the opener is light; once per night, when 3 turns have been served (opener
+and interval; passes do not count) or 60 minutes have passed since
+`played_at`, whichever comes first, the next question is deep. The reader of an
+interval turn is `QuestionBoxReaderPick.pick(...)`: never the last reader; then
+fewest turns tonight, fewest nights attended in this room, rotation order from
+the cursor.
+
+**Owner** `GamesRoom/Models/QuestionBox.swift`
+
+**Server twin** `public.question_box_advance` in
+`Supabase/migrations/118_question_box_depth.sql` (with
+`question_box_draw(room, event, depth)`, `question_box_nights_attended` and
+`events.question_deep_at`, the once-per-night marker).
+
+**Pinned by** `TestsQuestionDepth.swift` — `Question depth: a whole night has exactly one deeper question, never before turn 4 or 60 min`
+and `Question depth: the reader pick favours newer members and never repeats`.
+
+**Never** put the word "deep" or "level" on screen (the host's add sheet says
+"Deeper", nothing else does), count or show nights attended to anyone, or
+serve a deep question from anywhere but `question_box_advance`.
+
+---
+
 ## Left alone on purpose
 
 Copied from `~/gr-work/2026-11-09-state-machines/00-DECISION.md`:

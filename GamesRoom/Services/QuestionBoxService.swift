@@ -85,8 +85,8 @@ final class QuestionBoxService: ObservableObject {
         }
     }
 
-    func saveQuestion(roomId: UUID, id: UUID?, text: String, tag: QuestionTag?) async throws {
-        _ = try await store.upsertRoomQuestion(roomId: roomId, id: id, text: text, tag: tag)
+    func saveQuestion(roomId: UUID, id: UUID?, text: String, tag: QuestionTag?, depth: QuestionDepth? = nil) async throws {
+        _ = try await store.upsertRoomQuestion(roomId: roomId, id: id, text: text, tag: tag, depth: depth)
         await loadQuestions(roomId: roomId)
     }
 
