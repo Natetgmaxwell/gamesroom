@@ -190,6 +190,22 @@ extension InMemoryRoomStore {
         case "settled-rich":
             let settled = Event(id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name, playedAt: Date().addingTimeInterval(-10_800), createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: Date().addingTimeInterval(-1_800), sessionId: carwoolaEvent.sessionId, packSlug: carwoolaEvent.packSlug)
             events[carwoola.id] = [settled]
+            // How the night went: everyone cashed out (the host up 60,
+            // Alex up 40, Sam down 30), so the recap carries results.
+            let host = carwoola.createdBy
+            SweepChipSeeds.shared.set(
+                eventId: settled.id,
+                hands: [
+                    WorkingHand(memberId: host, displayName: "Host", workingHand: 260, pointsBalance: 1_260, hasScanned: true, scannedValue: 260),
+                    WorkingHand(memberId: alex, displayName: "Alex", workingHand: 240, pointsBalance: 1_020, hasScanned: true, scannedValue: 240),
+                    WorkingHand(memberId: sam, displayName: "Sam", workingHand: 170, pointsBalance: 710, hasScanned: true, scannedValue: 170),
+                ],
+                transactions: [
+                    EventTransaction(id: UUID(), memberId: host, memberDisplayName: "Host", kind: "casino_settlement", amountPoints: 60, createdAt: Date().addingTimeInterval(-2_000)),
+                    EventTransaction(id: UUID(), memberId: alex, memberDisplayName: "Alex", kind: "casino_settlement", amountPoints: 40, createdAt: Date().addingTimeInterval(-2_000)),
+                    EventTransaction(id: UUID(), memberId: sam, memberDisplayName: "Sam", kind: "casino_settlement", amountPoints: -30, createdAt: Date().addingTimeInterval(-2_000)),
+                ]
+            )
             chapterLines[settled.id] = ChapterLine(
                 id: UUID(),
                 roomId: carwoola.id,

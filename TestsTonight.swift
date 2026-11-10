@@ -121,4 +121,13 @@ func runTonightTests(_ runner: TestRunner) {
         runner.assertNil(NightWhen.label(playedAt: at(20, 19), now: now, calendar: cal))
         runner.assertNil(NightWhen.label(playedAt: at(10, 8), now: now, calendar: cal))
     }
+
+    runner.run("CashOutCopy: up is celebrated, even is fine, down is a good game") {
+        runner.assertEqual(CashOutCopy.headline(net: 40), "You finished up 40")
+        runner.assertEqual(CashOutCopy.headline(net: 0), "You broke even")
+        runner.assertEqual(CashOutCopy.headline(net: -20), "Down 20 tonight. Good game.")
+        runner.assertEqual(CashOutCopy.detail(counted: 240, took: 200), "240 in chips · you took 200")
+        runner.assertEqual(CashOutCopy.rescanTitle(remaining: 2), "Scan again (2 left)")
+        runner.assertNil(CashOutCopy.rescanTitle(remaining: 0))
+    }
 }

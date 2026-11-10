@@ -108,7 +108,7 @@ struct SeasonsSection: View {
             }
             SeasonBar(
                 fraction: SeasonComparison.barFraction(currentScore, scale: scale),
-                color: currentScore < 0 ? Theme.Palette.loss : Theme.Palette.accent,
+                color: currentScore < 0 ? Theme.Palette.scoreDown : Theme.Palette.scoreUp,
                 tick: lastSeasonFinal.map { SeasonComparison.barFraction($0, scale: scale) },
                 grown: grown,
                 caption: nightsCaption(currentNights.count)
@@ -207,7 +207,7 @@ struct SeasonsSection: View {
     }
 
     private func signColor(_ value: Int64) -> Color {
-        value > 0 ? Theme.Palette.gain : (value < 0 ? Theme.Palette.loss : Theme.Palette.tertiaryText)
+        value > 0 ? Theme.Palette.scoreUp : (value < 0 ? Theme.Palette.scoreDown : Theme.Palette.tertiaryText)
     }
 
     private func dateRange(_ row: SeasonHistoryEntry) -> String {
@@ -355,7 +355,7 @@ struct SeasonDualTrace: View {
             let plot = TracePlot(solid: solid, ghost: ghost, size: size)
             ZStack(alignment: .topLeading) {
                 ForEach(Array(plot.gapBands.enumerated()), id: \.offset) { _, band in
-                    band.path.fill((band.ahead ? Theme.Palette.gain : Theme.Palette.loss).opacity(0.14))
+                    band.path.fill((band.ahead ? Theme.Palette.scoreUp : Theme.Palette.scoreDown).opacity(0.14))
                         .opacity(Double(drawn))
                 }
                 plot.line(ghost)
@@ -582,8 +582,8 @@ struct SeasonGridSheet: View {
 
     private func fill(_ mark: SeasonGrid.Mark) -> Color {
         switch mark {
-        case .won: return Theme.Palette.gain
-        case .lost: return Theme.Palette.loss
+        case .won: return Theme.Palette.scoreUp
+        case .lost: return Theme.Palette.scoreDown
         case .even: return Theme.Palette.tertiaryText
         case .satOut: return .clear
         }

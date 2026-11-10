@@ -216,28 +216,33 @@ struct ChipScanSheet: View {
 
     private func resultView(result: ScanSettleChipsResult) -> some View {
         VStack(spacing: 0) {
+            // The moment each player finds out how their night went.
+            // It leads with the result in words, not the arithmetic;
+            // the count rolls up, and finishing up gets a small brass
+            // burst. The working-out sits under it, quiet.
             VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
-                Text("Your chips: \(displayedTotal) pts")
-                    .font(Theme.Typography.display)
-                    .foregroundStyle(Theme.Palette.primaryText)
-                    .contentTransition(.numericText())
-                    .animation(reduceMotion ? nil : Theme.Motion.popIn, value: displayedTotal)
-                HStack(spacing: Theme.Layout.cardLineGap) {
-                    Text("Counted by the table's vision service · counts are final")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.secondaryText)
+                ZStack(alignment: .leading) {
+                    Text(CashOutCopy.headline(net: netDelta))
+                        .font(Theme.Typography.display)
+                        .foregroundStyle(netDelta > 0 ? Theme.Palette.scoreUp : Theme.Palette.primaryText)
+                        .contentTransition(.numericText())
+                        .animation(reduceMotion ? nil : Theme.Motion.popIn, value: displayedTotal)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if netDelta > 0 {
+                        ConfettiBurst()
+                            .accessibilityHidden(true)
+                    }
                 }
-                Text("Withdrew: \(withdrawn) pts")
+                Text(CashOutCopy.detail(counted: displayedTotal, took: withdrawn))
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Palette.secondaryText)
-                Text("Net: \(netDelta >= 0 ? "+" : "")\(netDelta) pts")
-                    .font(Theme.Typography.body.weight(.semibold))
-                    .foregroundStyle(netDelta >= 0 ? Theme.Palette.accent : Theme.Palette.labelText)
+                    .contentTransition(.numericText())
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Theme.Layout.edgePadding)
             .padding(.top, Theme.Layout.roomSectionGap)
             .padding(.bottom, Theme.Layout.roomRowInset)
+            .accessibilityElement(children: .combine)
 
             Divider()
                 .background(Theme.Palette.hairline)
@@ -255,36 +260,23 @@ struct ChipScanSheet: View {
                 .background(Theme.Palette.hairline)
                 .padding(.horizontal, Theme.Layout.edgePadding)
 
-            // v1.2.4 S4.7 — the footer's caption lines are one group
-            // (`cardLineGap`), the Done button is the next group
-            // (`cardGroupGap`) and is the app's one primary, and
-            // "Re-scan" is the app's one secondary under it.
+            // Done is the one primary, "Scan again" the one secondary,
+            // and the receipt line sits under both.
             VStack(spacing: Theme.Layout.cardGroupGap) {
-                VStack(spacing: Theme.Layout.cardLineGap) {
-                    HStack(spacing: Theme.Layout.cardLineGap) {
-                        Text("Attempt \(result.attempt) of \(ScanSettleService.maxAttempts)")
-                        if result.attemptsRemaining == 0 {
-                            Text("· last scan")
-                        }
-                    }
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.secondaryText)
-                    Text("Photo \(String(result.photoHash.prefix(8)))…")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.secondaryText)
-                    Text("Your photo is analysed by a cloud vision model and never stored.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Palette.secondaryText)
-                }
-
                 Button(action: { Task { await done() } }) {
                     Text("Done")
                 }
                 .buttonStyle(PrimaryButtonStyle())
 
-                if result.attemptsRemaining > 0 {
-                    SecondaryTextAction(title: "Re-scan", action: resetForRescan)
+                if let rescan = CashOutCopy.rescanTitle(remaining: result.attemptsRemaining) {
+                    SecondaryTextAction(title: rescan, action: resetForRescan)
                 }
+
+                // The receipt, for a disputed count: one quiet line.
+                Text("Photo \(String(result.photoHash.prefix(8))) · analysed by a cloud vision model, never stored")
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.tertiaryText)
+                    .multilineTextAlignment(.center)
             }
             .padding(.horizontal, Theme.Layout.edgePadding)
             .padding(.top, Theme.Layout.roomSectionGap)

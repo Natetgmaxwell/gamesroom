@@ -41,9 +41,17 @@ enum Theme {
         static let hairline = Color(red: 0.239, green: 0.239, blue: 0.251)         // #3D3D40
         /// Brass-warm single accent. The only chromatic voice in the app.
         static let accent = Color(red: 0.690, green: 0.553, blue: 0.341)            // #B08D57
-        /// Score movement only (standings + past-season deltas): up green, down red.
+        /// Green / red. `loss` is the error and destructive voice
+        /// (failed saves, "Keep" a deposit). Scores do not use either:
+        /// see `scoreUp` / `scoreDown`.
         static let gain = Color(red: 0.188, green: 0.820, blue: 0.345)              // #30D158
         static let loss = Color(red: 1.000, green: 0.271, blue: 0.227)              // #FF453A
+        /// Score movement (tonight's board, standings, past seasons).
+        /// A night with friends is not a trading screen: finishing up
+        /// is warm (the brass accent), finishing down is quiet, never
+        /// red next to a friend's name.
+        static let scoreUp = accent
+        static let scoreDown = primaryText.opacity(0.55)
     }
 
     // MARK: Typography

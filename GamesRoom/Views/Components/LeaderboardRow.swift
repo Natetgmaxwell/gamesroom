@@ -149,8 +149,8 @@ struct LeaderboardRow: View {
     }
 
     private var deltaColor: Color {
-        if lastDelta > 0 { return Theme.Palette.gain }
-        if lastDelta < 0 { return Theme.Palette.loss }
+        if lastDelta > 0 { return Theme.Palette.scoreUp }
+        if lastDelta < 0 { return Theme.Palette.scoreDown }
         return Theme.Palette.tertiaryText
     }
 

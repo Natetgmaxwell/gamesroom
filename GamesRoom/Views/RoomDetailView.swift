@@ -176,6 +176,16 @@ struct RoomDetailView: View {
         authService.currentUser?.id
     }
 
+    /// Who is hosting, by name: "you" for the host themself. A night
+    /// is somebody's invitation, and the page says whose. nil until
+    /// the roster has loaded.
+    private var hostedByLine: String? {
+        if isHost { return "you" }
+        return roomService.cachedMembers(roomId: room.id)
+            .first(where: { $0.userId == room.createdBy })?
+            .displayName
+    }
+
     /// V0.106 — the active event while it is live. Question turns only
     /// exist inside this window, and the window now ends at
     /// `played_at + auto_close_hours`, the same place the server stops
@@ -236,9 +246,19 @@ struct RoomDetailView: View {
     /// (`meta.dispensed`, stamped by `mark_withdrawal_dispensed`,
     /// migration 073) instead of a local `@State` set that forgot
     /// every acknowledgement on relaunch.
+    ///
+    /// Only chips someone may still be waiting on: never the host's own
+    /// (nobody hands chips to themself), and never a player who has
+    /// already cashed out (they had the chips in hand to scan).
     private var pendingWithdrawals: [EventTransaction] {
         guard isHost else { return [] }
-        return eventTransactions.filter { $0.kind == "casino_withdrawal" && !$0.isDispensed }
+        let cashedOut = Set(workingHands.filter(\.isCashedOut).map(\.memberId))
+        return eventTransactions.filter {
+            $0.kind == "casino_withdrawal"
+                && !$0.isDispensed
+                && $0.memberId != currentUserId
+                && !cashedOut.contains($0.memberId)
+        }
     }
 
     /// A night is being played right now. While it is, the page is
@@ -950,7 +970,8 @@ struct RoomDetailView: View {
                     onEdit: isHost ? { presenting = .editEvent(event) } : nil,
                     room: liveRoom,
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
-                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
+                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } },
+                    hostedBy: hostedByLine
                 )
             case .claimed(let event):
                 BriefingSlot(
@@ -967,7 +988,8 @@ struct RoomDetailView: View {
                     onEdit: isHost ? { presenting = .editEvent(event) } : nil,
                     room: liveRoom,
                     heldDeposit: roomService.cachedMySeatDeposit(eventId: event.id),
-                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } }
+                    onCheckIn: { Task { await checkInSeat(eventId: event.id) } },
+                    hostedBy: hostedByLine
                 )
                 if showsClaimReminderAsk {
                     ClaimReminderAskRow {
@@ -992,7 +1014,8 @@ struct RoomDetailView: View {
                     isHost: isHost,
                     isHero: true,
                     onEdit: isHost ? { presenting = .editEvent(event) } : nil,
-                    room: room
+                    room: room,
+                    hostedBy: hostedByLine
                 )
 
             case .inPlay(let event):
@@ -2040,7 +2063,12 @@ struct RoomDetailView: View {
                 : nil,
             onSkipMemberNote: !isHost
                 ? { skipMemberNotePrompt(for: event.id) }
-                : nil
+                : nil,
+            currentUserId: currentUserId,
+            hostedBy: hostedByLine,
+            // The chip reads are loaded for the page's active night;
+            // when the recap IS that night, it carries the results.
+            results: event.id == activeEvent?.id ? tonightScore(for: event) : nil
         )
     }
 
@@ -2153,6 +2181,8 @@ private struct BriefingSlot: View {
     /// instantly; the reclaim IS the check-in. Wired up only
     /// when the parent passes a non-nil callback.
     let onCheckIn: (() -> Void)?
+    /// "Hosted by Nathan": the night has a person behind it.
+    let hostedBy: String?
     // V0.79 — notification toggle params removed. Preferences moved
     // to the one-time RoomNotifPromptCard (main room page) and
     // RoomSettingsSheet's "My notifications" section.
@@ -2177,8 +2207,10 @@ private struct BriefingSlot: View {
         onEdit: (() -> Void)? = nil,
         room: Room,
         heldDeposit: SeatDeposit? = nil,
-        onCheckIn: (() -> Void)? = nil
+        onCheckIn: (() -> Void)? = nil,
+        hostedBy: String? = nil
     ) {
+        self.hostedBy = hostedBy
         self.event = event
         self.briefing = briefing
         self.myRSVP = myRSVP
@@ -2270,6 +2302,11 @@ private struct BriefingSlot: View {
                     Text(venue)
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.labelText)
+                }
+                if let hostedBy {
+                    Text("Hosted by \(hostedBy)")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
             }
 
@@ -3129,13 +3166,19 @@ private struct WitnessSlot: View {
 private struct TonightBoard: View {
     let score: TonightScore
     let currentUserId: UUID?
+    /// The recap's version: "How the night went", cashed-out rows only.
+    var isFinal: Bool = false
+
+    private var rows: [TonightScore.Row] {
+        isFinal ? score.cashedOut : score.rows
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
             HStack(alignment: .firstTextBaseline) {
-                SectionTitle(text: "Tonight")
+                SectionTitle(text: isFinal ? "How the night went" : "Tonight")
                 Spacer()
-                if let progress = score.progressCaption {
+                if !isFinal, let progress = score.progressCaption {
                     Text(progress)
                         .font(Theme.Typography.footnote)
                         .foregroundStyle(Theme.Palette.secondaryText)
@@ -3151,9 +3194,9 @@ private struct TonightBoard: View {
             .font(Theme.Typography.body.weight(.semibold))
             .foregroundStyle(score.leaders.isEmpty ? Theme.Palette.primaryText : Theme.Palette.accent)
             .contentTransition(.opacity)
-            if !score.rows.isEmpty {
+            if !rows.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(Array(score.rows.enumerated()), id: \.element.id) { index, row in
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         if index > 0 { Divider().overlay(Theme.Palette.hairline) }
                         boardRow(row)
                     }
@@ -3180,7 +3223,7 @@ private struct TonightBoard: View {
             case .cashedOut(let net):
                 Text(net > 0 ? "+\(net)" : net < 0 ? "−\(-net)" : "0")
                     .font(Theme.Typography.mono)
-                    .foregroundStyle(net > 0 ? Theme.Palette.gain : net < 0 ? Theme.Palette.loss : Theme.Palette.secondaryText)
+                    .foregroundStyle(net > 0 ? Theme.Palette.scoreUp : net < 0 ? Theme.Palette.scoreDown : Theme.Palette.secondaryText)
                     .contentTransition(.numericText())
             case .playing:
                 Text("Playing")
@@ -3243,6 +3286,11 @@ private struct CeremonialCard: View {
     /// V0.84 C5 — member submit/skip for the one-line drop.
     let onSubmitMemberNote: ((String) -> Void)?
     let onSkipMemberNote: (() -> Void)?
+    var currentUserId: UUID? = nil
+    /// "Hosted by Nathan".
+    var hostedBy: String? = nil
+    /// How the night went, once anyone cashed out. nil hides it.
+    var results: TonightScore? = nil
 
     /// V0.84 C2 — host-only. Presents `TonightStarCallSheet`.
     @State private var showingCallSheet = false
@@ -3254,9 +3302,11 @@ private struct CeremonialCard: View {
     /// so the header stops saying the same thing in two type sizes.
     /// `nil` when the event has neither.
     private var settledCaption: String? {
+        // The recap only lives for a day, so "settled 30 minutes ago"
+        // was bookkeeping. It says whose night it was instead.
         var parts: [String] = []
-        if let settledAt = event.settledAt {
-            parts.append("Settled \(settledAt.formatted(.relative(presentation: .named)))")
+        if let hostedBy {
+            parts.append("Hosted by \(hostedBy)")
         }
         if let teaser = chapterLine?.nextEpisodeTeaser, !teaser.isEmpty {
             parts.append("Next: \(teaser)")
@@ -3323,6 +3373,10 @@ private struct CeremonialCard: View {
             // v1.2.4 S4.3 — with no star to sit beside, the action
             // is the app's one secondary style: a centred grey caption
             // on its own row, so it no longer hangs off the right edge.
+            if let results, !results.cashedOut.isEmpty {
+                TonightBoard(score: results, currentUserId: currentUserId, isFinal: true)
+            }
+
             Group {
                 if let card = tonightStarCard {
                     TonightStarSection(
@@ -3918,7 +3972,7 @@ private struct HostWithdrawalsSection: View {
         // is the app's `SectionTitle`, and it sits `roomHeaderGap`
         // above its first row.
         VStack(alignment: .leading, spacing: 0) {
-            SectionTitle(text: "Chips to dispense")
+            SectionTitle(text: "Hand out chips")
                 .padding(.bottom, Theme.Layout.roomHeaderGap)
 
             VStack(spacing: 0) {
@@ -3932,37 +3986,30 @@ private struct HostWithdrawalsSection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// One quiet line per player waiting on chips: "Alex 200" and a
+    /// plain "Handed over" the host taps once the chips are in their
+    /// hands. It sits under the live card, so it never out-shouts it.
     private func row(txn: EventTransaction) -> some View {
         HStack(spacing: Theme.Layout.cardInset) {
-            VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
-                Text(txn.memberDisplayName)
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.primaryText)
-                Text("Withdrew chips")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.secondaryText)
-            }
+            Text(txn.memberDisplayName)
+                .font(Theme.Typography.body)
+                .foregroundStyle(Theme.Palette.primaryText)
+            Text("\(abs(txn.amountPoints))")
+                .font(Theme.Typography.mono)
+                .foregroundStyle(Theme.Palette.secondaryText)
             Spacer()
-            Text("\(abs(txn.amountPoints)) pts")
-                .font(Theme.Typography.monoSemibold)
-                .foregroundStyle(Theme.Palette.accent)
             Button {
                 Haptics.light()
                 onDispense(txn.id)
             } label: {
-                Text("Dispensed")
+                Text("Handed over")
                     .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Palette.background)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: Theme.Layout.smallRadius)
-                            .fill(Theme.Palette.accent)
-                    )
+                    .foregroundStyle(Theme.Palette.accent)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text("Dispensed \(txn.memberDisplayName)'s \(abs(txn.amountPoints)) points"))
+            .accessibilityLabel(Text("Handed \(txn.memberDisplayName) \(abs(txn.amountPoints)) in chips"))
         }
+        .padding(.vertical, Theme.Layout.cardLineGap)
     }
 }
 

@@ -176,3 +176,25 @@ enum NightWhen {
         }
     }
 }
+
+/// The words at the cash-out, the moment each player finds out how
+/// their night went. Up is celebrated, even is fine, down is a good
+/// game: nobody is told off for losing at a night with friends.
+enum CashOutCopy {
+    static func headline(net: Int) -> String {
+        if net > 0 { return "You finished up \(net)" }
+        if net == 0 { return "You broke even" }
+        return "Down \(-net) tonight. Good game."
+    }
+
+    /// "240 in chips · you took 200".
+    static func detail(counted: Int, took: Int) -> String {
+        "\(counted) in chips · you took \(took)"
+    }
+
+    /// "Scan again (2 left)", nil when no scans are left.
+    static func rescanTitle(remaining: Int) -> String? {
+        guard remaining > 0 else { return nil }
+        return "Scan again (\(remaining) left)"
+    }
+}

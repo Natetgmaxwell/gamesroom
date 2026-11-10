@@ -275,6 +275,16 @@ final class ScreenshotSweepTests: XCTestCase {
             app.staticTexts["Alex"].firstMatch.waitForExistence(timeout: 5),
             "Tonight's Star winner name never rendered."
         )
+        // The recap is the memory of the night: whose night it was,
+        // and how everyone finished.
+        XCTAssertTrue(
+            app.staticTexts["How the night went"].firstMatch.waitForExistence(timeout: 5),
+            "The recap lost the night's results."
+        )
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Hosted by you")).firstMatch.exists,
+            "The recap no longer credits the host."
+        )
 
         snap(app, "06-room-page-settled-last-night")
     }
