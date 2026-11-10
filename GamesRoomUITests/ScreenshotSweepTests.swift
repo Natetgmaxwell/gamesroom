@@ -668,11 +668,53 @@ final class ScreenshotSweepTests: XCTestCase {
             "Briefing venue line missing (expected 'The dining room' from the briefing seed)."
         )
 
+        // 1.2.5 Task 3 — the host's summary names the newcomer and
+        // suggests a job. The briefing seed gives Sam zero nights and a
+        // claimed seat, so exactly one line renders.
+        let newcomerJob = app.descendants(matching: .any)["newcomer-job"].firstMatch
+        XCTAssertTrue(
+            newcomerJob.waitForExistence(timeout: 5),
+            "Host's newcomer job line missing from the briefing (Task 3)."
+        )
+        XCTAssertTrue(
+            newcomerJob.label.contains("Sam's first night. Give them a job: the bank, dealing, or the first question."),
+            "Newcomer job line has the wrong copy: got '\(newcomerJob.label)'."
+        )
+        XCTAssertFalse(
+            newcomerJob.label.contains("Alex's first night"),
+            "A regular (Alex, 12 nights) was named as a newcomer."
+        )
+        _ = scrollIntoFrame(app, element: newcomerJob)
         snap(app, "16-briefing")
         // S6 T4 — `scrollUp`, not `app.swipeUp()` (a no-op here):
         // end state must clear the floating tab bar.
         for _ in 0..<4 { scrollUp(app) }
         snap(app, "16b-briefing-scrolled-end")
+    }
+
+    // MARK: - 16c Briefing, member view: no newcomer job line (Task 3)
+
+    func test_16c_briefing_member_has_no_newcomer_job() throws {
+        let app = launchSweep(arguments: [
+            "-screenshots-as-member",
+            "-screenshots-state=briefing"
+        ])
+
+        openRoom(app, named: "Carwoola Crew")
+
+        XCTAssertTrue(
+            app.staticTexts["The dining room"].firstMatch.waitForExistence(timeout: 10),
+            "BriefingSlot never rendered for the member's briefing seed."
+        )
+        // The job line is the host's prompt. A member must never see it.
+        XCTAssertFalse(
+            app.descendants(matching: .any)["newcomer-job"].firstMatch.exists,
+            "A member can see the host's newcomer job line (Task 3)."
+        )
+        XCTAssertFalse(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Give them a job")).firstMatch.exists,
+            "A member can see the host's newcomer job copy (Task 3)."
+        )
     }
 
     // MARK: - 17 Briefing seat grid (V0.107 brought-by, S6 T3/T4)
