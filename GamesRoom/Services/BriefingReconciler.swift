@@ -229,6 +229,10 @@ enum BriefingReconciler {
     static let catchUpKindRaw = "catch_up"
     /// The kind the server's anchor nudge push carries (`type`).
     static let anchorKindRaw = "anchor_nudge"
+    /// The kind the server's "glad you came" push carries (`type`,
+    /// glad-push, 1.2.5 Task 4). A tap opens the room, where the recap
+    /// shows the same line.
+    static let gladKindRaw = "glad_you_came"
 
     /// Every kind this device schedules locally. A briefing of one
     /// of these kinds is listed in Notification Center even when the
@@ -314,7 +318,7 @@ enum BriefingReconciler {
     /// Box turn) is not this file's to route.
     static func tapRoute(_ userInfo: [AnyHashable: Any]) -> BriefingTapRoute {
         guard let kind = kindRaw(userInfo) else { return .none }
-        guard briefingKindRaws.contains(kind) || kind == anchorKindRaw else {
+        guard briefingKindRaws.contains(kind) || kind == anchorKindRaw || kind == gladKindRaw else {
             return .none
         }
         guard

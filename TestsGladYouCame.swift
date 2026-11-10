@@ -200,4 +200,16 @@ func runGladYouCameTests(_ runner: TestRunner) {
         eq(GladSendPhase.idle.reduce(.send([])), .idle, "an empty send is no send")
         runner.assertEqual(GladSendPhase.idle.reduce(.commitStarted), .idle)
     }
+
+    // MARK: The push tap
+
+    runner.run("Glad: tapping the push opens the room of that night") {
+        let room = UUID()
+        let info: [AnyHashable: Any] = [
+            "type": "glad_you_came", "event_id": event.uuidString, "room_id": room.uuidString,
+        ]
+        runner.assertEqual(BriefingReconciler.tapRoute(info), .openRoom(roomId: room, eventId: event))
+        runner.assertEqual(BriefingReconciler.gladKindRaw, "glad_you_came")
+        runner.assertFalse(BriefingReconciler.isBriefingKind(info), "not a local briefing kind")
+    }
 }
