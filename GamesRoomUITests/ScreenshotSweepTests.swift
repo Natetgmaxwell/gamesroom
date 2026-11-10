@@ -214,10 +214,18 @@ final class ScreenshotSweepTests: XCTestCase {
             witnessTitle.waitForExistence(timeout: 10),
             "WitnessSlot (.tonightEvent) never rendered."
         )
-        let withdraw = app.buttons["Withdraw to play"].firstMatch
+        // fx30 (Nathan, walkthrough 2026-11-10): the sweep viewer is the
+        // host, and the host's live card leads with "Score a round"; the
+        // host's own chip actions live in its picker ("Casino chips"),
+        // not under the primary.
+        let score = app.buttons["Score a round (host)"].firstMatch
         XCTAssertTrue(
-            withdraw.waitForExistence(timeout: 5),
-            "Primary withdraw CTA missing on the witness slot."
+            score.waitForExistence(timeout: 5),
+            "Host 'Score a round' primary missing on the witness slot."
+        )
+        XCTAssertFalse(
+            app.buttons["Withdraw to play"].exists,
+            "The host's own withdraw line is back under the primary."
         )
 
         snap(app, "05-room-page-tonight-live")
