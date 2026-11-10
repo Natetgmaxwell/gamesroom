@@ -271,13 +271,31 @@ this machine was audited and left as it is (it is the best one in the app).
 `waitingForTable(arrived:claimed:)`, `scoreRound(packs:)`, `settleNight`,
 `planNextNight`. `NightPlan` carries `primary`, `secondaries`, `caption`.
 
-**Moves it** `NightPlan.plan(for: NightInput)` — pure, clock-injected, phase-driven.
+**Moves it** `NightPlan.plan(for: NightInput)` — pure, clock-injected,
+phase-driven. fx30 changed the host's live rule, not the machine: a host
+gets ONE primary and at most ONE line under it.
+- nothing scored tonight, seats claimed and nobody arrived →
+  `waitingForTable` as the caption, with `scoreRound` as its one line;
+- nothing scored tonight → `scoreRound`, nothing under it;
+- something scored → `settleNight`, with `scoreRound` as its one line.
+
+"Scored" is a non-correction round (`roundsScored > 0`) **or** a casino
+settlement (`casinoSettlements > 0`, read from `WorkingHand.hasScanned`).
+`claimed == 0` never emits `waitingForTable` (no "0 of 0 here"). The host's
+own member actions are not lines: `NightAction.withdrawChips` and
+`countCAH` reach the host through the "Score which game?" picker, which
+lists `NightPlan.scorablePacks(in:)` — casino first when the night has it,
+then the night's own order — and labels the casino entry `Casino chips` via
+`NightPlan.pickerTitle(for:)`. One pack skips the picker.
 
 **Owner** `GamesRoom/Services/NightPlan.swift`
 
 **Server twin** none; its inputs are the seat RPCs' rows.
 
-**Pinned by** `TestsP1.swift` — `P1: a stranded night asks the host to settle it`.
+**Pinned by** `TestsP1.swift` — `P1: a stranded night asks the host to settle it`;
+`TestsS1.swift` — `S1.3: the host scores first with nothing under the primary`,
+`S1.3: the host settles after a casino settlement`,
+`S1.3: nobody claimed a seat means no '0 of 0 here' caption`.
 
 **Never** reorder or add an action here without a table row. The member action
 order is a product decision, not a refactor.

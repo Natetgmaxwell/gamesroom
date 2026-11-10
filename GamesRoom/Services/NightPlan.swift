@@ -38,14 +38,20 @@
 //      else CAH in packs               -> countCAH
 //      else                            -> nil
 //
-//    Host, live night:
-//      nobody arrived                  -> waitingForTable
-//      arrived, no round scored yet    -> scoreRound (the scorable
-//                                         packs) when there are any,
-//                                         else settleNight
-//      a round is scored               -> settleNight, with
-//                                         scoreRound as a secondary
-//      the host also gets their member action as a secondary
+//    Host, live night (fx30 — ONE primary, at most ONE line under it):
+//      nobody arrived, seats claimed   -> waitingForTable as the caption,
+//                                         with scoreRound as the one line
+//                                         under it (a host can always
+//                                         record a round)
+//      nothing scored tonight          -> scoreRound, nothing under it
+//      something scored tonight        -> settleNight, with scoreRound
+//                                         as the one line under it
+//
+//      "Scored" is a non-correction round OR a casino settlement (a
+//      scan) for this event. The host's own player actions (withdraw,
+//      settle chips, withdraw more, count CAH) are NOT lines under the
+//      primary: they live in the "Score a round" picker, which lists
+//      every pack on the night with Casino chips first.
 //
 //    Host, night settled inside the recap window -> planNextNight
 //
@@ -70,7 +76,8 @@ enum NightAction: Equatable {
     case countCAH
     /// Nobody has arrived yet. Caption only, no button.
     case waitingForTable(arrived: Int, claimed: Int)
-    /// Score a round of one of these packs.
+    /// Open the score picker: one entry per pack on the night, casino
+    /// chips first. One pack routes straight into it.
     case scoreRound(packs: [String])
     /// Close the night out.
     case settleNight
@@ -94,6 +101,12 @@ struct NightInput: Equatable {
     var claimedCount: Int
     /// Rounds already scored for this event.
     var roundsScored: Int
+    /// fx30 — casino settlements (scans) already recorded for this
+    /// event. A settled hand is "something scored tonight" for the
+    /// host's card: the casino pack is played by settling chips, not
+    /// by scoring rounds, so rounds alone would leave a casino-only
+    /// night looking untouched.
+    var casinoSettlements: Int = 0
     /// The room is still holding a deposit for the viewer.
     var iHaveHeldDeposit: Bool
     /// The viewer has already withdrawn, so the deposit is spent.
@@ -148,37 +161,37 @@ struct NightPlan: Equatable {
     }
 
     /// The plan for a night that is live right now.
+    ///
+    /// fx30 — the host gets ONE primary and at most ONE grey line under
+    /// it. The host's own player actions are not lines any more; they
+    /// live in the "Score a round" picker, so nothing under the primary
+    /// competes with the night's own progress.
     private static func livePlan(for input: NightInput) -> NightPlan {
         let memberAction = memberAction(for: input)
         guard input.isHost else {
             return NightPlan(primary: memberAction, secondaries: [])
         }
         let scorable = scorablePacks(in: input.packSlugs)
-        var secondaries: [NightAction] = []
-        let primary: NightAction
-        if input.arrivedCount == 0 {
-            primary = .waitingForTable(arrived: input.arrivedCount, claimed: input.claimedCount)
-            // TARS — a room without seat deposits has no arrival signal,
-            // so "nobody has arrived" is a guess, not a fact. The host
-            // must still be able to record a round; the line above is
-            // information, not a gate.
-            if !scorable.isEmpty {
-                secondaries.append(.scoreRound(packs: scorable))
-            }
-        } else if input.roundsScored == 0 {
-            primary = scorable.isEmpty ? .settleNight : .scoreRound(packs: scorable)
-        } else {
-            primary = .settleNight
-            if !scorable.isEmpty {
-                secondaries.append(.scoreRound(packs: scorable))
-            }
+        let scoreLine = scorable.isEmpty ? nil : NightAction.scoreRound(packs: scorable)
+        // "Scored" means a non-correction round OR a casino settlement:
+        // the casino pack is played by settling a hand, not by scoring
+        // a round, and a night where the chips are settled is under way.
+        let hasScored = input.roundsScored > 0 || input.casinoSettlements > 0
+
+        if !hasScored, input.arrivedCount == 0, input.claimedCount > 0 {
+            // A room with claimed seats and nobody at the table yet.
+            // The caption is the primary slot (no button); the host can
+            // still record a round, so that is the one line under it.
+            // claimed == 0 never reaches here: "0 of 0 here" was noise.
+            return NightPlan(
+                primary: .waitingForTable(arrived: input.arrivedCount, claimed: input.claimedCount),
+                secondaries: scoreLine.map { [$0] } ?? []
+            )
         }
-        // The host plays too: their own member action rides under the
-        // host action, after the night's own progress line.
-        if let memberAction {
-            secondaries.append(memberAction)
+        if hasScored {
+            return NightPlan(primary: .settleNight, secondaries: scoreLine.map { [$0] } ?? [])
         }
-        return NightPlan(primary: primary, secondaries: secondaries)
+        return NightPlan(primary: scoreLine ?? .settleNight, secondaries: [])
     }
 
     /// The member's own action for the night. The held deposit comes
@@ -191,20 +204,39 @@ struct NightPlan: Equatable {
         return nil
     }
 
-    /// The packs the host can score a round of: the single-winner
-    /// packs (Monopoly Deal) and the count packs (Cards Against
-    /// Humanity). The casino pack is `withdraw_return` — the host
-    /// settles chips, not rounds — so it is never scorable.
+    /// The packs the host can score tonight, in picker order: the
+    /// casino pack first (it is played by settling chips, so its label
+    /// is "Casino chips"), then the rest in the night's own pack order.
+    ///
+    /// fx30 — the casino pack used to be excluded here because it is
+    /// `withdrawReturn` and the host "settles chips, not rounds". That
+    /// left the score picker offering only the side packs on a casino
+    /// night and put the host's chip actions in grey lines under the
+    /// primary. The picker is now the one place the host picks a pack.
     ///
     /// The pack list comes from the registry, the same source the room
     /// page reads for its single-winner gate.
     static func scorablePacks(in packSlugs: [String]) -> [String] {
         var seen: Set<String> = []
-        return packSlugs.filter { slug in
+        var ordered = packSlugs.filter { slug in
             guard let type = PackRegistry.shared.definition(for: slug)?.scoringType else { return false }
-            guard type == .singleWinner || type == .countBased else { return false }
+            guard type == .singleWinner || type == .countBased || type == .withdrawReturn else { return false }
             return seen.insert(slug).inserted
         }
+        // Casino chips come first whenever the night has the pack.
+        if let index = ordered.firstIndex(of: CasinoPack.slug) {
+            ordered.remove(at: index)
+            ordered.insert(CasinoPack.slug, at: 0)
+        }
+        return ordered
+    }
+
+    /// The label for one pack in the "Score which game?" picker. The
+    /// casino option is the host's chip actions in one place, so it
+    /// says "Casino chips"; every other pack keeps its display name.
+    static func pickerTitle(for slug: String) -> String {
+        if slug == CasinoPack.slug { return "Casino chips" }
+        return PackRegistry.shared.definition(for: slug)?.displayName ?? slug
     }
 }
 

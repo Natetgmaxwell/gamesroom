@@ -480,7 +480,7 @@ struct RoomDetailView: View {
             presenting: roomConfirm
         ) { choice in
             ForEach(choice.packs, id: \.self) { slug in
-                Button(PackRegistry.shared.definition(for: slug)?.displayName ?? slug) {
+                Button(NightPlan.pickerTitle(for: slug)) {
                     Task { await openHostScore(event: choice.event, packSlug: slug) }
                 }
             }
@@ -1966,17 +1966,20 @@ struct RoomDetailView: View {
     }
 
     /// P0.4 — host scoring for ONE chosen pack. S1.4 routes on the
-    /// pack the host picked, never the event's headline pack:
+    /// pack the host picked, never the event's headline pack. fx30 —
+    /// the casino entry is the host's chip action, routed by what is
+    /// actually in their hand:
+    ///   - `.withdrawReturn` (Casino) -> chips in hand ? `ChipScanSheet`
+    ///     (settle the hand) : `WithdrawChipsSheet`. This also covers
+    ///     "withdraw more" after a settle: the hand is back to 0.
     ///   - `.countBased` (CAH) -> `CAHCardScanSheet`.
-    ///   - `.withdrawReturn` (Casino) -> `ChipScanSheet` (never
-    ///     offered by the plan; kept so the switch is total).
     ///   - `.singleWinner` -> `HostScoreEntrySheet` for that pack.
     ///     The iPad dashboard scores the event's headline pack, so
     ///     it is used only when the chosen pack is that pack.
     private func openHostScore(event: Event, packSlug: String) async {
         switch PackRegistry.shared.definition(for: packSlug)?.scoringType {
         case .withdrawReturn?:
-            presenting = .settleScan(event)
+            presenting = myWorkingHand > 0 ? .settleScan(event) : .withdraw(event)
         case .countBased?:
             presenting = .cahScan(event)
         default:
@@ -2018,6 +2021,10 @@ struct RoomDetailView: View {
         let scoredRounds = Set(
             rounds.filter { $0.correctionOf == nil }.map { "\($0.packSlug):\($0.roundIndex)" }
         )
+        // fx30 — a casino settlement is a scan on the working hands the
+        // page already loads. Rounds alone cannot see a casino night
+        // being played, because the casino pack is settled, not scored.
+        let casinoSettlements = workingHands.filter { $0.hasScanned }.count
         return NightInput(
             isHost: isHost,
             packSlugs: event.packSlugs,
@@ -2025,6 +2032,7 @@ struct RoomDetailView: View {
             arrivedCount: arrivedIds.count,
             claimedCount: max(claimedIds.count, arrivedIds.count),
             roundsScored: scoredRounds.count,
+            casinoSettlements: casinoSettlements,
             iHaveHeldDeposit: seatPhase(for: event).deposit?.status == .held,
             iHaveWithdrawn: hasWithdrawn
         )
@@ -2053,7 +2061,15 @@ struct RoomDetailView: View {
         case .waitingForTable(let arrived, let claimed):
             return WitnessSlot.Line(title: "Waiting for the table · \(arrived) of \(claimed) here", style: .caption)
         case .scoreRound(let packs):
-            return WitnessSlot.Line(title: "Score a round", style: .button, action: { startScoreRound(event: event, packs: packs) })
+            return WitnessSlot.Line(
+                title: "Score a round",
+                style: .button,
+                action: { startScoreRound(event: event, packs: packs) },
+                // The host's score action keeps its "(host)" label so
+                // VoiceOver and the UI sweep can tell it from the
+                // member-facing actions, wherever it renders.
+                a11yLabel: isHost ? "Score a round (host)" : nil
+            )
         case .settleNight:
             return WitnessSlot.Line(title: "Settle the night", style: .button, action: { settleNight(event: event) })
         case .planNextNight:
@@ -2064,19 +2080,26 @@ struct RoomDetailView: View {
     /// S1.4 — the live card. The plan picks the one primary; every
     /// other action is grey caption text under it. The plan reads
     /// `event.packSlugs`, never the headline `event.packSlug`.
+    ///
+    /// fx30 — a host's card is one primary and at most one line under
+    /// it. The host's own chip/CAH actions are not lines: "Score a
+    /// round" opens a picker that lists every pack on the night, so the
+    /// withdraw and count actions live there. Members keep theirs.
     private func liveCard(event: Event, headerMode: WitnessSlot.HeaderMode) -> some View {
         let plan = NightPlan.plan(for: nightInput(for: event))
         let memberActions = [plan.primary].compactMap { $0 } + plan.secondaries
         var secondaries = plan.secondaries.compactMap { nightLine(for: $0, event: event) }
-        // Casino top-up once chips are in hand.
-        if memberActions.contains(.withdrawChips), myWorkingHand > 0 {
-            secondaries.append(WitnessSlot.Line(title: "Withdraw more", style: .button, action: { presenting = .withdraw(event) }))
-        }
-        // A CAH count on a night where the plan's own action is
-        // something else (Casino + CAH, or the host's score line).
-        if event.packSlugs.contains(CardsAgainstHumanityPack.slug),
-           !memberActions.contains(.countCAH) {
-            secondaries.append(WitnessSlot.Line(title: "Count your CAH cards", style: .button, action: { presenting = .cahScan(event) }))
+        if !isHost {
+            // Casino top-up once chips are in hand.
+            if memberActions.contains(.withdrawChips), myWorkingHand > 0 {
+                secondaries.append(WitnessSlot.Line(title: "Withdraw more", style: .button, action: { presenting = .withdraw(event) }))
+            }
+            // A CAH count on a night where the plan's own action is
+            // something else (Casino + CAH).
+            if event.packSlugs.contains(CardsAgainstHumanityPack.slug),
+               !memberActions.contains(.countCAH) {
+                secondaries.append(WitnessSlot.Line(title: "Count your CAH cards", style: .button, action: { presenting = .cahScan(event) }))
+            }
         }
         let inHand = memberActions.contains(.withdrawChips) && casinoWithdrawn > 0 ? casinoWithdrawn : nil
         // P2 (audit 03 C2) — a failed settle is this card's own line,
@@ -3013,6 +3036,10 @@ private struct WitnessSlot: View {
         /// explainer). Ignored on secondaries.
         var lead: String? = nil
         var action: () -> Void = {}
+        /// fx30 — the VoiceOver label when it differs from the title
+        /// (the host's "Score a round" reads "(host)" so the sweep and
+        /// VoiceOver can tell it apart).
+        var a11yLabel: String? = nil
     }
 
     let event: Event
@@ -3148,6 +3175,9 @@ private struct WitnessSlot: View {
                                 .animation(Theme.Motion.fade, value: primary.title)
                         }
                         .pressScale()
+                        // fx30 — the primary keeps the line's own
+                        // VoiceOver label (the host's "(host)").
+                        .accessibilityLabel(Text(primary.a11yLabel ?? primary.title))
                     case .caption:
                         Text(primary.title)
                             .font(Theme.Typography.caption)
@@ -3196,14 +3226,9 @@ private struct WitnessSlot: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(line.style == .caption)
-                        // The host's at-play score action keeps its
-                        // "(host)" label so VoiceOver and the UI sweep
-                        // can tell it from the member-facing actions.
-                        .accessibilityLabel(Text(
-                            line.title == "Score a round"
-                                ? "Score a round (host)"
-                                : line.title
-                        ))
+                        // fx30 — a line may carry its own VoiceOver
+                        // label (the host's "Score a round (host)").
+                        .accessibilityLabel(Text(line.a11yLabel ?? line.title))
                     }
                 }
                 .transition(.opacity)

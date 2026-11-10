@@ -352,7 +352,7 @@ final class ScreenshotSweepTests: XCTestCase {
         snap(app, "10-question-box-reader-card")
     }
 
-    // MARK: - 11 Casino chip scan sheet
+    // MARK: - 11 Casino chips from the score picker
 
     func test_11_casino_chip_scan_sheet() throws {
         let app = launchSweep(arguments: ["-screenshots-state=chip-scan"])
@@ -368,18 +368,32 @@ final class ScreenshotSweepTests: XCTestCase {
         )
         scoreCTA.tap()
 
-        // v1.2.4 S1.4 - scoring follows the packs picked, not the
-        // headline pack: on a Casino + Monopoly Deal night the host's
-        // "Score a round" opens the SCORING sheet for the one pack that
-        // is scored per round (Monopoly Deal), never the chip scanner.
-        // The chip scanner belongs to the member's withdraw path.
-        let sheetBar = app.navigationBars["Score a round"].firstMatch
+        // fx30 — the host's card no longer carries the chip lines under
+        // it. "Score a round" opens the picker, which lists every pack
+        // on tonight's night, Casino chips first.
+        let casinoChips = app.buttons["Casino chips"].firstMatch
         XCTAssertTrue(
-            sheetBar.waitForExistence(timeout: 10),
-            "ChipScanSheet never presented."
+            casinoChips.waitForExistence(timeout: 10),
+            "Score picker never offered the Casino chips entry."
+        )
+        XCTAssertTrue(
+            app.buttons["Monopoly Deal"].firstMatch.exists,
+            "Score picker dropped the night's other pack."
+        )
+        casinoChips.tap()
+
+        // The `chip-scan` seed seeds no chips in hand (the working-hand
+        // read is network-backed and returns empty under
+        // `-screenshots-bypass-auth`), so "Casino chips" routes to the
+        // withdraw sheet. The chip-scan sheet is the same entry once a
+        // hand is out: `myWorkingHand > 0` routes to `.settleScan`.
+        let withdrawBar = app.navigationBars["Withdraw chips"].firstMatch
+        XCTAssertTrue(
+            withdrawBar.waitForExistence(timeout: 10),
+            "WithdrawChipsSheet never presented from the Casino chips entry."
         )
 
-        snap(app, "11-casino-chip-scan-sheet")
+        snap(app, "11-casino-chips-withdraw-sheet")
     }
 
     // MARK: - 12 Settled view with deltas
