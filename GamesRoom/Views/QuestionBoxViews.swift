@@ -454,12 +454,14 @@ struct QuestionBoxEditorView: View {
         .sheet(item: $sheet) { sheet in
             switch sheet {
             case .editing(let q):
-                QuestionEditSheet(initialText: q.text, initialTag: q.tag) { text, tag in
-                    try await questionBox.saveQuestion(roomId: roomId, id: q.id, text: text, tag: tag)
+                QuestionEditSheet(initialText: q.text, initialDeeper: q.depth == .deep) { text, depth in
+                    // The old deep/unhinged tag is kept as it was; the
+                    // sheet no longer shows it (118: no "deep" on screen).
+                    try await questionBox.saveQuestion(roomId: roomId, id: q.id, text: text, tag: q.tag, depth: depth)
                 }
             case .adding:
-                QuestionEditSheet(initialText: "", initialTag: nil) { text, tag in
-                    try await questionBox.saveQuestion(roomId: roomId, id: nil, text: text, tag: tag)
+                QuestionEditSheet(initialText: "", initialDeeper: false) { text, depth in
+                    try await questionBox.saveQuestion(roomId: roomId, id: nil, text: text, tag: nil, depth: depth)
                 }
             }
         }
@@ -470,7 +472,6 @@ struct QuestionBoxEditorView: View {
             Text(q.text)
                 .font(Theme.Typography.body)
             HStack(spacing: Theme.Layout.cardLineGap) {
-                if let tag = q.tag { Text(tag.rawValue) }
                 if q.source == .member, let author = q.authorDisplayName { Text("from \(author)") }
                 if q.source == .host { Text("host") }
             }
@@ -483,12 +484,12 @@ struct QuestionBoxEditorView: View {
 
 private struct QuestionEditSheet: View {
     let initialText: String
-    let initialTag: QuestionTag?
-    let onSave: (String, QuestionTag?) async throws -> Void
+    let initialDeeper: Bool
+    let onSave: (String, QuestionDepth) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
-    @State private var tag: QuestionTag?
+    @State private var deeper = false
     @State private var error: String?
 
     var body: some View {
@@ -498,9 +499,21 @@ private struct QuestionEditSheet: View {
                     .onChange(of: text) { _, v in
                         if v.count > RoomQuestion.maxLength { text = String(v.prefix(RoomQuestion.maxLength)) }
                     }
-                Picker("Tag", selection: $tag) {
-                    Text("None").tag(QuestionTag?.none)
-                    ForEach(QuestionTag.allCases, id: \.self) { Text($0.rawValue).tag(QuestionTag?.some($0)) }
+                Section {
+                    // 118: a grey caption, not a big switch. Light unless ticked.
+                    Button { deeper.toggle() } label: {
+                        HStack(spacing: Theme.Layout.cardLineGap) {
+                            Image(systemName: deeper ? "checkmark.circle.fill" : "circle")
+                            Text("Deeper")
+                        }
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("question-deeper-toggle")
+                    .accessibilityAddTraits(deeper ? .isSelected : [])
+                    .listRowBackground(Color.clear)
                 }
                 if let error { Text(error).foregroundStyle(Theme.Palette.loss) }
             }
@@ -509,13 +522,13 @@ private struct QuestionEditSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         Task {
-                            do { try await onSave(text, tag); dismiss() } catch { self.error = error.localizedDescription }
+                            do { try await onSave(text, deeper ? .deep : .light); dismiss() } catch { self.error = error.localizedDescription }
                         }
                     }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
-        .onAppear { text = initialText; tag = initialTag }
+        .onAppear { text = initialText; deeper = initialDeeper }
     }
 }
