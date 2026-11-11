@@ -3982,14 +3982,9 @@ private struct AwardsCard: View {
     /// so this is a manual-pass surface on an Xcode host.
     @State private var shareImage: UIImage?
 
-    /// V0.70 — per-row appear state. The set holds the indices of
-    /// rows that have already staggered in; each row reads its own
-    /// membership to drive opacity/offset. Each row's `onAppear`
-    /// sleeps `idx * 50ms` then inserts its own index inside a
-    /// `withAnimation(Theme.Motion.fade)` (no `.delay` — the sleep
-    /// already staggers), so rows cascade in independently and a
-    /// late-appearing row doesn't short-circuit the cascade.
-    @State private var appearedIndices: Set<Int> = []
+    /// D2 — reduced motion turns the rows' entrance off entirely:
+    /// the rows are simply there, no fade, no stagger.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Stable display order: phoenix, veteran, whale, drowning,
     /// ironMann, comebackKid, goodSport. `AwardType.CaseIterable`
@@ -4020,26 +4015,33 @@ private struct AwardsCard: View {
                 }
             }
 
-            if sortedAwards.isEmpty {
-                Text("Awards haven't been declared yet.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.secondaryText)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
-                        awardView(for: award, at: idx)
-                        if idx != sortedAwards.count - 1 {
-                            Divider()
-                                .overlay(Theme.Palette.hairline)
-                                // Start the hairline under the row
-                                // text, past the icon column, so the
-                                // award names and the rule share a
-                                // left edge.
-                                .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
-                        }
+            // D2 — the awards list. The container is rendered even
+            // while there is nothing to show, so it is already in the
+            // hierarchy when the awards land: its `.animation(value:)`
+            // then turns the rows' insertion into a fade instead of a
+            // pop. Each row carries its own delay (see
+            // `StaggeredAwardRow`), so the rows still cascade in —
+            // declaratively, with no "has this row appeared" flag.
+            VStack(spacing: 0) {
+                if sortedAwards.isEmpty {
+                    Text("Awards haven't been declared yet.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                }
+                ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
+                    awardView(for: award, at: idx)
+                    if idx != sortedAwards.count - 1 {
+                        Divider()
+                            .overlay(Theme.Palette.hairline)
+                            // Start the hairline under the row
+                            // text, past the icon column, so the
+                            // award names and the rule share a
+                            // left edge.
+                            .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
                     }
                 }
             }
+            .animation(reduceMotion ? nil : Theme.Motion.fade, value: sortedAwards)
 
             // V0.53 — share the member's own stat card. The card is
             // generated on the member's device and shared through the
@@ -4082,9 +4084,14 @@ private struct AwardsCard: View {
         return image
     }
 
-    @ViewBuilder
+    /// D2 — one award row. The row's *content* says how it enters
+    /// (a fade from 6pt below — the same subtle distance the old
+    /// stagger used: no scale, no spring); the wrapper says *when*
+    /// (one delay per row). The delay lives in the row's transaction
+    /// instead of in a timer the view owns, so nothing about the
+    /// entrance is stored.
     private func awardView(for award: SeasonAward, at idx: Int) -> some View {
-        Group {
+        StaggeredAwardRow(index: idx, reduceMotion: reduceMotion) {
             if award.awardType == .drowning {
                 DrowningBadge(
                     award: award,
@@ -4096,30 +4103,35 @@ private struct AwardsCard: View {
                 AwardRow(award: award)
             }
         }
-        // V0.70 — staggered fade-in. Subtle (opacity + 6pt offset,
-        // no scale, no spring) per the V0.8 "table distance" rule.
-        // Per-row state: each row reads its own membership in
-        // `appearedIndices`, so the rows cascade independently and
-        // row 0's onAppear can't flip a shared Bool that every row
-        // reads.
-        .opacity(appearedIndices.contains(idx) ? 1 : 0)
-        .offset(y: appearedIndices.contains(idx) ? 0 : 6)
-        .onAppear { staggerAppear(idx: idx) }
     }
+}
 
-    /// V0.70 — dispatches a staggered state flip for one row.
-    /// Sleeps for `idx * 50ms`, then inserts `idx` into
-    /// `appearedIndices` inside a `withAnimation(Theme.Motion.fade)`
-    /// — no `.delay`, because the sleep already staggers the flip
-    /// and stacking another delay would double-stagger. The
-    /// `Task.isCancelled` guard short-circuits on view teardown.
-    private func staggerAppear(idx: Int) {
-        Task {
-            try? await Task.sleep(for: .milliseconds(idx * 50))
-            if !Task.isCancelled {
-                withAnimation(Theme.Motion.fade) {
-                    _ = appearedIndices.insert(idx)
-                }
+/// D2 — the awards-card row entrance, without stored appearance
+/// state.
+///
+/// The wrapper owns the row's *transaction* — the animation that
+/// drives the row's transition. Every row's transaction carries its
+/// own delay (`index * 50ms`), so the rows cascade in exactly the way
+/// the old `Task.sleep` stagger did, but the delay is a property of
+/// the transaction rather than of state the view has to remember.
+/// The content owns the transition itself (fade + 6pt offset).
+///
+/// Reduced motion sets no animation, so the rows simply appear.
+private struct StaggeredAwardRow<Content: View>: View {
+    let index: Int
+    let reduceMotion: Bool
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        Group {
+            content()
+                .transition(.opacity.combined(with: .offset(y: 6)))
+        }
+        .transaction { transaction in
+            if reduceMotion {
+                transaction.animation = nil
+            } else {
+                transaction.animation = Theme.Motion.fade.delay(Double(index) * 0.05)
             }
         }
     }
