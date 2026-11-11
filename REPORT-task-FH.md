@@ -16,8 +16,11 @@ related:
 Branch: `cc/store-contract`, cut from `7e7bf4b`. This report pins CURRENT
 behaviour. It changes no store behaviour and deletes no filter.
 
-Status: steps 1-2 complete. The F2 contract suite pins the fake's behaviour;
-the F3 RLS probes and the F4 recommendation land in later commits.
+Status: all four steps complete. F1 inventory (above), F2 contract suite
+(`TestsStoreContract.swift`), F3 RLS probes
+(`Supabase/probes/contract-rls-probes.sql`), F4 final table and recommendation
+(below). The probes are **written but unexecuted** — this worktree has no psql
+or local Postgres and the brief forbids touching the live DB.
 
 ## 1. Function inventory
 
@@ -135,14 +138,39 @@ store code. The cases confirm, rather than infer, the inventory above:
 - **(i)** `fetchSeasonHistory` stays the static `[2, 1]` seed after a close and
   never appends the just-closed season.
 
-## 5. Suggested fixes (input to F4)
+## 5. Final divergence table (F4)
 
-- (a) Make `upsertEventRSVP` call `adjustBriefingSeats(previous:state:)` so the
-  fake is idempotent like the RPC, or delete the briefing mutation and let
-  `RoomService.refreshSeatCaches` be the only live/fake difference.
-- (b) Either add the member gate to the fake, or document the fake as
-  guard-free by design.
-- (c) Correct the two comments: there is no client-side drowning filter. Then
-  decide (F4) whether one should exist.
-- (d) Either give the fake a set of seasons and apply the same ordering, or
-  document that the fake cannot represent the transition window.
+One row per divergence. "Right" names the side whose behaviour matches the
+contract as designed — the server twin is authoritative unless the server itself
+is the drift. Fixes are suggestions; this lane changes no store code.
+
+| Function | In-memory behaviour | Live behaviour | file:line (in-memory / live) | Which side looks right | Suggested fix |
+| --- | --- | --- | --- | --- | --- |
+| (a) `upsertEventRSVP` -> briefing | Applies a **state-only** delta to the briefing, ignoring the previous RSVP state: a repeated `.claimed` adds a seat again, `.unclaimed` after `.declined` decrements `seatsClaimed`. | Calls `upsert_event_rsvp`, which is idempotent and touches no briefing row; `RoomService` re-fetches RSVPs + briefing via `refreshSeatCaches`. | `InMemoryRoomStore.swift:1641` (delta 1649-1680) / `RoomStore.swift:823`; refresh `RoomService.swift:952-978` | **Live** — idempotence is the stated contract; the fake carries a second copy of a seat rule. | Route the fake through its existing `adjustBriefingSeats(previous:state:)` (`:2139`) so it is previous-state-aware, **or** delete the briefing mutation and let `refreshSeatCaches` be the only difference. |
+| (b) `autoCloseStaleEvents` | Sweeps every `settledAt == nil` event in the room older than the window; no auth, membership or host gate; default window from `NightPhaseResolver`. | RPC `auto_close_stale_events` raises 42501 for non-members and closes only that room's stale nights; second run closes 0. | `InMemoryRoomStore.swift:1101` / `RoomStore.swift:429`; SQL `081_auto_close_hours.sql:37-79` | **Live** — the server guards are the contract; the fake is guard-free. | Add the membership gate to the fake, or document it as deliberately guard-free for previews. Align the default window with the column default (8h) either way. |
+| (c) `fetchSeasonAwards` | Returns the seeded rows verbatim, including a `.drowning` row addressed to someone else. No filter. | Returns the RPC's rows verbatim. **There is no Swift-side filter**; the server returns drowning rows only to recipient / host / opted-in member. | `InMemoryRoomStore.swift:1344`; seed `:474-505` / `RoomStore.swift:536-546`; RPC `048:56-98`, read set `045` | **Live code** — but the protocol and live doc comments both claim a client filter that does not exist. | Fix the two comments (`RoomStoreProtocol.swift:350-354`, `RoomStore.swift:532-535`); do **not** add a client filter (see §6). |
+| (d) `fetchCurrentSeason` | Returns the single stored season for the room; one slot per room, so "active + ended" cannot be represented. | RPC orders `ended` before `active` then `ordinal desc limit 1`; returns nothing for non-members. | `InMemoryRoomStore.swift:1340` / `RoomStore.swift:521-531`; SQL `048:28-48` | **Live** — the ended-over-active preference is the documented transition behaviour. | Give the fake a season set and apply the same ordering, or document that the fake cannot model the transition window. |
+| (e) `fetchCurrentMemberRSVP` | Always `.unclaimed`; no notion of a current user. | RPC `get_my_event_rsvp` returns the real state. | `InMemoryRoomStore.swift:1624` / `RoomStore.swift:806` | **Live** | Track a synthetic current member in the fake, or document the gap. |
+| (f) `settleEvent` | Stamps `settledAt` unconditionally; no host or not-started guard. | Host-only; refuses not-started and already-settled (42501 / P0001). | `InMemoryRoomStore.swift:1120` / `RoomStore.swift:446` | **Live** | Mirror the two guards in the fake or document the gap. |
+| (g) `closeSeason` | Closes the active season and opens a fresh one; computes **no** awards. | Computes four awards, resets scores, opens the next season, emits a system event. | `InMemoryRoomStore.swift:1353` / `RoomStore.swift:550`; SQL `048:108+` | **Live** | Have the fake compute the seeded awards, or document that close is not modelled. |
+| (h) `addEvent` hidden list | Stores `hiddenFromUserIds` on the event but the read paths explicitly skip the gate. | `get_active_event` / `get_briefing_summary` / `get_event_rsvps` honour `hidden_from_user_ids`. | `InMemoryRoomStore.swift:1696-1719` / `RoomStore.swift:856` | **Live** | Apply the hidden gate in the fake's read paths. |
+| (i) `fetchSeasonHistory` / `fetchSeasonGrid` | Static seeded derivation; a close never appends the just-closed season. | RPCs `get_season_history` / `get_season_grid`. | `InMemoryRoomStore.swift:1389`/`:1395` / `RoomStore.swift:573`/`:586` | **Live** | Derive history from the fake's own season set so it moves when a season closes. |
+
+## 6. Recommendation: the client drowning filter
+
+**Delete the claim, do not implement the filter.** There is no client-side
+drowning filter on this branch — `fetchSeasonAwards` returns the RPC's rows
+verbatim on both stores — so the "keep vs delete" question is really "implement
+or correct the docs". Correct the docs. The server owns the boundary: migration
+`045` defines the read set (recipient, host, opted-in member) and `048`'s
+`get_season_awards` applies it, and the F3 probes
+(`PROBE FH.a.*` in `Supabase/probes/contract-rls-probes.sql`) pin exactly that
+behaviour — recipient sees their own row, non-recipient sees none, host and
+opted-in members see it, non-members see nothing. Once those probes pass, a
+Swift-side filter would do no work in the happy path, would silently paper over
+a server regression instead of surfacing it, and would be a second copy of a
+privacy rule — which `AGENTS.md` calls a bug even when the copies agree. The F2
+test that asserts the fake returns the seeded `.drowning` row is therefore
+correct as written: it pins pass-through, which is what the contract should be.
+If the boundary is ever found leaking, the fix belongs in the migration, with a
+new probe, not in a client filter.
