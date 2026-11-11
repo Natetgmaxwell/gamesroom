@@ -140,7 +140,7 @@ do $$ declare v_state text; begin
   perform public.cron_close_stale();
   raise notice 'PROBE 120.g-authenticated-call-refused FAIL an app role ran the janitor';
 exception when others then
-  get diagnostics v_state = returned_sqlstate;
+  v_state := sqlstate;
   raise notice 'PROBE 120.g-authenticated-call-refused %', case when v_state = '42501'
     then 'PASS refused (42501: '||sqlerrm||')' else 'FAIL '||v_state||' '||sqlerrm end;
 end $$;
@@ -151,7 +151,7 @@ do $$ declare v_state text; begin
   perform public.cron_close_stale();
   raise notice 'PROBE 120.h-anon-call-refused FAIL anon ran the janitor';
 exception when others then
-  get diagnostics v_state = returned_sqlstate;
+  v_state := sqlstate;
   raise notice 'PROBE 120.h-anon-call-refused %', case when v_state = '42501'
     then 'PASS refused (42501: '||sqlerrm||')' else 'FAIL '||v_state||' '||sqlerrm end;
 end $$;
