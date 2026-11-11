@@ -2919,16 +2919,22 @@ private struct SeatGridRow: View {
     /// V0.106 shipped is unchanged.
     @EnvironmentObject private var questionBox: QuestionBoxService
 
-    /// V0.42 — fires only for the current user's claim, not every
-    /// grid render. Reset to false after ~500ms so the burst is a
-    /// single one-shot celebration.
-    @State private var justClaimed: Bool = false
     /// v1.2.2 S6 T4 — whose seat popover is open. One at a time: a
     /// grid of buttons all sharing one presenter reads as "the grid
     /// is open", not "this seat is open". The binding per cell is
     /// built from this id.
     @State private var popoverMemberId: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// D1 — "do I hold a claimed seat?", answered by the roster. The
+    /// grid used to keep a `justClaimed` flag in `@State` and clear it
+    /// 500 ms later from a detached `Task`; the roster already knows
+    /// whose seat this is, so the flag was a second copy of the truth
+    /// waiting to go stale. One answer, one owner: the rsvps.
+    private var mySeatClaimed: Bool {
+        guard let me = currentUserId else { return false }
+        return rsvps.contains { $0.memberId == me && $0.state == .claimed }
+    }
 
     private var columnCount: Int { SeatGrid.columnCount(for: maxSeats) }
 
@@ -2964,14 +2970,10 @@ private struct SeatGridRow: View {
                     }
             }
         }
-        .onChange(of: rsvps) { _, newValue in
-            guard let me = currentUserId else { return }
-            let nowClaimed = newValue.contains { $0.memberId == me && $0.state == .claimed }
-            if nowClaimed {
-                justClaimed = true
-                Task { try? await Task.sleep(for: .milliseconds(500)); justClaimed = false }
-            }
-        }
+        // D1 — the roster is the animation input. When it changes, the
+        // grid cross-fades to the new arrangement instead of the view
+        // deciding when to celebrate.
+        .animation(reduceMotion ? nil : Theme.Motion.fade, value: rsvps)
     }
 
     /// Vertical rule after every cell that is not in the last
@@ -3013,11 +3015,13 @@ private struct SeatGridRow: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .overlay {
-                    if isYours && justClaimed {
+                    // D1 — the burst hangs off the roster, not off a
+                    // timer: it rides the cell that carries my claim.
+                    if isYours && mySeatClaimed {
                         ConfettiBurst()
                     }
                 }
-                .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: isYours)
+                .animation(reduceMotion ? nil : Theme.Motion.popIn, value: isYours)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
