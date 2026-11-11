@@ -1,10 +1,10 @@
 # STATE cc-cc-b
 Base: 7e7bf4b4a4e16c9b1893b3b440b8af3340b53ea6  Branch: cc/janitor-pg-cron  Worktree: /Users/nathanmaxwell/Projects/worktrees/cc/janitor-pg-cron
 Rewrite this file after every step: tick the step, set NEXT to the following one. When all are ticked, replace the NEXT line with: ALL STEPS DONE
-NEXT: B3 write Supabase/tests/120_probes.sql (probes for the schema-replica harness)
+NEXT: B4 finish REPORT-task-B.md incl client removal plan
 - [x] B1 facts: extract signatures + client cadence into REPORT-task-B.md
 - [x] B2 write the guarded pg_cron migration (landed as Supabase/migrations/120_stale_close_cron.sql)
-- [ ] B3 write Supabase/tests/120_probes.sql
+- [x] B3 write Supabase/tests/120_probes.sql
 - [ ] B4 finish REPORT-task-B.md incl client removal plan
 
 NOTE (B1): migration number 118 is TAKEN on this branch (Supabase/migrations/118_question_box_depth.sql; 119 also exists). Per Supabase/migrations/README.md rule 3 the next free number is 120. Brief's STOP-AND-REPORT item hit; filename decision needed before B2.
@@ -13,3 +13,5 @@ NOTE (B2): no conductor ruling on 118-vs-120 arrived before B2, so the README ru
 NOTE (B2): the brief's probe path `supabase/probes/118-stale-close-probes.sql` does not match this repo — the convention is Supabase/tests/<NNN>_probes.sql (115_probes.sql, 119_probes.sql; 118_probes.sql existed on the question-box branch). B3 writes Supabase/tests/120_probes.sql, following the convention, and records the deviation in REPORT §5.
 NOTE (B2): the brief's probe format is `select 'PROBE <id> ' || case when ... then 'PASS' else 'FAIL' end;`, but the two existing probe files (115_probes.sql, 119_probes.sql) use `raise notice 'PROBE <id> PASS|FAIL ...'` inside do-blocks instead, and the brief itself says "copy their exact style". B3 follows the EXISTING repo style (raise notice), which also matches how the harness output is consumed elsewhere in the repo. Probe ids: prefix 120.
 NOTE (B2): no local postgres and no running docker daemon, so the SQL was not executed against a live or replica database in this lane. The probes (B3) are what a replica run will exercise.
+NOTE (B3): probes landed as Supabase/tests/120_probes.sql, commit 7e11993, message exactly "B3: probes 118" per the brief. 22 probes, ids 120.a .. 120.v: (a) existence / security-definer + pinned search_path / documented contract; (b) has_function_privilege false for authenticated, anon and PUBLIC; (c) the call itself refused under `set role authenticated` and `set role anon` (42501); (d) as postgres with no JWT the sweep stamps a stranded night at played_at + the ROOM's auto_close_hours (not now(), not a hard-coded 24h), leaves a night inside its window, an already-settled night, a wider-window room's night and a soft-deleted room alone, closes the 25h-old attestation and leaves the 1h-old one open, returns exactly the number of rows it closed, and a second call changes nothing; (e) the cron job: absent -> nothing registered, present -> exactly one gr-stale-close job at '17 * * * *' calling public.cron_close_stale(). The counts are read from the data immediately before the call rather than hard-coded, because both sweeps are global.
+NOTE (B3): the setup block deletes its own seeded rows before inserting them, so the file can be run twice in a row against the same replica. The probe could not be executed in this lane (no local postgres, docker daemon down) — it is checked by eye and by a dollar-quote/paren/keyword-balance script only. B4 records that limit in REPORT §4.
