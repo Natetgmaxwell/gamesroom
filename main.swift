@@ -5272,6 +5272,10 @@ runTonightTests(runner)
 
 runNextNightTests(runner)
 
+// MARK: - Question depth (1.2.5 task 2: one deeper question a night, newer members first)
+
+runQuestionDepthTests(runner)
+
 // MARK: - Summary
 
 print("")

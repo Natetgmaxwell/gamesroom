@@ -23,6 +23,8 @@ private struct UpsertRoomQuestionParams: Encodable, Sendable {
     let p_id: String?
     let p_text: String
     let p_tag: String?
+    /// 118. Nil adds a light question, or keeps an edited one's depth.
+    let p_depth: String?
 }
 
 private struct RegisterDeviceTokenParams: Encodable, Sendable {
@@ -66,12 +68,13 @@ final class LiveQuestionBoxStore: QuestionBoxStore, @unchecked Sendable {
             .execute().value
     }
 
-    func upsertRoomQuestion(roomId: UUID, id: UUID?, text: String, tag: QuestionTag?) async throws -> UUID {
+    func upsertRoomQuestion(roomId: UUID, id: UUID?, text: String, tag: QuestionTag?, depth: QuestionDepth?) async throws -> UUID {
         try await client.rpc("upsert_room_question", params: UpsertRoomQuestionParams(
             p_room_id: roomId.uuidString,
             p_id: id?.uuidString,
             p_text: text,
-            p_tag: tag?.rawValue
+            p_tag: tag?.rawValue,
+            p_depth: depth?.rawValue
         )).execute().value
     }
 

@@ -457,6 +457,13 @@ final class ScreenshotSweepTests: XCTestCase {
             app.staticTexts["Question from the box:"].firstMatch.exists,
             "Ritual opener line missing on the reader card."
         )
+        // 118: the table never sees a depth label. The opener is light and
+        // nothing on the card says "deep" or "level".
+        let depthWord = NSPredicate(format: "label MATCHES[c] %@", ".*\\b(deep|deeper|level)\\b.*")
+        XCTAssertEqual(
+            app.staticTexts.matching(depthWord).count, 0,
+            "The reader card must not label the question's depth."
+        )
 
         snap(app, "10-question-box-reader-card")
     }

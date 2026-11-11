@@ -21,7 +21,8 @@ protocol QuestionBoxStore: Sendable {
     /// `get_room_questions(p_room_id)` — host only; includes authorship.
     func fetchRoomQuestions(roomId: UUID) async throws -> [RoomQuestion]
     /// `upsert_room_question(...)` — host only. `id == nil` adds a host question.
-    func upsertRoomQuestion(roomId: UUID, id: UUID?, text: String, tag: QuestionTag?) async throws -> UUID
+    /// `depth == nil` adds a light question, or keeps an edited one's depth.
+    func upsertRoomQuestion(roomId: UUID, id: UUID?, text: String, tag: QuestionTag?, depth: QuestionDepth?) async throws -> UUID
     /// `delete_room_question(p_id)` — host only.
     func deleteRoomQuestion(id: UUID) async throws
     /// `restore_room_question(p_id)` — host only; clears drawn_at.
@@ -60,6 +61,11 @@ struct InMemoryQuestionBoxState {
     var withdrawals: [UUID: [QuestionBoxRotation.Withdrawal]] = [:]
     var turns: [UUID: [StoredTurn]] = [:]
     var readerIndex: [UUID: Int] = [:]
+    /// 118: nights attended in this room, per room then member. The fake's
+    /// stand-in for the server's ledger count; 0 when absent.
+    var nightsAttended: [UUID: [UUID: Int]] = [:]
+    /// 118: when tonight's deeper question was served, per event.
+    var deepServedAt: [UUID: Date] = [:]
     var deviceTokens: Set<String> = []
 
     struct StoredTurn {
@@ -98,6 +104,13 @@ extension InMemoryRoomStore: QuestionBoxStore {
                 text: entry.text, tag: entry.tag, drawnAt: nil,
                 createdAt: Date(timeIntervalSince1970: 0), authorId: nil, authorDisplayName: nil
             )
+        } + QuestionBoxDeepDeck.entries.map { text in
+            RoomQuestion(
+                id: UUID(), roomId: roomId, eventId: nil, source: .house,
+                text: text, tag: nil, drawnAt: nil,
+                createdAt: Date(timeIntervalSince1970: 0), authorId: nil, authorDisplayName: nil,
+                depth: .deep
+            )
         }
     }
 
@@ -123,7 +136,7 @@ extension InMemoryRoomStore: QuestionBoxStore {
         }.map(\.element)
     }
 
-    func upsertRoomQuestion(roomId: UUID, id: UUID?, text: String, tag: QuestionTag?) async throws -> UUID {
+    func upsertRoomQuestion(roomId: UUID, id: UUID?, text: String, tag: QuestionTag?, depth: QuestionDepth?) async throws -> UUID {
         qbSeedDeckIfNeeded(roomId)
         let clean = ClaimedCardAsk.sanitize(text, max: RoomQuestion.maxLength)
         guard !clean.isEmpty else {
@@ -134,12 +147,14 @@ extension InMemoryRoomStore: QuestionBoxStore {
         if let id, let idx = rows.firstIndex(where: { $0.id == id }) {
             rows[idx].text = clean
             rows[idx].tag = tag
+            if let depth { rows[idx].depth = depth }
             questionBox.questions[roomId] = rows
             return id
         }
         let new = RoomQuestion(
             id: UUID(), roomId: roomId, eventId: nil, source: .host, text: clean, tag: tag,
-            drawnAt: nil, createdAt: Date(), authorId: nil, authorDisplayName: nil
+            drawnAt: nil, createdAt: Date(), authorId: nil, authorDisplayName: nil,
+            depth: depth ?? .light
         )
         rows.append(new)
         questionBox.questions[roomId] = rows
@@ -229,17 +244,44 @@ extension InMemoryRoomStore: QuestionBoxStore {
         let due = decision != .none
         guard due else { return }
         let isOpener = turns.isEmpty
-        let rotation = try await qbRotation(eventId: eventId)
-        let index = questionBox.readerIndex[eventId] ?? 0
-        guard let reader = QuestionBoxRotation.reader(
-            isOpener: isOpener, hostId: qbCurrentMemberId(), rotation: rotation, index: index
-        ), let question = qbDraw(roomId: event.roomId, eventId: eventId, houseDeck: settings.houseDeck) else { return }
+        let reader: UUID
+        var nextCursor: Int?
+        if isOpener {
+            reader = qbCurrentMemberId()
+        } else {
+            // 118: same pick as the server. Never the last reader; fewest
+            // reads tonight, then fewest nights in this room, then order.
+            let rotation = try await qbRotation(eventId: eventId)
+            var reads: [UUID: Int] = [:]
+            for turn in turns { reads[turn.readerId, default: 0] += 1 }
+            guard let pick = QuestionBoxReaderPick.pick(
+                rotation: rotation,
+                cursor: questionBox.readerIndex[eventId] ?? 0,
+                lastReader: turns.last?.readerId,
+                readsTonight: reads,
+                nightsAttended: questionBox.nightsAttended[event.roomId] ?? [:]
+            ) else { return }
+            reader = pick.reader
+            nextCursor = pick.nextCursor
+        }
+        let depth = QuestionBoxPacing.depth(
+            isOpener: isOpener,
+            turnsServed: turns.filter { $0.kind != "pass" }.count,
+            deepServedTonight: questionBox.deepServedAt[eventId] != nil,
+            playedAt: event.playedAt,
+            now: Date()
+        )
+        // A room with no deeper question left stays light tonight.
+        guard let question = qbDraw(roomId: event.roomId, eventId: eventId, houseDeck: settings.houseDeck, depth: depth)
+            ?? (depth == .deep ? qbDraw(roomId: event.roomId, eventId: eventId, houseDeck: settings.houseDeck, depth: .light) : nil)
+        else { return }
         qbCloseOpenTurns(eventId)
         questionBox.turns[eventId, default: []].append(.init(
             id: UUID(), readerId: reader, questionId: question.id, text: question.text,
             kind: isOpener ? "opener" : "interval", createdAt: Date(), closed: false
         ))
-        if !isOpener { questionBox.readerIndex[eventId] = index + 1 }
+        if question.depth == .deep { questionBox.deepServedAt[eventId] = Date() }
+        if let nextCursor { questionBox.readerIndex[eventId] = nextCursor }
     }
 
     private func qbRotation(eventId: UUID) async throws -> [UUID] {
@@ -250,12 +292,12 @@ extension InMemoryRoomStore: QuestionBoxStore {
         return QuestionBoxRotation.order(withdrawals: questionBox.withdrawals[eventId] ?? [], claims: claims)
     }
 
-    private func qbDraw(roomId: UUID, eventId: UUID, houseDeck: Bool) -> RoomQuestion? {
+    private func qbDraw(roomId: UUID, eventId: UUID, houseDeck: Bool, depth: QuestionDepth) -> RoomQuestion? {
         qbSeedDeckIfNeeded(roomId)
         var rows = questionBox.questions[roomId] ?? []
         let pool = rows.indices.filter { idx in
             let q = rows[idx]
-            guard q.drawnAt == nil else { return false }
+            guard q.drawnAt == nil, q.depth == depth else { return false }
             switch q.source {
             case .member: return q.eventId == eventId
             case .host: return true
@@ -317,5 +359,30 @@ extension InMemoryRoomStore: QuestionBoxStore {
 
     func registerDeviceToken(_ token: String, sandbox: Bool, appVersion: String?) async throws {
         questionBox.deviceTokens.insert(token)
+    }
+}
+
+extension InMemoryRoomStore {
+    /// 118: who is at the table tonight (in withdrawal order) and how many
+    /// nights each has had in this room before. The `live` UI-test seed
+    /// and the harness use it; the server reads both from the ledger.
+    func seedQuestionBoxTable(
+        eventId: UUID,
+        roomId: UUID,
+        withdrawals: [QuestionBoxRotation.Withdrawal],
+        nightsAttended: [UUID: Int]
+    ) {
+        questionBox.withdrawals[eventId] = withdrawals
+        questionBox.nightsAttended[roomId] = nightsAttended
+    }
+
+    /// 118: the turns served tonight, oldest first, with the depth each
+    /// question was drawn at. Harness read-back only.
+    func questionBoxServedTurns(eventId: UUID) -> [(reader: UUID, kind: String, depth: QuestionDepth)] {
+        guard let roomId = roomIdForEvent(eventId) else { return [] }
+        let rows = questionBox.questions[roomId] ?? []
+        return (questionBox.turns[eventId] ?? []).map { turn in
+            (turn.readerId, turn.kind, rows.first { $0.id == turn.questionId }?.depth ?? .light)
+        }
     }
 }
