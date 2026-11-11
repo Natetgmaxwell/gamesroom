@@ -1,11 +1,12 @@
 # STATE cc-cc-b
 Base: 7e7bf4b4a4e16c9b1893b3b440b8af3340b53ea6  Branch: cc/janitor-pg-cron  Worktree: /Users/nathanmaxwell/Projects/worktrees/cc/janitor-pg-cron
 Rewrite this file after every step: tick the step, set NEXT to the following one. When all are ticked, replace the NEXT line with: ALL STEPS DONE
-NEXT: B5 final iteration — gate, commit, set STATE to ALL STEPS DONE
+ALL STEPS DONE
 - [x] B1 facts: extract signatures + client cadence into REPORT-task-B.md
 - [x] B2 write the guarded pg_cron migration (landed as Supabase/migrations/120_stale_close_cron.sql)
 - [x] B3 write Supabase/tests/120_probes.sql
 - [x] B4 finish REPORT-task-B.md incl client removal plan
+- [x] B5 final: gate green, STATE set to ALL STEPS DONE
 
 NOTE (B1): migration number 118 is TAKEN on this branch (Supabase/migrations/118_question_box_depth.sql; 119 also exists). Per Supabase/migrations/README.md rule 3 the next free number is 120. Brief's STOP-AND-REPORT item hit; filename decision needed before B2.
 NOTE (B1): public.auto_close_stale_events(uuid) is PER-ROOM and its 115 member gate (current_user_id() null -> 42501) makes it uncallable from cron, so the wrapper must do the events update itself; public.close_stale_attestations() is GLOBAL and guard-free (one call).
@@ -19,3 +20,5 @@ NOTE (B4): REPORT-task-B.md §4 is now the client-removal spec for the LATER sli
 NOTE (B4): REPORT §5 now also records the probe-format deviation (repo style `raise notice 'PROBE <id> PASS|FAIL'` instead of the brief's `select 'PROBE <id> ' || case ...`), the fact that the probes were never executed here, and observation 4 — docs/STATE-MACHINES.md:93 credits auto_close_stale_events with a deposit-ledger forfeit move that no migration performs (080/081/115 only write events.settled_at; the forfeit is host-driven via forfeit_seat_deposit). Flagged, not touched: docs/ is outside the allowed files.
 NOTE (B4): corrected §2.4 in the report — public.events has TWO triggers, not one: trg_check_one_upcoming_event (115:896) and trg_reject_retired_pack (100:79-81, fires only on `update of pack_slug`). Neither fires on a settled_at-only update, so the "no settlement side effects" claim stands, but it now says why.
 NOTE (B4): gate green before the commit — FASTGATE: PASS (592 cases, 72/72 parse-check).
+NOTE (B5): final iteration. Gate re-run before this commit — FASTGATE: PASS (592 cases: 592 passed, 0 failed; parse-check-swiftui pass=72 fail=0). Working tree clean apart from this STATE file; ghost-dup check (`git status --porcelain | grep -E " [0-9]"`) returned nothing, so no `* [0-9]*.*` file was staged. No Swift file, migration, probe or report was touched in B5 — this commit changes only .maestro/STATE-cc-b.md. Lane commits on this branch, in order: 7014437 B1: janitor facts / f2a1885 B2: migration 118 stale-close cron / 15271ae B3: probes 118 / aa5349a B4: report / (this commit) B5: all steps done. Not merged, not pushed, branch not switched — per the brief those are the conductor's calls.
+NOTE (B5): the branch is ready for review, not for landing. Three deviations from the brief remain recorded in REPORT-task-B.md §5 and above, and the conductor still owns them: (1) migration numbered 120 not 118 (118/119 taken); (2) probes at Supabase/tests/120_probes.sql, not supabase/probes/118-stale-close-probes.sql (repo convention); (3) probes written in the repo's `raise notice 'PROBE <id> PASS|FAIL'` style, not the brief's `select 'PROBE <id> ' || case ...`. Live apply of the migration is Nathan-gated and was NOT done in this lane; the 22 probes have never been executed against a live or replica database.
