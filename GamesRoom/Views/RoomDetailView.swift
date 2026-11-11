@@ -134,20 +134,6 @@ struct RoomDetailView: View {
     /// one-line toast; no modal, no haptic on a no-op.
     @State private var seatOutcome: SeatOutcomeToast?
 
-    /// V0.100 — first-refresh gate. Flips to `true` after the
-    /// initial `refresh()` in `.task` resolves. The state machine
-    /// uses this to distinguish "data fetch in flight" (true
-    /// `.loading` — show spinner) from "fetched, no data" (a
-    /// genuine empty state — show `.readStandings` with the
-    /// "ledger fills in after your first night" copy, never a
-    /// spinner). Without this, a freshly-created room with no
-    /// events + no leaderboard rows + no briefing pins the state
-    /// machine at `.loading` forever, so the user sees a spinner
-    /// on a room that will never load. Seeded rooms like Felt
-    /// Faction never hit this path because they carry historical
-    /// leaderboard rows.
-    @State private var hasLoadedInitialData: Bool = false
-
     /// S3.6 / P2 (audit 03 C6) — the join code the empty-room invite
     /// shares, as one phase instead of three flags. There is no read RPC
     /// for the live code (only `generate_join_code`), so it is minted on
@@ -411,14 +397,6 @@ struct RoomDetailView: View {
         }
         .task {
             await refresh()
-            // V0.100 — first-refresh gate. Flip AFTER the refresh
-            // resolves so the state machine can distinguish "still
-            // loading" from "loaded but empty". A failed refresh
-            // still flips the flag — a long-running fetch failure
-            // shouldn't leave the user on a perpetual spinner
-            // either; the per-loader error handling + the eventual
-            // "Pull to refresh" affordance cover the retry path.
-            hasLoadedInitialData = true
         }
         // S3.6 — the empty-room invite needs a join code. The key
         // flips once the roster lands and the host turns out to be
@@ -854,9 +832,21 @@ struct RoomDetailView: View {
 
     // MARK: - State resolution
 
+    /// C — "has the room loaded yet?" is a question about the STORE,
+    /// not about this view instance. `RoomService` owns the room's
+    /// load phase: `.idle` before the first fetch, `.loading` while
+    /// it runs, `.loaded` once it finished (successfully or not).
+    ///
+    /// The old view-local `hasLoadedInitialData` flag inferred the
+    /// same thing from the shape of the data, which is what pinned a
+    /// genuinely-empty room to the spinner forever (the V0.100 bug).
+    /// Asking the store removes the inference: a room with no night,
+    /// no standings and no briefing is `.loaded` and shows its empty
+    /// state, and a pull-to-refresh of a loaded room keeps the phase
+    /// at `.loaded` so the spinner never comes back.
     private var state: V0State {
         V0State.resolve(
-            hasLoaded: hasLoadedInitialData,
+            hasLoaded: roomService.loadPhase(room.id) == .loaded,
             phase: nightPhase(for: activeEvent),
             activeEvent: activeEvent,
             myRSVP: myRSVP,
@@ -1244,7 +1234,23 @@ struct RoomDetailView: View {
     /// members (for the P1.1 roster surface), and the current
     /// season + awards (for the S1.7 season awards section).
     /// Called from `.task` and `.refreshable`.
+    ///
+    /// C — the load phase lives in the store (`RoomService`), not in a
+    /// view flag: this funnel opens it, the body below fills the
+    /// room, and the phase lands on `.loaded` when the body returns
+    /// — successfully or not. The phase is per room, and a refresh of
+    /// an already-loaded room keeps it `.loaded`, so pull-to-refresh
+    /// never puts the spinner back over content the user is reading.
     private func refresh(force: Bool = false) async {
+        await roomService.withRoomLoadPhase(roomId: room.id) {
+            await loadRoomContent(force: force)
+        }
+    }
+
+    /// The body of `refresh(force:)` — every loader the room page
+    /// needs, in parallel. Split out of `refresh` so the phase wrapper
+    /// around it reads as one line instead of a 70-line indent.
+    private func loadRoomContent(force: Bool) async {
         Perf.event("refresh start force=\(force)")
         async let active: () = loadActiveIfNeeded(force: force)
         async let board: () = loadLeaderboardIfNeeded(force: force)
