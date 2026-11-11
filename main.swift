@@ -5284,6 +5284,10 @@ runNewcomerJobTests(runner)
 
 runGladYouCameTests(runner)
 
+// MARK: - Room load phase (task C: the page's first load, as a named machine)
+
+runLoadPhaseTests(runner)
+
 // MARK: - Summary
 
 print("")

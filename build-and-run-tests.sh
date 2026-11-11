@@ -28,6 +28,7 @@ SRC_FILES=(main.swift
            GamesRoom/Services/StorageKeys.swift
            GamesRoom/Services/NightPhase.swift
            GamesRoom/Services/LoadPhase.swift
+           TestsLoadPhase.swift
            GamesRoom/Services/DeviceStateKeys.swift
            GamesRoom/Services/RoomStoreProtocol.swift
            GamesRoom/Services/InMemoryRoomStore.swift
