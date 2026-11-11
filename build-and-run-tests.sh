@@ -55,7 +55,8 @@ SRC_FILES=(main.swift
            TestsTonight.swift
            TestsNextNight.swift \
            TestsQuestionDepth.swift \
-           TestsGladYouCame.swift)
+           TestsGladYouCame.swift \
+           TestsDraftSaver.swift)
 
 echo "Compiling ${BIN} against $SDK..."
 swiftc \

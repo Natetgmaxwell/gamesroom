@@ -5288,6 +5288,10 @@ runGladYouCameTests(runner)
 
 runLoadPhaseTests(runner)
 
+// MARK: - Draft saver (task E: the settings write sequencer, as a table test)
+
+runDraftSaverTests(runner)
+
 // MARK: - Summary
 
 print("")
