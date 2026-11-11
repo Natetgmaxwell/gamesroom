@@ -1,7 +1,7 @@
 # STATE cc-cc-cde
 Base: 7e7bf4b4a4e16c9b1893b3b440b8af3340b53ea6  Branch: cc/client-local-state  Worktree: /Users/nathanmaxwell/Projects/worktrees/cc/client-local-state
 Rewrite this file after every step: tick the step, set NEXT to the following one. When all are ticked, replace the NEXT line with: ALL STEPS DONE
-NEXT: E4
+NEXT: ALL STEPS DONE
 - [x] C1 LoadPhase enum + RoomService phase tracking
 - [x] C2 RoomDetailView reads phase; delete hasLoadedInitialData
 - [x] C3 phase table tests
@@ -10,7 +10,7 @@ NEXT: E4
 - [x] E1 DraftSaver actor
 - [x] E2 RoomSettingsSheet hands off to saver
 - [x] E3 DraftSaver tests
-- [ ] E4 REPORT-task-CDE.md
+- [x] E4 REPORT-task-CDE.md
 
 ## Notes for later steps
 - D1 kept the confetti celebration but re-sourced its trigger. The old code
@@ -257,4 +257,60 @@ function, seven cases, Foundation only.
 `bash .maestro/fastgate.sh --compile` → `FASTGATE: PASS`
 (606 unit cases, 74 parse-check files, `BUILD SUCCEEDED`).
 The seven cases were run four extra times back-to-back with no flake.
+
+## E4 — what landed
+
+**Commit** `b16fabf` "E4: report". One file: `REPORT-task-CDE.md` (repo root).
+
+For each of C, D, E the report gives: the deleted grep anchors with their
+base line numbers, what replaced them, and the behaviour differences that
+could not be avoided. It also records the things a reviewer would otherwise
+have to find by hand:
+
+- **The file-list deviation.** `GamesRoom/Services/RoomService.swift` was
+  edited even though the brief's "Allowed files" list does not name it —
+  step C1 explicitly required the phase to live in `RoomService`. The two
+  instructions cannot both hold; C1's instruction won and the deviation is
+  written down in the report.
+- **The claim celebration (D1).** It now lasts as long as the seat is
+  claimed, not 500 ms — the timer was the thing the data could not express.
+  The burst itself is still a one-shot (`ConfettiBurst` owns its own `burst`
+  state + `onAppear` + 0.45s fade). Two further consequences: the burst no
+  longer re-fires on unrelated roster changes (the old `.onChange` fired it
+  for ANY roster change on which my seat happened to be claimed), and a
+  warm-cache room open now celebrates where it previously stayed silent.
+- **The award entrance (D2).** Fires when the award list CHANGES, not on
+  the card's first paint; the drowning badge's footnote fades with its row's
+  delay (DrowningBadge.swift is outside the allowed list); dividers still
+  appear instantly.
+- **The settings write (E).** Eight behaviour differences, including the
+  change-back-to-the-acknowledged-value now scheduling a write, the
+  "seed moves with every write" baseline being gone, the dismiss path no
+  longer writing twice, the refused-draft retry being once per flush, the
+  re-write waiting out its own 600 ms window when the in-flight write ends
+  first, and the payload being captured at submit time.
+- **One surviving instance of the E pattern, deliberately not converted:**
+  `RoomSettingsCasinoSheet` (`RoomSettingsSheet.swift:1812-1814`) still
+  owns a `.task(id: draftKey)` 600 ms debounce + an `.onDisappear` flush.
+  It is a different surface (the casino chips preset config,
+  `updateCasinoConfig`) with a different payload — not the room settings
+  draft E named — and converting it is not one of E's steps. Flagged in the
+  report for the next task.
+- **UI tests / sweep.** `iPadEmptyRoomContentTests.swift` mentions
+  `hasLoadedInitialData` in a comment and in an assertion message; it
+  asserts BEHAVIOUR (empty room → empty state, not a spinner) and that
+  behaviour is preserved, so the test still passes — and per the brief it
+  was not edited, so its comment is stale. No sweep assertion references
+  the staggered appear or the claim glow.
+- **Outside the allowed file list, reported not edited:**
+  `docs/STATE-MACHINES.md:428` still lists `justClaimed` as view ephemera
+  ("view ephemera such as `packsExpanded` and `justClaimed`") — D1 removed
+  it, so that line is now stale and needs one edit by the doc's owner.
+
+### Verification
+
+`bash .maestro/fastgate.sh --compile` → `FASTGATE: PASS`
+(606 unit cases, 74 parse-check files; the xcodebuild leg succeeded).
+`git log --oneline 7e7bf4b..HEAD` shows all nine step commits plus the
+state commits.
 
