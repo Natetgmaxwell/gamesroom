@@ -1,8 +1,8 @@
 # STATE cc-cc-cde
 Base: 7e7bf4b4a4e16c9b1893b3b440b8af3340b53ea6  Branch: cc/client-local-state  Worktree: /Users/nathanmaxwell/Projects/worktrees/cc/client-local-state
 Rewrite this file after every step: tick the step, set NEXT to the following one. When all are ticked, replace the NEXT line with: ALL STEPS DONE
-NEXT: first step below
-- [ ] C1 LoadPhase enum + RoomService phase tracking
+NEXT: C2
+- [x] C1 LoadPhase enum + RoomService phase tracking
 - [ ] C2 RoomDetailView reads phase; delete hasLoadedInitialData
 - [ ] C3 phase table tests
 - [ ] D1 claim emphasis derived from rsvps data (no stored bool/timer)
