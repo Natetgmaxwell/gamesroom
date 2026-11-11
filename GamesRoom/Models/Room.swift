@@ -170,6 +170,18 @@ struct Room: Identifiable, Codable, Hashable {
     /// Defaults to 10.
     let seatDepositGraceMinutes: Int
 
+    /// 1.2.5 — `rooms.time_zone` (migration 108), when the read carries
+    /// it. The room reads its clock through `timeZone`.
+    let timeZoneId: String?
+
+    /// The room's time zone: `rooms.time_zone` when the read carries it,
+    /// otherwise this device's. The host's device is the one that
+    /// reports the room's zone (`AppReconciler.reportRoomTimeZoneOnce`),
+    /// so on the host's phone the two agree.
+    var timeZone: TimeZone {
+        timeZoneId.flatMap(TimeZone.init(identifier:)) ?? .current
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -206,6 +218,7 @@ struct Room: Identifiable, Codable, Hashable {
     case overlapCount = "overlap_count"
     case overlapNames = "overlap_names"
     case autoCloseHours = "auto_close_hours"
+    case timeZoneId = "time_zone"
     }
 
     init(
@@ -237,7 +250,8 @@ struct Room: Identifiable, Codable, Hashable {
         notificationsEnabled: Bool = false,
         overlapCount: Int = 0,
         overlapNames: [String] = [],
-        autoCloseHours: Int = 8
+        autoCloseHours: Int = 8,
+        timeZoneId: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -268,6 +282,7 @@ struct Room: Identifiable, Codable, Hashable {
         self.overlapCount = overlapCount
         self.overlapNames = overlapNames
         self.autoCloseHours = autoCloseHours
+        self.timeZoneId = timeZoneId
     }
 
     init(from decoder: Decoder) throws {
@@ -309,6 +324,7 @@ struct Room: Identifiable, Codable, Hashable {
         overlapCount = try c.decodeIfPresent(Int.self, forKey: .overlapCount) ?? 0
         overlapNames = try c.decodeIfPresent([String].self, forKey: .overlapNames) ?? []
         autoCloseHours = try c.decodeIfPresent(Int.self, forKey: .autoCloseHours) ?? 8
+        timeZoneId = try c.decodeIfPresent(String.self, forKey: .timeZoneId)
     }
 
     /// V0.85 — encode always writes the renamed seat_deposit_* keys
@@ -347,5 +363,6 @@ struct Room: Identifiable, Codable, Hashable {
         try c.encode(overlapCount, forKey: .overlapCount)
         try c.encode(overlapNames, forKey: .overlapNames)
         try c.encode(autoCloseHours, forKey: .autoCloseHours)
+        try c.encodeIfPresent(timeZoneId, forKey: .timeZoneId)
     }
 }

@@ -94,6 +94,15 @@ struct RoomDetailView: View {
     /// S1.5 — the settle with Undo, and the window that will send it.
     @State private var settle: SettlePhase = .idle
     @State private var settleTask: Task<Void, Never>?
+    /// 1.2.5 — "Same time next Tuesday?": the one-tap booking with
+    /// Undo, and the window that will send it.
+    @State private var booking: NextNightBooking = .idle
+    @State private var bookingTask: Task<Void, Never>?
+    /// 1.2.5 — the cash-out results of the night recapped ABOVE the
+    /// next night's card. The page's chip reads follow the active
+    /// night, so once the next night is booked the recap reads its
+    /// own night's rows here. Keyed by the recapped night.
+    @State private var recapChips: (eventId: UUID, hands: [WorkingHand], transactions: [EventTransaction])?
     /// S1.7 — flips when the awards are dismissed so SwiftUI
     /// re-renders (UserDefaults isn't observed).
     @State private var seasonAwardsDismissedFlip: Bool = false
@@ -478,6 +487,38 @@ struct RoomDetailView: View {
             }
         }
         .animation(reduceMotion ? nil : Theme.Motion.fade, value: settle.showsToast)
+        // 1.2.5 — "Next night booked." with Undo for the 5 s before
+        // the night is created; it stays up while the create is in
+        // flight. Never at the same time as the settle toast: the
+        // booking is only offered once the settle has gone through.
+        .overlay(alignment: .bottom) {
+            if booking.showsToast {
+                HStack(spacing: Theme.Layout.cardLineGap) {
+                    Text(NextNightBooking.toastLine)
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.primaryText)
+                    Spacer()
+                    if booking.undoingOffer != nil {
+                        Button("Undo") { undoBooking() }
+                            .font(Theme.Typography.body.weight(.semibold))
+                            .foregroundStyle(Theme.Palette.accent)
+                            .accessibilityHint(Text("Takes the next night back off the books"))
+                            .accessibilityIdentifier("next-night-undo")
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Theme.Palette.surface)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.Palette.hairline, lineWidth: 1))
+                )
+                .padding(.horizontal, Theme.Layout.edgePadding)
+                .padding(.bottom, 96)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : Theme.Motion.fade, value: booking.showsToast)
         .alert("Seat action failed", isPresented: $showSeatActionError) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -513,10 +554,11 @@ struct RoomDetailView: View {
             EditEventSheet(event: event)
                 .environmentObject(roomService)
 
-        case .addEvent(let seed):
+        case .addEvent(let seed, let packs):
             AddEventSheet(
                 roomId: room.id,
                 initialPlayedAt: seed,
+                initialPackSlugs: packs,
                 onSaved: { _ in
                     presenting = nil
                     justClosedSeason = nil
@@ -1028,25 +1070,13 @@ struct RoomDetailView: View {
                 liveCard(event: event, headerMode: .tonightEvent)
 
             case .justSettled(let event):
-                VStack(spacing: Theme.Layout.cardGroupGap) {
+                // S1.5 / 1.2.5 — the recap ends on the next night: the
+                // host's "Same time next Tuesday?" (or "Plan the next
+                // night") is the card's closing line, `RecapClosing`.
+                // This state only renders while no future night is
+                // known (the room allows one), so it never offers a
+                // second upcoming night.
                 recapCard(event: event)
-                // S1.5 — the host plans the next night from the
-                // recap. This state only renders while no future
-                // night is known (the room allows one), so the plan
-                // never offers a second upcoming night.
-                if NightPlan.plan(for: nightInput(for: event)).primary == .planNextNight {
-                    Button { planNextNight(after: event) } label: {
-                        Text("Plan the next night")
-                            .font(Theme.Typography.body.weight(.semibold))
-                            .foregroundStyle(Theme.Palette.background)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Theme.Palette.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                    .pressScale()
-                }
-                }
 
             case .readStandings:
                 // V0.100 — branch the empty-state copy on host vs
@@ -1229,6 +1259,7 @@ struct RoomDetailView: View {
         async let chapterLoad: () = loadChapterLineIfNeeded(force: force)
         async let transactionsLoad: () = loadEventTransactionsIfNeeded(force: force)
         async let workingHandsLoad: () = loadWorkingHandsIfNeeded(force: force)
+        async let recapChipsLoad: () = loadRecapChipsIfNeeded()
         // V0.84 C2 — Tonight's Star card. Loaded every refresh so
         // a host pick made on another device shows up on next open.
         async let tonightStarLoad: () = loadTonightStarCardIfNeeded(force: force)
@@ -1245,7 +1276,7 @@ struct RoomDetailView: View {
             guard let event = activeEvent else { return }
             await roomService.loadMySeatDeposit(eventId: event.id, force: force)
         }()
-        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packsLoad, chapterLoad, transactionsLoad, workingHandsLoad, tonightStarLoad, notesLoad, arrivalLoad, myDepositLoad)
+        _ = await (active, board, attestations, briefingLoad, rsvpLoad, membersLoad, seasonLoad, eventsLoad, rsvpGridLoad, packsLoad, chapterLoad, transactionsLoad, workingHandsLoad, recapChipsLoad, tonightStarLoad, notesLoad, arrivalLoad, myDepositLoad)
         Perf.event("refresh end")
         // W2.3 — keep the widget/watch snapshot fresh with the
         // current standings. Best-effort write; the stale-empty
@@ -1281,6 +1312,23 @@ struct RoomDetailView: View {
                 )
             }
         )
+    }
+
+    /// 1.2.5 — the cash-out results for the night recapped above the
+    /// next night's card. Once the next night is booked the page's
+    /// chip reads follow it, and the recap would lose its results.
+    private func loadRecapChipsIfNeeded() async {
+        if roomService.cachedActiveEvent(roomId: room.id) == nil {
+            await roomService.loadActiveEvent(roomId: room.id)
+        }
+        guard let recap = recapAboveNextNight else {
+            recapChips = nil
+            return
+        }
+        async let hands = casinoService.loadWorkingHands(eventId: recap.id)
+        async let transactions = casinoService.getEventTransactions(eventId: recap.id)
+        let (h, t) = await (hands, transactions)
+        recapChips = (recap.id, h, t)
     }
 
     /// Loads the chapter line for the active event so the
@@ -2066,10 +2114,131 @@ struct RoomDetailView: View {
                 : nil,
             currentUserId: currentUserId,
             hostedBy: hostedByLine,
-            // The chip reads are loaded for the page's active night;
-            // when the recap IS that night, it carries the results.
-            results: event.id == activeEvent?.id ? tonightScore(for: event) : nil
+            results: recapResults(for: event),
+            closing: recapClosing(for: event),
+            closingNote: booking.failedMessage,
+            onBookSameTime: { offer in bookSameTime(offer) },
+            onPickAnotherTime: { offer in
+                presenting = .addEvent(seed: offer.playedAt, packs: offer.packSlugs)
+            },
+            onPlanNextNight: { planNextNight(after: event) },
+            onClaimNextSeat: {
+                guard let next = activeEvent, next.id != event.id else { return }
+                Task { await claimSeat(eventId: next.id) }
+            }
         )
+    }
+
+    /// How the night went. The chip reads are loaded for the page's
+    /// active night; when the recap IS that night it carries them, and
+    /// when the recap sits above the next night it reads its own rows
+    /// (`recapChips`).
+    private func recapResults(for event: Event) -> TonightScore? {
+        if event.id == activeEvent?.id { return tonightScore(for: event) }
+        guard let chips = recapChips, chips.eventId == event.id else { return nil }
+        let members = roomService.cachedMembers(roomId: room.id)
+        let names = Dictionary(members.map { ($0.userId, $0.displayName) }, uniquingKeysWith: { a, _ in a })
+        return TonightScore.tally(
+            hands: chips.hands,
+            transactions: chips.transactions,
+            players: [],
+            names: names
+        )
+    }
+
+    /// 1.2.5 — the recap's last line. The next night when one is on the
+    /// books (or the host's booking is pending), else the host's
+    /// "Same time next Tuesday?", else "Plan the next night".
+    private func recapClosing(for event: Event) -> RecapClosing {
+        let now = Date()
+        let timeZone = liveRoom.timeZone
+        let hasFuture = NextNightOffer.hasFutureNight(
+            active: activeEvent, settledId: event.id, now: now,
+            autoCloseHours: liveRoom.autoCloseHours
+        )
+        // The closing line names a night that has not started yet; a
+        // next night already under way has its own card below.
+        let booked: Event? = hasFuture && nightPhase(for: activeEvent, now: now) == .upcoming ? activeEvent : nil
+        let offer = NextNightOffer.offer(
+            settled: event,
+            isHost: isHost,
+            hasFutureNight: hasFuture,
+            settleInFlight: settle.showsToast,
+            now: now,
+            timeZone: timeZone
+        )
+        let canPlan = !hasFuture && NightPlan.plan(for: nightInput(for: event)).primary == .planNextNight
+        return RecapClosing.resolve(
+            isHost: isHost,
+            nextNightAt: booked?.playedAt ?? booking.pendingOffer?.playedAt,
+            nextNightIsReal: booked != nil,
+            myRSVPOnNext: booked.map { roomService.cachedRSVP(eventId: $0.id) },
+            offer: offer,
+            canPlan: canPlan,
+            timeZone: timeZone
+        )
+    }
+
+    /// 1.2.5 — "Same time next Tuesday?". Optimistic: the recap reads
+    /// "Next: Tue 17 Nov, 7pm" at once and "Next night booked." offers
+    /// Undo for 5 s. Only then does the night go to the server, so a
+    /// night the host takes back never reaches the table.
+    private func bookSameTime(_ offer: NextNightOffer) {
+        guard !booking.isCommitting else { return }
+        bookingTask?.cancel()
+        let task = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            await commitBooking(offer)
+        }
+        bookingTask = task
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            booking = booking.reduce(.begin(offer))
+        }
+    }
+
+    /// Undo inside the window: nothing was sent.
+    private func undoBooking() {
+        bookingTask?.cancel()
+        bookingTask = nil
+        withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+            booking = booking.reduce(.undo)
+        }
+    }
+
+    /// The create itself, once the Undo window has passed.
+    private func commitBooking(_ offer: NextNightOffer) async {
+        booking = booking.reduce(.commitStarted)
+        do {
+            let newId = try await roomService.addEvent(
+                roomId: room.id,
+                name: offer.name,
+                playedAt: offer.playedAt,
+                packSlugs: offer.packSlugs
+            )
+            await roomService.eventDidChange(eventId: newId)
+            Haptics.success()
+            bookingTask = nil
+            // Read the new night before the pending line goes, so the
+            // recap's "Next: ..." never blinks out and back.
+            await refresh(force: true)
+            withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                booking = booking.reduce(.commitSucceeded)
+            }
+        } catch {
+            bookingTask = nil
+            if ServerErrorCode.code(in: error) == .oneUpcomingNight {
+                // A night is on the books after all: show it.
+                await refresh(force: true)
+                withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                    booking = booking.reduce(.alreadyBooked)
+                }
+            } else {
+                withAnimation(reduceMotion ? nil : Theme.Motion.fade) {
+                    booking = booking.reduce(.commitFailed(NextNightBooking.failureMessage))
+                }
+            }
+        }
     }
 
     /// S1.5 / P2 (audit 03 C2) — "Settle the night". Optimistic: the
@@ -2134,7 +2303,8 @@ struct RoomDetailView: View {
     /// after tonight, same time.
     private func planNextNight(after event: Event) {
         presenting = .addEvent(
-            seed: Calendar.current.date(byAdding: .day, value: 7, to: event.playedAt)
+            seed: NextNightOffer.sameTimeNextWeek(after: event.playedAt, timeZone: liveRoom.timeZone),
+            packs: event.packSlugs
         )
     }
 }
@@ -3291,6 +3461,15 @@ private struct CeremonialCard: View {
     var hostedBy: String? = nil
     /// How the night went, once anyone cashed out. nil hides it.
     var results: TonightScore? = nil
+    /// 1.2.5 — how the recap ends: the next night, the host's
+    /// "Same time next Tuesday?", or "Plan the next night".
+    var closing: RecapClosing = .none
+    /// A failed booking's one line, shown over the prompt (the retry).
+    var closingNote: String? = nil
+    var onBookSameTime: ((NextNightOffer) -> Void)? = nil
+    var onPickAnotherTime: ((NextNightOffer) -> Void)? = nil
+    var onPlanNextNight: (() -> Void)? = nil
+    var onClaimNextSeat: (() -> Void)? = nil
 
     /// V0.84 C2 — host-only. Presents `TonightStarCallSheet`.
     @State private var showingCallSheet = false
@@ -3338,6 +3517,131 @@ private struct CeremonialCard: View {
             .accessibilityIdentifier("make-a-call")
     }
 
+    /// V0.84 C5 — the one-line drop renders for a member once the
+    /// next-morning window is open and they have not answered it.
+    private var showsMemberNote: Bool {
+        !isHost && memberNoteWindowOpen && memberNotePromptVisible
+            && onSubmitMemberNote != nil && onSkipMemberNote != nil
+    }
+
+    /// 1.2.5 — the recap's blocks, in order.
+    private var sections: [RecapSection] {
+        RecapLayout.sections(
+            star: RecapLayout.star(for: tonightStarCard),
+            canMakeACall: canMakeACall,
+            hasResults: !(results?.cashedOut.isEmpty ?? true),
+            showsMemberNote: showsMemberNote,
+            closing: closing
+        )
+    }
+
+    @ViewBuilder
+    private func sectionView(_ section: RecapSection) -> some View {
+        switch section {
+        case .star:
+            // Tonight's Star: the host's pick (or the chip-swing
+            // winner) and their line. The host's "Make a call" rides
+            // the label row so the quote gets the full card width.
+            if let card = tonightStarCard {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardGroupGap) {
+                    TonightStarSection(card: card, onMakeACall: makeACallAction)
+                    // S3 T3 — the foot line only earns its place when
+                    // it says something the name above it doesn't.
+                    if !card.heroFootLine.contains(card.memberDisplayName) {
+                        Text(card.heroFootLine)
+                            .font(Theme.Typography.caption.italic())
+                            .foregroundStyle(Theme.Palette.secondaryText)
+                    }
+                }
+            }
+        case .makeACall:
+            // v1.2.4 S4.3 — with no star to sit beside, the action is
+            // the app's one secondary style on its own row.
+            makeACallButton
+        case .results:
+            if let results {
+                TonightBoard(score: results, currentUserId: currentUserId, isFinal: true)
+            }
+        case .memberNote:
+            // V0.84 C5 — member-only, next-morning window (≥12h after
+            // settle), not yet answered. A self-contained subview.
+            if let onSubmitMemberNote, let onSkipMemberNote {
+                MemberNotePromptSection(
+                    draft: $memberNoteDraft,
+                    onSubmit: {
+                        let text = memberNoteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !text.isEmpty else { return }
+                        onSubmitMemberNote(text)
+                        memberNoteDraft = ""
+                    },
+                    onSkip: {
+                        onSkipMemberNote()
+                        memberNoteDraft = ""
+                    }
+                )
+            }
+        case .closing:
+            closingView
+        }
+    }
+
+    /// 1.2.5 — the recap's last line. One primary at most, and at most
+    /// one grey caption under it.
+    @ViewBuilder
+    private var closingView: some View {
+        switch closing {
+        case .nextNight(let line, let claim):
+            VStack(spacing: Theme.Layout.cardLineGap) {
+                Text(line)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.primaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("recap-next-night")
+                if claim, let onClaimNextSeat {
+                    SecondaryTextAction(title: RecapClosing.claimYourSeat, action: onClaimNextSeat)
+                        .accessibilityIdentifier("recap-claim-seat")
+                }
+            }
+        case .bookSameTime(let offer):
+            VStack(spacing: Theme.Layout.cardLineGap) {
+                if let closingNote {
+                    Text(closingNote)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Button { onBookSameTime?(offer) } label: {
+                    Text(offer.prompt)
+                        .font(Theme.Typography.body.weight(.semibold))
+                        .foregroundStyle(Theme.Palette.background)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Theme.Palette.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .pressScale()
+                .accessibilityIdentifier("same-time-next-week")
+                SecondaryTextAction(title: NextNightOffer.pickAnotherTime) {
+                    onPickAnotherTime?(offer)
+                }
+                .accessibilityIdentifier("pick-another-time")
+            }
+        case .planNextNight:
+            Button { onPlanNextNight?() } label: {
+                Text(RecapClosing.planNextNightTitle)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .foregroundStyle(Theme.Palette.background)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Theme.Palette.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .pressScale()
+        case .none:
+            EmptyView()
+        }
+    }
+
     var body: some View {
         // v1.2.2 S6 T7 — the card rhythm `BriefingSlot` uses (S6 T2):
         // groups (header block, Tonight's Star, the one-line drop,
@@ -3361,85 +3665,22 @@ private struct CeremonialCard: View {
             }
             .accessibilityElement(children: .combine)
 
-            // (2) Tonight's Star section — the host's pick (or the
-            // chip-swing winner) and their line. Hidden when
-            // `tonightStarCard == nil` (no host pick AND no
-            // chip-swing winner — matches the 067 empty case).
-            // The host's "Make a call" rides the label row inside
-            // `TonightStarSection` so the quote gets the full card
-            // width; with no star to sit beside it, it keeps a row
-            // of its own.
-            //
-            // v1.2.4 S4.3 — with no star to sit beside, the action
-            // is the app's one secondary style: a centred grey caption
-            // on its own row, so it no longer hangs off the right edge.
-            if let results, !results.cashedOut.isEmpty {
-                TonightBoard(score: results, currentUserId: currentUserId, isFinal: true)
+            // 1.2.5 — the recap's order is `RecapLayout` (peak-end):
+            // the host's Tonight's Star first, the cash-out results as
+            // they are (loss stays real), and the next night last, so
+            // the night is remembered by a person and by what comes
+            // next rather than by a number.
+            ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                sectionView(section)
             }
-
-            Group {
-                if let card = tonightStarCard {
-                    TonightStarSection(
-                        card: card,
-                        onMakeACall: makeACallAction
-                    )
-                } else if canMakeACall {
-                    makeACallButton
-                }
-            }
-            .sheet(isPresented: $showingCallSheet) {
-                if let onTonightStarPick {
-                    TonightStarCallSheet(
-                        members: hostPickMembers,
-                        currentCard: tonightStarCard,
-                        onSave: onTonightStarPick
-                    )
-                }
-            }
-
-            // V0.84 C5 — one-line drop prompt. Member-only, gated on
-            // both `memberNoteWindowOpen` (the next-morning window
-            // has opened, ≥12h since settle) AND
-            // `memberNotePromptVisible` (the member hasn't already
-            // submitted or dismissed it). Next-morning rule: the
-            // drop arrives the next morning with the recap, NOT on
-            // the post-session screen — the 12h cool-down gives
-            // the member private space to reflect first.
-            //
-            // v1.2.2 S6 T7 — group (3). It is a self-contained
-            // subview, so its own internal steps stay its own (same
-            // call T2 made for `ClaimedCardAskField`); the only gap
-            // it inherits from here is this stack's `cardGroupGap`.
-            if !isHost, memberNoteWindowOpen, memberNotePromptVisible, let onSubmitMemberNote, let onSkipMemberNote {
-                MemberNotePromptSection(
-                    draft: $memberNoteDraft,
-                    onSubmit: {
-                        let text = memberNoteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !text.isEmpty else { return }
-                        onSubmitMemberNote(text)
-                        memberNoteDraft = ""
-                    },
-                    onSkip: {
-                        onSkipMemberNote()
-                        memberNoteDraft = ""
-                    }
+        }
+        .sheet(isPresented: $showingCallSheet) {
+            if let onTonightStarPick {
+                TonightStarCallSheet(
+                    members: hostPickMembers,
+                    currentCard: tonightStarCard,
+                    onSave: onTonightStarPick
                 )
-            }
-
-            // S3 T3 — the foot line only earns its place when it
-            // says something the name above it doesn't. Many mascot
-            // lines restate the winner ("The host picked Alex."),
-            // which reads as a double-say two lines under "Alex".
-            // Drop the line whenever it contains the winner's name;
-            // `heroFootLine` itself is untouched so the text the host
-            // sees in the picker is unchanged.
-            //
-            // v1.2.2 S6 T7 — group (4).
-            if let card = tonightStarCard,
-               !card.heroFootLine.contains(card.memberDisplayName) {
-                Text(card.heroFootLine)
-                    .font(Theme.Typography.caption.italic())
-                    .foregroundStyle(Theme.Palette.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

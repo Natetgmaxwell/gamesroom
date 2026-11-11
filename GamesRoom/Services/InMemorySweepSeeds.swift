@@ -62,6 +62,13 @@
 //    night-settled      S1.8. The night settled 30 minutes ago:
 //                       `.justSettled` (CeremonialCard) with the
 //                       host's "Plan the next night" under it.
+//    recap-next-night   1.2.5. The night settled 30 minutes ago and the
+//                       next one is already booked (next Friday): the
+//                       recap sits above the next night's card, opens
+//                       on the host's Tonight's Star (Alex), keeps the
+//                       cash-out results, and ends on "Next: Fri ...".
+//                       Pair with `-screenshots-as-member` for the
+//                       member's "Claim your seat".
 //
 
 import Foundation
@@ -418,6 +425,49 @@ extension InMemoryRoomStore {
                 nextEpisodeTeaser: nil,
                 writtenAt: Date().addingTimeInterval(-1_800)
             )
+
+        case "recap-next-night":
+            let settled = Event(id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name, playedAt: Date().addingTimeInterval(-10_800), createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: Date().addingTimeInterval(-1_800), sessionId: carwoolaEvent.sessionId, packSlug: carwoolaEvent.packSlug)
+            let next = Event(id: UUID(uuidString: "00000000-0000-0000-0000-0000000000a7")!, roomId: carwoola.id, name: EventDefaultName.name(for: sweepNextFridayEvening()), playedAt: sweepNextFridayEvening(), createdAt: Date().addingTimeInterval(-1_500), venue: carwoolaEvent.venue, hostNote: nil, maxSeats: 6, settledAt: nil, sessionId: nil, packSlug: "casino")
+            events[carwoola.id] = [settled, next]
+            briefings[next.id] = BriefingSummary(
+                eventId: next.id,
+                roomId: carwoola.id,
+                seatsTotal: 6,
+                seatsClaimed: 0,
+                seatsDeclined: 0,
+                seatsUnclaimed: 6
+            )
+            let host = carwoola.createdBy
+            SweepChipSeeds.shared.set(
+                eventId: settled.id,
+                hands: [
+                    WorkingHand(memberId: host, displayName: "Host", workingHand: 260, pointsBalance: 1_260, hasScanned: true, scannedValue: 260),
+                    WorkingHand(memberId: alex, displayName: "Alex", workingHand: 240, pointsBalance: 1_020, hasScanned: true, scannedValue: 240),
+                    WorkingHand(memberId: sam, displayName: "Sam", workingHand: 170, pointsBalance: 710, hasScanned: true, scannedValue: 170),
+                ],
+                transactions: [
+                    EventTransaction(id: UUID(), memberId: host, memberDisplayName: "Host", kind: "casino_settlement", amountPoints: 60, createdAt: Date().addingTimeInterval(-2_000)),
+                    EventTransaction(id: UUID(), memberId: alex, memberDisplayName: "Alex", kind: "casino_settlement", amountPoints: 40, createdAt: Date().addingTimeInterval(-2_000)),
+                    EventTransaction(id: UUID(), memberId: sam, memberDisplayName: "Sam", kind: "casino_settlement", amountPoints: -30, createdAt: Date().addingTimeInterval(-2_000)),
+                ]
+            )
+            chapterLines[settled.id] = ChapterLine(
+                id: UUID(),
+                roomId: carwoola.id,
+                sessionId: settled.id,
+                title: "Felix held the table",
+                nextEpisodeTeaser: nil,
+                writtenAt: Date().addingTimeInterval(-1_800)
+            )
+            tonightStarCards[settled.id] = TonightStarCard(
+                memberId: alex,
+                memberDisplayName: "Alex",
+                overrideCategory: .custom,
+                customText: "Read the whole table all night.",
+                source: "host_pick"
+            )
+            questionBox.settings[carwoola.id] = questionBoxOff
 
         default:
             break

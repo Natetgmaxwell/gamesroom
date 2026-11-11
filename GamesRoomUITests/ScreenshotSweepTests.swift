@@ -285,8 +285,74 @@ final class ScreenshotSweepTests: XCTestCase {
             app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Hosted by you")).firstMatch.exists,
             "The recap no longer credits the host."
         )
+        // 1.2.5 — the recap opens on the host's Star, not on the
+        // numbers: a losing player's last memory must not be "down 30".
+        XCTAssertLessThan(
+            star.frame.minY,
+            app.staticTexts["How the night went"].firstMatch.frame.minY,
+            "The recap leads with the chip results again; Tonight's Star must come first."
+        )
+        // 1.2.5 — nothing is booked, so the host's one primary is
+        // "Same time next <weekday>?" with "Pick another time" under it.
+        let sameTime = app.buttons["same-time-next-week"]
+        XCTAssertTrue(
+            scrollIntoFrame(app, element: sameTime),
+            "The settled night never offered \"Same time next ...?\"."
+        )
+        XCTAssertTrue(
+            sameTime.label.hasPrefix("Same time next "),
+            "The booking prompt lost its copy: \(sameTime.label)"
+        )
+        XCTAssertTrue(app.buttons["pick-another-time"].exists, "\"Pick another time\" is missing under the prompt.")
+        XCTAssertFalse(
+            app.buttons["Plan the next night"].exists,
+            "\"Plan the next night\" came back as a second primary next to the booking prompt."
+        )
 
         snap(app, "06-room-page-settled-last-night")
+    }
+
+    // MARK: - 06c Recap ends on the next night (member)
+
+    func test_06c_recap_ends_on_the_next_night() throws {
+        let app = launchSweep(arguments: [
+            "-screenshots-as-member",
+            "-screenshots-state=recap-next-night"
+        ])
+
+        openRoom(app, named: "Carwoola Crew")
+
+        let star = app.staticTexts["Tonight's Star"].firstMatch
+        XCTAssertTrue(
+            star.waitForExistence(timeout: 10),
+            "The recap above the next night never rendered Tonight's Star."
+        )
+        let results = app.staticTexts["How the night went"].firstMatch
+        XCTAssertTrue(
+            results.waitForExistence(timeout: 5),
+            "The recap above the next night lost the cash-out results."
+        )
+        let next = app.staticTexts["recap-next-night"]
+        XCTAssertTrue(
+            next.waitForExistence(timeout: 5),
+            "The recap no longer ends on the next night."
+        )
+        XCTAssertTrue(
+            next.label.hasPrefix("Next: Fri "),
+            "The closing line should read \"Next: Fri d MMM, 7:30pm\", got \(next.label)"
+        )
+        // Star first, results in the middle, next night last.
+        XCTAssertLessThan(star.frame.minY, results.frame.minY, "Tonight's Star must lead the recap.")
+        XCTAssertLessThan(results.frame.minY, next.frame.minY, "The next night must close the recap.")
+        XCTAssertTrue(scrollIntoFrame(app, element: next), "The closing line never scrolled into view.")
+        XCTAssertTrue(
+            app.buttons["recap-claim-seat"].exists,
+            "A member who has not answered should see \"Claim your seat\" under the next night."
+        )
+        // A night is booked and this is a member: no booking prompt.
+        XCTAssertFalse(app.buttons["same-time-next-week"].exists, "A member was offered the host's booking prompt.")
+
+        snap(app, "06c-recap-ends-on-the-next-night")
     }
 
     // MARK: - 07 Room detail, member idle

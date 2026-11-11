@@ -80,10 +80,17 @@ struct AddEventSheet: View {
     /// date keeps the sheet's own default. The parameter exists in
     /// both lanes with the same name and type, so callers can pass it
     /// positionally or by label.
-    init(roomId: UUID, initialPlayedAt: Date? = nil, onSaved: @escaping (UUID) -> Void) {
+    ///
+    /// 1.2.5 — `initialPackSlugs` pre-selects the games ("Pick another
+    /// time" passes the settled night's packs). Chips are never listed
+    /// here; `save()` files them first either way.
+    init(roomId: UUID, initialPlayedAt: Date? = nil, initialPackSlugs: [String] = [], onSaved: @escaping (UUID) -> Void) {
         self.roomId = roomId
         self.onSaved = onSaved
         _playedAt = State(initialValue: initialPlayedAt ?? AddEventSheet.defaultPlayedAt())
+        _packSlugs = State(initialValue: initialPackSlugs.filter {
+            $0 != CasinoPack.slug && PackRegistry.shared.isRegistered(slug: $0)
+        })
 
     }
 

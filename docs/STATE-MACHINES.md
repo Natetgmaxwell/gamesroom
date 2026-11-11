@@ -175,7 +175,7 @@ inherits it.
 ## 8. Presentation
 
 **States** one enum per presenter node: `RoomPresentation` (`settings`,
-`editEvent`, `addEvent(seed:)`, `withdraw`, `settleScan`, `createRoom`),
+`editEvent`, `addEvent(seed:packs:)`, `withdraw`, `settleScan`, `createRoom`),
 `RoomConfirm` (`settleEarly`), `PackEditor` (`casinoConfig`),
 `RoomListPresentation` (`settings`, `createRoom`, `joinRoom`, `appSettings`),
 `RoomSettingsConfirm` (`declareSeason`, `deleteRoom`, `leaveRoom`),
@@ -316,6 +316,39 @@ the same rows the season leaderboard sums.
 
 **Never** compute "cashed out" or a player's night net anywhere else, and
 never show the season total under the "Tonight" title.
+
+---
+
+## 14. Next night at settle *(1.2.5)*
+
+**States** `NextNightBooking`: `idle`, `undoing(offer)`, `committing(offer)`,
+`failed(offer, message:)`. Events: `NextNightBookingEvent` — `begin`, `undo`,
+`commitStarted`, `commitSucceeded`, `alreadyBooked`, `commitFailed`. The
+offer is `NextNightOffer` ("Same time next Tuesday?": start + 7 days in the
+room's time zone, same packs, default name); the recap's last line is
+`RecapClosing` and its order is `RecapLayout` (host's Tonight's Star,
+results, next night).
+
+**Moves it** `NextNightOffer.offer(settled:isHost:hasFutureNight:settleInFlight:now:timeZone:)`
+— nil for members, when a future night exists (`hasFutureNight`, read from
+`NightPhaseResolver`), while the settle toast is up, or when next week has
+already gone. A tap is `begin` (5 s Undo, nothing sent, the recap already
+reads "Next: ..."); then `add_event`; `one_upcoming_night` is
+`alreadyBooked` (back to idle, the page reloads).
+
+**Owner** `GamesRoom/Models/NextNight.swift`
+
+**Server twin** `add_event` and the one-upcoming-night trigger
+(`115_state_machine_guards.sql`, §9).
+
+**Pinned by** `TestsNextNight.swift` — `NextNight: same time next week keeps the wall clock — DST starts (AEST to AEDT)`,
+`NextNight: the prompt — a future night is already booked`,
+`Recap order: Star first, results, next night last`; sweep
+`test_06_room_page_settled_last_night`, `test_06c_recap_ends_on_the_next_night`.
+
+**Never** add 7 × 24 h to a start time (it drifts an hour across DST), offer
+the booking while a future night exists, or send the create before the Undo
+window has passed.
 
 ---
 
