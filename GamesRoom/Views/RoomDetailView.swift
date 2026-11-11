@@ -2360,6 +2360,8 @@ private struct BriefingSlot: View {
     /// brought-by caption under a claimed seat (S6 T4). Read from
     /// the root `environmentObject`, as `ClaimedCardAskField` does.
     @EnvironmentObject private var questionBox: QuestionBoxService
+    /// 1.2.5 Task 3 — the room's board, for `newcomerLines`.
+    @EnvironmentObject private var roomService: RoomService
 
     init(
         event: Event,
@@ -2432,6 +2434,23 @@ private struct BriefingSlot: View {
     }
 
     private var isNightFull: Bool { seatAvailability == .full }
+
+    /// 1.2.5 Task 3 — "Sam's first night. Give them a job: ...". Host
+    /// only, before the night only, at most two. `NewcomerJob` owns
+    /// every rule; this only hands it the facts.
+    private var newcomerLines: [String] {
+        let board = roomService.cachedLeaderboard(roomId: room.id)
+        return NewcomerJob.lines(
+            isHost: isHost,
+            viewerId: currentUserId,
+            phase: nightPhase,
+            seats: rsvps.map {
+                NewcomerJob.Seat(memberId: $0.memberId, displayName: $0.displayName,
+                                 state: $0.state, claimedAt: $0.claimedAt)
+            },
+            isFirstNight: { BroughtBy.isFirstNight($0, board: board) }
+        )
+    }
 
     var body: some View {
         // v1.2.2 S6 T2 — the card body is ONE stack on two spacing
@@ -2520,6 +2539,22 @@ private struct BriefingSlot: View {
                 // Who's-coming list below names every claimant.
                 SeatGridRow(maxSeats: event.maxSeats, roomId: room.id,
                             rsvps: rsvps, currentUserId: currentUserId)
+            }
+
+            // (4b) 1.2.5 Task 3 — the host's newcomer job lines. Plain
+            // grey text, no card, no button; empty for everyone else.
+            let newcomers = newcomerLines
+            if !newcomers.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Layout.cardLineGap) {
+                    ForEach(newcomers, id: \.self) { line in
+                        Text(line)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Palette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("newcomer-job")
             }
 
             // (5) actions — one group per RSVP state. v1.2 S2 — one
@@ -3043,9 +3078,7 @@ private struct SeatGridRow: View {
     /// path yet: treat that as "not a newcomer" rather than calling
     /// the whole room first-night on a cold open.
     private func isFirstNight(_ userId: UUID) -> Bool {
-        roomService.cachedLeaderboard(roomId: roomId)
-            .first { $0.userId == userId }?
-            .sessionsPlayed == 0
+        BroughtBy.isFirstNight(userId, board: roomService.cachedLeaderboard(roomId: roomId))
     }
 
     private func initial(for name: String) -> String {

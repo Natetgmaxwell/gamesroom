@@ -83,6 +83,20 @@ enum BroughtBy {
         return "via \(anchor)"
     }
 
+    // MARK: - First night
+
+    /// First night = no settled session in this room yet, so the
+    /// leaderboard's all-time `sessionsPlayed` is 0 (spec §4). A
+    /// member missing from the board means it has not loaded on this
+    /// path yet: treat that as "not a newcomer" rather than calling
+    /// the whole room first-night on a cold open.
+    ///
+    /// The one copy of this rule. The seat popover's caption and the
+    /// host's newcomer line (`NewcomerJob`) both read it.
+    static func isFirstNight(_ userId: UUID, board: [LeaderboardEntry]) -> Bool {
+        board.first { $0.userId == userId }?.sessionsPlayed == 0
+    }
+
     // MARK: - Parts
 
     /// "into bouldering", or the member's own text when they already

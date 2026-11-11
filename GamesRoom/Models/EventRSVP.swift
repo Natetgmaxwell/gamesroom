@@ -77,6 +77,10 @@ struct EventRSVP: Identifiable, Codable, Hashable {
     /// the room-level `notifications_enabled`. Surface via
     /// `get_event_rsvps` (migration 066).
     let notificationsMuted: Bool
+    /// 1.2.5 Task 3 — when the seat was claimed (`event_rsvps.responded_at`).
+    /// Optional: `get_event_rsvps` does not return it yet, so this is
+    /// nil today and `NewcomerJob` falls back to the server's row order.
+    let claimedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case eventId = "event_id"
@@ -84,6 +88,7 @@ struct EventRSVP: Identifiable, Codable, Hashable {
         case displayName = "display_name"
         case state
         case notificationsMuted = "notifications_muted"
+        case claimedAt = "responded_at"
     }
 
     init(
@@ -91,7 +96,8 @@ struct EventRSVP: Identifiable, Codable, Hashable {
         memberId: UUID,
         displayName: String,
         state: MemberRSVPState,
-        notificationsMuted: Bool = false
+        notificationsMuted: Bool = false,
+        claimedAt: Date? = nil
     ) {
         self.id = "\(eventId.uuidString):\(memberId.uuidString)"
         self.eventId = eventId
@@ -99,6 +105,7 @@ struct EventRSVP: Identifiable, Codable, Hashable {
         self.displayName = displayName
         self.state = state
         self.notificationsMuted = notificationsMuted
+        self.claimedAt = claimedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -108,6 +115,7 @@ struct EventRSVP: Identifiable, Codable, Hashable {
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? "Member"
         state = try c.decodeIfPresent(MemberRSVPState.self, forKey: .state) ?? .unclaimed
         notificationsMuted = try c.decodeIfPresent(Bool.self, forKey: .notificationsMuted) ?? false
+        claimedAt = try? c.decodeIfPresent(Date.self, forKey: .claimedAt)
         id = "\(eventId.uuidString):\(memberId.uuidString)"
     }
 }
