@@ -5280,6 +5280,10 @@ runQuestionDepthTests(runner)
 
 runNewcomerJobTests(runner)
 
+// MARK: - Glad you came (1.2.5 Task 4: the batched line, the delivery hour, Send with Undo)
+
+runGladYouCameTests(runner)
+
 // MARK: - Summary
 
 print("")

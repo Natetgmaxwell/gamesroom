@@ -295,6 +295,8 @@ enum RecapSection: Equatable {
     case memberNote
     /// The recap's last line: `RecapClosing`.
     case closing
+    /// "Glad you came": `RecapLayout.placingGlad(in:)` puts it in.
+    case glad
 }
 
 /// Where Tonight's Star comes from.
@@ -328,6 +330,16 @@ enum RecapLayout {
         if showsMemberNote { sections.append(.memberNote) }
         if closing != .none { sections.append(.closing) }
         return sections
+    }
+
+    /// 1.2.5 Task 4: "Glad you came" goes directly under Tonight's Star.
+    /// With no star it takes the star's place (under "Make a call" when
+    /// the host has one), so it always comes before the closing line.
+    static func placingGlad(in sections: [RecapSection]) -> [RecapSection] {
+        var placed = sections
+        let anchor = placed.firstIndex(of: .star) ?? placed.firstIndex(of: .makeACall)
+        placed.insert(.glad, at: anchor.map { $0 + 1 } ?? 0)
+        return placed
     }
 
     /// The star's source as the recap reads it.

@@ -69,6 +69,13 @@
 //                       cash-out results, and ends on "Next: Fri ...".
 //                       Pair with `-screenshots-as-member` for the
 //                       member's "Claim your seat".
+//    glad-you-came      1.2.5 Task 4. The same seed as
+//                       recap-next-night. The caller (Nathan) held a
+//                       seat with Host, Alex and Sam, and Alex and Sam
+//                       said they were glad Nathan came. The recap
+//                       shows the line under Tonight's Star and the
+//                       grey "Who were you glad to see?" caption that
+//                       opens the sheet; the next night stays last.
 //
 
 import Foundation
@@ -426,7 +433,9 @@ extension InMemoryRoomStore {
                 writtenAt: Date().addingTimeInterval(-1_800)
             )
 
-        case "recap-next-night":
+        // One seed, two shots: the recap with the Star on top and the
+        // next night at the bottom, and the recipient's glad line.
+        case "recap-next-night", "glad-you-came":
             let settled = Event(id: carwoolaEvent.id, roomId: carwoola.id, name: carwoolaEvent.name, playedAt: Date().addingTimeInterval(-10_800), createdAt: carwoolaEvent.createdAt, venue: carwoolaEvent.venue, hostNote: carwoolaEvent.hostNote, maxSeats: carwoolaEvent.maxSeats, settledAt: Date().addingTimeInterval(-1_800), sessionId: carwoolaEvent.sessionId, packSlug: carwoolaEvent.packSlug)
             let next = Event(id: UUID(uuidString: "00000000-0000-0000-0000-0000000000a7")!, roomId: carwoola.id, name: EventDefaultName.name(for: sweepNextFridayEvening()), playedAt: sweepNextFridayEvening(), createdAt: Date().addingTimeInterval(-1_500), venue: carwoolaEvent.venue, hostNote: nil, maxSeats: 6, settledAt: nil, sessionId: nil, packSlug: "casino")
             events[carwoola.id] = [settled, next]
@@ -452,6 +461,11 @@ extension InMemoryRoomStore {
                     EventTransaction(id: UUID(), memberId: sam, memberDisplayName: "Sam", kind: "casino_settlement", amountPoints: -30, createdAt: Date().addingTimeInterval(-2_000)),
                 ]
             )
+            let me = Self.screenshotCallerId
+            seedExtraMember(roomId: carwoola.id, userId: me, displayName: "Nathan")
+            rsvps[settled.id] = [
+                carwoola.createdBy: .claimed, alex: .claimed, sam: .claimed, me: .claimed,
+            ]
             chapterLines[settled.id] = ChapterLine(
                 id: UUID(),
                 roomId: carwoola.id,
@@ -468,6 +482,10 @@ extension InMemoryRoomStore {
                 source: "host_pick"
             )
             questionBox.settings[carwoola.id] = questionBoxOff
+            InMemoryGladStore.shared.seed([
+                GladNote(eventId: settled.id, fromUser: alex, toUser: me, createdAt: Date().addingTimeInterval(-1_200)),
+                GladNote(eventId: settled.id, fromUser: sam, toUser: me, createdAt: Date().addingTimeInterval(-600)),
+            ])
 
         default:
             break

@@ -3559,13 +3559,13 @@ private struct CeremonialCard: View {
 
     /// 1.2.5 — the recap's blocks, in order.
     private var sections: [RecapSection] {
-        RecapLayout.sections(
+        RecapLayout.placingGlad(in: RecapLayout.sections(
             star: RecapLayout.star(for: tonightStarCard),
             canMakeACall: canMakeACall,
             hasResults: !(results?.cashedOut.isEmpty ?? true),
             showsMemberNote: showsMemberNote,
             closing: closing
-        )
+        ))
     }
 
     @ViewBuilder
@@ -3591,6 +3591,9 @@ private struct CeremonialCard: View {
             // v1.2.4 S4.3 — with no star to sit beside, the action is
             // the app's one secondary style on its own row.
             makeACallButton
+        case .glad:
+            // 1.2.5 Task 4: "Glad you came", under Tonight's Star.
+            GladYouCameSection(event: event, viewerId: currentUserId)
         case .results:
             if let results {
                 TonightBoard(score: results, currentUserId: currentUserId, isFinal: true)
@@ -3703,7 +3706,9 @@ private struct CeremonialCard: View {
             // they are (loss stays real), and the next night last, so
             // the night is remembered by a person and by what comes
             // next rather than by a number.
-            ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+            // Keyed by section, not position: the Glad section holds a
+            // live Undo and must survive results arriving above it.
+            ForEach(sections, id: \.self) { section in
                 sectionView(section)
             }
         }

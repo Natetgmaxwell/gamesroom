@@ -265,6 +265,23 @@ private func runRecapLayoutTests(_ runner: TestRunner) {
         runner.assertEqual(sections.last, .closing)
     }
 
+    // (label, sections from `RecapLayout.sections`, expected with Glad placed)
+    let gladRows: [(String, [RecapSection], [RecapSection])] = [
+        ("directly under the Star, above the results", [.star, .results, .closing], [.star, .glad, .results, .closing]),
+        ("under a chip-swing Star, which sits after the results", [.results, .star, .closing], [.results, .star, .glad, .closing]),
+        ("under Make a call when there is no Star", [.makeACall, .results, .closing], [.makeACall, .glad, .results, .closing]),
+        ("no Star: above the results", [.results, .closing], [.glad, .results, .closing]),
+        ("before the member note", [.star, .results, .memberNote, .closing], [.star, .glad, .results, .memberNote, .closing]),
+        ("an otherwise empty recap still has it", [], [.glad]),
+    ]
+    for (label, sections, expected) in gladRows {
+        runner.run("Recap order: Glad you came — \(label)") {
+            let placed = RecapLayout.placingGlad(in: sections)
+            runner.assertEqual(placed, expected)
+            if sections.last == .closing { runner.assertEqual(placed.last, .closing) }
+        }
+    }
+
     runner.run("Recap order: the Star's source decides where it sits") {
         let pick = TonightStarCard(memberId: UUID(), memberDisplayName: "Alex", overrideCategory: .custom, customText: "x", source: "host_pick")
         let swing = TonightStarCard(memberId: UUID(), memberDisplayName: "Sam", overrideCategory: nil, customText: nil, source: "chip_swing")

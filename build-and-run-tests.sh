@@ -42,6 +42,7 @@ SRC_FILES=(main.swift
            GamesRoom/Services/NightPlan.swift
            GamesRoom/Services/EventDefaultName.swift
            GamesRoom/Services/BriefingReconciler.swift
+           GamesRoom/Services/GladStore.swift
            TestsBriefingReconcile.swift
            TestsDeviceState.swift
            TestsS2.swift
@@ -50,7 +51,8 @@ SRC_FILES=(main.swift
            TestsFX30.swift
            TestsTonight.swift
            TestsNextNight.swift \
-           TestsQuestionDepth.swift)
+           TestsQuestionDepth.swift \
+           TestsGladYouCame.swift)
 
 echo "Compiling ${BIN} against $SDK..."
 swiftc \

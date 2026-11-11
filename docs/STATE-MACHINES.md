@@ -327,7 +327,8 @@ never show the season total under the "Tonight" title.
 offer is `NextNightOffer` ("Same time next Tuesday?": start + 7 days in the
 room's time zone, same packs, default name); the recap's last line is
 `RecapClosing` and its order is `RecapLayout` (host's Tonight's Star,
-results, next night).
+results, next night; `RecapLayout.placingGlad(in:)` adds §16's section
+directly under the Star).
 
 **Moves it** `NextNightOffer.offer(settled:isHost:hasFutureNight:settleInFlight:now:timeZone:)`
 — nil for members, when a future night exists (`hasFutureNight`, read from
@@ -376,6 +377,38 @@ and `Question depth: the reader pick favours newer members and never repeats`.
 **Never** put the word "deep" or "level" on screen (the host's add sheet says
 "Deeper", nothing else does), count or show nights attended to anyone, or
 serve a deep question from anywhere but `question_box_advance`.
+
+## 16. Glad you came *(1.2.5 Task 4)*
+
+**States** `GladSendPhase`: `idle`, `undoing([UUID])`, `committing([UUID])`,
+`sent([UUID])`, `failed([UUID])`. Server ledger `glad_push_queue.push_status`:
+`queued`, `sending`, `sent`, `failed`, `no_device`, `skipped_muted`, `expired`.
+
+**Moves it** `GladSendPhase.reduce(_:)` — `send` → `undoing` (5 s, nothing
+sent); `commitStarted` → `committing` (Undo gone); `succeeded` / `failed`.
+Who may send is `GladYouCame.canSend(phase:viewerHadSeat:)`, fed by
+`NightPhaseResolver` (`.recap` only). The push hour is
+`GladPushTime.deliverAt(settledAt:timeZone:)`; the sentence is
+`GladYouCame.line(senderNames:)`.
+
+**Owner** `GamesRoom/Models/GladYouCame.swift` (view:
+`GamesRoom/Views/GladYouCameSection.swift`, one line in `CeremonialCard`,
+placed by `RecapLayout.placingGlad(in:)`)
+
+**Server twin** `Supabase/migrations/119_glad_you_came.sql`: the insert
+policy via `glad_can_send` (uses `night_phase`), `glad_push_deliver_at`,
+`glad_push_cron_tick`; copy twin `composeGladCopy` in
+`Supabase/functions/glad-push/handler.ts`.
+
+**Pinned by** `TestsGladYouCame.swift` — `Glad: push time — 13:00 / 21:30 / 23:30 and the edges, in the room's zone`
+and `Glad: batching copy for 1, 2, 3 and 4 senders`; `TestsNextNight.swift` —
+`Recap order: Glad you came — directly under the Star, above the results`;
+`Supabase/tests/119_probes.sql`; `glad-push/handler_test.ts`; sweep
+`test_06b_glad_you_came`, `test_06c_recap_ends_on_the_next_night`.
+
+**Never** count, rank or total these rows anywhere, give the host a view of
+them, or add an RPC that returns anything but the caller's own sent rows and
+rows addressed to the caller.
 
 ---
 
