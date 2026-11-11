@@ -134,20 +134,6 @@ struct RoomDetailView: View {
     /// one-line toast; no modal, no haptic on a no-op.
     @State private var seatOutcome: SeatOutcomeToast?
 
-    /// V0.100 — first-refresh gate. Flips to `true` after the
-    /// initial `refresh()` in `.task` resolves. The state machine
-    /// uses this to distinguish "data fetch in flight" (true
-    /// `.loading` — show spinner) from "fetched, no data" (a
-    /// genuine empty state — show `.readStandings` with the
-    /// "ledger fills in after your first night" copy, never a
-    /// spinner). Without this, a freshly-created room with no
-    /// events + no leaderboard rows + no briefing pins the state
-    /// machine at `.loading` forever, so the user sees a spinner
-    /// on a room that will never load. Seeded rooms like Felt
-    /// Faction never hit this path because they carry historical
-    /// leaderboard rows.
-    @State private var hasLoadedInitialData: Bool = false
-
     /// S3.6 / P2 (audit 03 C6) — the join code the empty-room invite
     /// shares, as one phase instead of three flags. There is no read RPC
     /// for the live code (only `generate_join_code`), so it is minted on
@@ -411,14 +397,6 @@ struct RoomDetailView: View {
         }
         .task {
             await refresh()
-            // V0.100 — first-refresh gate. Flip AFTER the refresh
-            // resolves so the state machine can distinguish "still
-            // loading" from "loaded but empty". A failed refresh
-            // still flips the flag — a long-running fetch failure
-            // shouldn't leave the user on a perpetual spinner
-            // either; the per-loader error handling + the eventual
-            // "Pull to refresh" affordance cover the retry path.
-            hasLoadedInitialData = true
         }
         // S3.6 — the empty-room invite needs a join code. The key
         // flips once the roster lands and the host turns out to be
@@ -854,9 +832,21 @@ struct RoomDetailView: View {
 
     // MARK: - State resolution
 
+    /// C — "has the room loaded yet?" is a question about the STORE,
+    /// not about this view instance. `RoomService` owns the room's
+    /// load phase: `.idle` before the first fetch, `.loading` while
+    /// it runs, `.loaded` once it finished (successfully or not).
+    ///
+    /// The old view-local `hasLoadedInitialData` flag inferred the
+    /// same thing from the shape of the data, which is what pinned a
+    /// genuinely-empty room to the spinner forever (the V0.100 bug).
+    /// Asking the store removes the inference: a room with no night,
+    /// no standings and no briefing is `.loaded` and shows its empty
+    /// state, and a pull-to-refresh of a loaded room keeps the phase
+    /// at `.loaded` so the spinner never comes back.
     private var state: V0State {
         V0State.resolve(
-            hasLoaded: hasLoadedInitialData,
+            hasLoaded: roomService.loadPhase(room.id) == .loaded,
             phase: nightPhase(for: activeEvent),
             activeEvent: activeEvent,
             myRSVP: myRSVP,
@@ -1244,7 +1234,23 @@ struct RoomDetailView: View {
     /// members (for the P1.1 roster surface), and the current
     /// season + awards (for the S1.7 season awards section).
     /// Called from `.task` and `.refreshable`.
+    ///
+    /// C — the load phase lives in the store (`RoomService`), not in a
+    /// view flag: this funnel opens it, the body below fills the
+    /// room, and the phase lands on `.loaded` when the body returns
+    /// — successfully or not. The phase is per room, and a refresh of
+    /// an already-loaded room keeps it `.loaded`, so pull-to-refresh
+    /// never puts the spinner back over content the user is reading.
     private func refresh(force: Bool = false) async {
+        await roomService.withRoomLoadPhase(roomId: room.id) {
+            await loadRoomContent(force: force)
+        }
+    }
+
+    /// The body of `refresh(force:)` — every loader the room page
+    /// needs, in parallel. Split out of `refresh` so the phase wrapper
+    /// around it reads as one line instead of a 70-line indent.
+    private func loadRoomContent(force: Bool) async {
         Perf.event("refresh start force=\(force)")
         async let active: () = loadActiveIfNeeded(force: force)
         async let board: () = loadLeaderboardIfNeeded(force: force)
@@ -2913,16 +2919,22 @@ private struct SeatGridRow: View {
     /// V0.106 shipped is unchanged.
     @EnvironmentObject private var questionBox: QuestionBoxService
 
-    /// V0.42 — fires only for the current user's claim, not every
-    /// grid render. Reset to false after ~500ms so the burst is a
-    /// single one-shot celebration.
-    @State private var justClaimed: Bool = false
     /// v1.2.2 S6 T4 — whose seat popover is open. One at a time: a
     /// grid of buttons all sharing one presenter reads as "the grid
     /// is open", not "this seat is open". The binding per cell is
     /// built from this id.
     @State private var popoverMemberId: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// D1 — "do I hold a claimed seat?", answered by the roster. The
+    /// grid used to keep a `justClaimed` flag in `@State` and clear it
+    /// 500 ms later from a detached `Task`; the roster already knows
+    /// whose seat this is, so the flag was a second copy of the truth
+    /// waiting to go stale. One answer, one owner: the rsvps.
+    private var mySeatClaimed: Bool {
+        guard let me = currentUserId else { return false }
+        return rsvps.contains { $0.memberId == me && $0.state == .claimed }
+    }
 
     private var columnCount: Int { SeatGrid.columnCount(for: maxSeats) }
 
@@ -2958,14 +2970,10 @@ private struct SeatGridRow: View {
                     }
             }
         }
-        .onChange(of: rsvps) { _, newValue in
-            guard let me = currentUserId else { return }
-            let nowClaimed = newValue.contains { $0.memberId == me && $0.state == .claimed }
-            if nowClaimed {
-                justClaimed = true
-                Task { try? await Task.sleep(for: .milliseconds(500)); justClaimed = false }
-            }
-        }
+        // D1 — the roster is the animation input. When it changes, the
+        // grid cross-fades to the new arrangement instead of the view
+        // deciding when to celebrate.
+        .animation(reduceMotion ? nil : Theme.Motion.fade, value: rsvps)
     }
 
     /// Vertical rule after every cell that is not in the last
@@ -3007,11 +3015,13 @@ private struct SeatGridRow: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .overlay {
-                    if isYours && justClaimed {
+                    // D1 — the burst hangs off the roster, not off a
+                    // timer: it rides the cell that carries my claim.
+                    if isYours && mySeatClaimed {
                         ConfettiBurst()
                     }
                 }
-                .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: isYours)
+                .animation(reduceMotion ? nil : Theme.Motion.popIn, value: isYours)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(accessibilityLabel(for: rsvp)))
@@ -3972,14 +3982,9 @@ private struct AwardsCard: View {
     /// so this is a manual-pass surface on an Xcode host.
     @State private var shareImage: UIImage?
 
-    /// V0.70 — per-row appear state. The set holds the indices of
-    /// rows that have already staggered in; each row reads its own
-    /// membership to drive opacity/offset. Each row's `onAppear`
-    /// sleeps `idx * 50ms` then inserts its own index inside a
-    /// `withAnimation(Theme.Motion.fade)` (no `.delay` — the sleep
-    /// already staggers), so rows cascade in independently and a
-    /// late-appearing row doesn't short-circuit the cascade.
-    @State private var appearedIndices: Set<Int> = []
+    /// D2 — reduced motion turns the rows' entrance off entirely:
+    /// the rows are simply there, no fade, no stagger.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Stable display order: phoenix, veteran, whale, drowning,
     /// ironMann, comebackKid, goodSport. `AwardType.CaseIterable`
@@ -4010,26 +4015,33 @@ private struct AwardsCard: View {
                 }
             }
 
-            if sortedAwards.isEmpty {
-                Text("Awards haven't been declared yet.")
-                    .font(Theme.Typography.body)
-                    .foregroundStyle(Theme.Palette.secondaryText)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
-                        awardView(for: award, at: idx)
-                        if idx != sortedAwards.count - 1 {
-                            Divider()
-                                .overlay(Theme.Palette.hairline)
-                                // Start the hairline under the row
-                                // text, past the icon column, so the
-                                // award names and the rule share a
-                                // left edge.
-                                .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
-                        }
+            // D2 — the awards list. The container is rendered even
+            // while there is nothing to show, so it is already in the
+            // hierarchy when the awards land: its `.animation(value:)`
+            // then turns the rows' insertion into a fade instead of a
+            // pop. Each row carries its own delay (see
+            // `StaggeredAwardRow`), so the rows still cascade in —
+            // declaratively, with no "has this row appeared" flag.
+            VStack(spacing: 0) {
+                if sortedAwards.isEmpty {
+                    Text("Awards haven't been declared yet.")
+                        .font(Theme.Typography.body)
+                        .foregroundStyle(Theme.Palette.secondaryText)
+                }
+                ForEach(Array(sortedAwards.enumerated()), id: \.element.id) { idx, award in
+                    awardView(for: award, at: idx)
+                    if idx != sortedAwards.count - 1 {
+                        Divider()
+                            .overlay(Theme.Palette.hairline)
+                            // Start the hairline under the row
+                            // text, past the icon column, so the
+                            // award names and the rule share a
+                            // left edge.
+                            .padding(.leading, Theme.Layout.rowIconWidth + Theme.Layout.cardInset)
                     }
                 }
             }
+            .animation(reduceMotion ? nil : Theme.Motion.fade, value: sortedAwards)
 
             // V0.53 — share the member's own stat card. The card is
             // generated on the member's device and shared through the
@@ -4072,9 +4084,14 @@ private struct AwardsCard: View {
         return image
     }
 
-    @ViewBuilder
+    /// D2 — one award row. The row's *content* says how it enters
+    /// (a fade from 6pt below — the same subtle distance the old
+    /// stagger used: no scale, no spring); the wrapper says *when*
+    /// (one delay per row). The delay lives in the row's transaction
+    /// instead of in a timer the view owns, so nothing about the
+    /// entrance is stored.
     private func awardView(for award: SeasonAward, at idx: Int) -> some View {
-        Group {
+        StaggeredAwardRow(index: idx, reduceMotion: reduceMotion) {
             if award.awardType == .drowning {
                 DrowningBadge(
                     award: award,
@@ -4086,30 +4103,35 @@ private struct AwardsCard: View {
                 AwardRow(award: award)
             }
         }
-        // V0.70 — staggered fade-in. Subtle (opacity + 6pt offset,
-        // no scale, no spring) per the V0.8 "table distance" rule.
-        // Per-row state: each row reads its own membership in
-        // `appearedIndices`, so the rows cascade independently and
-        // row 0's onAppear can't flip a shared Bool that every row
-        // reads.
-        .opacity(appearedIndices.contains(idx) ? 1 : 0)
-        .offset(y: appearedIndices.contains(idx) ? 0 : 6)
-        .onAppear { staggerAppear(idx: idx) }
     }
+}
 
-    /// V0.70 — dispatches a staggered state flip for one row.
-    /// Sleeps for `idx * 50ms`, then inserts `idx` into
-    /// `appearedIndices` inside a `withAnimation(Theme.Motion.fade)`
-    /// — no `.delay`, because the sleep already staggers the flip
-    /// and stacking another delay would double-stagger. The
-    /// `Task.isCancelled` guard short-circuits on view teardown.
-    private func staggerAppear(idx: Int) {
-        Task {
-            try? await Task.sleep(for: .milliseconds(idx * 50))
-            if !Task.isCancelled {
-                withAnimation(Theme.Motion.fade) {
-                    _ = appearedIndices.insert(idx)
-                }
+/// D2 — the awards-card row entrance, without stored appearance
+/// state.
+///
+/// The wrapper owns the row's *transaction* — the animation that
+/// drives the row's transition. Every row's transaction carries its
+/// own delay (`index * 50ms`), so the rows cascade in exactly the way
+/// the old `Task.sleep` stagger did, but the delay is a property of
+/// the transaction rather than of state the view has to remember.
+/// The content owns the transition itself (fade + 6pt offset).
+///
+/// Reduced motion sets no animation, so the rows simply appear.
+private struct StaggeredAwardRow<Content: View>: View {
+    let index: Int
+    let reduceMotion: Bool
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        Group {
+            content()
+                .transition(.opacity.combined(with: .offset(y: 6)))
+        }
+        .transaction { transaction in
+            if reduceMotion {
+                transaction.animation = nil
+            } else {
+                transaction.animation = Theme.Motion.fade.delay(Double(index) * 0.05)
             }
         }
     }

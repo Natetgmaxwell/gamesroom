@@ -5284,6 +5284,14 @@ runNewcomerJobTests(runner)
 
 runGladYouCameTests(runner)
 
+// MARK: - Room load phase (task C: the page's first load, as a named machine)
+
+runLoadPhaseTests(runner)
+
+// MARK: - Draft saver (task E: the settings write sequencer, as a table test)
+
+runDraftSaverTests(runner)
+
 // MARK: - Summary
 
 print("")
