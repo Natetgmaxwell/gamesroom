@@ -144,9 +144,11 @@ select 'PROBE FH.b.ended-over-active ' || case when (
 
 -- b2: a non-member gets no season.
 select pg_temp.act('00000000-0000-0000-0000-000000000f99');
+-- get_current_season returns a single composite row (RETURNS seasons), so count(*) is always 1;
+-- the boundary check is whether the row's id is null for a non-member.
 select 'PROBE FH.b.non-member-none ' || case when (
-  select count(*) from public.get_current_season('00000000-0000-0000-0000-000000000e01')
-) = 0 then 'PASS' else 'FAIL' end;
+  select s.id from public.get_current_season('00000000-0000-0000-0000-000000000e01') s
+) is null then 'PASS' else 'FAIL' end;
 
 -- ===========================================================================
 -- c. auto_close_stale_events is idempotent
