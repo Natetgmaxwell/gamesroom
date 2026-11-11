@@ -24,17 +24,23 @@
 //  in the hub's root. The host does not need to enter any room to
 //  toggle their own calendar (it's per-user).
 //
-//  V0.81 — autosave: every edit to the draft restarts a 600ms
-//  trailing debounce via `.task(id: draft)`; the write fires
+//  V0.81 — autosave: every edit to the draft is written after a
+//  600ms trailing debounce; the write fires
 //  `RoomService.updateRoom(...)` + the P1.5 journal write + the
-//  W2.6 season-subtitle RPC. `.onDisappear` flushes a pending
-//  edit so a swipe-dismiss never loses the last keystroke, and a
-//  write that lands while another is in flight is refired after
-//  the in-flight one completes (no edit is silently dropped). On
-//  success the rooms-list cache in `RoomService` is refreshed by
-//  the service and the host sees the new mascot name +
-//  operations immediately on the Rooms page. On failure the
-//  inline status row shows the error and the next edit retries.
+//  W2.6 season-subtitle RPC. A swipe-dismiss flushes a pending
+//  edit so the last keystroke is never lost, and a write that
+//  lands while another is in flight is followed by exactly one
+//  re-write (no edit is silently dropped). On success the
+//  rooms-list cache in `RoomService` is refreshed by the service
+//  and the host sees the new mascot name + operations immediately
+//  on the Rooms page. On failure the inline status row shows the
+//  error and the next edit retries.
+//
+//  Task E — the debounce, the pending draft and the write
+//  serialisation moved out of the view and into `DraftSaver`
+//  (Services/). The view submits the form's current values to the
+//  saver and flushes it on the way out; it no longer owns a
+//  debounce task, a write handle or a dirty flag.
 //
 //  The host-only gate is enforced by the caller
 //  (`RoomDetailView`'s settings gear is conditional on
@@ -78,15 +84,20 @@ struct RoomSettingsSheet: View {
     @State private var briefing48hEnabled: Bool
     @State private var socialPreferencesEnabled: Bool
     // V0.107 — "brought by" host switch. The column is not on the
-    // `Room` model (migration 103 ships its own RPC, not a
+    // `Room` model (migration 103 ships its own RPC, not an
     // `update_room_settings` field), so there is nothing to seed in
     // `init`: the open-time seed comes from `RoomService` on the
-    // stack's `.task` below. `seededShowBroughtBy` holds the value
-    // that seed/wire actually persisted so opening settings never
-    // reads as an edit (the same guard the W2.6 subtitle bumper
-    // uses) while a host tap always does.
+    // stack's `.task` below. `seededShowBroughtBy` is that seed —
+    // `nil` until it has been read. The seed is not an edit (the
+    // server already holds the value), so the one change it causes
+    // is swallowed by `isSeedingShowBroughtBy`; every change after
+    // it is an edit and goes to the saver.
     @State private var showBroughtBy: Bool = true
     @State private var seededShowBroughtBy: Bool?
+    // True between applying the seed and the `onChange` that carries
+    // it. One change, swallowed.
+    @State private var isSeedingShowBroughtBy: Bool = false
+
     @State private var autoCloseHours: Int
     @State private var seatDepositAmount: Int
     @State private var seatDepositTrigger: SeatDepositTrigger
@@ -99,29 +110,24 @@ struct RoomSettingsSheet: View {
     // renders.
     @State private var shareCode: String?
 
-    // V0.81 — autosave state. Promoted to `WriteState` (Models/): the
-    // machine was already right, it only lacked a name for *what* failed.
-    // `writeState` drives the settings status section; `draft` is bumped on
-    // every edit so `.task(id:)` restarts the debounce; `writeTask` lets
-    // `onDisappear` refire a write that was mid-flight so the newest state
-    // is never dropped.
-    @State private var writeState: WriteState = .idle
-    @State private var draft = 0
-    // V0.81 — true when an edit landed that no write has captured
-    // yet. Cleared when a write starts; set again if an edit lands
-    // while the write is in flight. Drives the dismiss-time retry.
-    @State private var isDirty = false
-    @State private var writeTask: Task<Void, Never>?
-    // V0.81 — write serialization, wrapped as a value type so the same
-    // behaviour is table-tested: at most one writeAll runs at a time. An
-    // overlapping call (an edit landed while a write is in flight and the
-    // debounce fired again) queues a refire instead of running concurrently
-    // — concurrent writes could land out of order and persist stale values.
-    @State private var gate = WriteGate()
-    // W2.6 — the server subtitle value seeded on open; the
-    // season-subtitle bumper compares against it so seeding never
-    // triggers a spurious autosave.
+    // Task E — autosave state. The write machine is still `WriteState`
+    // (Models/), but the view no longer holds it: the saver's write runs
+    // off the main actor and reports through `DraftWriteStatus`, an
+    // object the status section reads (`writeStatus.state`).
+    @StateObject private var writeStatus = DraftWriteStatus()
+    // The saver owns the pending draft, the 600ms debounce and the write
+    // serialisation. It is built in the stack-level `.task`, where
+    // `roomService` is available; the view only submits drafts to it and
+    // flushes it on the way out.
+    @State private var saver: DraftSaver<RoomSettingsDraft>?
+    // W2.6 — the server subtitle value seeded on open. The seed is
+    // not an edit either: the one change it causes is swallowed by
+    // `isSeedingSeasonSubtitle`, so opening settings never triggers
+    // a spurious autosave.
     @State private var seededSeasonSubtitle: String = ""
+    // True between applying the seed and the `onChange` that carries
+    // it. One change, swallowed.
+    @State private var isSeedingSeasonSubtitle: Bool = false
 
     // W1.5 — host "Declare season end" CTA state.
     @State private var declareState: WriteState = .idle
@@ -195,52 +201,45 @@ struct RoomSettingsSheet: View {
         NavigationStack {
             hubForm
         }
-        // V0.81 — autosave debounce + flush live on the
-        // NavigationStack, not the Form: pushing into a sub-sheet
-        // disappears the Form (cancelling a `.task` attached
-        // there), but the stack survives the push.
-        .task(id: draft) {
-            guard draft > 0 else { return }
-            try? await Task.sleep(for: .milliseconds(600))
-            guard !Task.isCancelled else { return }
-            await writeAll()
-        }
+        // Task E — the flush lives on the NavigationStack, not the
+        // Form: pushing into a sub-sheet disappears the Form (and
+        // everything attached to it), but the stack survives the push.
         .onDisappear {
-            // Flush on dismiss so a swipe-away never loses the
-            // last edit. If a write was mid-flight, await it and
-            // retry when it failed or an edit landed while it was
-            // in flight (that edit wasn't captured).
-            // (Bumping `draft` here would not work: `.task(id:)`
-            // is cancelled as the view disappears.)
-            if let writeTask {
-                let inFlight = writeTask
-                Task {
-                    await inFlight.value
-                    if needsRetry {
-                        await writeAll()
-                    }
-                }
-            } else if draft > 0 {
-                Task { await writeAll() }
-            }
+            // The saver owns the pending draft and the write on the
+            // wire. Flushing here means a swipe-away never loses the
+            // last edit: the write in flight is awaited and the
+            // pending draft is written immediately.
+            guard let saver else { return }
+            Task { @MainActor in await saver.flush() }
         }
         .task {
+            // Task E — the saver is built here, where `roomService` is
+            // available (see `makeSaver`).
+            if saver == nil {
+                saver = makeSaver()
+            }
             // W2.6 — seed the subtitle field from the current
             // season once the environment object is available.
-            // Remember what we seeded so the bumper doesn't treat the
-            // seed as an edit (spurious write on open).
+            // The seed is not an edit: the one change it causes is
+            // swallowed, so opening settings never writes.
             if seasonSubtitle.isEmpty {
                 seededSeasonSubtitle = roomService.cachedCurrentSeason(roomId: room.id)?.subtitle ?? ""
-                seasonSubtitle = seededSeasonSubtitle
+                if seededSeasonSubtitle != seasonSubtitle {
+                    isSeedingSeasonSubtitle = true
+                    seasonSubtitle = seededSeasonSubtitle
+                }
             }
             // V0.107 — seed the brought-by switch. `cachedShowBroughtBy`
             // defaults to true so a cold open (the RPC has not landed
             // yet) still shows the switch where the column default
-            // says it should be.
+            // says it should be. The seed is not an edit either.
             if seededShowBroughtBy == nil {
                 let on = await roomService.loadShowBroughtBy(roomId: room.id)
                 seededShowBroughtBy = on
-                showBroughtBy = on
+                if on != showBroughtBy {
+                    isSeedingShowBroughtBy = true
+                    showBroughtBy = on
+                }
             }
             // S3.5 — read the roster so the Leave row knows whether
             // another host remains. A host may only leave when one
@@ -288,39 +287,47 @@ struct RoomSettingsSheet: View {
                         .foregroundStyle(Theme.Palette.labelText)
                 }
             }
-            // V0.81 — autosave bumpers. Every persisted field
-            // restarts the debounce. Attached at the hub so edits
-            // made inside the sub-sheets (hoisted bindings) fire
+            // Task E — autosave bumpers. Every persisted field submits
+            // the form's current values to the saver. Attached at the
+            // hub so edits made inside the sub-sheets (hoisted bindings)
+            // fire the same path.
     }
 
-    /// V0.95b — autosave bumpers (every persisted field restarts
-    /// the debounce), as its own type-check unit.
+    /// V0.95b — autosave bumpers (every persisted field submits to the
+    /// saver), as its own type-check unit.
     private var bumpersLayer: some View {
         toolbarLayer
-            // the same path.
-            .onChange(of: mascotName) { _, _ in bumpDraft() }
-            .onChange(of: mascotPersonality) { _, _ in bumpDraft() }
-            .onChange(of: mascotIdeology) { _, _ in bumpDraft() }
-            .onChange(of: socialNarrationEnabled) { _, _ in bumpDraft() }
-            .onChange(of: hostJournal) { _, _ in bumpDraft() }
-            .onChange(of: maxSeats) { _, _ in bumpDraft() }
-            .onChange(of: memberInviteQuota) { _, _ in bumpDraft() }
-            .onChange(of: joinStartingBonus) { _, _ in bumpDraft() }
-            .onChange(of: briefing48hEnabled) { _, _ in bumpDraft() }
-            .onChange(of: socialPreferencesEnabled) { _, _ in bumpDraft() }
-            .onChange(of: showBroughtBy) { _, newValue in
-                // The open-time seed is not an edit. A tap that lands
-                // back on the persisted value is an edit: the seed
-                // moves with every successful write, so it only ever
-                // equals the last value the server acknowledged.
-                if newValue != seededShowBroughtBy { bumpDraft() }
+            .onChange(of: mascotName) { _, _ in submitDraft() }
+            .onChange(of: mascotPersonality) { _, _ in submitDraft() }
+            .onChange(of: mascotIdeology) { _, _ in submitDraft() }
+            .onChange(of: socialNarrationEnabled) { _, _ in submitDraft() }
+            .onChange(of: hostJournal) { _, _ in submitDraft() }
+            .onChange(of: maxSeats) { _, _ in submitDraft() }
+            .onChange(of: memberInviteQuota) { _, _ in submitDraft() }
+            .onChange(of: joinStartingBonus) { _, _ in submitDraft() }
+            .onChange(of: briefing48hEnabled) { _, _ in submitDraft() }
+            .onChange(of: socialPreferencesEnabled) { _, _ in submitDraft() }
+            .onChange(of: showBroughtBy) { _, _ in
+                // The open-time seed is not an edit — the server already
+                // holds that value — so that one change is swallowed.
+                // Every change after it is an edit.
+                if isSeedingShowBroughtBy {
+                    isSeedingShowBroughtBy = false
+                    return
+                }
+                submitDraft()
             }
-            .onChange(of: autoCloseHours) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositAmount) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositTrigger) { _, _ in bumpDraft() }
-            .onChange(of: seatDepositGraceMinutes) { _, _ in bumpDraft() }
-            .onChange(of: seasonSubtitle) { _, newValue in
-                if newValue != seededSeasonSubtitle { bumpDraft() }
+            .onChange(of: autoCloseHours) { _, _ in submitDraft() }
+            .onChange(of: seatDepositAmount) { _, _ in submitDraft() }
+            .onChange(of: seatDepositTrigger) { _, _ in submitDraft() }
+            .onChange(of: seatDepositGraceMinutes) { _, _ in submitDraft() }
+            .onChange(of: seasonSubtitle) { _, _ in
+                // Same for the subtitle seed.
+                if isSeedingSeasonSubtitle {
+                    isSeedingSeasonSubtitle = false
+                    return
+                }
+                submitDraft()
             }
     }
 
@@ -604,7 +611,7 @@ struct RoomSettingsSheet: View {
                 // render under their own control now.
                 Section {
                     HStack {
-                        switch writeState {
+                        switch writeStatus.state {
                         case .idle:
                             Text("Edits save automatically")
                                 .font(Theme.Typography.caption)
@@ -866,99 +873,137 @@ struct RoomSettingsSheet: View {
 
     // MARK: - Autosave (V0.81)
 
-    /// Bumps the draft counter, which restarts the `.task(id:)`
-    /// debounce. Called from every field's `.onChange`.
-    private func bumpDraft() {
-        draft += 1
-        isDirty = true
+    /// The single funnel every field's `.onChange` calls.
+    ///
+    /// The form's current values go to the saver, which owns the
+    /// debounce and the write sequencing. The draft is read here, not
+    /// captured when the edit happened, so the write that lands carries
+    /// the newest values.
+    private func submitDraft() {
         // D8 — an edit retires the last outcome: "Saved" stops claiming the
         // current draft is on the wire, and a stale failure clears as the
         // retry is already queued.
-        writeState = writeState.reduce(.edited)
+        writeStatus.edited()
+        // The saver is built by the stack-level `.task`, which runs when
+        // the sheet appears. This is the belt to that braces: an edit
+        // must never be dropped because the saver was not there yet.
+        let saver = saver ?? makeSaver()
+        self.saver = saver
+        let draft = currentDraft()
+        // The submit is ordered on the main actor's queue, so the
+        // newest draft is the one that lands.
+        Task { @MainActor in await saver.submit(draft) }
     }
 
-    /// True when a dismiss-time retry is warranted: an edit that
-    /// no write captured, or a write that failed.
-    private var needsRetry: Bool {
-        if isDirty { return true }
-        if writeState.failureMessage != nil { return true }
-        return false
-    }
-
-    /// Fires `RoomService.updateRoom(...)` with every form value
-    /// plus the P1.5 host journal and the W2.6 season subtitle.
-    /// The journal/subtitle writes are skipped if the settings
-    /// write throws.
-    private func writeAll() async {
-        // Serialize: if a write is already in flight, queue a
-        // refire (runs when the current write completes) instead of
-        // running concurrently.
-        guard gate.begin() else { return }
-        defer {
-            if gate.end() {
-                Task { await writeAll() }
-            }
-        }
-        writeState = writeState.reduce(.begin(.settings))
-        let task = Task {
-            // Mark clean at the moment the write captures state;
-            // an edit landing mid-write re-dirties so the
-            // dismiss-time retry can catch it.
-            isDirty = false
+    /// The saver, with the settings write wired in.
+    ///
+    /// The write closure needs `roomService`, which is why the saver is
+    /// built where the environment object is available. Only the
+    /// service, the status object and the room id cross into the
+    /// closure: it is `@Sendable`, and a closure that captured the view
+    /// would capture a type that is not `Sendable`.
+    private func makeSaver() -> DraftSaver<RoomSettingsDraft> {
+        let service = roomService
+        let status = writeStatus
+        let roomId = room.id
+        return DraftSaver<RoomSettingsDraft>(
+            debounce: DraftSaver<RoomSettingsDraft>.defaultDebounce
+        ) { draft in
+            await status.begin()
             do {
-                _ = try await roomService.updateRoom(
-                    id: room.id,
-                    name: roomName,
-                    mascotName: mascotName,
-                    mascotPersonality: mascotPersonality,
-                    mascotPoliticalIdeology: mascotIdeology,
-                    maxSeats: maxSeats,
-                    memberInviteQuota: memberInviteQuota,
-                    joinStartingBonus: joinStartingBonus,
-                    socialNarrationEnabled: socialNarrationEnabled,
-                    briefing48hEnabled: briefing48hEnabled,
-                    socialPreferencesEnabled: socialPreferencesEnabled,
-                    autoCloseHours: autoCloseHours,
-                    seatDepositAmount: seatDepositAmount,
-                    seatDepositTrigger: seatDepositTrigger,
-                    seatDepositGraceMinutes: seatDepositGraceMinutes
+                try await persistRoomSettings(
+                    service: service,
+                    roomId: roomId,
+                    draft: draft
                 )
-                // V0.107 — the brought-by switch rides this write.
-                // `update_room_settings` does not own the column
-                // (migration 103 added a host-only RPC for it), so
-                // call it alongside; skipping it would leave the
-                // switch visibly off with nothing persisted.
-                let broughtBy = showBroughtBy
-                try await roomService.setShowBroughtBy(roomId: room.id, on: broughtBy)
-                seededShowBroughtBy = broughtBy
-                let trimmedJournal = hostJournal.trimmingCharacters(in: .whitespacesAndNewlines)
-                _ = try await roomService.updateHostJournal(
-                    roomId: room.id,
-                    journal: trimmedJournal.isEmpty ? nil : trimmedJournal
-                )
-                // W2.6 — season-subtitle host-approval beat. Empty
-                // clears; the RPC is idempotent.
-                let trimmedSubtitle = seasonSubtitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                try await roomService.setSeasonSubtitle(
-                    roomId: room.id,
-                    subtitle: trimmedSubtitle.isEmpty ? nil : trimmedSubtitle
-                )
-                // V0.86 — calendar permission is a per-member
-                // surface, fired by the
-                // `MemberCalendarSettingsSheet` (not the room's
-                // host settings). The host's own calendar row is
-                // written when the host has the toggle on
-                // (host = user, same toggle applies — no
-                // special-case for hosts). This branch is empty
-                // intentionally; kept here to mark the migration.
-                writeState = writeState.reduce(.succeed(at: Date()))
+                await status.succeed()
             } catch {
-                writeState = writeState.reduce(.fail(.settings, (error as NSError).localizedDescription))
+                await status.fail((error as NSError).localizedDescription)
+                // The rethrow is how the saver learns the write failed:
+                // it keeps the draft for the one retry a flush allows.
+                throw error
             }
         }
-        writeTask = task
-        await task.value
     }
+
+    /// The form as one value the saver can hold.
+    private func currentDraft() -> RoomSettingsDraft {
+        RoomSettingsDraft(
+            name: roomName,
+            mascotName: mascotName,
+            mascotPersonality: mascotPersonality,
+            mascotPoliticalIdeology: mascotIdeology,
+            maxSeats: maxSeats,
+            memberInviteQuota: memberInviteQuota,
+            joinStartingBonus: joinStartingBonus,
+            socialNarrationEnabled: socialNarrationEnabled,
+            briefing48hEnabled: briefing48hEnabled,
+            socialPreferencesEnabled: socialPreferencesEnabled,
+            autoCloseHours: autoCloseHours,
+            seatDepositAmount: seatDepositAmount,
+            seatDepositTrigger: seatDepositTrigger,
+            seatDepositGraceMinutes: seatDepositGraceMinutes,
+            showBroughtBy: showBroughtBy,
+            hostJournal: hostJournal,
+            seasonSubtitle: seasonSubtitle
+        )
+    }
+}
+
+/// The settings write, as a free function.
+///
+/// It cannot be a method on the view: the saver's write closure is
+/// `@Sendable`, and a closure that captures the view captures a type
+/// that is not `Sendable`. Everything the write needs is in the draft,
+/// so the function takes the draft and the room it belongs to.
+///
+/// The journal/subtitle writes are skipped if the settings write
+/// throws.
+private func persistRoomSettings(
+    service: RoomService,
+    roomId: UUID,
+    draft: RoomSettingsDraft
+) async throws {
+    _ = try await service.updateRoom(
+        id: roomId,
+        name: draft.name,
+        mascotName: draft.mascotName,
+        mascotPersonality: draft.mascotPersonality,
+        mascotPoliticalIdeology: draft.mascotPoliticalIdeology,
+        maxSeats: draft.maxSeats,
+        memberInviteQuota: draft.memberInviteQuota,
+        joinStartingBonus: draft.joinStartingBonus,
+        socialNarrationEnabled: draft.socialNarrationEnabled,
+        briefing48hEnabled: draft.briefing48hEnabled,
+        socialPreferencesEnabled: draft.socialPreferencesEnabled,
+        autoCloseHours: draft.autoCloseHours,
+        seatDepositAmount: draft.seatDepositAmount,
+        seatDepositTrigger: draft.seatDepositTrigger,
+        seatDepositGraceMinutes: draft.seatDepositGraceMinutes
+    )
+    // V0.107 — the brought-by switch rides this write.
+    // `update_room_settings` does not own the column (migration 103
+    // added a host-only RPC for it), so call it alongside; skipping it
+    // would leave the switch visibly off with nothing persisted.
+    try await service.setShowBroughtBy(roomId: roomId, on: draft.showBroughtBy)
+    // P1.5 — the host journal.
+    let trimmedJournal = draft.hostJournal.trimmingCharacters(in: .whitespacesAndNewlines)
+    _ = try await service.updateHostJournal(
+        roomId: roomId,
+        journal: trimmedJournal.isEmpty ? nil : trimmedJournal
+    )
+    // W2.6 — season-subtitle host-approval beat. Empty clears; the
+    // RPC is idempotent.
+    let trimmedSubtitle = draft.seasonSubtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    try await service.setSeasonSubtitle(
+        roomId: roomId,
+        subtitle: trimmedSubtitle.isEmpty ? nil : trimmedSubtitle
+    )
+    // V0.86 — calendar permission is a per-member surface, fired by the
+    // `MemberCalendarSettingsSheet` (not the room's host settings). The
+    // host's own calendar row is written when the host has the toggle on
+    // (host = user, same toggle applies — no special-case for hosts).
+    // This branch is empty intentionally; kept here to mark the migration.
 }
 
 // MARK: - Social sub-sheet
@@ -1106,7 +1151,7 @@ struct RoomSettingsOperationsSheet: View {
             // claim and returns on the member's "I'm here" tap.
             // The four values ride the autosave wire identical to
             // autoCloseHours (each edit restarts the V0.81 600ms
-            // debounce + writeAll call). `amount` is 0...1000
+            // debounce inside the saver). `amount` is 0...1000
             // server-side, `grace` is 0...120; the picker raw
             // values match the migration's CHECK constraint
             // members exactly so the RPC never rejects the write.
