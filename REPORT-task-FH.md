@@ -16,8 +16,8 @@ related:
 Branch: `cc/store-contract`, cut from `7e7bf4b`. This report pins CURRENT
 behaviour. It changes no store behaviour and deletes no filter.
 
-Status: step 1 (divergence inventory) complete. The F2 contract suite, F3 RLS
-probes and the F4 recommendation land in later commits.
+Status: steps 1-2 complete. The F2 contract suite pins the fake's behaviour;
+the F3 RLS probes and the F4 recommendation land in later commits.
 
 ## 1. Function inventory
 
@@ -107,7 +107,35 @@ previews.
 | h | `addEvent` hidden list | Hidden-from list is stored on the event but the in-memory read gates are explicitly skipped ("doesn't replicate the gate") | `get_active_event` / `get_briefing_summary` / `get_event_rsvps` honour `hidden_from_user_ids` | `InMemoryRoomStore.swift:1696-1719`, `RoomStore.swift:856` |
 | i | `fetchSeasonHistory` / `fetchSeasonGrid` | Static seeded derivation | RPC `get_season_history` / `get_season_grid` | `InMemoryRoomStore.swift:1389`/`1395`, `RoomStore.swift:573`/`586` |
 
-## 4. Suggested fixes (input to F4)
+## 4. Contract suite (F2)
+
+`TestsStoreContract.swift`, registered in `build-and-run-tests.sh` and
+`main.swift`, pins the fake's CURRENT behaviour in 19 cases. It changes no
+store code. The cases confirm, rather than infer, the inventory above:
+
+- **(a)** A first `.claimed` moves the briefing 1 -> 2 claimed; a **second**
+  `.claimed` for the same synthetic member takes it to 3, and a `.unclaimed`
+  after a `.declined` decrements `seatsClaimed` while leaving `seatsDeclined`
+  standing. The fake is not previous-state-aware, so it is not idempotent like
+  `upsert_event_rsvp`.
+- **(b)** `autoCloseStaleEvents` closes a stale night in Deal Sundays even
+  though the synthetic caller is the Carwoola host (no membership gate); a
+  second call closes 0; a night 7h old survives the 8h window.
+- **(c)** `fetchSeasonAwards` returns the seeded `.drowning` row whose
+  recipient is not the synthetic caller — no client-side filter exists.
+- **(d)** `fetchCurrentSeason` returns whatever single season was last written;
+  closing a season overwrites that slot, so the closed ended season is no
+  longer readable. An ended-only room's `closeSeason` throws.
+- **(e)** `fetchCurrentMemberRSVP` is `.unclaimed` even after an upsert.
+- **(f)** `settleEvent` stamps a night two days in the future and serves it as
+  the recap; no host or not-started guard.
+- **(g)** `closeSeason` writes no awards for the season it closes.
+- **(h)** `addEvent` stores `hiddenFromUserIds` but the read path returns the
+  hidden night anyway.
+- **(i)** `fetchSeasonHistory` stays the static `[2, 1]` seed after a close and
+  never appends the just-closed season.
+
+## 5. Suggested fixes (input to F4)
 
 - (a) Make `upsertEventRSVP` call `adjustBriefingSeats(previous:state:)` so the
   fake is idempotent like the RPC, or delete the briefing mutation and let

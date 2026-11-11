@@ -5284,6 +5284,10 @@ runNewcomerJobTests(runner)
 
 runGladYouCameTests(runner)
 
+// MARK: - Store contract (task F2: pin the in-memory fake's current behaviour)
+
+runStoreContractTests(runner)
+
 // MARK: - Summary
 
 print("")
