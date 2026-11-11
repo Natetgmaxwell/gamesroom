@@ -1,7 +1,7 @@
 # STATE cc-cc-cde
 Base: 7e7bf4b4a4e16c9b1893b3b440b8af3340b53ea6  Branch: cc/client-local-state  Worktree: /Users/nathanmaxwell/Projects/worktrees/cc/client-local-state
 Rewrite this file after every step: tick the step, set NEXT to the following one. When all are ticked, replace the NEXT line with: ALL STEPS DONE
-NEXT: E3
+NEXT: E4
 - [x] C1 LoadPhase enum + RoomService phase tracking
 - [x] C2 RoomDetailView reads phase; delete hasLoadedInitialData
 - [x] C3 phase table tests
@@ -9,7 +9,7 @@ NEXT: E3
 - [x] D2 declarative stagger (delete appearedIndices + staggerAppear)
 - [x] E1 DraftSaver actor
 - [x] E2 RoomSettingsSheet hands off to saver
-- [ ] E3 DraftSaver tests
+- [x] E3 DraftSaver tests
 - [ ] E4 REPORT-task-CDE.md
 
 ## Notes for later steps
@@ -184,3 +184,77 @@ the E1 API:
   the newer draft.
 - The new test file must be added to BOTH `main.swift` (the runner call)
   and the SRC list in `build-and-run-tests.sh`, or the gate will not see it.
+
+## E3 — what landed
+
+**Commit** `d11b922` "E3: saver tests". Three files:
+`TestsDraftSaver.swift` (new), `build-and-run-tests.sh` (one SRC line),
+`main.swift` (one runner call, `runDraftSaverTests(runner)`).
+
+**New file** `TestsDraftSaver.swift` at the repo root, next to
+`TestsLoadPhase.swift` — the same shape: a `run…Tests(_ runner: TestRunner)`
+function, seven cases, Foundation only.
+
+### The seven cases (all green, 606 unit cases total, 599 before)
+
+1. **N rapid submits → exactly one write.** Five submits 100 ms apart
+   (debounce 100 ms) → exactly one write, carrying the newest draft (5).
+   A flush afterwards writes nothing more, so nothing was left pending.
+2. **Flush right after a submit → the write lands with the latest draft.**
+   The debounce is 2 s and the flush still lands the write immediately
+   (asserted: the flush returned in under a second), so dismissing the
+   sheet never waits out the debounce.
+3. **An edit during an in-flight write → exactly one more write.** The
+   first write is parked in a latch so it is genuinely on the wire; three
+   edits (2, 3, 4) land while it is parked; after the latch opens there is
+   exactly ONE more write, carrying 4. This is the "an edit that lands
+   during a write queues exactly one re-write" rule.
+4. **A refused write is not retried on its own.** The write closure throws;
+   one attempt, no retry storm, and `lastWrittenDraft()` stays `nil`.
+5. **A flush retries a refused draft exactly once.** One flush → two
+   attempts (the write + the dismiss-time retry), no more.
+6. **A flush with nothing pending writes nothing** (and is safe twice).
+7. **The real `RoomSettingsDraft` is a usable payload** — the saver
+   carries the app's actual draft type, not just a test Int.
+
+### Test doubles
+
+- `DraftWriteRecorder<Payload: Sendable>` — an **actor**. The saver's
+  write closure is `@Sendable`, so a plain mutable array captured by it
+  would not compile; this is the "recorder must be Sendable" gotcha from
+  the E2 handoff, honoured.
+- `DraftWriteLatch` — a `@unchecked Sendable` final class with an
+  `NSLock` (the repo's existing pattern, cf. `QuestionBoxPush.swift`),
+  parking a write until the test releases it. This is what makes case 3
+  deterministic: no sleeps guess at "is the write in flight yet?".
+- `DraftSaverTestError.refused` — the refusal the refusing writer throws.
+
+### Notes for E4 (new behaviour facts the tests pinned)
+
+1. **The re-write is not fired the instant the in-flight write ends.**
+   `WriteGate.end()` only reports "refire" when a `fire()` attempt was
+   refused *while* the write was on the wire. If the write finishes
+   BEFORE the pending edit's own debounce elapses, the edit is not written
+   early — it waits out its own 600 ms window and is written then. The
+   user-visible promise ("an edit lands within ~600 ms") still holds,
+   because the window is measured from the edit, not from the write's
+   end. `flush()` does not have this property: it writes the pending
+   draft immediately, so dismissing the sheet writes it at once.
+2. **A refused draft is remembered, not pending.** It is retried once per
+   `flush()` call. A second flush retries it again (the saver keeps
+   `failedDraft` until a flush takes it). The old view retried at most
+   once per dismiss; the saver can be flushed more than once in
+   principle, though the sheet flushes once.
+3. **`lastWrittenDraft()` only advances on a success.** It is `nil` after
+   a refused write — there is no "last attempted draft".
+4. **The payload is captured at SUBMIT time** (case 1 writes 5, the last
+   value submitted, not the last value the form happened to hold). This
+   is the difference from the old view code, which read the form at FIRE
+   time; E2 already adjusted the seed guard to match.
+
+### Verification
+
+`bash .maestro/fastgate.sh --compile` → `FASTGATE: PASS`
+(606 unit cases, 74 parse-check files, `BUILD SUCCEEDED`).
+The seven cases were run four extra times back-to-back with no flake.
+
