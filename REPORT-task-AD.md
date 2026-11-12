@@ -296,4 +296,69 @@ the one intended difference) and the host's own stamp (it wins).
 > orchestrator repoints those two rows the way it repoints the UI tests.
 > `TestsP1.swift` carries the same pinned row and is repointed in AD4.
 
+### 1.9 What AD3 changed: the probe set
+
+`Supabase/tests/120_probes.sql` is replaced. The old file tested the
+**janitor** (the hourly tick was the correctness path); the new file tests
+the **derive**, and keeps the janitor's own probes because the janitor still
+has to be a correct writer (it is hygiene, but it is still a writer).
+
+**Brief letter → probe id**
+
+| brief | probe id | what it pins |
+|---|---|---|
+| (a) | `120.a-headline-no-tick`, `-phase`, `-read`, `-active` | a never-stamped night 8 h 01 m past its start reads `recap` through `night_phase` **and** through `get_recent_settled_event` **and** through `get_active_event`; the returned `settled_at` is `played_at + 8 h`; the physical column is still `NULL` — no writer ran |
+| (b) | `120.b-phase-live`, `-no-recap-yet`, `-active-live` | a night 7 h 59 m past its start is still `live`, is not a recap, and is still the live night on the room page |
+| (c) | `120.c-phase-upcoming`, `-no-recap`, `-active-upcoming` | a night two days out is still `upcoming` |
+| (d) | `120.d-host-stamp-phase`, `-host-stamp-wins`, `-order-by-effective-settle` | the host's own stamp is returned unchanged, and recency keys on the **effective** settle: a derived end (now − 1 m) outranks an older host stamp (now − 2 h) — under the old rule the derived night was not a candidate at all |
+| (e) | `120.e-phase-past`, `-no-recap` | an expired night 40 h old reads `past`, never `stranded`, and is out of the recap window |
+| (f) | `120.f-non-member-gated`, `-member-sees`, `-hidden-filter`, `-hidden-filter-control` | the membership gate still turns a non-member away, the member still gets the recap, and the hidden-member filter still hides the night from the member it names (with a control that empties the list) |
+| (g) | `120.u-cron-job-count`, `120.v-cron-job-shape` | no job is registered without pg_cron; with pg_cron the job is `gr-stale-close` at **`'17 3 * * *'`** (was `'17 * * * *'`) calling `public.cron_close_stale()` |
+| (h) | `120.i-*` … `120.t-*` | the old janitor probes, reused verbatim: it stamps `played_at + the room's window`, leaves a night inside its window, an already-settled night, a wider-window room's night and a soft-deleted room alone, closes the 25 h-old attestation, returns the number of rows it closed, and a second call changes nothing |
+
+The janitor's **security** contract (the old probes `120.a` … `120.h`) is
+reused too, renumbered `120.sec1-…` … `120.sec8-` so it does not collide with
+the new derive probes: the function exists, it is `SECURITY DEFINER` with
+`search_path=public`, its contract is documented, no app role holds an
+execute grant, and the call itself is refused with 42501 under both
+`authenticated` and `anon`.
+
+**One new probe that is not in the brief:**
+`120.derive-write-agrees` — it reads the derived end *before* the janitor
+runs, runs the janitor, and asserts the janitor wrote **exactly** that
+value. That is the invariant this lane rests on: deriving and stamping
+agree by construction, so the physical column only ever catches up with what
+the reads already said.
+
+**Two things the file does that the old one did not.**
+
+1. *It re-anchors its own fixtures.* Every block sets the timestamps it
+   reads relative to `now()` before it asserts anything. `now()` is the
+   transaction timestamp, so the fixture and the assertions inside one
+   block see the same clock, however long the file took to get there. The
+   margins the brief asks for (8 h 01 m past, 7 h 59 m past) are exact
+   inside a block instead of approximate.
+2. *It runs the derive probes before the janitor probes.* The janitor stamps
+   every expired night in the replica, so running it first would write the
+   very column probe (a) asserts is `NULL`.
+
+**Deviations, recorded**
+
+- **Probe style.** The brief asks for `select 'PROBE … ' || case … end`.
+  The file uses `raise notice 'PROBE … %', case … end` — the style of the
+  107/115/119 probe files, and the style lane B's version of this file
+  already used (recorded there as a deviation). A bare `SELECT` inside a
+  `DO` block is discarded by plpgsql, so the notice form is the one that
+  carries a multi-step probe; every probe still prints exactly one
+  `PROBE <id> PASS|FAIL …` line, and `grep PROBE` still finds them all.
+- **Probe ids.** The brief's letters are the ids of the derive probes
+  (`120.a-…` … `120.f-…`); (g) and (h) map onto the old `120.u`/`120.v` and
+  `120.i`…`120.t`, which are reused under their old ids so the diff against
+  the previous file is readable.
+- **The probes have still never been executed** against a live or replica
+  database — this lane has no database. What was verified here: the file
+  parses (pglast, 29 statements) and every assertion was checked against a
+  model of the AD rules (`night_phase`, the two readers and the janitor
+  sweep) — 31 modelled assertions, 0 that would fail.
+
 ---

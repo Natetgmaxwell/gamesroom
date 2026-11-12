@@ -1,10 +1,10 @@
 # STATE cc-ad
 Base: 0ed187927d4fd5d6e10ca3f18a901d448c8692be  Branch: cc/autoclose-derived
 Rewrite after every step. When all ticked, replace NEXT line with: ALL STEPS DONE
-NEXT: AD3 probes — no-tick recap
+NEXT: AD4 Swift resolver mirror + tests
 - [x] AD1 settled_at consumer facts
 - [x] AD2 migration 120 rebuilt — night ends itself
-- [ ] AD3 probes — no-tick recap
+- [x] AD3 probes — no-tick recap
 - [ ] AD4 Swift resolver mirror + tests
 - [ ] AD5 doc + report
 
@@ -114,3 +114,83 @@ built, and what AD3 must know:
   '17 * * * *'), and the headline probe must show a never-stamped night 8h01m past
   its start reading as 'recap' through get_recent_settled_event AND night_phase,
   with settled_at = played_at + window and NO janitor call.
+
+AD3 DONE (this commit: "AD3: probes — no-tick recap"). What AD3 built, and
+what AD4 must know:
+
+- Supabase/tests/120_probes.sql is REPLACED. The old file tested the janitor
+  (the hourly tick was the correctness path); the new file tests the DERIVE
+  and keeps the janitor's own probes (it is hygiene, but it is still a
+  writer, so it must stamp the same value the reads derive).
+
+- Brief letter -> probe id:
+    (a) 120.a-headline-no-tick / -phase / -read / -active
+    (b) 120.b-phase-live / -no-recap-yet / -active-live
+    (c) 120.c-phase-upcoming / -no-recap / -active-upcoming
+    (d) 120.d-host-stamp-phase / -host-stamp-wins / -order-by-effective-settle
+    (e) 120.e-phase-past / -no-recap
+    (f) 120.f-non-member-gated / -member-sees / -hidden-filter
+        / -hidden-filter-control
+    (g) 120.u-cron-job-count + 120.v-cron-job-shape  (old ids reused; the
+        shape probe now expects '17 3 * * *', not '17 * * * *')
+    (h) 120.i-* .. 120.t-*  (the old janitor sweep probes, reused verbatim)
+  The janitor's SECURITY contract (the old 120.a .. 120.h) is reused too,
+  renumbered 120.sec1- .. 120.sec8- so it does not collide with the new
+  derive probes.
+
+- The headline (a) proves the whole lane: a never-stamped night 8h01m past
+  its start reads 'recap' through night_phase AND through
+  get_recent_settled_event AND through get_active_event; the returned
+  settled_at is played_at + 8h; and the physical column is still NULL --
+  no writer ran.
+
+- (d) pins the ordering rule that the old code could not express: in one
+  room, a host-settled night (stamp now-2h) and a never-stamped night
+  (true end now-1m) -> the never-stamped one is the recap, because recency
+  keys on the EFFECTIVE settle. Under the old rule the never-stamped night
+  was not a candidate at all.
+
+- One probe that is not in the brief: 120.derive-write-agrees -- it reads
+  the derived end BEFORE the janitor runs, runs the janitor, and asserts the
+  janitor wrote exactly that value. That is the invariant the lane rests on.
+
+- Two structural choices worth knowing:
+    * Every block RE-ANCHORS its own fixtures against now() before it
+      asserts anything. now() is the transaction timestamp, so the fixture
+      and the assertions inside one block see the same clock, however long
+      the file took to get there. The margins the brief asks for (8h01m
+      past, 7h59m past) are exact inside a block, not approximate.
+    * The derive probes run BEFORE the janitor probes: the janitor stamps
+      every expired night in the replica, so running it first would write
+      the very column probe (a) asserts is NULL.
+  The janitor block also clears the JWT claims (to '{}', NOT '' --
+  current_user_id() casts the claims to json and '' is not json) so the
+  sweep really does run the way pg_cron runs it.
+
+- Recorded deviations (also in REPORT-task-AD.md §1.9):
+    * Probe style: raise notice, not the brief's `select 'PROBE … ' || case
+      … end`. A bare SELECT inside a DO block is discarded by plpgsql, so
+      the notice form is the one that carries a multi-step probe; every
+      probe still prints exactly one 'PROBE <id> PASS|FAIL …' line. This is
+      the same deviation lane B recorded for the previous version of this
+      file -- it is not new.
+    * Probe ids: the brief's letters are the derive probes; (g) and (h)
+      reuse the old ids so the diff is readable.
+
+- Verification for AD3: the file parses clean (pglast, 29 statements) and
+  every assertion was checked against a model of the AD rules (night_phase,
+  the two readers, the janitor sweep) -- 31 modelled assertions, 0 that
+  would fail. The probes have STILL never been executed against a live or
+  replica database: this lane has no database. Gate: FASTGATE: PASS (625
+  cases).
+
+- For AD4: the Swift twin is NightPhaseResolver in GamesRoom/Services/
+  NightPhase.swift (the rule at :102-110, recapWindow 86_400 at :83,
+  defaultAutoCloseHours 8 at :87). It must mirror the effective-settle
+  logic: the effective settle is the host's stamp when there is one, else
+  played_at + the window once `now` has reached it; 'live' additionally
+  requires NO effective settle (so an early-settled night reads recap);
+  'stranded' stays as the unreachable safety fallback. The table tests
+  live in TestsP1.swift:29-99 (runP1NightPhaseTests, pinned now at :30,
+  exact boundary rows at :57) -- the pinned 'stranded' rows there are now
+  'recap' and must be repointed in the same commit.
