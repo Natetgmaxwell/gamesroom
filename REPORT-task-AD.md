@@ -239,13 +239,18 @@ enumerates every `NightPhase` case including `.stranded`.
 under `GamesRoomUITests/`. The `stranded` case therefore has no UI test to
 repoint, and no UI test is edited in this lane.
 
+> [!NOTE]
+> The rule quoted above is the one AD1 found — the rule as it stood **before**
+> AD4. AD4 rewrote it to the effective-settle form; see §1.10 for the new body
+> and the table of the pinned rows that moved.
+
 ### 1.7 The change list this lane will make
 
 | step | file | change |
 |---|---|---|
 | AD2 | `Supabase/migrations/120_night_ends_itself.sql` (new; `120_stale_close_cron.sql` removed in the same commit) | rewrite `night_phase`, `get_recent_settled_event`, `get_active_event__inner`; keep `cron_close_stale`'s body, move its schedule to `'17 3 * * *'`; header comment states WHY (the end time is known at booking; the stamp is hygiene) |
 | AD3 | `Supabase/tests/120_probes.sql` | replace with the derive-at-read probe set |
-| AD4 | `GamesRoom/Services/NightPhase.swift` + `TestsP1.swift` | mirror the effective settle in `NightPhaseResolver.phase`; extend the table test |
+| AD4 | `GamesRoom/Services/NightPhase.swift` + `TestsP1.swift` (+ `main.swift`, one test assertion) | mirror the effective settle in `NightPhaseResolver.phase`; extend the table test; repoint the four tests that pinned the now-unreachable `stranded` (§1.10) |
 | AD5 | `docs/STATE-MACHINES.md` (Night phase section only) + this report | the doc, and the finished report |
 
 ### 1.8 What AD2 changed, and what it found
@@ -360,5 +365,127 @@ the reads already said.
   parses (pglast, 29 statements) and every assertion was checked against a
   model of the AD rules (`night_phase`, the two readers and the janitor
   sweep) — 31 modelled assertions, 0 that would fail.
+
+### 1.10 What AD4 changed: the Swift twin
+
+`GamesRoom/Services/NightPhase.swift` — the resolver body is now the mirror of
+migration 120's `night_phase`, branch for branch:
+
+```swift
+guard let playedAt = facts.playedAt else { return .none }
+if playedAt > facts.now { return .upcoming }
+let windowEnd = playedAt.addingTimeInterval(TimeInterval(facts.autoCloseHours) * 3_600)
+let effectiveSettledAt = facts.settledAt ?? (facts.now >= windowEnd ? windowEnd : nil)
+if let settledAt = effectiveSettledAt {
+    return settledAt > facts.now.addingTimeInterval(-recapWindow) ? .recap : .past
+}
+return facts.now < windowEnd ? .live : .stranded
+```
+
+The effective settle is the host's own stamp when there is one, and otherwise
+the night's true end (`played_at + auto_close_hours`) once the clock has
+reached it. `live` still requires **no** effective settle, so a night the host
+settled early reads `recap`, never `live`. `stranded` is the last branch and is
+**unreachable** — a nil effective settle means the clock has not reached the
+window end, so the `live` branch took the row. It stays in the vocabulary
+because the SQL keeps it as its own fallback.
+
+The header comment and the `NightPhase.stranded` doc comment were updated in
+the same commit: the file now says it mirrors migration **120** (not 115), and
+`stranded` is documented as unreachable by design.
+
+**The table tests** (`TestsP1.swift:29-…`, `runP1NightPhaseTests`, pinned clock
+at line 30) were extended, not replaced. The pinned `stranded` rows are now
+`recap` — they were the rows that said "the window is gone, nothing ran":
+
+| row | was | now | why |
+|---|---|---|---|
+| exactly at `played_at + auto_close_hours` | `.stranded` | `.recap` | the effective settle lands exactly on `now` |
+| one second past the window | `.stranded` | `.recap` | the night ended a second ago |
+| a night nine hours old, never settled | `.stranded` | `.recap` | its true end was an hour ago |
+| `autoCloseHours` moves the live line | `.stranded` | `.recap` | same, one row over |
+| `autoCloseHours` 0, a just-started night | `.stranded` | `.recap` | the window is zero hours, so the night ended at once |
+| a night in the future carrying a stamp | `.recap` | `.upcoming` | the branch order changed: `upcoming` runs before the settle branches (120) |
+
+Five rows were **added** for the rule the lane introduces:
+
+| row | pins |
+|---|---|
+| a night whose true end was 24 h ago | `.past` — the effective settle is `played_at + 8 h`, not `now()`, so a 32-hour-old night is past and never waited for a writer |
+| one second inside that recap window | `.recap` |
+| a night two days old, never settled | `.past` |
+| the host's own stamp wins over the derived end | a night settled an hour ago reads `.recap`, not `.live` |
+| an old host stamp still wins over a fresher derived end | settled 25 h ago on a 30-hour-old night reads `.past`, even though the derived end would be 22 h ago (inside the window) |
+
+**The twins were checked against each other mechanically.** The resolver was
+extracted verbatim into a throwaway harness (`/tmp`, not committed) and run
+over a grid of 990 input combinations (18 played offsets × 11 settled offsets ×
+5 auto-close windows, including every exact boundary: the window end, the
+24-hour recap edge, `now` itself). The Swift answers were compared with a
+model of migration 120's `night_phase`:
+
+```
+rows compared: 990
+Swift-vs-SQL120 mismatches: 0
+rows reaching 'stranded' under the new rule: 0
+```
+
+The same grid was also run against the **old** Swift rule and the **old** SQL
+rule (115): they agreed with each other on all 990 rows, so the change is
+symmetric — the twins moved together, and they moved together only in the two
+classes AD2 documented (§1.8): an expired never-settled night stops being
+`stranded`, and a future night carrying a physical stamp reads `upcoming`
+instead of `recap`/`past` (unreachable: `settle_event` refuses to settle a
+night that has not started).
+
+#### What else AD4 had to repoint, and what was left alone
+
+Four tests elsewhere in the tree derived a phase from facts and expected
+`stranded`. `stranded` is now unreachable, so they could not be left alone —
+the gate has to be green — and each one was repointed to the new truth:
+
+| test | was | now |
+|---|---|---|
+| `TestsP1.swift` — a stranded night outranks the next scheduled night | the expired night took the active slot | the next scheduled night takes the active slot; the expired night is the recap on the server |
+| `TestsP1.swift` — a stranded night is `.inPlay` | `.inPlay(event)` | `.justSettled(event)` |
+| `TestsP1.swift` — a stranded night stays `.inPlay` even before the viewer plays | `.inPlay(event)` | `.justSettled(event)` |
+| `main.swift` — `MascotEngine.footerKind` for a stranded night | `.settleRound` | `.postPlayRecap` |
+
+The `main.swift` edit is outside the brief's "list lines only" whitelist for
+that file. It is there because the MascotEngine test lives in `main.swift` and
+the gate is not allowed to go red: the rule is "fix your change, never the
+gate".
+
+**STOP-AND-REPORT — left unchanged, for the orchestrator**
+
+1. **The fake store does not derive.** `InMemoryRoomStore.fetchActiveEvent`
+   (`GamesRoom/Services/InMemoryRoomStore.swift:1053-1075`) still has its
+   `.stranded` leg at line 1068 — dead code now — and
+   `fetchRecentSettledEvent` (1080-1088) still filters on a **physical**
+   `settledAt`. So in the fake an expired never-settled night is invisible: it
+   is neither the active slot nor a recap. On the server it **is** the recap
+   (migration 120 returns it with the derived settle). The file is outside this
+   lane's whitelist and was not edited.
+2. **Stale doc comments that still describe `stranded` as a live state** (each
+   is now a second copy of a rule the doc has to match):
+   `GamesRoom/Models/V0State.swift:24-26` and `:41`,
+   `GamesRoom/Services/MascotEngine.swift:249`,
+   `GamesRoom/Services/NightPlan.swift:24` and `:107-109`,
+   `GamesRoom/Services/RoomStore.swift:398`,
+   `GamesRoom/Models/NextNight.swift:101`.
+3. **The product consequence, unasked for and undecided.** `NightPlan`'s
+   `.stranded` branch (`GamesRoom/Services/NightPlan.swift:121-123`) is the
+   only place that offered the host a "settle the night" action for a night
+   that ran past its window, and it is now dead. The host still gets
+   `.settleNight` for a **live** night (`NightPlan.swift:124` → `hostClosing`),
+   but a night that overran its window now simply ends and reads as a recap.
+   That is the lane's intent ("the night ends itself"), but it removes the
+   host's last say over an over-window night, so Nathan should confirm it is
+   wanted.
+4. `Supabase/tests/115_probes.sql:145-146` is still stale (§1.8).
+
+No UI test, screenshot seed or migration was touched in AD4. `TestsP1.swift`
+was already registered in `build-and-run-tests.sh` and `main.swift`, so no
+registration line changed.
 
 ---

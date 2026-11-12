@@ -2186,18 +2186,21 @@ runner.run("MascotEngine.footerKind returns .inPlayWithWithdrawal when live and 
     runner.assertEqual(kind, .inPlayWithWithdrawal)
 }
 
-runner.run("MascotEngine.footerKind returns .settleRound for a stranded night") {
+runner.run("MascotEngine.footerKind returns .postPlayRecap for an expired night nobody settled") {
     // The old fixture set `hostFinalized: true` on a live event. That
     // column exists in no migration and no RPC returns it, so the case
-    // was unreachable in production (audit 01 D7). The settle voice now
-    // belongs to the phase that actually needs a settle: stranded.
+    // was unreachable in production (audit 01 D7). The settle voice
+    // then belonged to the phase that needed a settle: stranded.
+    // Since 120 the night ends itself, so that phase is unreachable:
+    // an expired night nobody settled reads recap and gets the recap
+    // voice. `.stranded` stays in the vocabulary as a safety fallback.
     let now = Date()
     let event = Event(id: UUID(), roomId: UUID(), name: "Poker", playedAt: now.addingTimeInterval(-30 * 3_600), createdAt: now.addingTimeInterval(-86_400))
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: now,
         withdrawnAmount: 500
     )
-    runner.assertEqual(kind, .settleRound)
+    runner.assertEqual(kind, .postPlayRecap)
 }
 
 runner.run("MascotEngine.footerKind returns .seasonClose when current season ended") {

@@ -43,8 +43,18 @@ private func runP1NightPhaseTests(_ runner: TestRunner) {
     }
 
     // The table the Swift resolver and `public.night_phase(...)` must
-    // both satisfy. Rows 3, 7, 10 and 11 are exact boundaries: the SQL
+    // both satisfy. Several rows are exact boundaries: the SQL
     // comparisons are strict, so "exactly at" lands on the later state.
+    //
+    // The clock is pinned (line 30) because the SQL twin is
+    // IMMUTABLE and takes `p_now`: a row that says "the true end was
+    // exactly 24 h ago" only means something against a fixed now.
+    //
+    // Since migration 120 the night ends ITSELF: the effective settle
+    // is the host's stamp when there is one, and otherwise
+    // `played_at + auto_close_hours` once the clock has reached it.
+    // So an expired, never-settled night reads `recap` (or `past`) and
+    // `stranded` is unreachable.
 
     runner.run("P1: no night is .none") {
         runner.assertEqual(phase(played: nil), .none)
@@ -54,20 +64,40 @@ private func runP1NightPhaseTests(_ runner: TestRunner) {
         runner.assertEqual(phase(played: -3_600), .live)
     }
 
-    runner.run("P1: exactly at played_at + auto_close_hours is .stranded") {
-        runner.assertEqual(phase(played: -8 * 3_600), .stranded)
+    runner.run("P1: exactly at played_at + auto_close_hours is .recap") {
+        // The night ends itself: the effective settle is the window
+        // end, and it lands exactly on `now`. Nobody had to stamp it.
+        runner.assertEqual(phase(played: -8 * 3_600), .recap)
     }
 
     runner.run("P1: one second inside the window is still .live") {
         runner.assertEqual(phase(played: -(8 * 3_600) + 1), .live)
     }
 
-    runner.run("P1: one second past the window is .stranded") {
-        runner.assertEqual(phase(played: -(8 * 3_600) - 1), .stranded)
+    runner.run("P1: one second past the window is .recap, not .stranded") {
+        runner.assertEqual(phase(played: -(8 * 3_600) - 1), .recap)
     }
 
-    runner.run("P1: a night nine hours old was never settled and is .stranded") {
-        runner.assertEqual(phase(played: -9 * 3_600), .stranded)
+    runner.run("P1: a night nine hours old was never settled and is .recap") {
+        // Its true end was an hour ago, so it is the night that just
+        // happened — no janitor call, no physical stamp.
+        runner.assertEqual(phase(played: -9 * 3_600), .recap)
+    }
+
+    runner.run("P1: a night whose true end was 24h ago is .past") {
+        // 32 h old with an 8 h window: the effective settle is
+        // played_at + 8 h, which lands exactly 24 h ago. The recap
+        // window is closed, so the night is past — and it never waited
+        // for a writer to say so.
+        runner.assertEqual(phase(played: -32 * 3_600), .past)
+    }
+
+    runner.run("P1: one second inside the recap window of a derived end is .recap") {
+        runner.assertEqual(phase(played: -(32 * 3_600) + 1), .recap)
+    }
+
+    runner.run("P1: a night two days old was never settled and is .past") {
+        runner.assertEqual(phase(played: -40 * 3_600), .past)
     }
 
     runner.run("P1: starting exactly now is .live, not .upcoming") {
@@ -108,19 +138,36 @@ private func runP1NightPhaseTests(_ runner: TestRunner) {
         runner.assertEqual(phase(played: -10 * 3_600, settled: -9 * 3_600), .recap)
     }
 
-    runner.run("P1: a settled night in the future is still .recap") {
+    runner.run("P1: the host's own stamp wins over the derived end") {
+        // Settled an hour ago, well inside the window: the host said
+        // the night ended, so it reads recap and never live.
+        runner.assertEqual(phase(played: -2 * 3_600, settled: -3_600), .recap)
+    }
+
+    runner.run("P1: an old host stamp still wins over a fresher derived end") {
+        // The stamp is 25 h old; the derived end would be 22 h old
+        // (inside the recap window). The stamp is the truth about the
+        // night, so the night is past.
+        runner.assertEqual(phase(played: -30 * 3_600, settled: -25 * 3_600), .past)
+    }
+
+    runner.run("P1: a night that has not started is .upcoming, stamp or not") {
         // Defensive: a bad row can carry played_at > now and a settle
-        // stamp. The settled branches run first, exactly like the SQL.
-        runner.assertEqual(phase(played: 3_600, settled: -60), .recap)
+        // stamp. The upcoming branch runs first, exactly like the SQL
+        // (migration 120): a night that has not started is upcoming,
+        // whatever the column says.
+        runner.assertEqual(phase(played: 3_600, settled: -60), .upcoming)
     }
 
-    runner.run("P1: the room's autoCloseHours moves the live/stranded line") {
+    runner.run("P1: the room's autoCloseHours moves the live/recap line") {
         runner.assertEqual(phase(played: -5_400, autoCloseHours: 2), .live)
-        runner.assertEqual(phase(played: -5_400, autoCloseHours: 1), .stranded)
+        runner.assertEqual(phase(played: -5_400, autoCloseHours: 1), .recap)
     }
 
-    runner.run("P1: autoCloseHours 0 makes a just-started night .stranded") {
-        runner.assertEqual(phase(played: -1, autoCloseHours: 0), .stranded)
+    runner.run("P1: autoCloseHours 0 ends a just-started night at once") {
+        // The window is zero hours, so the night ended the moment it
+        // started: the effective settle is played_at itself.
+        runner.assertEqual(phase(played: -1, autoCloseHours: 0), .recap)
     }
 
     runner.run("P1: autoCloseHours does not affect an upcoming night") {
@@ -208,19 +255,20 @@ private func runP1StoreNightTests(_ runner: TestRunner) {
         runner.assertTrue(recent?.id == settledId, "the settled night is still the recap")
     }
 
-    runner.runAsync("P1: a stranded night outranks the next scheduled night") {
-        // Audit 01 D3 — a night nobody settled used to be invisible: the
-        // future night took the slot and the settle action did not
-        // exist. The stranded night has to win the slot to be fixable.
+    runner.runAsync("P1: an expired night nobody settled does not take the active slot") {
+        // Since 120 the night ends itself: its effective settle is the
+        // night's true end (played_at + the window), so the night reads
+        // recap on the server and the next scheduled night takes the
+        // active slot. The host has no stranded night left to fix.
         let store = InMemoryRoomStore()
         let roomId = try await emptyRoom(store)
-        let strandedId = try await addNight(store, roomId: roomId, name: "Forgotten", playedAt: -30 * 3_600)
-        _ = try await addNight(store, roomId: roomId, name: "Next week", playedAt: 7 * 86_400)
+        _ = try await addNight(store, roomId: roomId, name: "Forgotten", playedAt: -30 * 3_600)
+        let nextId = try await addNight(store, roomId: roomId, name: "Next week", playedAt: 7 * 86_400)
         let active = try await store.fetchActiveEvent(roomId: roomId)
-        runner.assertEqual(active?.id, strandedId)
+        runner.assertEqual(active?.id, nextId)
     }
 
-    runner.runAsync("P1: a live night outranks both the stranded night and the future one") {
+    runner.runAsync("P1: a live night outranks both the expired night and the future one") {
         let store = InMemoryRoomStore()
         let roomId = try await emptyRoom(store)
         _ = try await addNight(store, roomId: roomId, name: "Forgotten", playedAt: -30 * 3_600)
@@ -358,17 +406,19 @@ private func runP1V0StateTests(_ runner: TestRunner) {
         runner.assertEqual(state(e), .justSettled(e))
     }
 
-    runner.run("P1: a stranded night is .inPlay") {
-        // Audit 01 D3 — the settle action has to exist somewhere.
+    runner.run("P1: an expired night nobody settled is .justSettled") {
+        // Since 120 the night ends itself, so it reads recap: the
+        // ceremonial card, not the in-play card. There is nothing left
+        // for the host to settle, so nothing waits on them.
         let e = event(playedAt: -30 * 3_600)
-        runner.assertEqual(state(e), .inPlay(e))
+        runner.assertEqual(state(e), .justSettled(e))
     }
 
-    runner.run("P1: a stranded night stays .inPlay even before the viewer plays") {
-        // Stranded is not the play-just-started moment: the table is
-        // long gone, the card is waiting on the host.
+    runner.run("P1: an expired night is .justSettled even before the viewer plays") {
+        // The viewer's play does not matter for a night that ended:
+        // the card is the recap's, whoever is looking.
         let e = event(playedAt: -30 * 3_600)
-        runner.assertEqual(state(e, hasWithdrawn: false), .inPlay(e))
+        runner.assertEqual(state(e, hasWithdrawn: false), .justSettled(e))
     }
 
     runner.run("P1: a cancelled night reads the standings") {
