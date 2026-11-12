@@ -248,4 +248,52 @@ repoint, and no UI test is edited in this lane.
 | AD4 | `GamesRoom/Services/NightPhase.swift` + `TestsP1.swift` | mirror the effective settle in `NightPhaseResolver.phase`; extend the table test |
 | AD5 | `docs/STATE-MACHINES.md` (Night phase section only) + this report | the doc, and the finished report |
 
+### 1.8 What AD2 changed, and what it found
+
+`Supabase/migrations/120_stale_close_cron.sql` is **removed** (it was never
+applied) and replaced by `Supabase/migrations/120_night_ends_itself.sql`, which
+rewrites three readers and demotes the janitor:
+
+| function | change |
+|---|---|
+| `public.night_phase` | the recap/past branches read the **effective** settle; `stranded` stays as the final, unreachable `else` |
+| `public.get_active_event__inner` | the settled leg keys on the effective settle and **returns** it as `settled_at`; the live and future legs are byte-for-byte unchanged |
+| `public.get_recent_settled_event` | same, behind the same membership gate and the same hidden-member filter |
+| `public.cron_close_stale` | body unchanged; the schedule moves from `'17 * * * *'` to `'17 3 * * *'`; SECURITY DEFINER, `search_path`, the revoke and the pg_cron guard are unchanged |
+
+**The branch order.** The brief pins the order `none > upcoming > live >
+recap > past`. Two details make that work:
+
+- The `live` branch additionally requires **no effective settle**
+  (`settled_at is null and now < played_at + window`). Without that clause a
+  night the host settled *early* — played 2 h ago, settled 1 h ago, window 8 h
+  — would read `live`, because it is still inside its window. `115.a` pins
+  that row as `recap`, and it still reads `recap`: the effective settle is the
+  host's stamp, so the night has ended.
+- `stranded` is the final `else`, not a branch. It is **unreachable**: a null
+  effective settle means `now` has not reached the window end, so the `live`
+  branch took the row.
+
+**The behavioural diff**, checked over the whole phase table (120 input
+combinations of played/settled × window 8 h/24 h): exactly two classes change.
+
+| input | old | new | why |
+|---|---|---|---|
+| expired, never stamped, ended inside 24 h | `stranded` | `recap` | **the point of the lane** — the night ended; it no longer waits for a janitor |
+| expired, never stamped, ended more than 24 h ago | `stranded` | `past` | same |
+| future night that carries a physical stamp | `recap`/`past` | `upcoming` | unreachable: `settle_event` refuses to settle a night that has not started (`107:258`), and `create_event` writes `settled_at = null` |
+
+Everything else is unchanged, including the early-settle row (`recap`), the
+7 h 59 m row (`live`), the exactly-at-the-boundary row (`stranded` → `recap`,
+the one intended difference) and the host's own stamp (it wins).
+
+> [!WARNING]
+> **`Supabase/tests/115_probes.sql:145-146` is now stale.** It asserts
+> `night_phase(now - 8 hours, null, 8, now) = 'stranded'` and the same at
+> 9 hours. After this migration both read `recap` — the night's true end is
+> inside the 24 h recap window — and the probe will report FAIL. The file is
+> outside this lane's whitelist, so it is **not edited here**: the
+> orchestrator repoints those two rows the way it repoints the UI tests.
+> `TestsP1.swift` carries the same pinned row and is repointed in AD4.
+
 ---
