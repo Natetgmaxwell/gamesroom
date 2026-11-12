@@ -13,25 +13,40 @@ name below was read from this branch.
 ## 1. Night phase
 
 **States** `NightPhase`: `none`, `upcoming`, `live`, `stranded`, `recap`, `past`, `cancelled`.
+`stranded` is unreachable by design since migration 120 — the night ends itself, so an
+expired night reads `recap` or `past` with no writer having run. It stays in the
+vocabulary (it is one of the seven SQL values) as a safety fallback on both sides.
 
 **Moves it** `NightPhaseResolver.phase(_ facts: NightFacts)` — a pure function of
-`playedAt`, `settledAt`, the room's `autoCloseHours` and `now`. Settled wins
-over the auto-close window; `playedAt <= now < playedAt + autoCloseHours` is
-`.live`; at or past that line it is `.stranded`; a settle inside 24 h is
-`.recap`, outside it `.past`. `.cancelled` is in the vocabulary (it is one of
-the seven SQL values) and the resolver never returns it.
+`playedAt`, `settledAt`, the room's `autoCloseHours` and `now`. It reads the
+**effective settle**: the host's own `settledAt` when there is one, otherwise the
+night's true end `playedAt + autoCloseHours` once `now` has reached it — the end of a
+night is known at booking time, so no writer has to stamp the column for the night to
+have ended. `playedAt > now` is `.upcoming`; `.live` needs no effective settle and
+`now < playedAt + autoCloseHours` (so a night the host settled early reads `.recap`,
+never `.live`); an effective settle inside 24 h is `.recap`, older than that `.past`.
+`.cancelled` is in the vocabulary (it is one of the seven SQL values) and the resolver
+never returns it.
 
 **Owner** `GamesRoom/Services/NightPhase.swift`
 
 **Server twin** `public.night_phase(played_at, settled_at, auto_close_hours, now)`
-in `Supabase/migrations/115_state_machine_guards.sql`; consumed by
-`get_active_event__inner` (115) and `get_recent_settled_event` (107).
+in `Supabase/migrations/120_night_ends_itself.sql`; consumed by
+`get_active_event__inner` (120) and `get_recent_settled_event` (120), which key
+recency on the effective settle and return it as `settled_at`.
 
-**Pinned by** `TestsP1.swift` — `P1: exactly at played_at + auto_close_hours is .stranded`.
+**Hygiene** `public.cron_close_stale()` (120) stamps that same derived value into the
+physical column, daily at 03:17 (`'17 3 * * *'`). It is hygiene, not the correctness
+path: nothing waits on it, and the reads above are right before it has ever run.
+
+**Pinned by** `TestsP1.swift` — `P1: exactly at played_at + auto_close_hours is .recap`,
+`P1: a night whose true end was 24h ago is .past`.
 
 **Never** write an inline `playedAt <= Date()` / `settledAt == nil` predicate in
 a view, service or notification. Ask the resolver, or ask the phase a caller
-already computed. Nine sites were replaced this way on 2026-11-09.
+already computed. Nine sites were replaced this way on 2026-11-09. Never key recency
+on the physical `settled_at` column: it stays null until somebody writes it, so the
+effective settle is the only thing that says when a night ended.
 
 ---
 
