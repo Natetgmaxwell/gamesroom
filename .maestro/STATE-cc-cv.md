@@ -1,46 +1,52 @@
 # STATE cc-cv
 Base: 6ecea66755cfa13519f30e0ca4461428045c7636  Branch: cc/casino-visible
 Rewrite after every step. When all ticked, replace NEXT line with: ALL STEPS DONE
-NEXT: CV2 picker shows the always-on casino row
+NEXT: CV3 member renders include casino
 - [x] CV1 where casino is hidden — facts
-- [ ] CV2 picker shows the always-on casino row
+- [x] CV2 picker shows the always-on casino row
 - [ ] CV3 member renders include casino
 - [ ] CV4 tests repointed + report
 
-## CV1 DONE (commit "CV1: where casino is hidden — facts")
+## CV2 DONE (commit "CV2: picker shows the always-on casino row")
 
-What CV1 established (full detail + line anchors in REPORT-task-CV.md):
+What CV2 changed (all in GamesRoom/Views/AddEventSheet.swift; detail + before/after in
+REPORT-task-CV.md §8):
 
-- The brief's premise is HALF true. The host picker really does filter casino out
-  (GamesRoom/Views/AddEventSheet.swift:245 — `availablePacks`), but no member-facing
-  surface renders the night's packs AT ALL, so none of them filter casino. The
-  member side is SILENT, not filtered.
-- Exactly ONE filter hides casino from a human: F1, AddEventSheet.swift:245.
-  Removing it is enough for the order: PackRegistry.defaultPacks already lists
-  CasinoPack FIRST (PackRegistry.swift:43-47).
-- The picker's SEED filter (AddEventSheet.swift:91-93) STAYS and still serves the
-  dedupe: it keeps the tick state free of the always-on slug, so the row list and
-  the tick state cannot disagree. save() (AddEventSheet.swift:284) stays EXACTLY as
-  is — files casino first, dedupes.
-- DOUBLE sites (already show casino, left alone, listed in the report):
-  RoomSettingsSheet.swift:1198 "Packs" toggles, PackStoreView.swift:28 pack
-  store, PackDetailView.swift how-to, NextNight.swift:84 next-night offer
-  (casino already first), PackHowTo.swift:73 casino how-to content.
-- The member gap: BriefingSlot (RoomDetailView.swift:2320 — the briefing view
-  file IS RoomDetailView.swift; BriefingSlot is a private struct there) is the
-  hero card every member sees before a night and shows name/date/venue/hosted-by
-  + the host's free-text note, and NO pack name. The live card (liveCard:2014)
-  and the recap card (recapCard:2099) are the same.
-- Stale comments to rewrite in CV2: AddEventSheet.swift:69-71 ("the casino pack
-  is not offered here") and :85-86 ("Chips are never listed here").
-- Test surfaces: no Foundation test encodes "casino is absent from the picker",
-  and the 19-screen sweep never opens the sheet's pack section nor asserts a
-  pack name or an option count. Nothing to repoint; main.swift:148-151 and
-  TestsNextNight.swift:137 already pin casino first. The new picker shape is
-  UI-testable only — noted for the orchestrator's sweep.
-- Flagged for the orchestrator: CV3 ADDS the night's games to the member card
-  (there is no member-facing pack list to un-filter). If the intent was strictly
-  "stop filtering where a filter exists", CV3 is a no-op and the lane reduces to
-  CV2 + CV4. Reasoning + the proposed shape are in REPORT-task-CV.md §3/§4.2.
-- Verification: `bash .maestro/fastgate.sh` -> FASTGATE: PASS (630 cases,
-  74/74 SwiftUI parse-checks). Docs only in this commit.
+- F1 DELETED: `availablePacks` is now `PackRegistry.shared.allPacks.map { … }` — no
+  `.filter { $0.slug != CasinoPack.slug }`. The catalog is the registry again, and the
+  "casino first" row order is inherited from `PackRegistry.defaultPacks` (F5), not from
+  a sort added here. One source of truth for the order.
+- The casino row is a READONLY `HStack` (`alwaysOnPackRow`), not a `Button`: there is
+  nothing to tap, so it cannot be unticked. It renders "Casino" (CasinoPack.displayName)
+  + the caption "Every night runs on casino chips" in Theme.Typography.caption /
+  Palette.secondaryText + a pre-ticked accent checkmark. The picker no longer presents
+  an untickable thing as a choice.
+- `togglePack` guarded: `guard slug != CasinoPack.slug else { return }` — the always-on
+  slug can never enter (or leave) the tick set, even if called from elsewhere.
+- F2 (the `initialPackSlugs` seed filter, :91-93) KEPT, as the brief allows: it is the
+  dedupe guard, not a display filter. It keeps the tick state free of the always-on slug
+  so the rows and the tick state cannot disagree. Reason recorded in the report (§4.1/§8).
+- `save()` (:284) UNTOUCHED: still `[CasinoPack.slug] + packSlugs.filter { $0 != … }` —
+  files casino first, dedupes. No change to scoring, save semantics or the data model.
+- Stale comments rewritten (:68-72 the packSlugs doc, :84-87 the init doc, plus the seed
+  filter and `availablePacks`): the old "the casino pack is not offered here" / "Chips are
+  never listed here" now say casino is always on and VISIBLE — the label informs, the save
+  semantics never depended on the tick.
+- `PackOption` was NOT extended with a description: the other rows show no description
+  (slug + displayName only), so the brief's conditional "use its description as the row's
+  secondary text if the other rows show descriptions" does not fire. The caption is the
+  secondary line instead.
+- No new/changed user-facing string collided with a sweep assertion: the sweep never
+  opens the new-event sheet's pack section and never asserts a pack name or an option
+  count (grepped GamesRoomUITests/ for "What are you playing" / "Play anything" — no hits).
+- Verification: `bash .maestro/fastgate.sh` -> FASTGATE: PASS (630 cases, 74/74 SwiftUI
+  parse-checks); also `--compile` -> FASTGATE: PASS (xcodebuild BUILD SUCCEEDED, no
+  type errors in the new ViewBuilder code).
+
+CV3 is next and it is NOT an un-filtering job: no member-facing surface renders the
+night's packs at all (CV1 §3), so CV3 ADDS the night's games to the member event card
+(the briefing slot — BriefingSlot, a `private struct` inside RoomDetailView.swift:2320)
+with casino first, styled like any other pack, no special chrome. The proposed shape is
+REPORT-task-CV.md §4.2; the shared pure "casino first" rule is proposed in §4.3 (NextNight.swift
+already owns that rule in `NextNightOffer.offer`). F4/S2/S3/S8 are already unfiltered —
+leave them alone.

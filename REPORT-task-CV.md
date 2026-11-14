@@ -173,7 +173,7 @@ keep `save()` exactly as is; it is the *write* order, the new type is the *displ
 
 ---
 
-## 5. Comments that state the old rule (must be rewritten in CV2)
+## 5. Comments that state the old rule (rewritten in CV2 — see §8)
 
 | File:line | Old rule as written | New rule |
 | --- | --- | --- |
@@ -227,12 +227,57 @@ repoint on that side. The new Foundation case will pin: (a) the picker row list 
 
 ---
 
-## 8. Step plan (for CV2 → CV4)
+## 8. CV2 as built — the picker now shows casino
+
+Commit `CV2: picker shows the always-on casino row`, all in `GamesRoom/Views/AddEventSheet.swift`.
+
+**Before** — the host saw two rows, "Cards Against Humanity" and "Monopoly Deal", and was
+never told the night is a casino night:
+
+```
+What are you playing?
+  ○  Cards Against Humanity
+  ○  Monopoly Deal
+```
+
+**After** — three rows, casino first, pre-ticked, not tappable:
+
+```
+What are you playing?
+  ✓  Casino
+     Every night runs on casino chips
+  ○  Cards Against Humanity
+  ○  Monopoly Deal
+```
+
+What changed, line by line:
+
+| Change | Where | Note |
+| --- | --- | --- |
+| F1 filter **deleted** | `availablePacks` (was `:244-248`) — now `PackRegistry.shared.allPacks.map { … }`, no `.filter` | The catalog is the registry again. Casino is first because `PackRegistry.defaultPacks` lists it first (F5) — the order comes from one place, not from a sort here. |
+| Casino row **readonly** | new `alwaysOnPackRow` + `packRow(_:)` | The row is an `HStack`, **not** a `Button` — there is nothing to tap, so it cannot be unticked. The tick mark (`Theme.Icon.checkmarkCircleFill`, accent) renders it as pre-ticked. Caption: "Every night runs on casino chips". |
+| Caption typography | `Theme.Typography.caption` / `Theme.Palette.secondaryText` | The other rows show no description (`PackOption` carries only `slug` + `displayName`), so the brief's conditional "use its description as the secondary text **if the other rows show descriptions**" does not fire; the caption is the secondary line instead. |
+| `togglePack` **guarded** | `guard slug != CasinoPack.slug else { return }` | Belt and braces: even if something else calls it, the always-on slug can never enter the tick set. |
+| Seed filter **kept** | `initialPackSlugs` (`:91-93`) | Still the dedupe guard, not a display filter: it keeps the tick state free of the always-on slug so the rows and the tick state cannot disagree. Recorded here because the brief asks for the reason whenever a filter is kept. |
+| `save()` **untouched** | `:284` | Still `[CasinoPack.slug] + packSlugs.filter { $0 != CasinoPack.slug }` — files casino first, dedupes. |
+| Comments rewritten | `:68-72`, `:84-87`, the seed filter, `availablePacks` | The two stale statements from §5 ("the casino pack is not offered here", "Chips are never listed here") now say the new rule: casino is always on and visible; the label informs, the save semantics never depended on the tick. |
+
+**Ordering note:** the "casino first" order is inherited from `PackRegistry.defaultPacks`
+(F5) — the picker adds no sort of its own. If a future pack is registered before casino,
+the row order follows the registry, which is the single source of truth.
+
+**Not done in CV2 (by design):** the member-facing side. No member render shows a pack
+list at all (§3), so CV3 has to ADD the night's games to the member card rather than
+un-filter anything. §4.2 holds the proposed shape.
+
+---
+
+## 9. Step plan (for CV2 → CV4)
 
 | Step | Commit | Files | Work |
 | --- | --- | --- | --- |
 | CV1 | `CV1: where casino is hidden — facts` | `REPORT-task-CV.md`, `.maestro/STATE-cc-cv.md` | This document. **DONE** |
-| CV2 | `CV2: picker shows the always-on casino row` | `GamesRoom/Views/AddEventSheet.swift` | Remove F1; render the readonly pre-ticked Casino row first with the caption "Every night runs on casino chips"; guard `togglePack`; rewrite the two stale comments (§5) |
+| CV2 | `CV2: picker shows the always-on casino row` | `GamesRoom/Views/AddEventSheet.swift` | Remove F1; render the readonly pre-ticked Casino row first with the caption "Every night runs on casino chips"; guard `togglePack`; rewrite the two stale comments (§5). **DONE** — see §8 |
 | CV3 | `CV3: member renders include casino` | `GamesRoom/Models/NextNight.swift`, `GamesRoom/Views/RoomDetailView.swift` | Shared pure "casino first" rule; member card gains the games line with casino first; F4/S2/S3/S8 left alone |
 | CV4 | `CV4: tests repointed + report` | one Foundation test file (+`main.swift` call, `build-and-run-tests.sh` list line), `REPORT-task-CV.md` | Pin the picker shape (casino present, first, readonly) and the member-facing list (casino first); finish this report with the before/after a member sees |
 
