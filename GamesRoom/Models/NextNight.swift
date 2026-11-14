@@ -30,6 +30,12 @@
 
 import Foundation
 
+enum NightPackOrder {
+    static func casinoFirst(_ packSlugs: [String]) -> [String] {
+        [CasinoPack.slug] + packSlugs.filter { $0 != CasinoPack.slug }
+    }
+}
+
 // MARK: - The offer
 
 /// "Same time next Tuesday?": the settled night's start time plus seven
@@ -81,12 +87,11 @@ struct NextNightOffer: Equatable {
         guard isHost, !hasFutureNight, !settleInFlight else { return nil }
         guard let next = sameTimeNextWeek(after: settled.playedAt, timeZone: timeZone),
               next > now else { return nil }
-        let chips = CasinoPack.slug
         // Only games the catalog still knows: a retired pack on an old
         // night must not make the one-tap booking fail.
-        let packs = [chips] + settled.packSlugs.filter {
-            $0 != chips && PackRegistry.shared.isRegistered(slug: $0)
-        }
+        let packs = NightPackOrder.casinoFirst(
+            settled.packSlugs.filter { PackRegistry.shared.isRegistered(slug: $0) }
+        )
         return NextNightOffer(
             playedAt: next,
             name: EventDefaultName.name(for: next, timeZone: timeZone),

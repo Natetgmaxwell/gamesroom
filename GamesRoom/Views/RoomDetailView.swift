@@ -2412,6 +2412,11 @@ private struct BriefingSlot: View {
         NightPhaseResolver.phase(for: event, autoCloseHours: room.autoCloseHours)
     }
 
+    private var nightPackNames: [String] {
+        NightPackOrder.casinoFirst(event.packSlugs)
+            .compactMap { PackRegistry.shared.definition(for: $0)?.displayName }
+    }
+
     /// This member's chair, from the three facts the server keeps.
     private var seatPhase: SeatPhase {
         SeatPhase.phase(
@@ -2497,6 +2502,11 @@ private struct BriefingSlot: View {
                     Text(venue)
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.labelText)
+                }
+                if !nightPackNames.isEmpty {
+                    Text(nightPackNames.joined(separator: " · "))
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 if let hostedBy {
                     Text("Hosted by \(hostedBy)")

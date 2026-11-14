@@ -1,52 +1,42 @@
 # STATE cc-cv
 Base: 6ecea66755cfa13519f30e0ca4461428045c7636  Branch: cc/casino-visible
 Rewrite after every step. When all ticked, replace NEXT line with: ALL STEPS DONE
-NEXT: CV3 member renders include casino
+NEXT: CV4 tests repointed + report
 - [x] CV1 where casino is hidden — facts
 - [x] CV2 picker shows the always-on casino row
-- [ ] CV3 member renders include casino
+- [x] CV3 member renders include casino
 - [ ] CV4 tests repointed + report
 
-## CV2 DONE (commit "CV2: picker shows the always-on casino row")
+## CV3 DONE (commit "CV3: member renders include casino")
 
-What CV2 changed (all in GamesRoom/Views/AddEventSheet.swift; detail + before/after in
-REPORT-task-CV.md §8):
+What CV3 changed:
 
-- F1 DELETED: `availablePacks` is now `PackRegistry.shared.allPacks.map { … }` — no
-  `.filter { $0.slug != CasinoPack.slug }`. The catalog is the registry again, and the
-  "casino first" row order is inherited from `PackRegistry.defaultPacks` (F5), not from
-  a sort added here. One source of truth for the order.
-- The casino row is a READONLY `HStack` (`alwaysOnPackRow`), not a `Button`: there is
-  nothing to tap, so it cannot be unticked. It renders "Casino" (CasinoPack.displayName)
-  + the caption "Every night runs on casino chips" in Theme.Typography.caption /
-  Palette.secondaryText + a pre-ticked accent checkmark. The picker no longer presents
-  an untickable thing as a choice.
-- `togglePack` guarded: `guard slug != CasinoPack.slug else { return }` — the always-on
-  slug can never enter (or leave) the tick set, even if called from elsewhere.
-- F2 (the `initialPackSlugs` seed filter, :91-93) KEPT, as the brief allows: it is the
-  dedupe guard, not a display filter. It keeps the tick state free of the always-on slug
-  so the rows and the tick state cannot disagree. Reason recorded in the report (§4.1/§8).
-- `save()` (:284) UNTOUCHED: still `[CasinoPack.slug] + packSlugs.filter { $0 != … }` —
-  files casino first, dedupes. No change to scoring, save semantics or the data model.
-- Stale comments rewritten (:68-72 the packSlugs doc, :84-87 the init doc, plus the seed
-  filter and `availablePacks`): the old "the casino pack is not offered here" / "Chips are
-  never listed here" now say casino is always on and VISIBLE — the label informs, the save
-  semantics never depended on the tick.
-- `PackOption` was NOT extended with a description: the other rows show no description
-  (slug + displayName only), so the brief's conditional "use its description as the row's
-  secondary text if the other rows show descriptions" does not fire. The caption is the
-  secondary line instead.
-- No new/changed user-facing string collided with a sweep assertion: the sweep never
-  opens the new-event sheet's pack section and never asserts a pack name or an option
-  count (grepped GamesRoomUITests/ for "What are you playing" / "Play anything" — no hits).
-- Verification: `bash .maestro/fastgate.sh` -> FASTGATE: PASS (630 cases, 74/74 SwiftUI
-  parse-checks); also `--compile` -> FASTGATE: PASS (xcodebuild BUILD SUCCEEDED, no
-  type errors in the new ViewBuilder code).
+- `GamesRoom/Models/NextNight.swift` now has one shared pure ordering rule,
+  `NightPackOrder.casinoFirst(_:)`. It returns Casino first and removes any
+  duplicate Casino slug while preserving the order of the remaining packs.
+- `NextNightOffer.offer` calls that rule after its existing registered-pack
+  filter. Its behaviour is unchanged: the one-tap next-night offer still
+  contains Casino first and excludes retired packs (F4/S8 left alone).
+- `BriefingSlot` in `GamesRoom/Views/RoomDetailView.swift` now reads the
+  event's own `packSlugs`, applies the same shared ordering rule, resolves the
+  registered pack display names, and renders them as one caption line under the
+  venue: `Casino · Monopoly Deal`.
+- The games line uses the existing caption typography and secondary text
+  colour, with no icon, accent colour, badge, or other Casino-specific chrome.
+  It appears on the shared briefing card used by the upcoming, claimed, and
+  declined member states.
+- No live-card, recap-card, room-settings, pack-store, pack-how-to, or other
+  already-unfiltered surface was changed (S2/S3/S4/S6/S7 left alone). The
+  only member-facing change is the briefing card's new games line.
+- No static user-facing string or accessibility identifier was added or
+  changed, so the screenshot sweep has no pack-label or option-count assertion
+  to repoint.
+- Verification: `bash .maestro/fastgate.sh` -> FASTGATE: PASS (630 cases,
+  74/74 SwiftUI parse-checks); `bash .maestro/fastgate.sh --compile` ->
+  FASTGATE: PASS (simulator-less iOS build succeeded).
 
-CV3 is next and it is NOT an un-filtering job: no member-facing surface renders the
-night's packs at all (CV1 §3), so CV3 ADDS the night's games to the member event card
-(the briefing slot — BriefingSlot, a `private struct` inside RoomDetailView.swift:2320)
-with casino first, styled like any other pack, no special chrome. The proposed shape is
-REPORT-task-CV.md §4.2; the shared pure "casino first" rule is proposed in §4.3 (NextNight.swift
-already owns that rule in `NextNightOffer.offer`). F4/S2/S3/S8 are already unfiltered —
-leave them alone.
+CV4 is next: repoint/add the Foundation table tests required by design 4, pin
+the new member-facing Casino-first list, and finish `REPORT-task-CV.md` with the
+member before/after view. Add any new test file to both
+`build-and-run-tests.sh` and `main.swift`, then run the gate and commit with
+the exact message `CV4: tests repointed + report`.
