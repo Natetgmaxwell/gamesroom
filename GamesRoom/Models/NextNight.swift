@@ -14,7 +14,7 @@
 //     (peak-end rule). The recap now opens on Tonight's Star and closes
 //     on the next night, with the chip results between them.
 //
-//  Three pure pieces, Foundation only, no clock reads:
+//  Five pure pieces, Foundation only, no clock reads:
 //
 //    NextNightOffer      what "Same time next Tuesday?" would book, or
 //                        nil when it must not be offered.
@@ -22,6 +22,10 @@
 //                        (same shape as `SettlePhase`).
 //    RecapClosing /      the recap's last line and the order of the
 //    RecapLayout         recap's sections.
+//    NightPackOrder      the order of a night's packs — casino first —
+//                        and the names a member reads them by.
+//    NightPackPicker     the host's picker: the rows it shows and the
+//                        set it lets the host tick.
 //
 //  Server twin: `add_event` and the one-upcoming-night trigger
 //  (`one_upcoming_night`, migration 115). This file never decides
@@ -30,9 +34,69 @@
 
 import Foundation
 
+// MARK: - A night's packs
+
+/// The order of a night's packs.
+///
+/// Casino is always on: every night is scored in chips and the first
+/// slug is the event's headline `pack_slug`, so casino leads every
+/// list of packs — in the host's picker, in the one-tap booking, and
+/// in the line a member reads on the card.
+///
+/// One copy of the rule: the picker, the next-night offer and the
+/// member's card all ask this type, so they cannot disagree about
+/// what the night is playing.
 enum NightPackOrder {
     static func casinoFirst(_ packSlugs: [String]) -> [String] {
         [CasinoPack.slug] + packSlugs.filter { $0 != CasinoPack.slug }
+    }
+
+    /// The pack names a member reads for a night: casino first, one
+    /// name per registered pack, the night's own order after casino.
+    /// A pack the registry no longer knows is dropped.
+    static func displayNames(for packSlugs: [String]) -> [String] {
+        casinoFirst(packSlugs).compactMap { PackRegistry.shared.definition(for: $0)?.displayName }
+    }
+
+    /// The line under the venue on the member's card:
+    /// "Casino · Monopoly Deal".
+    static func caption(for packSlugs: [String]) -> String {
+        displayNames(for: packSlugs).joined(separator: packSeparator)
+    }
+
+    /// What joins two pack names in the member's line.
+    static let packSeparator = " · "
+}
+
+/// The host's "What are you playing?" picker.
+///
+/// Two lists, and they must never disagree:
+///
+///   - the ROWS: every registered pack, the always-on one first.
+///   - the TICKABLE SET: the packs the host can tick — never the
+///     always-on one, whose row is pre-ticked and readonly.
+///
+/// Casino is always on, so it is listed (the host has to SEE that
+/// the night is a casino night) and it cannot be unticked (the tick
+/// never decided anything: `save()` files the slug either way).
+enum NightPackPicker {
+    /// The pack that is always on.
+    static let alwaysOnSlug = CasinoPack.slug
+
+    /// True for the always-on pack: its row is readonly and pre-ticked.
+    static func isAlwaysOn(_ slug: String) -> Bool { slug == alwaysOnSlug }
+
+    /// The rows the host sees, in the registry's order with the
+    /// always-on pack first.
+    static func rows(catalog: [String] = PackRegistry.shared.allPacks.map { $0.slug }) -> [String] {
+        NightPackOrder.casinoFirst(catalog)
+    }
+
+    /// The tickable set the picker starts from, seeded with a saved
+    /// night's packs: the always-on pack is dropped (its row is
+    /// pre-ticked and readonly) and unknown slugs are refused.
+    static func tickableSet(seed: [String]) -> [String] {
+        seed.filter { !isAlwaysOn($0) && PackRegistry.shared.isRegistered(slug: $0) }
     }
 }
 

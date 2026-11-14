@@ -96,9 +96,9 @@ struct AddEventSheet: View {
         // always on and is rendered as a pre-ticked readonly row, so
         // it must never sit in the tickable set. This is the dedupe
         // guard, not a display filter — the casino ROW is listed.
-        _packSlugs = State(initialValue: initialPackSlugs.filter {
-            $0 != CasinoPack.slug && PackRegistry.shared.isRegistered(slug: $0)
-        })
+        // The rule lives in `NightPackPicker` so the picker and the
+        // test pin one copy of it.
+        _packSlugs = State(initialValue: NightPackPicker.tickableSet(seed: initialPackSlugs))
 
     }
 
@@ -238,12 +238,14 @@ struct AddEventSheet: View {
     /// know about.
     ///
     /// Casino is NOT filtered out of the catalog any more: the pack
-    /// is always on, so the host has to SEE it. The registry already
-    /// lists it first (`PackRegistry.defaultPacks`), which is where
-    /// the "casino first" order of the rows comes from.
+    /// is always on, so the host has to SEE it. The rows come from
+    /// `NightPackPicker.rows()` — the registry's catalog with the
+    /// always-on pack first — so the order the host sees is the
+    /// registry's own order (`PackRegistry.defaultPacks`).
     private var availablePacks: [PackOption] {
-        PackRegistry.shared.allPacks.map {
-            PackOption(slug: $0.slug, displayName: $0.displayName)
+        NightPackPicker.rows().compactMap { slug in
+            guard let definition = PackRegistry.shared.definition(for: slug) else { return nil }
+            return PackOption(slug: definition.slug, displayName: definition.displayName)
         }
     }
 
@@ -252,7 +254,7 @@ struct AddEventSheet: View {
     /// the host could untick. Every other pack is a plain toggle.
     @ViewBuilder
     private func packRow(_ option: PackOption) -> some View {
-        if option.slug == CasinoPack.slug {
+        if NightPackPicker.isAlwaysOn(option.slug) {
             alwaysOnPackRow
         } else {
             Button {
@@ -296,7 +298,7 @@ struct AddEventSheet: View {
         // Casino is always on: its row is readonly, so the slug must
         // never enter (or leave) the tickable set. `save()` files it
         // first regardless of what the host does here.
-        guard slug != CasinoPack.slug else { return }
+        guard !NightPackPicker.isAlwaysOn(slug) else { return }
         if let idx = packSlugs.firstIndex(of: slug) {
             packSlugs.remove(at: idx)
         } else {

@@ -1,24 +1,29 @@
 ---
-type: research
-title: "Task CV — where casino is hidden, and what a member sees"
+type: report
+title: "Task CV — where casino was hidden, and what a member now sees"
 created: 2026-11-14
+updated: 2026-11-14
 tags:
   - task-cv
   - casino
   - packs
   - visibility
   - facts
+  - picker
+  - member-facing
 related:
   - '[[GamesRoom]]'
   - '[[PackRegistry]]'
   - '[[NextNightOffer]]'
+  - '[[NightPackOrder]]'
+  - '[[NightPackPicker]]'
   - '[[BriefingSlot]]'
   - '[[AddEventSheet]]'
 ---
 
-# Task CV — where casino is hidden
+# Task CV — where casino was hidden, and what a member now sees
 
-**Lane:** `cc/casino-visible` (base `6ecea667`) · **Step:** CV1 (facts) · **Date:** 2026-11-14
+**Lane:** `cc/casino-visible` (base `6ecea667`) · **Steps:** CV1–CV4 (done) · **Date:** 2026-11-14
 
 Nathan, 2026-11-13: *"I'm thinking that we should list the casino games in the 'what are you
 playing' section when creating a new event, so it gives the members an idea into what's going to
@@ -278,11 +283,180 @@ un-filter anything. §4.2 holds the proposed shape.
 | --- | --- | --- | --- |
 | CV1 | `CV1: where casino is hidden — facts` | `REPORT-task-CV.md`, `.maestro/STATE-cc-cv.md` | This document. **DONE** |
 | CV2 | `CV2: picker shows the always-on casino row` | `GamesRoom/Views/AddEventSheet.swift` | Remove F1; render the readonly pre-ticked Casino row first with the caption "Every night runs on casino chips"; guard `togglePack`; rewrite the two stale comments (§5). **DONE** — see §8 |
-| CV3 | `CV3: member renders include casino` | `GamesRoom/Models/NextNight.swift`, `GamesRoom/Views/RoomDetailView.swift` | Shared pure "casino first" rule; member card gains the games line with casino first; F4/S2/S3/S8 left alone |
-| CV4 | `CV4: tests repointed + report` | one Foundation test file (+`main.swift` call, `build-and-run-tests.sh` list line), `REPORT-task-CV.md` | Pin the picker shape (casino present, first, readonly) and the member-facing list (casino first); finish this report with the before/after a member sees |
+| CV3 | `CV3: member renders include casino` | `GamesRoom/Models/NextNight.swift`, `GamesRoom/Views/RoomDetailView.swift` | Shared pure "casino first" rule; member card gains the games line with casino first; F4/S2/S3/S8 left alone. **DONE** — see §10 |
+| CV4 | `CV4: tests repointed + report` | one Foundation test file (+`main.swift` call, `build-and-run-tests.sh` list line), `REPORT-task-CV.md` | Pin the picker shape (casino present, first, readonly) and the member-facing list (casino first); finish this report with the before/after a member sees. **DONE** — see §11 |
 
 **Files this lane may touch** (from the brief): `GamesRoom/Views/AddEventSheet.swift`,
 `GamesRoom/Views/RoomDetailView.swift` (which **is** the briefing view file — `BriefingSlot` is
 `private struct` at `RoomDetailView.swift:2320`), `GamesRoom/Models/NextNight.swift`, ONE
 Foundation test file, `main.swift` / `build-and-run-tests.sh` (list lines only), this report,
 `.maestro/STATE-cc-cv.md`. No migrations. No `PackRegistry` structural change.
+
+---
+
+## 10. CV3 as built — the member's card names the games
+
+Commit `CV3: member renders include casino`.
+
+**One shared rule.** `GamesRoom/Models/NextNight.swift` now owns the order:
+
+```swift
+enum NightPackOrder {
+    static func casinoFirst(_ packSlugs: [String]) -> [String] {
+        [CasinoPack.slug] + packSlugs.filter { $0 != CasinoPack.slug }
+    }
+}
+```
+
+`NextNightOffer.offer` calls it (so the one-tap booking still books casino first and still drops
+retired packs — F4 untouched), and the member card calls it (so the card and the booking cannot
+disagree about what the night is playing).
+
+**The member's card.** `BriefingSlot` (`GamesRoom/Views/RoomDetailView.swift`) gained one line
+under the venue, built from the event's own `packSlugs` and the registry's display names:
+
+```
+Casino · Monopoly Deal
+```
+
+- Same caption typography and secondary-text colour as the venue / "Hosted by" line.
+- No icon, no accent colour, no badge, no Casino-specific chrome — casino is styled like the
+  other packs, it just happens to be first.
+- It appears on the shared briefing card, so the upcoming, claimed and declined member states
+  all get it.
+
+**Left alone, on purpose** (the DOUBLE sites from §2): the live card (S6), the recap card (S7),
+room settings' pack toggles (S2), the pack store (S3), the pack how-to (S4) and the next-night
+offer (S8) already showed casino, or show no pack list at all. Showing it twice would double
+it, so none of them were touched.
+
+**No new user-facing string was introduced by the *card*,** so the screenshot sweep has no
+pack-label or option-count assertion to repoint — confirmed again in CV4 (§11).
+
+---
+
+## 11. CV4 as built — the tests, and what a member now sees
+
+Commit `CV4: tests repointed + report`.
+
+### 11.1 The repoint check — nothing encoded the old rule
+
+Design 4 says "repoint, never delete". Re-verified in CV4, not taken on trust:
+
+| Surface | Result |
+| --- | --- |
+| `main.swift` | The only casino assertions are `PackRegistry` cases (`:148-151`): the catalog is `["casino", "cards_against_humanity", "monopoly_deal"]` — casino first. Still true. **No repoint.** |
+| `TestsNextNight.swift:137` | `offer.packSlugs == ["casino", "monopoly_deal"]` — the one-tap booking is casino-first. Still true. **No repoint.** |
+| `TestsS1.swift:42` | `settled.packSlugs == ["casino", "monopoly_deal"]` — the saved night is casino-first. Still true. **No repoint.** |
+| Every other `Tests*.swift` | casino only appears as an event's `packSlugs` fixture. **No repoint.** |
+| `GamesRoomUITests/ScreenshotSweepTests.swift` | The sweep never opens the new-event sheet's pack section and asserts no pack name or option count (`test_11_casino_chip_scan_sheet` is the chip-withdraw sheet, not the picker). **No repoint.** |
+
+So there was **nothing to repoint and nothing to delete** — the old rule was never in a test.
+What was missing was a test for the *new* rule, which is what CV4 adds.
+
+### 11.2 The rule moved into one pure type, so the test can pin it
+
+A test that re-implements the view's rule would be a second copy of it — `AGENTS.md` ("A second
+copy of a rule is a bug even when the two copies agree today"). So the two surfaces CV2/CV3
+touched were lifted into the pure layer (`GamesRoom/Models/NextNight.swift`), and the views now
+ask that layer instead of spelling the rule out:
+
+| Type | What it owns | Who asks it |
+| --- | --- | --- |
+| `NightPackOrder.casinoFirst(_:)` | casino leads every list of packs | `NextNightOffer.offer`, `NightPackPicker.rows` |
+| `NightPackOrder.displayNames(for:)` | the pack names a member reads, casino first, retired packs dropped | `NightPackOrder.caption` |
+| `NightPackOrder.caption(for:)` | the member's line: `"Casino · Monopoly Deal"` | `BriefingSlot` (`RoomDetailView.swift`) |
+| `NightPackPicker.rows(catalog:)` | the rows the host sees: the registry's catalog, casino first | `AddEventSheet.availablePacks` |
+| `NightPackPicker.tickableSet(seed:)` | the tickable set: never the always-on pack, never an unknown slug | `AddEventSheet`'s seed, `togglePack`'s guard |
+| `NightPackPicker.isAlwaysOn(_:)` | "this row is readonly and pre-ticked" | `AddEventSheet.packRow`, `togglePack` |
+
+Behaviour is unchanged — the seed filter, the catalog, the row order and the guard all compute
+what they computed before, they just ask one type for it now. `save()` is untouched (§8).
+
+### 11.3 The new test file
+
+`TestsCasinoVisible.swift` (new; registered in `build-and-run-tests.sh` and called from
+`main.swift`) — 24 cases, all table-driven where a table exists:
+
+| Group | Cases | What it pins |
+| --- | --- | --- |
+| Picker rows | 5 table rows + 1 | casino is present, first, listed once — for the live registry and for a catalog that lists another pack first, leaves casino out, or lists it twice |
+| Picker tickable set | 6 table rows + 2 | the always-on pack is **never** in the tick state, whatever the seed (this is "readonly" at the state level); the only difference between the rows and the tick set is the always-on pack |
+| Member pack list | 7 table rows + 3 | the names a member reads: casino first, once, retired packs dropped, never empty; and the exact line — `"Casino · Monopoly Deal"` |
+
+Case names (for the sweep / for anyone grepping):
+
+```
+Picker rows: the registry's catalog
+Picker rows: the live registry lists casino first, and casino is the only always-on pack
+Picker tickable set: a night saved with casino and a game
+Picker tickable set: the always-on pack is never in it, whatever the seed
+Picker rows and tickable set: the rows show every registered pack, the tick set never shows casino twice
+Member pack list: a casino night with a game
+Member pack list: casino leads, and it appears once
+Member pack line: the line reads 'Casino · Monopoly Deal'
+Member pack line: it is never empty — every night is a casino night
+```
+
+### 11.4 What a member sees — before and after
+
+**Before** (the app as it was before this lane): the member's briefing card named the night, the
+date, the venue and the host — and **nothing about the games**. A member learned what was being
+played only from the free-text note, if the host remembered to type one:
+
+```
+Friday Night
+Tue 17 Nov · 7pm
+The Legion Hall
+Hosted by Alex
+```
+
+**After** (CV3 + CV4): the same card, with one line under the venue. Casino leads it, because
+every night is a casino night:
+
+```
+Friday Night
+Tue 17 Nov · 7pm
+The Legion Hall
+Casino · Monopoly Deal
+Hosted by Alex
+```
+
+And the host's picker, which now says the same thing out loud (§8):
+
+```
+What are you playing?
+  ✓  Casino
+     Every night runs on casino chips
+  ○  Cards Against Humanity
+  ○  Monopoly Deal
+```
+
+The host and the member now read the same list, in the same order, from the same rule.
+
+### 11.5 What is still UI-only (for the orchestrator's sweep)
+
+The Foundation runner cannot see pixels, so these three are the sweep's to check:
+
+1. the picker's Casino row is **pre-ticked and not a button** (no tap target, no untick);
+2. the picker's caption reads "Every night runs on casino chips";
+3. the member card's games line sits under the venue, in caption type, with no Casino-specific
+   chrome, on the upcoming, claimed and declined states.
+
+No accessibility identifier or option count changed, so no sweep assertion has to move.
+
+### 11.6 Stop-and-report notes for the orchestrator
+
+1. **`docs/STATE-MACHINES.md` has no entry for the pack-order / picker derivation.** The house
+   rule is "the machine lives in one pure type in one file, with a table test" — this lane now
+   has exactly that (`NightPackOrder` / `NightPackPicker` in
+   `GamesRoom/Models/NextNight.swift`, pinned by `TestsCasinoVisible.swift`), but the doc's
+   §-list does not mention it. Writing that entry is outside this lane's allowed files, so it is
+   left for the orchestrator.
+2. **The member's line is never empty now** — a night with no packs renders "Casino", because
+   every night is a casino night. That is the intended reading of the brief, and the test pins it
+   ("it is never empty").
+3. **No `PackRegistry` structural change**, no migration, no scoring change, no `save()` change.
+   `PackRegistry.defaultPacks` still lists casino first, and the picker's row order still comes
+   from the registry — the new pure layer only asks it.
+

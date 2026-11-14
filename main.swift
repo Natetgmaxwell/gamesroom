@@ -5275,6 +5275,10 @@ runTonightTests(runner)
 
 runNextNightTests(runner)
 
+// MARK: - Casino visible (the picker's rows; the pack line a member reads)
+
+runCasinoVisibleTests(runner)
+
 // MARK: - Question depth (1.2.5 task 2: one deeper question a night, newer members first)
 
 runQuestionDepthTests(runner)
