@@ -7,7 +7,7 @@
 //  Foundation only. No I/O, no clock: the caller hands in every
 //  fact the phase depends on and gets one answer back.
 //
-//  This is the Swift mirror of migration 115's `public.night_phase(
+//  This is the Swift mirror of migration 120's `public.night_phase(
 //  p_played_at, p_settled_at, p_auto_close_hours, p_now)`. The SQL is
 //  canonical; the two bodies must answer identically for every input,
 //  and `TestsP1` pins the table row by row on both sides.
@@ -16,9 +16,18 @@
 //
 //  1. `live` ends at `played_at + auto_close_hours`, settled or not.
 //     It is a promise about the app's attention, not about the table.
-//     After that window a night nobody settled is `stranded`, never
-//     `live` — the old inline `playedAt <= now && settledAt == nil`
-//     predicate said "live forever", and the server disagreed.
+//     After that window a night nobody settled has ENDED — the night
+//     ends itself, so it reads `recap` (or `past`), never `live` and
+//     never `stranded`. The old inline `playedAt <= now && settledAt
+//     == nil` predicate said "live forever", and the server disagreed.
+//
+//  1a. The night ends itself because the end is known at booking time:
+//      `played_at + auto_close_hours`. So the phase is derived from the
+//      EFFECTIVE settle — the host's own stamp when there is one,
+//      otherwise the night's true end once the clock has reached it —
+//      and no writer has to run for the night to have ended. `stranded`
+//      stays in the vocabulary as an unreachable safety fallback, on
+//      both sides.
 //
 //  2. `recap` is a property of the night, not of the room's active
 //     slot. It coexists with `upcoming`: a night settled inside the
@@ -43,9 +52,12 @@ enum NightPhase: String, Equatable, Codable, CaseIterable {
     case upcoming
     /// Started, inside the auto-close window, not settled.
     case live
-    /// Started, the window has gone, nobody settled it. One action:
-    /// the host settles it. Named so it stops being mistaken for live
-    /// or for a recap.
+    /// Started, the window has gone, nobody settled it. UNREACHABLE
+    /// BY DESIGN since migration 120: the night ends itself, so an
+    /// expired night reads `recap` (or `past`) without any writer
+    /// having run. The case stays in the vocabulary — the SQL keeps it
+    /// as its final fallback and old rows can carry it — but the
+    /// resolver no longer produces it.
     case stranded
     /// Settled inside the 24-hour recap window.
     case recap
@@ -89,23 +101,44 @@ enum NightPhaseResolver {
     /// Mirrors `public.night_phase(...)` branch for branch:
     ///
     ///     played_at is null                                              -> none
-    ///     settled_at is not null and settled_at > now - 24h              -> recap
-    ///     settled_at is not null                                         -> past
-    ///     played_at > now                                                -> upcoming
-    ///     now < played_at + auto_close_hours                             -> live
+    ///     played_at > now                                               -> upcoming
+    ///     no effective settle and now < played_at + auto_close_hours    -> live
+    ///     effective settle > now - 24h                                  -> recap
+    ///     effective settle is not null                                  -> past
     ///     otherwise                                                      -> stranded
     ///
-    /// The three comparisons are strict, exactly like the SQL: a night
+    /// The EFFECTIVE settle is the host's own stamp when there is one,
+    /// and otherwise the night's true end — `played_at +
+    /// auto_close_hours` — once the clock has reached it. The end of a
+    /// night is known the moment the night is booked, so the night
+    /// ends itself: no writer has to stamp the column for the night to
+    /// have ended, and a night nobody settled reads `recap` (or
+    /// `past`) the moment its window closes.
+    ///
+    /// `live` additionally requires NO effective settle: a night the
+    /// host settled early has ended, so it reads `recap`, never `live`.
+    ///
+    /// The comparisons are strict, exactly like the SQL: a night
     /// settled exactly 24 hours ago is `past`, a night starting exactly
     /// now is `live`, and a night whose window ends exactly now is
-    /// `stranded`.
+    /// `recap` — its effective settle lands exactly on `now`.
+    ///
+    /// `stranded` is the last branch and is unreachable: a nil
+    /// effective settle means the clock has not reached the window end,
+    /// so the `live` branch took the row. It stays in the vocabulary
+    /// because the SQL keeps it as its own fallback.
     static func phase(_ facts: NightFacts) -> NightPhase {
         guard let playedAt = facts.playedAt else { return .none }
-        if let settledAt = facts.settledAt {
-            return settledAt > facts.now.addingTimeInterval(-recapWindow) ? .recap : .past
-        }
         if playedAt > facts.now { return .upcoming }
         let windowEnd = playedAt.addingTimeInterval(TimeInterval(facts.autoCloseHours) * 3_600)
+        // The effective settle: the host's own stamp when there is
+        // one, else the night's true end once `now` has reached it.
+        let effectiveSettledAt = facts.settledAt ?? (facts.now >= windowEnd ? windowEnd : nil)
+        if let settledAt = effectiveSettledAt {
+            return settledAt > facts.now.addingTimeInterval(-recapWindow) ? .recap : .past
+        }
+        // No effective settle: the clock has not reached the window
+        // end, so the night is still live.
         return facts.now < windowEnd ? .live : .stranded
     }
 

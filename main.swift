@@ -2186,18 +2186,21 @@ runner.run("MascotEngine.footerKind returns .inPlayWithWithdrawal when live and 
     runner.assertEqual(kind, .inPlayWithWithdrawal)
 }
 
-runner.run("MascotEngine.footerKind returns .settleRound for a stranded night") {
+runner.run("MascotEngine.footerKind returns .postPlayRecap for an expired night nobody settled") {
     // The old fixture set `hostFinalized: true` on a live event. That
     // column exists in no migration and no RPC returns it, so the case
-    // was unreachable in production (audit 01 D7). The settle voice now
-    // belongs to the phase that actually needs a settle: stranded.
+    // was unreachable in production (audit 01 D7). The settle voice
+    // then belonged to the phase that needed a settle: stranded.
+    // Since 120 the night ends itself, so that phase is unreachable:
+    // an expired night nobody settled reads recap and gets the recap
+    // voice. `.stranded` stays in the vocabulary as a safety fallback.
     let now = Date()
     let event = Event(id: UUID(), roomId: UUID(), name: "Poker", playedAt: now.addingTimeInterval(-30 * 3_600), createdAt: now.addingTimeInterval(-86_400))
     let kind = MascotEngine.footerKind(
         activeEvent: event, leaderboard: [], now: now,
         withdrawnAmount: 500
     )
-    runner.assertEqual(kind, .settleRound)
+    runner.assertEqual(kind, .postPlayRecap)
 }
 
 runner.run("MascotEngine.footerKind returns .seasonClose when current season ended") {
@@ -5272,6 +5275,10 @@ runTonightTests(runner)
 
 runNextNightTests(runner)
 
+// MARK: - Casino visible (the picker's rows; the pack line a member reads)
+
+runCasinoVisibleTests(runner)
+
 // MARK: - Question depth (1.2.5 task 2: one deeper question a night, newer members first)
 
 runQuestionDepthTests(runner)
@@ -5283,6 +5290,18 @@ runNewcomerJobTests(runner)
 // MARK: - Glad you came (1.2.5 Task 4: the batched line, the delivery hour, Send with Undo)
 
 runGladYouCameTests(runner)
+
+// MARK: - Room load phase (task C: the page's first load, as a named machine)
+
+runLoadPhaseTests(runner)
+
+// MARK: - Draft saver (task E: the settings write sequencer, as a table test)
+
+runDraftSaverTests(runner)
+
+// MARK: - Store contract (task F2: pin the in-memory fake's current behaviour)
+
+runStoreContractTests(runner)
 
 // MARK: - Summary
 

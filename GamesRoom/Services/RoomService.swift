@@ -242,6 +242,38 @@ final class RoomService: ObservableObject {
     /// reclaim while a deposit is held. `nil` = no held deposit.
     @Published private(set) var mySeatDepositByEvent: [UUID: SeatDeposit] = [:]
 
+    // MARK: - Room load phase (task C)
+
+    /// The first-load phase per room: `.idle` → `.loading` → `.loaded`.
+    ///
+    /// Owned here, in the store, because the view used to infer it from
+    /// the shape of the data it had: a room with no night, no standings
+    /// and no briefing looked exactly like a room still fetching, and
+    /// the page pinned itself to the spinner forever. The phase is
+    /// explicit and per room — and a refresh of a loaded room keeps it
+    /// `.loaded`, so pull-to-refresh never re-shows a spinner.
+    @Published private(set) var roomLoadPhase: [UUID: RoomLoadPhase] = [:]
+
+    /// The load phase of `roomId`. A room the store has never loaded is
+    /// `.idle`.
+    func loadPhase(_ roomId: UUID) -> RoomLoadPhase {
+        RoomLoadPhase.phase(in: roomLoadPhase, for: roomId)
+    }
+
+    /// Runs `body` with the room's load phase open: the phase moves to
+    /// `.loading` on the way in — unless the room has already loaded,
+    /// in which case it stays `.loaded` — and to `.loaded` on the way
+    /// out, whether `body` succeeded or threw.
+    ///
+    /// "The first load finished" is the only thing the phase claims.
+    /// Whether the data is good is the service's own error path.
+    @discardableResult
+    func withRoomLoadPhase<T>(roomId: UUID, _ body: () async -> T) async -> T {
+        roomLoadPhase = RoomLoadPhase.begin(in: roomLoadPhase, for: roomId)
+        defer { roomLoadPhase = RoomLoadPhase.finish(in: roomLoadPhase, for: roomId) }
+        return await body()
+    }
+
     // MARK: - Sign-out purge
 
     /// Drops every cached room, night, roster and ledger value for the
@@ -277,6 +309,7 @@ final class RoomService: ObservableObject {
         unconsumedNotesByRoom = [:]
         arrivalCandidatesByEvent = [:]
         mySeatDepositByEvent = [:]
+        roomLoadPhase = [:]
         cacheTimestamps = [:]
         activeEventInFlight = [:]
         lastAutoCloseAt = [:]
