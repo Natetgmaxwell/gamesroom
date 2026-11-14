@@ -54,6 +54,7 @@ SRC_FILES=(main.swift
            TestsFX30.swift
            TestsTonight.swift
            TestsNextNight.swift \
+           TestsCasinoVisible.swift \
            TestsQuestionDepth.swift \
            TestsGladYouCame.swift \
            TestsDraftSaver.swift \

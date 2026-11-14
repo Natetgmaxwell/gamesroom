@@ -2412,6 +2412,15 @@ private struct BriefingSlot: View {
         NightPhaseResolver.phase(for: event, autoCloseHours: room.autoCloseHours)
     }
 
+    /// The night's games, as a member reads them: "Casino · Monopoly
+    /// Deal". Casino leads it — every night is a casino night — and
+    /// the pack names come from the registry, so a retired pack is
+    /// dropped. The rule lives in `NightPackOrder` so the picker,
+    /// the one-tap booking and this line cannot disagree.
+    private var nightPackCaption: String {
+        NightPackOrder.caption(for: event.packSlugs)
+    }
+
     /// This member's chair, from the three facts the server keeps.
     private var seatPhase: SeatPhase {
         SeatPhase.phase(
@@ -2497,6 +2506,11 @@ private struct BriefingSlot: View {
                     Text(venue)
                         .font(Theme.Typography.body)
                         .foregroundStyle(Theme.Palette.labelText)
+                }
+                if !nightPackCaption.isEmpty {
+                    Text(nightPackCaption)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.secondaryText)
                 }
                 if let hostedBy {
                     Text("Hosted by \(hostedBy)")
